@@ -265,9 +265,7 @@ impl TryFrom<ThirdPartyItemSourceKind> for NotificationSourceKind {
             ThirdPartyItemSourceKind::LinearNotification => Ok(Self::Linear),
             ThirdPartyItemSourceKind::GoogleMailThread => Ok(Self::GoogleMail),
             ThirdPartyItemSourceKind::GoogleDriveComment => Ok(Self::GoogleDrive),
-            ThirdPartyItemSourceKind::SlackReaction | ThirdPartyItemSourceKind::SlackStar => {
-                Ok(Self::Slack)
-            }
+            ThirdPartyItemSourceKind::SlackReaction => Ok(Self::Slack),
             ThirdPartyItemSourceKind::WebPage => Ok(Self::API),
             _ => Err(anyhow!(
                 "ThirdPartyItemSourceKind {source_kind} is not a valid NotificationSourceKind"

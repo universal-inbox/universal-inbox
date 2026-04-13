@@ -54,7 +54,7 @@ run interactive="true": clear-dev-assets build-assets
     if [ -n "$API_PORT" ]; then
         # Update Dioxus.toml proxy to use the correct API port
         API_URL="http://localhost:${API_PORT:-8000}/api/"
-        sed "s|backend = \"http://localhost:[0-9]*/api/\"|backend = \"${API_URL}\"|" Dioxus.toml
+        sed -i -e "s|backend = \"http://localhost:[0-9]*/api/\"|backend = \"${API_URL}\"|" Dioxus.toml
     fi
 
     dx serve --port ${DX_SERVE_PORT:-8080} --verbose --interactive false

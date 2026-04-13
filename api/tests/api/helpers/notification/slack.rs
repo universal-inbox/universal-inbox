@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use chrono::Utc;
 use rstest::*;
 use serde_json::{Value, json};
 use slack_blocks_render::SlackReferences;
@@ -13,8 +12,7 @@ use universal_inbox::{
     notification::Notification,
     third_party::{
         integrations::slack::{
-            SlackMessageDetails, SlackMessageSenderDetails, SlackStar, SlackStarItem,
-            SlackStarState, SlackThread,
+            SlackMessageDetails, SlackMessageSenderDetails, SlackReactionItem, SlackThread,
         },
         item::ThirdPartyItemData,
     },
@@ -28,23 +26,8 @@ use crate::helpers::{
 };
 
 #[fixture]
-pub fn slack_push_star_added_event() -> Box<SlackPushEvent> {
-    load_json_fixture_file("slack_push_star_added_event.json")
-}
-
-#[fixture]
 pub fn slack_push_reaction_added_event() -> Box<SlackPushEvent> {
     load_json_fixture_file("slack_push_reaction_added_event.json")
-}
-
-#[fixture]
-pub fn slack_push_bot_star_added_event() -> Box<SlackPushEvent> {
-    load_json_fixture_file("slack_push_bot_star_added_event.json")
-}
-
-#[fixture]
-pub fn slack_push_star_removed_event() -> Box<SlackPushEvent> {
-    load_json_fixture_file("slack_push_star_removed_event.json")
 }
 
 #[fixture]
@@ -60,49 +43,6 @@ pub fn slack_push_message_event() -> Box<SlackPushEvent> {
 #[fixture]
 pub fn slack_push_message_in_thread_event() -> Box<SlackPushEvent> {
     load_json_fixture_file("slack_push_message_in_thread_event.json")
-}
-
-#[fixture]
-pub fn slack_star_added() -> Box<SlackStar> {
-    let message_response: SlackApiConversationsHistoryResponse =
-        load_json_fixture_file("slack_fetch_message_response.json");
-    let channel_response: SlackApiConversationsInfoResponse =
-        load_json_fixture_file("slack_fetch_channel_response.json");
-    let user_response: SlackApiUsersInfoResponse =
-        load_json_fixture_file("slack_fetch_user_response.json");
-    let sender = SlackMessageSenderDetails::User(Box::new(user_response.user.profile.unwrap()));
-    let team_response: SlackApiTeamInfoResponse =
-        load_json_fixture_file("slack_fetch_team_response.json");
-
-    Box::new(SlackStar {
-        state: SlackStarState::StarAdded,
-        created_at: Utc::now(),
-        item: SlackStarItem::SlackMessage(Box::new(SlackMessageDetails {
-            url: "https://example.com".parse().unwrap(),
-            message: message_response.messages[0].clone(),
-            channel: channel_response.channel,
-            sender,
-            team: team_response.team,
-            references: None,
-        })),
-    })
-}
-
-pub async fn create_notification_from_slack_star(
-    app: &TestedApp,
-    slack_star: &SlackStar,
-    user_id: UserId,
-    slack_integration_connection_id: IntegrationConnectionId,
-) -> Box<Notification> {
-    create_notification_from_source_item::<SlackStar, SlackService>(
-        app,
-        slack_star.item.id(),
-        ThirdPartyItemData::SlackStar(Box::new(slack_star.clone())),
-        app.notification_service.read().await.slack_service.clone(),
-        user_id,
-        slack_integration_connection_id,
-    )
-    .await
 }
 
 #[fixture]
@@ -152,22 +92,6 @@ pub async fn mock_slack_fetch_user(
     Mock::given(method("GET"))
         .and(path("/users.info"))
         .and(query_param("user", user_id))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
-            "application/json",
-        ))
-        .mount(slack_mock_server)
-        .await;
-}
-
-pub async fn mock_slack_fetch_bot(
-    slack_mock_server: &MockServer,
-    bot_id: &str,
-    fixture_response_file: &str,
-) {
-    Mock::given(method("GET"))
-        .and(path("/bots.info"))
-        .and(query_param("bot", bot_id))
         .respond_with(ResponseTemplate::new(200).set_body_raw(
             std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
             "application/json",
@@ -301,52 +225,6 @@ pub async fn mock_slack_list_users_in_usergroup(
         .await;
 }
 
-pub async fn mock_slack_stars_add(
-    slack_mock_server: &MockServer,
-    channel_id: &str,
-    message_id: &str,
-) {
-    Mock::given(method("POST"))
-        .and(path("/stars.add"))
-        .and(header(
-            "authorization",
-            "Bearer slack_test_user_access_token",
-        ))
-        .and(body_json(
-            json!({"channel": channel_id, "timestamp": message_id}),
-        ))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/json")
-                .set_body_json(json!({ "ok": true })),
-        )
-        .mount(slack_mock_server)
-        .await;
-}
-
-pub async fn mock_slack_stars_remove(
-    slack_mock_server: &MockServer,
-    channel_id: &str,
-    message_id: &str,
-) {
-    Mock::given(method("POST"))
-        .and(path("/stars.remove"))
-        .and(header(
-            "authorization",
-            "Bearer slack_test_user_access_token",
-        ))
-        .and(body_json(
-            json!({"channel": channel_id, "timestamp": message_id}),
-        ))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/json")
-                .set_body_json(json!({ "ok": true })),
-        )
-        .mount(slack_mock_server)
-        .await;
-}
-
 pub async fn mock_slack_get_chat_permalink(
     slack_mock_server: &MockServer,
     channel_id: &str,
@@ -376,8 +254,60 @@ pub async fn mock_slack_list_emojis(slack_mock_server: &MockServer, fixture_resp
         .await;
 }
 
+pub async fn mock_slack_reactions_add(
+    slack_mock_server: &MockServer,
+    channel_id: &str,
+    message_id: &str,
+    reaction_name: &str,
+) {
+    Mock::given(method("POST"))
+        .and(path("/reactions.add"))
+        .and(header(
+            "authorization",
+            "Bearer slack_test_user_access_token",
+        ))
+        .and(body_json(json!({
+            "channel": channel_id,
+            "name": reaction_name,
+            "timestamp": message_id,
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(json!({ "ok": true })),
+        )
+        .mount(slack_mock_server)
+        .await;
+}
+
+pub async fn mock_slack_reactions_remove(
+    slack_mock_server: &MockServer,
+    channel_id: &str,
+    message_id: &str,
+    reaction_name: &str,
+) {
+    Mock::given(method("POST"))
+        .and(path("/reactions.remove"))
+        .and(header(
+            "authorization",
+            "Bearer slack_test_user_access_token",
+        ))
+        .and(body_json(json!({
+            "name": reaction_name,
+            "channel": channel_id,
+            "timestamp": message_id,
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(json!({ "ok": true })),
+        )
+        .mount(slack_mock_server)
+        .await;
+}
+
 #[fixture]
-pub fn slack_starred_message() -> Box<SlackStarItem> {
+pub fn slack_reacted_message() -> Box<SlackReactionItem> {
     let message_response: SlackApiConversationsHistoryResponse =
         load_json_fixture_file("slack_fetch_message_response.json");
     let channel_response: SlackApiConversationsInfoResponse =
@@ -388,7 +318,7 @@ pub fn slack_starred_message() -> Box<SlackStarItem> {
     let team_response: SlackApiTeamInfoResponse =
         load_json_fixture_file("slack_fetch_team_response.json");
 
-    Box::new(SlackStarItem::SlackMessage(Box::new(SlackMessageDetails {
+    Box::new(SlackReactionItem::SlackMessage(SlackMessageDetails {
         url: "https://example.com".parse().unwrap(),
         message: message_response.messages[0].clone(),
         channel: channel_response.channel,
@@ -420,5 +350,5 @@ pub fn slack_starred_message() -> Box<SlackStarItem> {
                 ),
             ]),
         }),
-    })))
+    }))
 }

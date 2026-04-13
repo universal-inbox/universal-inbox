@@ -4,17 +4,9 @@ The Slack integration for Universal Inbox provides multiple ways to track import
 
 ## Supported Slack Features
 
-Universal Inbox connects with Slack through three different mechanisms. For each mechanism, you can choose to either receive items as notifications or synchronize them as tasks in your task management tool.
+Universal Inbox connects with Slack through two different mechanisms. For each mechanism, you can choose to either receive items as notifications or synchronize them as tasks in your task management tool.
 
-### 1. Saved for Later Messages
-
-![Slack "saved for later" integration configuration](images/slack-saved-for-later-config.png =750x center)
-
-Slack's "Save for later" feature (bookmark icon) lets you mark messages for future reference. With this integration, these saved messages can automatically:
-- Appear in your Universal Inbox notification feed
-- Be converted to tasks in your task management tool
-
-### 2. Message Reactions
+### 1. Message Reactions
 
 ![Slack reaction integration configuration](images/slack-reaction-config.png =750x center)
 
@@ -22,7 +14,7 @@ Specific emoji reactions can trigger task creation or a new notification. When y
 - Appear in your Universal Inbox notification feed
 - Be converted to tasks in your task management tool
 
-### 3. Message Mentions
+### 2. Message Mentions
 
 ![Slack mention integration configuration](images/slack-mention-config.png =750x center)
 
@@ -33,19 +25,6 @@ Messages where you're mentioned (`@username` or `@groupname`) can be tracked in 
 ## Configuration Options
 
 Each Slack integration component has its own settings:
-
-### Saved for Later
-
-You must choose one of the following synchronization methods:
-
-- **Notification Synchronization**: Saved messages appear in your Universal Inbox notification feed
-- **Task Synchronization**: Saved messages are synchronized as tasks in your task management tool
-  - **Project Assignment**: Optionally assign tasks to a specific project
-  - **Due Date**: Set a default due date for tasks created from saved messages
-
-```admonish note
-You cannot enable both Notification and Task synchronization at the same time for the same integration.
-```
 
 ### Message Reactions
 
@@ -67,13 +46,13 @@ Unlike the other integration options, Message Mentions can only be synchronized 
 This allows you to keep track of conversations where you're mentioned.
 
 ```admonish tip
-You can enable any combination of these Slack integrations based on your workflow needs. For example, you might only want to use the "Saved for Later" feature without tracking mentions.
+You can enable any combination of these Slack integrations based on your workflow needs. For example, you might only want to use the reaction feature without tracking mentions.
 ```
 
 ## Available Actions
 
 With the Slack integration, you can:
 
-- View saved messages, reactions, and mentions in one place
+- View reactions and mentions in one place
 - Convert these items into tasks with proper due dates
 - Complete tasks directly from Universal Inbox

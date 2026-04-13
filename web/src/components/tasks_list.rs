@@ -11,7 +11,7 @@ use crate::{
     components::{
         integrations::{
             linear::task_list_item::LinearTaskListItem,
-            slack::task_list_item::{SlackReactionTaskListItem, SlackStarTaskListItem},
+            slack::task_list_item::SlackReactionTaskListItem,
             todoist::task_list_item::TodoistTaskListItem,
         },
         list::{List, ListItemActionButton},
@@ -89,14 +89,6 @@ fn TaskListItem(
             LinearTaskListItem {
                 task,
                 linear_issue: *linear_issue,
-                is_selected,
-                on_select,
-            }
-        },
-        ThirdPartyItemData::SlackStar(slack_star) => rsx! {
-            SlackStarTaskListItem {
-                task,
-                slack_star: *slack_star,
                 is_selected,
                 on_select,
             }

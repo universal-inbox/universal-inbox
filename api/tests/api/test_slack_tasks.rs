@@ -15,7 +15,7 @@ use universal_inbox::{
     task::{Task, TaskCreationResult, TaskSourceKind, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::{
-            slack::{SlackStar, SlackStarItem, SlackStarState},
+            slack::{SlackReaction, SlackReactionItem, SlackReactionState},
             todoist::{TodoistItem, TodoistItemPriority},
         },
         item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
@@ -37,8 +37,9 @@ use crate::helpers::{
         slack::{
             mock_slack_fetch_channel, mock_slack_fetch_reply, mock_slack_fetch_team,
             mock_slack_fetch_user, mock_slack_get_chat_permalink, mock_slack_list_emojis,
-            mock_slack_list_usergroups, mock_slack_stars_add, mock_slack_stars_remove,
-            slack_push_star_added_event, slack_push_star_removed_event, slack_starred_message,
+            mock_slack_list_usergroups, mock_slack_reactions_add, mock_slack_reactions_remove,
+            slack_push_reaction_added_event, slack_push_reaction_removed_event,
+            slack_reacted_message,
         },
     },
     rest::{create_resource, create_resource_response, get_resource, patch_resource},
@@ -64,8 +65,8 @@ async fn test_sync_todoist_slack_task(
     #[future] authenticated_app: AuthenticatedApp,
     mut sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
-    slack_push_star_added_event: Box<SlackPushEvent>,
-    slack_push_star_removed_event: Box<SlackPushEvent>,
+    slack_push_reaction_added_event: Box<SlackPushEvent>,
+    slack_push_reaction_removed_event: Box<SlackPushEvent>,
     nango_slack_connection: Box<NangoConnection>,
     nango_todoist_connection: Box<NangoConnection>,
     #[case] new_project_id: &str,
@@ -106,7 +107,7 @@ async fn test_sync_todoist_slack_task(
     mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json").await;
     let _slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
-        "U05YYY", // The message's creator, not the user who starred the message
+        "U05YYY", // The message's creator, not the user who reacted to the message
         "slack_fetch_user_response.json",
     )
     .await;
@@ -193,9 +194,9 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         &app.app.api_address,
         "hooks/slack/events",
         if expected_new_task_status == TaskStatus::Done {
-            slack_push_star_added_event.clone()
+            slack_push_reaction_added_event.clone()
         } else {
-            slack_push_star_removed_event.clone()
+            slack_push_reaction_removed_event.clone()
         },
     )
     .await;
@@ -234,10 +235,21 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     )
     .await;
 
-    let _slack_stars_add_mock =
-        mock_slack_stars_add(&app.app.slack_mock_server, "C05XXX", "1707686216.825719").await;
+    let _slack_reactions_add_mock = mock_slack_reactions_add(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "1707686216.825719",
+        "eyes",
+    )
+    .await;
     if expected_new_task_status == TaskStatus::Done {
-        mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719").await;
+        mock_slack_reactions_remove(
+            &app.app.slack_mock_server,
+            "C05XXX",
+            "1707686216.825719",
+            "eyes",
+        )
+        .await;
     }
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
@@ -251,7 +263,7 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     assert_eq!(task_creations.len(), 2);
     for task_creation in task_creations.iter() {
         // A new notification is created only after the first sync (ie. not when receiving
-        // the Slack star added event) and when the synced task is in the Inbox
+        // the Slack reaction added event) and when the synced task is in the Inbox
         if new_project_id == "1111" {
             assert_eq!(task_creation.notifications.len(), 1);
         }
@@ -313,8 +325,8 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
 async fn test_patch_slack_task_status_as_done(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
-    slack_push_star_added_event: Box<SlackPushEvent>,
-    slack_starred_message: Box<SlackStarItem>,
+    slack_push_reaction_added_event: Box<SlackPushEvent>,
+    slack_reacted_message: Box<SlackReactionItem>,
     todoist_item: Box<TodoistItem>,
     sync_todoist_projects_response: TodoistSyncResponse,
     nango_slack_connection: Box<NangoConnection>,
@@ -390,23 +402,16 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
 
     let SlackPushEvent::EventCallback(SlackPushEventCallback {
         event:
-            SlackEventCallbackBody::StarAdded(
-                SlackStarAddedEvent {
-                    item:
-                        SlackStarsItem::Message(SlackStarsItemMessage {
-                            message:
-                                SlackHistoryMessage {
-                                    origin: SlackMessageOrigin { ts: source_id, .. },
-                                    ..
-                                },
-                            ..
-                        }),
-                    ..
-                },
-                ..,
-            ),
+            SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent {
+                item:
+                    SlackReactionsItem::Message(SlackHistoryMessage {
+                        origin: SlackMessageOrigin { ts: source_id, .. },
+                        ..
+                    }),
+                ..
+            }),
         ..
-    }) = *slack_push_star_added_event
+    }) = *slack_push_reaction_added_event
     else {
         unreachable!("Unexpected event type");
     };
@@ -420,10 +425,11 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id: app.user.id,
-            data: ThirdPartyItemData::SlackStar(Box::new(SlackStar {
-                state: SlackStarState::StarAdded,
+            data: ThirdPartyItemData::SlackReaction(Box::new(SlackReaction {
+                name: SlackReactionName("eyes".to_string()),
+                state: SlackReactionState::ReactionAdded,
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
-                item: *slack_starred_message,
+                item: *slack_reacted_message,
             })),
             integration_connection_id: integration_connection.id,
             source_item: None,
@@ -439,8 +445,13 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         &exiting_task.sink_item.as_ref().unwrap().source_id,
     )
     .await;
-    let _slack_star_remove_mock =
-        mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719").await;
+    let _slack_reaction_remove_mock = mock_slack_reactions_remove(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "1707686216.825719",
+        "eyes",
+    )
+    .await;
 
     let patched_task: Box<Task> = patch_resource(
         &app.client,
