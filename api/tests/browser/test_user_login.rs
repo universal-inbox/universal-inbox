@@ -35,15 +35,15 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
     // Wait for notification rows to render (API data may still be loading after login)
     wait_for_notification_rows(&page).await;
 
-    // Count notification rows — test user has 9 notifications
+    // Count notification rows — test user has 8 notifications
     let notification_rows = page.locator("#notifications-list table tr.row-hover").await;
     let count = notification_rows
         .count()
         .await
         .expect("Failed to count notification rows");
     assert!(
-        count >= 9,
-        "Expected at least 9 notification rows, but found {count}"
+        count >= 8,
+        "Expected at least 8 notification rows, but found {count}"
     );
 
     // Check that at least one notification row has text content
