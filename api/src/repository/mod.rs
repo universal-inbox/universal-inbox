@@ -10,6 +10,7 @@ pub mod integration_connection;
 pub mod notification;
 pub mod oauth2;
 pub mod oauth_credential;
+pub mod slack_bridge;
 pub mod task;
 pub mod third_party;
 pub mod user;

@@ -4,6 +4,12 @@
 
 ### Added
 
+- Add Slack browser-extension bridge for 2-way sync (delete/unsubscribe actions)
+  - Extension polls for queued actions and executes them through Slack's private API using the user's authenticated browser session
+  - Credential validation: extension sends live `team_id` + `user_id` pairs matched against the integration connection
+  - Three-state action lifecycle: Pending → Failed (with exponential backoff retry) → PermanentlyFailed
+  - Bridge status displayed on integration card and in Extension settings tab with actionable error messages
+  - Extension bridge enabled by default for new Slack integration connections
 - Support multiple authentication methods per user account
   - Users can now add password, passkey, or Google authentication to an existing account
   - New "Authentication methods" card on the user profile page to manage auth methods

@@ -374,6 +374,7 @@ async fn generate_slack_notifications_and_tasks(
             message_config: SlackMessageConfig {
                 sync_enabled: true,
                 is_2way_sync: false,
+                extension_enabled: true,
             },
         })),
     )

@@ -3,18 +3,26 @@
 use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
-use dioxus_free_icons::{Icon, icons::bs_icons::BsChatText};
+use dioxus_free_icons::{
+    Icon,
+    icons::bs_icons::{BsChatText, BsPuzzle},
+};
+use log::error;
+use reqwest::Method;
 use serde_json::json;
 use slack_morphism::SlackReactionName;
+
+use chrono::{Local, SecondsFormat};
 
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
         integrations::slack::{
-            SlackConfig, SlackMessageConfig, SlackReactionConfig, SlackSyncTaskConfig,
-            SlackSyncType,
+            SlackConfig, SlackContext, SlackMessageConfig, SlackReactionConfig,
+            SlackSyncTaskConfig, SlackSyncType,
         },
     },
+    slack_bridge::SlackBridgeStatus,
     task::{PresetDueDate, ProjectSummary, TaskPriority},
     utils::emoji::replace_emoji_code_with_emoji,
 };
@@ -26,12 +34,17 @@ use crate::{
     },
     config::get_api_base_url,
     model::UniversalInboxUIModel,
-    services::flyonui::{forget_flyonui_tabs_element, init_flyonui_tabs_element},
+    services::{
+        api::call_api,
+        flyonui::{forget_flyonui_tabs_element, init_flyonui_tabs_element},
+    },
 };
 
 #[component]
 pub fn SlackProviderConfiguration(
     config: ReadSignal<SlackConfig>,
+    context: ReadSignal<Option<Option<SlackContext>>>,
+    provider_user_id: ReadSignal<Option<Option<String>>>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
@@ -75,6 +88,15 @@ pub fn SlackProviderConfiguration(
                     Icon { class: "h-5 w-5 min-w-5", icon: BsChatText },
                     span { "Mention" }
                 }
+
+                button {
+                    class: "tab active-tab:tab-active flex items-center gap-2 rounded-b-none",
+                    "type": "button",
+                    role: "tab",
+                    "data-tab": "#slack-config-tab-extension",
+                    Icon { class: "h-5 w-5 min-w-5", icon: BsPuzzle },
+                    span { "Extension" }
+                }
             }
 
             div {
@@ -90,6 +112,13 @@ pub fn SlackProviderConfiguration(
                     role: "tabpanel",
                     class: "bg-base-100 border-base-300 p-6 rounded-b-md flex flex-col gap-2 hidden",
                     SlackMessageConfiguration { config, ui_model, on_config_change }
+                }
+
+                div {
+                    id: "slack-config-tab-extension",
+                    role: "tabpanel",
+                    class: "bg-base-100 border-base-300 p-6 rounded-b-md flex flex-col gap-2 hidden",
+                    SlackExtensionConfiguration { config, context, provider_user_id, on_config_change }
                 }
             }
         }
@@ -415,6 +444,175 @@ fn SlackMessageConfiguration(
                 }
                 span {
                     class: "icon-[tabler--x] text-neutral absolute end-1 top-1 block size-4 peer-checked:hidden"
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn SlackExtensionConfiguration(
+    config: ReadSignal<SlackConfig>,
+    context: ReadSignal<Option<Option<SlackContext>>>,
+    provider_user_id: ReadSignal<Option<Option<String>>>,
+    on_config_change: EventHandler<IntegrationConnectionConfig>,
+) -> Element {
+    let slack_context = context().flatten();
+    let expected_user_id = provider_user_id().flatten();
+    let extension_enabled = config().message_config.extension_enabled;
+
+    let bridge_status = use_resource(move || async move {
+        if !extension_enabled {
+            return None;
+        }
+        let api_base_url = get_api_base_url().ok()?;
+        let result: Result<SlackBridgeStatus, _> = call_api(
+            Method::GET,
+            &api_base_url,
+            "slack-bridge/status",
+            None::<()>,
+            None,
+        )
+        .await;
+        match result {
+            Ok(status) => Some(status),
+            Err(err) => {
+                error!("Failed to fetch bridge status: {err}");
+                None
+            }
+        }
+    });
+
+    rsx! {
+        div {
+            class: "flex items-center gap-2",
+
+            label {
+                class: "label-text cursor-pointer grow text-sm text-base-content",
+                "Enable browser extension bridge for Slack actions"
+            }
+            div {
+                class: "relative inline-block",
+                input {
+                    r#type: "checkbox",
+                    class: "switch switch-primary switch-outline peer",
+                    oninput: move |event| {
+                        on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
+                            message_config: SlackMessageConfig {
+                                extension_enabled: event.value() == "true",
+                                ..config().message_config
+                            },
+                            ..config()
+                        }))
+                    },
+                    checked: config().message_config.extension_enabled
+                }
+                span {
+                    class: "icon-[tabler--check] text-primary absolute start-1 top-1 hidden size-4 peer-checked:block"
+                }
+                span {
+                    class: "icon-[tabler--x] text-neutral absolute end-1 top-1 block size-4 peer-checked:hidden"
+                }
+            }
+        }
+
+        p {
+            class: "text-xs text-base-content/60",
+            "When enabled, deleting or unsubscribing from Slack thread notifications will "
+            "queue actions for the browser extension to execute using your Slack session."
+        }
+
+        if extension_enabled {
+            div {
+                class: "mt-4 flex flex-col gap-2 rounded-md bg-base-200 p-3 text-xs",
+
+                div {
+                    class: "flex items-center gap-2",
+                    span { class: "font-medium text-base-content/70", "Last heartbeat:" }
+                    if let Some(ref ctx) = slack_context {
+                        if let Some(heartbeat) = ctx.last_extension_heartbeat_at {
+                            {
+                                let age_secs = (chrono::Utc::now() - heartbeat).num_seconds();
+                                let is_stale = age_secs > 120;
+                                let formatted = heartbeat
+                                    .with_timezone(&Local)
+                                    .to_rfc3339_opts(SecondsFormat::Secs, true);
+                                rsx! {
+                                    span {
+                                        class: if is_stale { "text-warning" } else { "text-success" },
+                                        "{formatted} ({age_secs}s ago)"
+                                    }
+                                }
+                            }
+                        } else {
+                            span { class: "text-warning", "No heartbeat detected" }
+                        }
+                    } else {
+                        span { class: "text-base-content/50", "No extension data available" }
+                    }
+                }
+
+                if let Some(Some(ref status)) = *bridge_status.read() {
+                    div {
+                        class: "flex items-center gap-2",
+                        span { class: "font-medium text-base-content/70", "Connection status:" }
+                        if !status.extension_connected {
+                            span { class: "text-warning",
+                                "Extension not polling. Check it is installed and running."
+                            }
+                        } else if let Some(ref ctx) = slack_context {
+                            if ctx.extension_credentials.is_empty() {
+                                span { class: "text-warning",
+                                    "Extension is polling but no Slack tab detected. Open app.slack.com in your browser, or grant the extension permission to access the tab."
+                                }
+                            } else if !status.team_id_match {
+                                {
+                                    let ext_teams = ctx.extension_credentials.iter()
+                                        .map(|c| c.team_id.0.as_str())
+                                        .collect::<Vec<_>>().join(", ");
+                                    rsx! {
+                                        span { class: "text-warning",
+                                            "Workspace mismatch: extension sees team {ext_teams}, but the integration expects {ctx.team_id.0}."
+                                        }
+                                    }
+                                }
+                            } else if !status.user_id_match {
+                                {
+                                    let matching_cred = ctx.extension_credentials.iter()
+                                        .find(|c| c.team_id == ctx.team_id);
+                                    let ext_uid = matching_cred.map(|c| c.user_id.as_str()).unwrap_or("unknown");
+                                    let expected_uid = expected_user_id.as_deref().unwrap_or("unknown");
+                                    rsx! {
+                                        span { class: "text-warning",
+                                            "User mismatch: extension sees user {ext_uid}, but the integration expects {expected_uid}."
+                                        }
+                                    }
+                                }
+                            } else {
+                                span { class: "text-success", "Connected and ready" }
+                            }
+                        } else {
+                            span { class: "text-base-content/50", "No extension data available" }
+                        }
+                    }
+
+                    div {
+                        class: "flex items-center gap-2",
+                        span { class: "font-medium text-base-content/70", "Pending actions:" }
+                        span {
+                            class: "text-base-content",
+                            "{status.pending_actions_count}"
+                        }
+                    }
+
+                    div {
+                        class: "flex items-center gap-2",
+                        span { class: "font-medium text-base-content/70", "Failed actions (retrying):" }
+                        span {
+                            class: if status.failed_actions_count > 0 { "text-warning" } else { "text-base-content" },
+                            "{status.failed_actions_count}"
+                        }
+                    }
                 }
             }
         }
