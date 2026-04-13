@@ -8,6 +8,7 @@ pub mod auth_token;
 pub mod integration_connection;
 pub mod notification;
 pub mod oauth2;
+pub mod slack_bridge;
 pub mod task;
 pub mod third_party;
 pub mod user;

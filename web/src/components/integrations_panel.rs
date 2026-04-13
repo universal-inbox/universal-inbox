@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use chrono::{Local, SecondsFormat};
+use chrono::{Local, SecondsFormat, TimeDelta, Utc};
 use dioxus::prelude::*;
 use dioxus_free_icons::{
     Icon,
@@ -301,6 +301,62 @@ pub fn IntegrationSettings(
         _ => None,
     })();
 
+    let extension_bridge_message = use_memo(move || {
+        let Some(Some(ref ic)) = connection() else {
+            return None;
+        };
+        let IntegrationProvider::Slack {
+            config: ref slack_config,
+            context: Some(ref ctx),
+        } = ic.provider
+        else {
+            return None;
+        };
+        if !slack_config.message_config.extension_enabled {
+            return None;
+        }
+        let heartbeat_fresh = ctx
+            .last_extension_heartbeat_at
+            .map(|hb| Utc::now() - hb < TimeDelta::seconds(120))
+            .unwrap_or(false);
+        if !heartbeat_fresh {
+            return Some(
+                "🟡 Browser extension not polling. Check it is installed and running.".to_string(),
+            );
+        }
+        if ctx.extension_credentials.is_empty() {
+            return Some(
+                "🟡 Browser extension polling but no Slack tab detected. Open app.slack.com or grant the extension permission to access the tab.".to_string(),
+            );
+        }
+        let matching_cred = ctx
+            .extension_credentials
+            .iter()
+            .find(|c| c.team_id == ctx.team_id);
+        if matching_cred.is_none() {
+            let ext_teams = ctx
+                .extension_credentials
+                .iter()
+                .map(|c| c.team_id.0.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Some(format!(
+                "🟡 Browser extension workspace mismatch. Extension sees team {ext_teams}, expected {}.",
+                ctx.team_id.0
+            ));
+        }
+        let matching_cred = matching_cred.unwrap();
+        if let Some(ref expected_uid) = ic.provider_user_id
+            && matching_cred.user_id != *expected_uid
+        {
+            return Some(format!(
+                "🟡 Browser extension user mismatch. Extension sees user {}, expected {expected_uid}.",
+                matching_cred.user_id
+            ));
+        }
+        Some("🟢 Browser extension connected and ready.".to_string())
+    })();
+
     let has_all_oauth_scopes = use_memo(move || {
         if let Some(Some(ic)) = connection() {
             let result = ic.has_oauth_scopes(&config().required_oauth_scopes);
@@ -381,7 +437,10 @@ pub fn IntegrationSettings(
                     if let Some(tasks_sync_message) = &tasks_sync_message {
                         span { "{tasks_sync_message}" }
                     }
-                    if notifications_sync_message.is_none() && tasks_sync_message.is_none() {
+                    if let Some(extension_bridge_message) = &extension_bridge_message {
+                        span { "{extension_bridge_message}" }
+                    }
+                    if notifications_sync_message.is_none() && tasks_sync_message.is_none() && extension_bridge_message.is_none() {
                         span { }
                     }
                 }
@@ -426,10 +485,16 @@ pub fn IntegrationSettings(
 
                 if let Some(provider) = provider {
                     if let Some(Some(connection)) = connection() {
-                        IntegrationConnectionProviderConfiguration {
-                            ui_model: ui_model,
-                            on_config_change: move |c| on_config_change.call((connection.clone(), c)),
-                            provider: provider.clone(),
+                        {
+                            let provider_user_id = connection.provider_user_id.clone();
+                            rsx! {
+                                IntegrationConnectionProviderConfiguration {
+                                    ui_model: ui_model,
+                                    on_config_change: move |c| on_config_change.call((connection.clone(), c)),
+                                    provider: provider.clone(),
+                                    provider_user_id,
+                                }
+                            }
                         }
                     }
                 }
@@ -459,6 +524,7 @@ pub fn IconForAction(action: String) -> Element {
 #[component]
 pub fn IntegrationConnectionProviderConfiguration(
     provider: IntegrationProvider,
+    provider_user_id: ReadSignal<Option<Option<String>>>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
@@ -501,11 +567,13 @@ pub fn IntegrationConnectionProviderConfiguration(
                 config: config.clone()
             }
         },
-        IntegrationProvider::Slack { config, .. } => rsx! {
+        IntegrationProvider::Slack { config, context } => rsx! {
             SlackProviderConfiguration {
                 ui_model: ui_model,
                 on_config_change: move |c| on_config_change.call(c),
                 config: config.clone(),
+                context: context.clone(),
+                provider_user_id,
             }
         },
         _ => rsx! {},
