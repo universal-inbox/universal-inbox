@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use slack_morphism::{SlackReactionName, SlackTeamId};
 
@@ -23,6 +24,8 @@ pub struct SlackMessageConfig {
     // Keeping it for now as the logic is already implemented and it
     // might be possible to workaround this limitation in the future
     pub is_2way_sync: bool,
+    #[serde(default)]
+    pub extension_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -43,6 +46,7 @@ impl Default for SlackConfig {
             message_config: SlackMessageConfig {
                 sync_enabled: false,
                 is_2way_sync: false,
+                extension_enabled: true,
             },
         }
     }
@@ -59,6 +63,7 @@ impl SlackConfig {
             message_config: SlackMessageConfig {
                 sync_enabled: true,
                 is_2way_sync: false,
+                extension_enabled: true,
             },
         }
     }
@@ -73,6 +78,7 @@ impl SlackConfig {
             message_config: SlackMessageConfig {
                 sync_enabled: false,
                 is_2way_sync: false,
+                extension_enabled: true,
             },
         }
     }
@@ -87,6 +93,7 @@ impl SlackConfig {
             message_config: SlackMessageConfig {
                 sync_enabled: false,
                 is_2way_sync: false,
+                extension_enabled: false,
             },
         }
     }
@@ -110,6 +117,16 @@ impl Default for SlackSyncTaskConfig {
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct SlackExtensionCredential {
+    pub team_id: SlackTeamId,
+    pub user_id: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct SlackContext {
     pub team_id: SlackTeamId,
+    #[serde(default)]
+    pub extension_credentials: Vec<SlackExtensionCredential>,
+    #[serde(default)]
+    pub last_extension_heartbeat_at: Option<DateTime<Utc>>,
 }

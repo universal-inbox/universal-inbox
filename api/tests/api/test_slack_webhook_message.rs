@@ -465,6 +465,8 @@ mod job {
             None,
             Some(IntegrationConnectionContext::Slack(SlackContext {
                 team_id: SlackTeamId("T01".to_string()),
+                extension_credentials: vec![],
+                last_extension_heartbeat_at: None,
             })),
         )
         .await;
@@ -485,6 +487,8 @@ mod job {
             None,
             Some(IntegrationConnectionContext::Slack(SlackContext {
                 team_id: SlackTeamId("T01".to_string()),
+                extension_credentials: vec![],
+                last_extension_heartbeat_at: None,
             })),
         )
         .await;
@@ -668,6 +672,8 @@ mod job {
             None,
             Some(IntegrationConnectionContext::Slack(SlackContext {
                 team_id: SlackTeamId("T01".to_string()),
+                extension_credentials: vec![],
+                last_extension_heartbeat_at: None,
             })),
         )
         .await;
@@ -856,6 +862,8 @@ mod job {
             None,
             Some(IntegrationConnectionContext::Slack(SlackContext {
                 team_id: SlackTeamId("T01".to_string()),
+                extension_credentials: vec![],
+                last_extension_heartbeat_at: None,
             })),
         )
         .await;

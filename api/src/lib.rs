@@ -72,8 +72,8 @@ use crate::{
         UniversalInboxError, auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, oauth2::service::OAuth2Service,
-        task::service::TaskService, third_party::service::ThirdPartyItemService,
-        user::service::UserService,
+        slack_bridge::service::SlackBridgeService, task::service::TaskService,
+        third_party::service::ThirdPartyItemService, user::service::UserService,
     },
     utils::{
         crypto::TokenEncryptionKey,
@@ -106,6 +106,7 @@ pub async fn run_server(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
+    slack_bridge_service: Arc<SlackBridgeService>,
     oauth2_service: Arc<OAuth2Service>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
@@ -204,6 +205,7 @@ pub async fn run_server(
             .service(routes::user::scope())
             .service(routes::webhook::scope())
             .service(routes::third_party::scope())
+            .service(routes::slack_bridge::scope())
             .service(mcp::scope(
                 mcp_http_service.clone(),
                 mcp_rate_limiter.clone(),
@@ -215,6 +217,7 @@ pub async fn run_server(
             .app_data(web::Data::new(user_service.clone()))
             .app_data(web::Data::new(auth_token_service.clone()))
             .app_data(web::Data::new(third_party_item_service.clone()))
+            .app_data(web::Data::new(slack_bridge_service.clone()))
             .app_data(web::Data::new(oauth2_service.clone()));
 
         let api_path_for_cors = api_path.clone();
@@ -467,6 +470,7 @@ pub async fn build_services(
     Arc<RwLock<AuthenticationTokenService>>,
     Arc<RwLock<ThirdPartyItemService>>,
     Arc<SlackService>,
+    Arc<SlackBridgeService>,
     Arc<OAuth2Service>,
 ) {
     let repository = Arc::new(Repository::new(pool.clone()));
@@ -607,9 +611,11 @@ pub async fn build_services(
         .expect("Failed to create new GoogleDriveService"),
     ));
 
+    let slack_bridge_service = Arc::new(SlackBridgeService::new(repository.clone()));
     let slack_service = Arc::new(SlackService::new(
         slack_base_url,
         integration_connection_service.clone(),
+        slack_bridge_service.clone(),
     ));
     let api_service = Arc::new(APIService::new());
 
@@ -702,6 +708,7 @@ pub async fn build_services(
         auth_token_service,
         third_party_item_service,
         slack_service,
+        slack_bridge_service,
         oauth2_service,
     )
 }

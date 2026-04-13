@@ -16,6 +16,7 @@
   - [Google Mail](config/setup/gmail.md)
   - [Linear](config/setup/linear.md)
   - [Slack](config/setup/slack.md)
+  - [Browser Extension](config/setup/browser-extension.md)
   - [Todoist](config/setup/todoist.md)
   - [Google Calendar](config/setup/gcal.md)
   - [Google Drive](config/setup/gdrive.md)

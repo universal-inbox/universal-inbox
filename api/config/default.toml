@@ -193,7 +193,6 @@ required_oauth_scopes = [
   "users:read",
 ]
 use_as_oauth_user_scopes = true
-warning_message = "Slack mentions synchronization is only one way from Slack to Universal Inbox. Indeed, using Slack public API, it is not possible mark messages as read or to unsubscribe from a thread."
 
 [integrations.ticktick]
 name = "Tick Tick"

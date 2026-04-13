@@ -21,8 +21,8 @@ use crate::{
         UniversalInboxError, auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, oauth2::service::OAuth2Service,
-        task::service::TaskService, third_party::service::ThirdPartyItemService,
-        user::service::UserService,
+        slack_bridge::service::SlackBridgeService, task::service::TaskService,
+        third_party::service::ThirdPartyItemService, user::service::UserService,
     },
     utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
 };
@@ -230,6 +230,7 @@ impl Cli {
         auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
         third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
         slack_service: Arc<SlackService>,
+        slack_bridge_service: Arc<SlackBridgeService>,
         oauth2_service: Arc<OAuth2Service>,
     ) -> Result<(), UniversalInboxError> {
         match &self.command {
@@ -321,6 +322,7 @@ impl Cli {
                     integration_connection_service.clone(),
                     auth_token_service,
                     third_party_item_service.clone(),
+                    slack_bridge_service,
                     oauth2_service,
                 )
                 .await

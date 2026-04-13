@@ -154,6 +154,8 @@ pub struct TestServices {
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     pub third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     pub slack_service: Arc<SlackService>,
+    pub slack_bridge_service:
+        Arc<universal_inbox_api::universal_inbox::slack_bridge::service::SlackBridgeService>,
     pub oauth2_service: Arc<OAuth2Service>,
 }
 
@@ -182,6 +184,7 @@ pub async fn build_test_services(
         auth_token_service,
         third_party_item_service,
         slack_service,
+        slack_bridge_service,
         oauth2_service,
     ) = universal_inbox_api::build_services(
         pool,
@@ -207,6 +210,7 @@ pub async fn build_test_services(
         integration_connection_service,
         third_party_item_service,
         slack_service,
+        slack_bridge_service,
         oauth2_service,
     };
 
@@ -234,6 +238,7 @@ pub async fn spawn_test_server(
         services.integration_connection_service.clone(),
         auth_token_service,
         services.third_party_item_service.clone(),
+        services.slack_bridge_service.clone(),
         services.oauth2_service.clone(),
     )
     .await

@@ -33,7 +33,7 @@ This action lets you view the full message context in Slack, where you can respo
 Use this action when you want to clear a notification from your Universal Inbox. The notification will reappear if there's a new reply in the thread for notifications from a Slack mention.
 
 ```admonish note
-Due to Slack API limitations, the read status of a message cannot be changed in Slack. The "Delete" action will only update the status in Universal Inbox.
+Due to Slack API limitations, the read status of a message cannot be changed through the public API. When the [browser extension bridge](../../config/setup/browser-extension.md) is enabled, the extension will mark the thread as read in Slack using your browser session.
 ```
 
 #### Unsubscribe
@@ -43,7 +43,7 @@ Due to Slack API limitations, the read status of a message cannot be changed in 
 - **Effect in Slack**: Remove the reaction from the message. It does not mark the message as read, nor unsubscribe the Slack thread for notifications from Slack mentions.
 
 ```admonish note
-Due to Slack API limitations, the read and subscription status of a message/thread cannot be changed in Slack. The "Unsubscribe" action will only update the status in Universal Inbox.
+Due to Slack API limitations, the subscription status of a thread cannot be changed through the public API. When the [browser extension bridge](../../config/setup/browser-extension.md) is enabled, the extension will unsubscribe you from the thread in Slack using your browser session.
 ```
 
 #### Snooze

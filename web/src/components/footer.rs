@@ -10,7 +10,7 @@ use universal_inbox::{
     IntegrationProviderStaticConfig,
     integration_connection::{
         IntegrationConnection, IntegrationConnectionStatus as ConnectionStatus,
-        provider::IntegrationProviderKind,
+        provider::{IntegrationProvider, IntegrationProviderKind},
     },
 };
 
@@ -57,14 +57,45 @@ pub fn Footer() -> Element {
             }
         });
         if has_missing_permission {
-            (
+            return (
                 Some("Some integrations are missing permissions, please reconnect them."),
                 "bg-warning text-warning-content",
                 "",
-            )
-        } else {
-            (None, "", "max-sm:hidden")
+            );
         }
+        let has_slack_extension_enabled = integration_connections.iter().any(|c| {
+            matches!(
+                &c.provider,
+                IntegrationProvider::Slack {
+                    config,
+                    ..
+                } if config.message_config.extension_enabled
+            )
+        });
+        if has_slack_extension_enabled {
+            // Check if the extension has a recent heartbeat via context
+            let extension_not_detected = integration_connections.iter().any(|c| {
+                matches!(
+                    &c.provider,
+                    IntegrationProvider::Slack {
+                        context: Some(ctx),
+                        config,
+                        ..
+                    } if config.message_config.extension_enabled
+                        && ctx.last_extension_heartbeat_at
+                            .map(|hb| (chrono::Utc::now() - hb).num_seconds() > 120)
+                            .unwrap_or(true)
+                )
+            });
+            if extension_not_detected {
+                return (
+                    Some("Slack browser extension not detected. Install or check it is running."),
+                    "bg-warning text-warning-content",
+                    "",
+                );
+            }
+        }
+        (None, "", "max-sm:hidden")
     })();
 
     rsx! {

@@ -18,6 +18,7 @@ extern crate enum_derive;
 pub mod auth;
 pub mod integration_connection;
 pub mod notification;
+pub mod slack_bridge;
 pub mod task;
 pub mod third_party;
 pub mod typed_id;
