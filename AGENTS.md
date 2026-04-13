@@ -150,10 +150,6 @@ pub enum FrontAuthenticationConfig {
     Passkey,
 }
 
-// With content field
-#[serde(tag = "type", content = "content")]
-pub enum SlackStarState { ... }
-
 // Transparent wrappers
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]

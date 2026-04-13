@@ -22,8 +22,8 @@ use universal_inbox::{
         IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::slack::{
-            SlackConfig, SlackMessageConfig, SlackReactionConfig, SlackStarConfig,
-            SlackSyncTaskConfig, SlackSyncType,
+            SlackConfig, SlackMessageConfig, SlackReactionConfig, SlackSyncTaskConfig,
+            SlackSyncType,
         },
         provider::IntegrationProviderKind,
     },
@@ -38,7 +38,7 @@ use universal_inbox::{
             linear::{LinearIssue, LinearNotification},
             slack::{
                 SlackMessageDetails, SlackMessageSenderDetails, SlackReaction, SlackReactionItem,
-                SlackReactionState, SlackStar, SlackStarItem, SlackStarState, SlackThread,
+                SlackReactionState, SlackThread,
             },
             todoist::TodoistItem,
         },
@@ -366,10 +366,6 @@ async fn generate_slack_notifications_and_tasks(
             .clone(),
         user_id,
         Some(IntegrationConnectionConfig::Slack(SlackConfig {
-            star_config: SlackStarConfig {
-                sync_enabled: true,
-                sync_type: SlackSyncType::AsNotifications,
-            },
             reaction_config: SlackReactionConfig {
                 sync_enabled: true,
                 reaction_name: SlackReactionName("eyes".to_string()),
@@ -389,19 +385,6 @@ async fn generate_slack_notifications_and_tasks(
         .await
         .slack_service
         .clone();
-
-    let slack_star = slack_star_added()?;
-    create_notification_from_source_item::<SlackStar, SlackService>(
-        executor,
-        slack_star.item.id(),
-        ThirdPartyItemData::SlackStar(slack_star),
-        user_id,
-        integration_connection.id,
-        slack_service.clone(),
-        notification_service.clone(),
-        third_party_item_service.clone(),
-    )
-    .await?;
 
     let slack_thread = slack_thread()?;
     create_notification_from_source_item::<SlackThread, SlackService>(
@@ -430,31 +413,6 @@ async fn generate_slack_notifications_and_tasks(
     .await?;
 
     Ok(integration_connection)
-}
-
-pub fn slack_star_added() -> Result<Box<SlackStar>, UniversalInboxError> {
-    let message_response: SlackApiConversationsHistoryResponse =
-        load_json_fixture_file("slack_fetch_message_response.json")?;
-    let channel_response: SlackApiConversationsInfoResponse =
-        load_json_fixture_file("slack_fetch_channel_response.json")?;
-    let user_response: SlackApiUsersInfoResponse =
-        load_json_fixture_file("slack_fetch_user_response.json")?;
-    let sender = SlackMessageSenderDetails::User(Box::new(user_response.user.profile.unwrap()));
-    let team_response: SlackApiTeamInfoResponse =
-        load_json_fixture_file("slack_fetch_team_response.json")?;
-
-    Ok(Box::new(SlackStar {
-        state: SlackStarState::StarAdded,
-        created_at: Utc::now(),
-        item: SlackStarItem::SlackMessage(Box::new(SlackMessageDetails {
-            url: "https://example.com".parse().unwrap(),
-            message: message_response.messages[0].clone(),
-            channel: channel_response.channel,
-            sender,
-            team: team_response.team,
-            references: None,
-        })),
-    }))
 }
 
 pub fn slack_reaction_added() -> Result<Box<SlackReaction>, UniversalInboxError> {

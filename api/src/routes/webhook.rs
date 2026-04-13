@@ -15,7 +15,7 @@ use tracing::{debug, warn};
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
-        integrations::slack::{SlackConfig, SlackReactionConfig, SlackStarConfig},
+        integrations::slack::{SlackConfig, SlackReactionConfig},
         provider::IntegrationProviderKind,
     },
     third_party::item::ThirdPartyItemKind,
@@ -46,41 +46,6 @@ pub async fn push_slack_event(
             return Ok(HttpResponse::Ok()
                 .content_type("application/json")
                 .body(json!({ "challenge": challenge }).to_string()));
-        }
-        SlackPushEvent::EventCallback(
-            ref event @ SlackPushEventCallback {
-                event: SlackEventCallbackBody::StarAdded(SlackStarAddedEvent { ref user, .. }),
-                ..
-            },
-        )
-        | SlackPushEvent::EventCallback(
-            ref event @ SlackPushEventCallback {
-                event: SlackEventCallbackBody::StarRemoved(SlackStarRemovedEvent { ref user, .. }),
-                ..
-            },
-        ) => {
-            let service = integration_connection_service.read().await;
-            let mut transaction = service
-                .begin()
-                .await
-                .context("Failed to create new transaction while checking Slack user ID")?;
-
-            if let Some(IntegrationConnectionConfig::Slack(SlackConfig {
-                star_config:
-                    SlackStarConfig {
-                        sync_enabled: true, ..
-                    },
-                ..
-            })) = service
-                .get_integration_connection_config_for_provider_user_id(
-                    &mut transaction,
-                    IntegrationProviderKind::Slack,
-                    user.to_string(),
-                )
-                .await?
-            {
-                send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
-            }
         }
         SlackPushEvent::EventCallback(
             ref event @ SlackPushEventCallback {

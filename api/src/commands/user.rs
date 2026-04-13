@@ -1,17 +1,20 @@
-use std::sync::Arc;
+use std::{
+    io::{self, BufRead, IsTerminal},
+    sync::Arc,
+};
 
 use anyhow::Context;
 use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
 use log::{error, info};
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, SecretBox};
 use tabled::{
     builder::Builder,
     settings::{Color, object::Rows, style::Style},
 };
 use tokio::sync::RwLock;
 
-use universal_inbox::user::UserId;
+use universal_inbox::user::{Password, UserAuthKind, UserId};
 
 use crate::universal_inbox::{
     UniversalInboxError,
@@ -238,6 +241,79 @@ pub async fn delete_user(
     ))?;
 
     info!("User {user_id} and its data was successfully deleted");
+
+    Ok(())
+}
+
+#[tracing::instrument(
+    name = "reset-password-command",
+    level = "info",
+    skip(user_service),
+    err
+)]
+pub async fn reset_password(
+    user_service: Arc<UserService>,
+    user_email: &EmailAddress,
+) -> Result<(), UniversalInboxError> {
+    let password_input = if io::stdin().is_terminal() {
+        let p1 = rpassword::prompt_password_stderr(&format!("New password for {user_email}: "))
+            .context("Failed to read password")?;
+        let p2 = rpassword::prompt_password_stderr("Confirm password: ")
+            .context("Failed to read password confirmation")?;
+        if p1 != p2 {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: "Passwords do not match".to_string(),
+            });
+        }
+        p1
+    } else {
+        let mut line = String::new();
+        io::stdin()
+            .lock()
+            .read_line(&mut line)
+            .context("Failed to read password from stdin")?;
+        line.trim_end_matches('\n')
+            .trim_end_matches('\r')
+            .to_string()
+    };
+
+    let password: Password = password_input.parse().context("Invalid password")?;
+    let password = SecretBox::new(Box::new(password));
+
+    let service = user_service.clone();
+    let mut transaction = service.begin().await.context(format!(
+        "Failed to create new transaction while resetting password for {user_email}"
+    ))?;
+
+    let user = service
+        .get_user_by_email(&mut transaction, user_email)
+        .await?
+        .context(format!(
+            "Unable to find user with email address {user_email}"
+        ))?;
+
+    let has_local_auth = service
+        .get_user_auth(&mut transaction, user.id, UserAuthKind::Local)
+        .await?
+        .is_some();
+
+    if has_local_auth {
+        service
+            .set_password(&mut transaction, user.id, password)
+            .await?;
+        info!("Password updated for user {user_email}");
+    } else {
+        service
+            .add_local_auth_method(&mut transaction, user.id, password)
+            .await?;
+        eprintln!("Note: User {user_email} had no Local auth method. A new one has been created.");
+        info!("Local auth method created with password for user {user_email}");
+    }
+
+    transaction.commit().await.context(format!(
+        "Failed to commit transaction while resetting password for {user_email}"
+    ))?;
 
     Ok(())
 }

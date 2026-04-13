@@ -13,7 +13,7 @@ use universal_inbox::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     task::{Task, TaskCreation, service::TaskPatch},
     third_party::{
-        integrations::slack::{SlackReaction, SlackStar},
+        integrations::slack::SlackReaction,
         item::{
             ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData,
             ThirdPartyItemFromSource, ThirdPartyItemKind, ThirdPartyItemSource,
@@ -118,20 +118,6 @@ impl ThirdPartyItemService {
                         executor,
                         *third_party_item.clone(),
                         self.todoist_service.clone(),
-                        user_id,
-                    )
-                    .await?
-            }
-            ThirdPartyItemSourceKind::SlackStar => {
-                self.task_service
-                    .upgrade()
-                    .context("Unable to access task_service from third_party_service")?
-                    .read()
-                    .await
-                    .create_task_from_third_party_item::<SlackStar, SlackService>(
-                        executor,
-                        *third_party_item.clone(),
-                        self.slack_service.clone(),
                         user_id,
                     )
                     .await?

@@ -485,9 +485,7 @@ impl TryFrom<ThirdPartyItemSourceKind> for TaskSourceKind {
         match source_kind {
             ThirdPartyItemSourceKind::Todoist => Ok(Self::Todoist),
             ThirdPartyItemSourceKind::LinearIssue => Ok(Self::Linear),
-            ThirdPartyItemSourceKind::SlackReaction | ThirdPartyItemSourceKind::SlackStar => {
-                Ok(Self::Slack)
-            }
+            ThirdPartyItemSourceKind::SlackReaction => Ok(Self::Slack),
             _ => Err(anyhow!(
                 "ThirdPartyItemSourceKind {source_kind} is not a valid TaskSourceKind"
             )),

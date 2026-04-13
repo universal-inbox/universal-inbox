@@ -7,7 +7,7 @@ use tracing::debug;
 use universal_inbox::{
     task::Task,
     third_party::{
-        integrations::slack::{SlackReaction, SlackStar},
+        integrations::slack::SlackReaction,
         item::{ThirdPartyItemSource, ThirdPartyItemSourceKind},
     },
     user::UserId,
@@ -62,15 +62,6 @@ impl TaskEventService<SlackPushEventCallback> for TaskService {
         };
 
         match (*third_party_item).get_third_party_item_source_kind() {
-            ThirdPartyItemSourceKind::SlackStar => Ok(self
-                .create_task_from_third_party_item::<SlackStar, SlackService>(
-                    executor,
-                    *third_party_item,
-                    self.slack_service.clone(),
-                    user_id,
-                )
-                .await?
-                .map(|task_result| task_result.task)),
             ThirdPartyItemSourceKind::SlackReaction => Ok(self
                 .create_task_from_third_party_item::<SlackReaction, SlackService>(
                     executor,

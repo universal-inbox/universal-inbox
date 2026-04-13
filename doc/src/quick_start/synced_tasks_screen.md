@@ -14,7 +14,7 @@ The Synced Tasks screen displays all tasks synchronized between your connected t
 
 Each task entry includes:
 - **Source**: Origin of the task (Linear, Slack, etc.)
-- **Type**: Format of the task (Linear issue, Slack message reaction, Slack "saved for later" message, etc.)
+- **Type**: Format of the task (Linear issue, Slack message reaction, etc.)
 - **Title**: Main subject with contextual details
 - **Indicators**: Additional information like author, priority, and other metadata
 - **Timestamp**: When the task was last updated
@@ -47,7 +47,6 @@ Universal Inbox maintains continuous synchronization between three points: sourc
 
 When these events occur, Universal Inbox automatically creates tasks in your task management tool:
 - A Linear issue is assigned to you
-- You save a Slack message for later
 - You add a specific reaction to a Slack message
 
 ### Completing Tasks

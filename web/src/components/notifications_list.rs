@@ -32,8 +32,7 @@ use crate::{
             icons::IntegrationProviderIcon,
             linear::notification_list_item::LinearNotificationListItem,
             slack::notification_list_item::{
-                SlackReactionNotificationListItem, SlackStarNotificationListItem,
-                SlackThreadNotificationListItem,
+                SlackReactionNotificationListItem, SlackThreadNotificationListItem,
             },
             todoist::notification_list_item::TodoistNotificationListItem,
         },
@@ -282,9 +281,6 @@ fn NotificationListItem(
                 is_selected,
                 on_select,
             }
-        },
-        ThirdPartyItemData::SlackStar(_) => rsx! {
-            SlackStarNotificationListItem { notification, is_selected, on_select },
         },
         ThirdPartyItemData::SlackReaction(slack_reaction) => rsx! {
             SlackReactionNotificationListItem {

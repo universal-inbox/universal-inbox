@@ -12,7 +12,7 @@
   - GitHub notifications
   - Linear issue and project notifications
   - Google Mail threads (with specific tags)
-  - Slack "saved for later" items and reacted with an emoji
+  - Slack messages reacted with an emoji and direct mentions
 
 - [Efficient Notification Management](how/actions/): Take immediate action on notifications:
   - Delete notifications until next update
@@ -21,7 +21,7 @@
   - Convert notifications into actionable tasks
   - Custom actions tailored to notification types (e.g. respond to Google Calendar invitations) 
 
-- [Task Synchronization](how/synchronizing_tasks.md): Two-way synchronization between your task management tool and connected tools (e.g. Slack "saved for later" items or Linear assigned issues).
+- [Task Synchronization](how/synchronizing_tasks.md): Two-way synchronization between your task management tool and connected tools (e.g. Slack reacted messages or Linear assigned issues).
 
 ## Key Benefits
 

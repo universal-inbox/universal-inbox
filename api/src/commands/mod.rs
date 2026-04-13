@@ -175,6 +175,9 @@ pub enum UserCommands {
         dry_run: bool,
     },
 
+    /// Reset or set user password directly from CLI
+    ResetPassword { user_email: EmailAddress },
+
     /// Generate a new JWT token for given user
     GenerateJWTToken { user_email: EmailAddress },
 }
@@ -417,6 +420,10 @@ impl Cli {
                     user_email,
                     dry_run,
                 } => user::send_password_reset_email(user_service, user_email, *dry_run).await,
+
+                UserCommands::ResetPassword { user_email } => {
+                    user::reset_password(user_service, user_email).await
+                }
 
                 UserCommands::GenerateJWTToken { user_email } => {
                     user::generate_jwt_token(user_service, auth_token_service, user_email).await

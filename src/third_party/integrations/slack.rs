@@ -21,192 +21,6 @@ use crate::{
 };
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
-pub struct SlackStar {
-    pub state: SlackStarState,
-    pub created_at: DateTime<Utc>,
-    pub item: SlackStarItem,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-#[serde(tag = "type", content = "content")]
-pub enum SlackStarState {
-    StarAdded,
-    StarRemoved,
-}
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-#[serde(tag = "type", content = "content")]
-pub enum SlackStarItem {
-    SlackMessage(Box<SlackMessageDetails>),
-    SlackFile(Box<SlackFileDetails>),
-    SlackFileComment(Box<SlackFileCommentDetails>),
-    SlackChannel(Box<SlackChannelDetails>),
-    SlackIm(Box<SlackImDetails>),
-    SlackGroup(Box<SlackGroupDetails>),
-}
-
-impl SlackStarItem {
-    pub fn id(&self) -> String {
-        match self {
-            SlackStarItem::SlackMessage(message) => message.message.origin.ts.to_string(),
-            SlackStarItem::SlackFile(file) => file.id.as_ref().unwrap().to_string(), // Can use unwrap because new SlackStar all have an `id` value
-            SlackStarItem::SlackFileComment(comment) => comment.comment_id.to_string(),
-            SlackStarItem::SlackChannel(channel) => channel.channel.id.to_string(),
-            SlackStarItem::SlackIm(im) => im.channel.id.to_string(),
-            SlackStarItem::SlackGroup(group) => group.channel.id.to_string(),
-        }
-    }
-
-    pub fn team_id(&self) -> SlackTeamId {
-        match self {
-            SlackStarItem::SlackMessage(message) => message.team.id.clone(),
-            SlackStarItem::SlackFile(file) => file.team.id.clone(),
-            SlackStarItem::SlackFileComment(comment) => comment.team.id.clone(),
-            SlackStarItem::SlackChannel(channel) => channel.team.id.clone(),
-            SlackStarItem::SlackIm(im) => im.team.id.clone(),
-            SlackStarItem::SlackGroup(group) => group.team.id.clone(),
-        }
-    }
-
-    pub fn render_title(&self) -> String {
-        match self {
-            SlackStarItem::SlackMessage(message) => message.render_title(),
-            SlackStarItem::SlackFile(file) => file.render_title(),
-            SlackStarItem::SlackFileComment(comment) => comment.comment_id.to_string(),
-            SlackStarItem::SlackChannel(channel) => channel
-                .channel
-                .name
-                .clone()
-                .unwrap_or_else(|| "Channel".to_string()),
-            SlackStarItem::SlackIm(im) => {
-                im.channel.name.clone().unwrap_or_else(|| "IM".to_string())
-            }
-            SlackStarItem::SlackGroup(group) => group
-                .channel
-                .name
-                .clone()
-                .unwrap_or_else(|| "Group".to_string()),
-        }
-    }
-
-    pub fn render_content(&self) -> String {
-        match self {
-            SlackStarItem::SlackMessage(message) => message.render_content(),
-            SlackStarItem::SlackFile(file) => file.render_content(),
-            SlackStarItem::SlackFileComment(comment) => comment.comment_id.to_string(),
-            SlackStarItem::SlackChannel(channel) => channel
-                .channel
-                .name
-                .clone()
-                .unwrap_or_else(|| "Channel".to_string()),
-            SlackStarItem::SlackIm(im) => {
-                im.channel.name.clone().unwrap_or_else(|| "IM".to_string())
-            }
-            SlackStarItem::SlackGroup(group) => group
-                .channel
-                .name
-                .clone()
-                .unwrap_or_else(|| "Group".to_string()),
-        }
-    }
-
-    pub fn ids(&self) -> SlackStarIds {
-        let (channel_id, message_id, file_id, file_comment_id) = match &self {
-            SlackStarItem::SlackMessage(slack_message) => (
-                Some(slack_message.channel.id.clone()),
-                Some(slack_message.message.origin.ts.clone()),
-                None,
-                None,
-            ),
-            SlackStarItem::SlackChannel(slack_channel) => {
-                (Some(slack_channel.channel.id.clone()), None, None, None)
-            }
-            SlackStarItem::SlackIm(slack_im) => {
-                (Some(slack_im.channel.id.clone()), None, None, None)
-            }
-            SlackStarItem::SlackGroup(slack_group) => {
-                (Some(slack_group.channel.id.clone()), None, None, None)
-            }
-            SlackStarItem::SlackFile(slack_file) => (
-                Some(slack_file.channel.id.clone()),
-                None,
-                slack_file.id.clone(),
-                None,
-            ),
-            SlackStarItem::SlackFileComment(slack_file_comment) => (
-                Some(slack_file_comment.channel.id.clone()),
-                None,
-                None,
-                Some(slack_file_comment.comment_id.clone()),
-            ),
-        };
-
-        SlackStarIds {
-            channel_id,
-            message_id,
-            file_id,
-            file_comment_id,
-        }
-    }
-}
-
-impl HasHtmlUrl for SlackStar {
-    fn get_html_url(&self) -> Url {
-        match &self.item {
-            SlackStarItem::SlackMessage(message) => message.get_html_url(),
-            SlackStarItem::SlackFile(file) => file.get_html_url(),
-            SlackStarItem::SlackFileComment(comment) => comment.get_html_url(),
-            SlackStarItem::SlackChannel(channel) => channel.get_html_url(),
-            SlackStarItem::SlackIm(im) => im.get_html_url(),
-            SlackStarItem::SlackGroup(group) => group.get_html_url(),
-        }
-    }
-}
-
-impl TryFrom<ThirdPartyItem> for SlackStar {
-    type Error = anyhow::Error;
-
-    fn try_from(item: ThirdPartyItem) -> Result<Self, Self::Error> {
-        match item.data {
-            ThirdPartyItemData::SlackStar(slack_star) => Ok(*slack_star),
-            _ => Err(anyhow!(
-                "Unable to convert ThirdPartyItem {} to SlackStar",
-                item.id
-            )),
-        }
-    }
-}
-
-impl ThirdPartyItemFromSource for SlackStar {
-    fn into_third_party_item(
-        self,
-        user_id: UserId,
-        integration_connection_id: IntegrationConnectionId,
-    ) -> ThirdPartyItem {
-        ThirdPartyItem {
-            id: Uuid::new_v4().into(),
-            source_id: self.source_id(),
-            data: ThirdPartyItemData::SlackStar(Box::new(self.clone())),
-            created_at: Utc::now().with_nanosecond(0).unwrap(),
-            updated_at: Utc::now().with_nanosecond(0).unwrap(),
-            user_id,
-            integration_connection_id,
-            source_item: None,
-        }
-    }
-
-    fn source_id(&self) -> String {
-        self.item.id()
-    }
-}
-
-pub struct SlackStarIds {
-    pub channel_id: Option<SlackChannelId>,
-    pub message_id: Option<SlackTs>,
-    pub file_id: Option<SlackFileId>,
-    pub file_comment_id: Option<SlackFileCommentId>,
-}
-
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackReaction {
     pub name: SlackReactionName,
     pub state: SlackReactionState,
@@ -799,7 +613,7 @@ mod test_message_details {
     use super::*;
 
     #[fixture]
-    pub fn slack_starred_message() -> SlackStarItem {
+    pub fn slack_message() -> SlackMessageDetails {
         let message_response: SlackApiConversationsHistoryResponse =
             load_json_fixture_file("slack_fetch_message_response.json");
         let channel_response: SlackApiConversationsInfoResponse =
@@ -810,23 +624,23 @@ mod test_message_details {
         let team_response: SlackApiTeamInfoResponse =
             load_json_fixture_file("slack_fetch_team_response.json");
 
-        SlackStarItem::SlackMessage(Box::new(SlackMessageDetails {
+        SlackMessageDetails {
             url: "https://example.com".parse().unwrap(),
             message: message_response.messages[0].clone(),
             channel: channel_response.channel,
             sender,
             team: team_response.team,
             references: None,
-        }))
+        }
     }
 
     mod test_message_content {
         use super::*;
 
         #[rstest]
-        fn test_render_starred_message_with_blocks(slack_starred_message: SlackStarItem) {
+        fn test_render_message_with_blocks(slack_message: SlackMessageDetails) {
             assert_eq!(
-                slack_starred_message.render_content(),
+                slack_message.render_content(),
                 r#"📥  *Universal Inbox new release* 📥
 - list 1
 - list 2
@@ -848,15 +662,8 @@ Here is a [link](https://www.universal-inbox.com)"#
         }
 
         #[rstest]
-        fn test_render_starred_message_with_blocks_in_attachments(
-            mut slack_starred_message: SlackStarItem,
-        ) {
-            let SlackStarItem::SlackMessage(message) = &mut slack_starred_message else {
-                panic!(
-                    "Expected SlackStarItem::SlackMessage, got {:?}",
-                    slack_starred_message
-                );
-            };
+        fn test_render_message_with_blocks_in_attachments(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
             message.message.content.attachments = Some(vec![SlackMessageAttachment {
                 id: None,
                 color: None,
@@ -869,7 +676,7 @@ Here is a [link](https://www.universal-inbox.com)"#
             }]);
             message.message.content.blocks = Some(vec![]);
             assert_eq!(
-                slack_starred_message.render_content(),
+                slack_message.render_content(),
                 r#"📥  *Universal Inbox new release* 📥
 - list 1
 - list 2
@@ -891,15 +698,8 @@ Here is a [link](https://www.universal-inbox.com)"#
         }
 
         #[rstest]
-        fn test_render_starred_message_with_text_in_attachments(
-            mut slack_starred_message: SlackStarItem,
-        ) {
-            let SlackStarItem::SlackMessage(message) = &mut slack_starred_message else {
-                panic!(
-                    "Expected SlackStarItem::SlackMessage, got {:?}",
-                    slack_starred_message
-                );
-            };
+        fn test_render_message_with_text_in_attachments(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
             message.message.content.attachments = Some(vec![SlackMessageAttachment {
                 id: None,
                 color: None,
@@ -911,19 +711,14 @@ Here is a [link](https://www.universal-inbox.com)"#
                 blocks: None,
             }]);
             message.message.content.blocks = Some(vec![]);
-            assert_eq!(slack_starred_message.render_content(), "This is the text");
+            assert_eq!(slack_message.render_content(), "This is the text");
         }
 
         #[rstest]
-        fn test_render_starred_message_with_text_and_title_in_attachments(
-            mut slack_starred_message: SlackStarItem,
+        fn test_render_message_with_text_and_title_in_attachments(
+            mut slack_message: SlackMessageDetails,
         ) {
-            let SlackStarItem::SlackMessage(message) = &mut slack_starred_message else {
-                panic!(
-                    "Expected SlackStarItem::SlackMessage, got {:?}",
-                    slack_starred_message
-                );
-            };
+            let message = &mut slack_message;
             message.message.content.attachments = Some(vec![SlackMessageAttachment {
                 id: None,
                 color: None,
@@ -936,25 +731,17 @@ Here is a [link](https://www.universal-inbox.com)"#
             }]);
             message.message.content.blocks = Some(vec![]);
             assert_eq!(
-                slack_starred_message.render_content(),
+                slack_message.render_content(),
                 "This is the title\n\nThis is the text"
             );
         }
 
         #[rstest]
-        fn test_render_starred_message_with_only_text(mut slack_starred_message: SlackStarItem) {
-            let SlackStarItem::SlackMessage(message) = &mut slack_starred_message else {
-                panic!(
-                    "Expected SlackStarItem::SlackMessage, got {:?}",
-                    slack_starred_message
-                );
-            };
+        fn test_render_message_with_only_text(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
             message.message.content.text = Some("Test message".to_string());
             message.message.content.blocks = Some(vec![]);
-            assert_eq!(
-                slack_starred_message.render_content(),
-                "Test message".to_string()
-            );
+            assert_eq!(slack_message.render_content(), "Test message".to_string());
         }
     }
 
@@ -964,23 +751,16 @@ Here is a [link](https://www.universal-inbox.com)"#
         use super::*;
 
         #[rstest]
-        fn test_render_starred_message_with_blocks(slack_starred_message: SlackStarItem) {
+        fn test_render_message_with_blocks(slack_message: SlackMessageDetails) {
             assert_eq!(
-                slack_starred_message.render_title(),
+                slack_message.render_title(),
                 "📥  Universal Inbox new release 📥..."
             );
         }
 
         #[rstest]
-        fn test_render_starred_message_with_text_in_attachments(
-            mut slack_starred_message: SlackStarItem,
-        ) {
-            let SlackStarItem::SlackMessage(message) = &mut slack_starred_message else {
-                panic!(
-                    "Expected SlackStarItem::SlackMessage, got {:?}",
-                    slack_starred_message
-                );
-            };
+        fn test_render_message_with_text_in_attachments(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
             message.message.content.attachments = Some(vec![SlackMessageAttachment {
                 id: None,
                 color: None,
@@ -992,19 +772,14 @@ Here is a [link](https://www.universal-inbox.com)"#
                 blocks: None,
             }]);
             message.message.content.blocks = Some(vec![]);
-            assert_eq!(slack_starred_message.render_title(), "This is the text");
+            assert_eq!(slack_message.render_title(), "This is the text");
         }
 
         #[rstest]
-        fn test_render_starred_message_with_text_and_title_in_attachments(
-            mut slack_starred_message: SlackStarItem,
+        fn test_render_message_with_text_and_title_in_attachments(
+            mut slack_message: SlackMessageDetails,
         ) {
-            let SlackStarItem::SlackMessage(message) = &mut slack_starred_message else {
-                panic!(
-                    "Expected SlackStarItem::SlackMessage, got {:?}",
-                    slack_starred_message
-                );
-            };
+            let message = &mut slack_message;
             message.message.content.attachments = Some(vec![SlackMessageAttachment {
                 id: None,
                 color: None,
@@ -1016,19 +791,12 @@ Here is a [link](https://www.universal-inbox.com)"#
                 blocks: None,
             }]);
             message.message.content.blocks = Some(vec![]);
-            assert_eq!(slack_starred_message.render_title(), "This is the title");
+            assert_eq!(slack_message.render_title(), "This is the title");
         }
 
         #[rstest]
-        fn test_render_starred_message_with_blocks_in_attachments(
-            mut slack_starred_message: SlackStarItem,
-        ) {
-            let SlackStarItem::SlackMessage(message) = &mut slack_starred_message else {
-                panic!(
-                    "Expected SlackStarItem::SlackMessage, got {:?}",
-                    slack_starred_message
-                );
-            };
+        fn test_render_message_with_blocks_in_attachments(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
             message.message.content.blocks = Some(vec![SlackBlock::RichText(serde_json::json!({
                 "type": "rich_text",
                 "elements": [
@@ -1133,7 +901,7 @@ Here is a [link](https://www.universal-inbox.com)"#
                 ]),
             });
             assert_eq!(
-                slack_starred_message.render_content(),
+                slack_message.render_content(),
                 "@@John Doe@\n@@user2@\n@@Admins@\n@@group2@\n#general\n#C0011223\n👋\n![:unknown2:](https://emoji.com/unknown2.png)"
             );
         }

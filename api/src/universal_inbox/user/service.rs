@@ -133,6 +133,15 @@ impl UserService {
         Ok(user_auths.iter().map(UserAuthMethod::from).collect())
     }
 
+    pub async fn get_user_auth(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        kind: UserAuthKind,
+    ) -> Result<Option<UserAuth>, UniversalInboxError> {
+        self.repository.get_user_auth(executor, user_id, kind).await
+    }
+
     // --- Auth method management (add/remove) ---
 
     #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
@@ -1185,6 +1194,37 @@ impl UserService {
             UpdateStatus { result: None, .. } => Err(UniversalInboxError::InvalidInputData {
                 source: None,
                 user_error: format!("Invalid password reset token for user {user_id}"),
+            }),
+        }
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    pub async fn set_password(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        new_password: SecretBox<Password>,
+    ) -> Result<(), UniversalInboxError> {
+        let new_password_hash = self.get_new_password_hash(new_password)?;
+        let updated_user = self
+            .repository
+            .update_password(executor, user_id, new_password_hash, None)
+            .await?;
+
+        match updated_user {
+            UpdateStatus {
+                result: Some(_), ..
+            } => Ok(()),
+            UpdateStatus { result: None, .. } => Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: format!(
+                    "Failed to set password for user {user_id}: no Local auth found"
+                ),
             }),
         }
     }

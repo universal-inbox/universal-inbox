@@ -21,6 +21,6 @@ Todoist in Universal Inbox serves several key functions:
 - **Keyboard shortcut**: `c`
 - **Effect in Universal Inbox**: Marks the synchronized task or task associated to a notification as complete and remove the notification from your inbox
 - **Effect in Todoist**: Completes the task in Todoist
-- **Effect in Source Tool**: Updates the status in the original platform (e.g., completes a Linear issue, removes a Slack "saved for later" status)
+- **Effect in Source Tool**: Updates the status in the original platform (e.g., completes a Linear issue, removes a Slack reaction)
 
 This is the primary action for tasks, which synchronizes completion status across all platforms.

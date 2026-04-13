@@ -22,7 +22,7 @@ use crate::{
         google_drive::GoogleDriveComment,
         google_mail::GoogleMailThread,
         linear::{LinearIssue, LinearNotification, LinearWorkflowState, LinearWorkflowStateType},
-        slack::{SlackReaction, SlackReactionState, SlackStar, SlackStarState, SlackThread},
+        slack::{SlackReaction, SlackReactionState, SlackThread},
         todoist::TodoistItem,
     },
     user::UserId,
@@ -55,7 +55,6 @@ impl HasHtmlUrl for ThirdPartyItem {
     fn get_html_url(&self) -> Url {
         match self.data {
             ThirdPartyItemData::TodoistItem(ref item) => item.get_html_url(),
-            ThirdPartyItemData::SlackStar(ref star) => star.get_html_url(),
             ThirdPartyItemData::SlackReaction(ref reaction) => reaction.get_html_url(),
             ThirdPartyItemData::SlackThread(ref thread) => thread.get_html_url(),
             ThirdPartyItemData::LinearIssue(ref issue) => issue.get_html_url(),
@@ -75,7 +74,6 @@ pub type ThirdPartyItemId = TypedId<Uuid, ThirdPartyItem>;
 #[serde(tag = "type", content = "content")]
 pub enum ThirdPartyItemData {
     TodoistItem(Box<TodoistItem>),
-    SlackStar(Box<SlackStar>),
     SlackReaction(Box<SlackReaction>),
     SlackThread(Box<SlackThread>),
     LinearIssue(Box<LinearIssue>),
@@ -91,7 +89,6 @@ impl ThirdPartyItemData {
     pub fn kind(&self) -> ThirdPartyItemKind {
         match self {
             ThirdPartyItemData::TodoistItem(_) => ThirdPartyItemKind::TodoistItem,
-            ThirdPartyItemData::SlackStar(_) => ThirdPartyItemKind::SlackStar,
             ThirdPartyItemData::SlackReaction(_) => ThirdPartyItemKind::SlackReaction,
             ThirdPartyItemData::SlackThread(_) => ThirdPartyItemKind::SlackThread,
             ThirdPartyItemData::LinearIssue(_) => ThirdPartyItemKind::LinearIssue,
@@ -109,7 +106,6 @@ macro_attr! {
     #[derive(Copy, Clone, PartialEq, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum ThirdPartyItemKind {
         TodoistItem,
-        SlackStar,
         SlackReaction,
         SlackThread,
         LinearIssue,
@@ -130,9 +126,9 @@ impl IntegrationProviderSource for ThirdPartyItem {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
         match self.data {
             ThirdPartyItemData::TodoistItem(_) => IntegrationProviderKind::Todoist,
-            ThirdPartyItemData::SlackStar(_)
-            | ThirdPartyItemData::SlackReaction(_)
-            | ThirdPartyItemData::SlackThread(_) => IntegrationProviderKind::Slack,
+            ThirdPartyItemData::SlackReaction(_) | ThirdPartyItemData::SlackThread(_) => {
+                IntegrationProviderKind::Slack
+            }
             ThirdPartyItemData::LinearIssue(_) | ThirdPartyItemData::LinearNotification(_) => {
                 IntegrationProviderKind::Linear
             }
@@ -149,7 +145,6 @@ impl ThirdPartyItemSource for ThirdPartyItem {
     fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
         match self.data {
             ThirdPartyItemData::TodoistItem(_) => ThirdPartyItemSourceKind::Todoist,
-            ThirdPartyItemData::SlackStar(_) => ThirdPartyItemSourceKind::SlackStar,
             ThirdPartyItemData::SlackReaction(_) => ThirdPartyItemSourceKind::SlackReaction,
             ThirdPartyItemData::SlackThread(_) => ThirdPartyItemSourceKind::SlackThread,
             ThirdPartyItemData::LinearIssue(_) => ThirdPartyItemSourceKind::LinearIssue,
@@ -201,12 +196,6 @@ impl ThirdPartyItem {
                     checked: true,
                     completed_at: Some(Utc::now()),
                     ..*item.clone()
-                }))
-            }
-            ThirdPartyItemData::SlackStar(ref slack_star) => {
-                ThirdPartyItemData::SlackStar(Box::new(SlackStar {
-                    state: SlackStarState::StarRemoved,
-                    ..*slack_star.clone()
                 }))
             }
             ThirdPartyItemData::SlackReaction(ref slack_reaction) => {
@@ -272,7 +261,6 @@ macro_attr! {
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum ThirdPartyItemSourceKind {
         Todoist,
-        SlackStar,
         SlackReaction,
         SlackThread,
         LinearIssue,
