@@ -22,7 +22,7 @@ use universal_inbox::{
         TaskSyncSourceKind, service::TaskPatch,
     },
     third_party::{
-        integrations::slack::{SlackReaction, SlackStar},
+        integrations::slack::SlackReaction,
         item::{
             ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemSource,
             ThirdPartyItemSourceKind,
@@ -1291,16 +1291,6 @@ impl TaskService {
             }
             ThirdPartyItemSourceKind::SlackReaction => {
                 self.apply_updated_task_side_effect::<SlackReaction, SlackService>(
-                    executor,
-                    self.slack_service.clone(),
-                    patch,
-                    third_party_item,
-                    for_user_id,
-                )
-                .await
-            }
-            ThirdPartyItemSourceKind::SlackStar => {
-                self.apply_updated_task_side_effect::<SlackStar, SlackService>(
                     executor,
                     self.slack_service.clone(),
                     patch,

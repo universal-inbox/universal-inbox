@@ -105,6 +105,7 @@ reqwest = { workspace = true, features = ["rustls-tls", "gzip"] }
 reqwest_v013 = { package = "reqwest", version = "0.13", default-features = false, features = ["rustls", "json", "cookies", "gzip"] }
 reqwest-middleware = { version = "0.5.0", features = ["json", "form"] }
 reqwest-tracing = { version = "0.7.0", features = ["opentelemetry_0_31"] }
+rpassword = "5"
 rmcp = { version = "1.2.0", features = [
   "transport-streamable-http-server",
   "transport-streamable-http-server-session",

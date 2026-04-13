@@ -10,7 +10,7 @@ use crate::{
     integrations::slack::SlackService,
     jobs::slack::{
         slack_message::handle_slack_message_push_event,
-        slack_reaction::handle_slack_reaction_push_event, slack_star::handle_slack_star_push_event,
+        slack_reaction::handle_slack_reaction_push_event,
     },
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
@@ -21,7 +21,6 @@ use crate::{
 
 pub mod slack_message;
 pub mod slack_reaction;
-pub mod slack_star;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SlackPushEventCallbackJob(pub SlackPushEventCallback);
@@ -51,24 +50,6 @@ pub async fn handle_slack_push_event(
         .context("Failed to create new transaction while handling a Slack event")?;
 
     match &job.0 {
-        event @ SlackPushEventCallback {
-            event: SlackEventCallbackBody::StarAdded(SlackStarAddedEvent { user, .. }),
-            ..
-        }
-        | event @ SlackPushEventCallback {
-            event: SlackEventCallbackBody::StarRemoved(SlackStarRemovedEvent { user, .. }),
-            ..
-        } => {
-            handle_slack_star_push_event(
-                &mut transaction,
-                event,
-                user.to_string(),
-                (*notification_service).clone(),
-                (*task_service).clone(),
-                (*integration_connection_service).clone(),
-            )
-            .await?
-        }
         event @ SlackPushEventCallback {
             event: SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent { user, .. }),
             ..

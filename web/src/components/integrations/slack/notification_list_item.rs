@@ -14,7 +14,7 @@ use universal_inbox::{
         integrations::slack::{
             SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
             SlackImDetails, SlackMessageDetails, SlackMessageRender, SlackReaction,
-            SlackReactionItem, SlackStarItem, SlackThread,
+            SlackReactionItem, SlackThread,
         },
         item::ThirdPartyItemData,
     },
@@ -23,31 +23,12 @@ use universal_inbox::{
 
 use crate::{
     components::{
-        integrations::slack::{
-            SlackMessageActorDisplay, SlackTeamDisplay, SlackUserDisplay,
-            icons::SlackNotificationIcon,
-        },
+        integrations::slack::{SlackMessageActorDisplay, SlackTeamDisplay, SlackUserDisplay},
         list::{ListContext, ListItem},
         notifications_list::{TaskHint, get_notification_list_item_action_buttons},
     },
     utils::format_elapsed_time,
 };
-
-#[component]
-pub fn SlackStarNotificationListItem(
-    notification: ReadSignal<NotificationWithTask>,
-    is_selected: ReadSignal<bool>,
-    on_select: EventHandler<()>,
-) -> Element {
-    rsx! {
-        SlackNotificationListItem {
-            notification,
-            subicon: rsx! { SlackNotificationIcon { class: "h-5 w-5 min-w-5" } },
-            is_selected,
-            on_select,
-        }
-    }
-}
 
 #[component]
 pub fn SlackReactionNotificationListItem(
@@ -132,14 +113,6 @@ pub fn SlackNotificationSubtitle(notification: ReadSignal<NotificationWithTask>)
         }
     }
     let subtitle = match notification().source_item.data {
-        ThirdPartyItemData::SlackStar(slack_star) => match slack_star.item {
-            SlackStarItem::SlackMessage(item) => channel_str(&item.channel),
-            SlackStarItem::SlackFile(item) => channel_str(&item.channel),
-            SlackStarItem::SlackFileComment(item) => channel_str(&item.channel),
-            SlackStarItem::SlackChannel(item) => channel_str(&item.channel),
-            SlackStarItem::SlackIm(item) => channel_str(&item.channel),
-            SlackStarItem::SlackGroup(item) => channel_str(&item.channel),
-        },
         ThirdPartyItemData::SlackReaction(slack_reaction) => match slack_reaction.item {
             SlackReactionItem::SlackMessage(item) => channel_str(&item.channel),
             SlackReactionItem::SlackFile(item) => channel_str(&item.channel),
@@ -173,26 +146,6 @@ pub fn SlackNotificationSubtitle(notification: ReadSignal<NotificationWithTask>)
 #[component]
 fn SlackNotificationListItemDetails(notification: ReadSignal<NotificationWithTask>) -> Element {
     match notification().source_item.data {
-        ThirdPartyItemData::SlackStar(slack_star) => match slack_star.item {
-            SlackStarItem::SlackMessage(slack_message) => rsx! {
-                SlackMessageListItemDetails { slack_message: *slack_message }
-            },
-            SlackStarItem::SlackFile(slack_file) => rsx! {
-                SlackFileListItemDetails { slack_file: *slack_file }
-            },
-            SlackStarItem::SlackChannel(slack_channel) => rsx! {
-                SlackChannelListItemDetails { slack_channel: *slack_channel }
-            },
-            SlackStarItem::SlackFileComment(slack_file_comment) => rsx! {
-                SlackFileCommentListItemDetails { slack_file_comment: *slack_file_comment }
-            },
-            SlackStarItem::SlackIm(slack_im) => rsx! {
-                SlackImListItemDetails { slack_im: *slack_im }
-            },
-            SlackStarItem::SlackGroup(slack_group) => rsx! {
-                SlackGroupListItemDetails { slack_group: *slack_group }
-            },
-        },
         ThirdPartyItemData::SlackReaction(slack_reaction) => match slack_reaction.item {
             SlackReactionItem::SlackMessage(slack_message) => rsx! {
                 SlackMessageListItemDetails { slack_message }

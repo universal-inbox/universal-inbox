@@ -7,7 +7,7 @@ use tracing::debug;
 use universal_inbox::{
     notification::Notification,
     third_party::{
-        integrations::slack::{SlackReaction, SlackStar, SlackThread},
+        integrations::slack::{SlackReaction, SlackThread},
         item::{
             ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemSource, ThirdPartyItemSourceKind,
         },
@@ -84,14 +84,6 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
         };
 
         match (*third_party_item).get_third_party_item_source_kind() {
-            ThirdPartyItemSourceKind::SlackStar => Ok(self
-                .create_notification_from_third_party_item::<SlackStar, SlackService>(
-                    executor,
-                    *third_party_item,
-                    self.slack_service.clone(),
-                    user_id,
-                )
-                .await?),
             ThirdPartyItemSourceKind::SlackReaction => Ok(self
                 .create_notification_from_third_party_item::<SlackReaction, SlackService>(
                     executor,

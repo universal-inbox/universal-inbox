@@ -5,10 +5,7 @@ use dioxus::prelude::*;
 use universal_inbox::{
     notification::{NotificationId, NotificationWithTask},
     third_party::{
-        integrations::{
-            github::GithubNotificationItem,
-            slack::{SlackReactionItem, SlackStarItem},
-        },
+        integrations::{github::GithubNotificationItem, slack::SlackReactionItem},
         item::ThirdPartyItemData,
     },
 };
@@ -27,9 +24,7 @@ use crate::{
             icons::{NotificationIcon, TaskIcon},
             linear::preview::LinearNotificationPreview,
             slack::preview::{
-                channel::SlackChannelPreview, file::SlackFilePreview,
-                file_comment::SlackFileCommentPreview, group::SlackGroupPreview,
-                im::SlackImPreview, message::SlackMessagePreview, thread::SlackThreadPreview,
+                file::SlackFilePreview, message::SlackMessagePreview, thread::SlackThreadPreview,
             },
         },
         notifications_list::{NotificationListContext, get_notification_list_item_action_buttons},
@@ -276,44 +271,6 @@ fn NotificationDetailsPreview(
             },
             SlackReactionItem::SlackFile(slack_file) => rsx! {
                 SlackFilePreview { slack_file, title: notification().title }
-            },
-        },
-        ThirdPartyItemData::SlackStar(slack_star) => match slack_star.item {
-            SlackStarItem::SlackMessage(slack_message) => rsx! {
-                SlackMessagePreview {
-                    slack_message: *slack_message,
-                    title: notification().title
-                }
-            },
-            SlackStarItem::SlackFile(slack_file) => rsx! {
-                SlackFilePreview {
-                    slack_file: *slack_file,
-                    title: notification().title
-                }
-            },
-            SlackStarItem::SlackFileComment(slack_file_comment) => rsx! {
-                SlackFileCommentPreview {
-                    slack_file_comment: *slack_file_comment,
-                    title: notification().title
-                }
-            },
-            SlackStarItem::SlackChannel(slack_channel) => rsx! {
-                SlackChannelPreview {
-                    slack_channel: *slack_channel,
-                    title: notification().title
-                }
-            },
-            SlackStarItem::SlackIm(slack_im) => rsx! {
-                SlackImPreview {
-                    slack_im: *slack_im,
-                    title: notification().title
-                }
-            },
-            SlackStarItem::SlackGroup(slack_group) => rsx! {
-                SlackGroupPreview {
-                    slack_group: *slack_group,
-                    title: notification().title
-                }
             },
         },
         ThirdPartyItemData::SlackThread(slack_thread) => rsx! {

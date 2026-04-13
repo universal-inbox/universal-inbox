@@ -188,8 +188,6 @@ required_oauth_scopes = [
   "mpim:read",
   "reactions:read",
   "reactions:write",
-  "stars:read",
-  "stars:write",
   "team:read",
   "usergroups:read",
   "users:read",

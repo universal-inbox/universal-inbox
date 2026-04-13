@@ -30,7 +30,7 @@ use universal_inbox::{
     },
     task::{Task, TaskCreation, TaskId, TaskStatus, service::TaskPatch},
     third_party::{
-        integrations::slack::{SlackReaction, SlackStar, SlackThread},
+        integrations::slack::{SlackReaction, SlackThread},
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId, ThirdPartyItemKind},
     },
     user::UserId,
@@ -215,16 +215,6 @@ impl NotificationService {
             NotificationSourceKind::Slack => match notification.source_item.data {
                 ThirdPartyItemData::SlackReaction(_) => {
                     self.apply_updated_notification_side_effect::<SlackReaction, SlackService>(
-                        executor,
-                        self.slack_service.clone(),
-                        patch,
-                        &mut notification.source_item,
-                        for_user_id,
-                    )
-                    .await?
-                }
-                ThirdPartyItemData::SlackStar(_) => {
-                    self.apply_updated_notification_side_effect::<SlackStar, SlackService>(
                         executor,
                         self.slack_service.clone(),
                         patch,
