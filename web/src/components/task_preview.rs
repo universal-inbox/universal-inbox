@@ -10,11 +10,8 @@ use universal_inbox::{
 use crate::{
     components::{
         integrations::{
-            icons::TaskIcon,
-            linear::preview::issue::LinearIssuePreview,
-            slack::preview::{
-                slack_reaction::SlackReactionTaskPreview, slack_star::SlackStarTaskPreview,
-            },
+            icons::TaskIcon, linear::preview::issue::LinearIssuePreview,
+            slack::preview::slack_reaction::SlackReactionTaskPreview,
             todoist::preview::TodoistTaskPreview,
         },
         tasks_list::{TaskListContext, get_task_list_item_action_buttons},
@@ -57,7 +54,6 @@ pub fn TaskPreview(
         };
     let task_type = match task().source_item.kind() {
         ThirdPartyItemKind::TodoistItem => "Task",
-        ThirdPartyItemKind::SlackStar => "Saved for later message",
         ThirdPartyItemKind::SlackReaction => "Reaction",
         ThirdPartyItemKind::LinearIssue => "Issue",
         _ => "Task",
@@ -164,9 +160,6 @@ pub fn TaskDetailsPreview(task: ReadSignal<Task>, expand_details: ReadSignal<boo
     match task().source_item.data {
         ThirdPartyItemData::TodoistItem(todoist_item) => rsx! {
             TodoistTaskPreview { todoist_item: *todoist_item, task }
-        },
-        ThirdPartyItemData::SlackStar(slack_star) => rsx! {
-            SlackStarTaskPreview { slack_star: *slack_star, task }
         },
         ThirdPartyItemData::SlackReaction(slack_reaction) => rsx! {
             SlackReactionTaskPreview { slack_reaction: *slack_reaction, task }
