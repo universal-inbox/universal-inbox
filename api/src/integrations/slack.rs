@@ -154,6 +154,60 @@ impl SlackService {
         Ok(())
     }
 
+    async fn create_bridge_pending_action_if_enabled(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        source_item: &ThirdPartyItem,
+        user_id: UserId,
+        action_type: universal_inbox::slack_bridge::SlackBridgeActionType,
+    ) -> Result<(), UniversalInboxError> {
+        let ThirdPartyItemData::SlackThread(slack_thread) = &source_item.data else {
+            return Ok(()); // Not a SlackThread — no-op
+        };
+
+        // Check if extension bridge is enabled for this user
+        let integration_connection_service = self.integration_connection_service.read().await;
+        let (_, integration_connection) = match integration_connection_service
+            .find_access_token(executor, IntegrationProviderKind::Slack, user_id)
+            .await?
+        {
+            Some(result) => result,
+            None => return Ok(()), // No Slack connection
+        };
+
+        let extension_enabled = match &integration_connection.provider {
+            universal_inbox::integration_connection::provider::IntegrationProvider::Slack {
+                config,
+                ..
+            } => config.message_config.extension_enabled,
+            _ => false,
+        };
+
+        if !extension_enabled {
+            return Ok(());
+        }
+
+        let team_id = slack_thread.team.id.clone();
+        let channel_id = slack_thread.channel.id.clone();
+        let thread_ts = slack_thread.messages.first().origin.ts.clone();
+        let last_message_ts = slack_thread.messages.last().origin.ts.clone();
+
+        self.slack_bridge_service
+            .create_pending_action(
+                executor,
+                user_id,
+                None,
+                action_type,
+                team_id,
+                channel_id,
+                thread_ts,
+                last_message_ts,
+            )
+            .await?;
+
+        Ok(())
+    }
+
     pub fn build_slack_client(
         &self,
     ) -> Result<SlackClient<SlackClientHyperHttpsConnector>, UniversalInboxError> {
