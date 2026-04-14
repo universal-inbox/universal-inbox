@@ -198,7 +198,7 @@ impl SlackService {
         &self,
         channel: &SlackChannelId,
         root_message: &SlackTs,
-        current_message: &SlackTs,
+        current_message: Option<&SlackTs>,
         user_id: UserId,
         slack_api_token: &SlackApiToken,
     ) -> Result<Vec1<SlackHistoryMessage>, UniversalInboxError> {
@@ -208,7 +208,7 @@ impl SlackService {
             slack_api_token,
             channel,
             root_message,
-            current_message,
+            current_message.cloned(),
         )
         .await?;
         if result.was_cached {
@@ -665,7 +665,13 @@ impl SlackService {
         current_span.set_attribute("slack.channel_id", channel_id.to_string());
         let root_ts = origin.thread_ts.as_ref().unwrap_or(&origin.ts);
         let messages = self
-            .fetch_thread(channel_id, root_ts, &origin.ts, user_id, &slack_api_token)
+            .fetch_thread(
+                channel_id,
+                root_ts,
+                Some(&origin.ts),
+                user_id,
+                &slack_api_token,
+            )
             .await?;
         let channel = self.fetch_channel(channel_id, &slack_api_token).await?;
         let team = self
@@ -911,7 +917,7 @@ async fn cached_fetch_message(
 #[io_cached(
     key = "String",
     // Use user_id to avoid leaking a message to an unauthorized user
-    convert = r#"{ format!("{}__{}__{}__{}__{}", slack_base_url, _user_id, channel, root_message, current_message) }"#,
+    convert = r#"{ format!("{}__{}__{}__{}__{:?}", slack_base_url, _user_id, channel, root_message, current_message) }"#,
     ty = "cached::AsyncRedisCache<String, Vec<SlackHistoryMessage>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_thread`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_thread", Duration::from_secs(60), false).await }"##,
@@ -923,17 +929,19 @@ async fn cached_fetch_thread(
     slack_api_token: &SlackApiToken,
     channel: &SlackChannelId,
     root_message: &SlackTs,
-    current_message: &SlackTs,
+    current_message: Option<SlackTs>,
 ) -> Result<Return<Vec<SlackHistoryMessage>>, UniversalInboxError> {
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
+    let mut request =
+        SlackApiConversationsRepliesRequest::new(channel.clone(), root_message.clone());
+    if let Some(ref latest) = current_message {
+        request = request.with_latest(latest.clone()).with_inclusive(true);
+    }
+
     let messages = session
-        .conversations_replies(
-            &SlackApiConversationsRepliesRequest::new(channel.clone(), root_message.clone())
-                .with_latest(current_message.clone())
-                .with_inclusive(true),
-        )
+        .conversations_replies(&request)
         .await
         .with_context(|| {
             UniversalInboxError::Unexpected(anyhow!(
@@ -1209,13 +1217,7 @@ impl ThirdPartyItemSourceService<SlackThread> for SlackService {
                 .with_team_id(slack_thread.team.id.clone());
 
             let messages = match self
-                .fetch_thread(
-                    channel_id,
-                    root_ts,
-                    &slack_thread.messages.last().origin.ts,
-                    user_id,
-                    &slack_api_token,
-                )
+                .fetch_thread(channel_id, root_ts, None, user_id, &slack_api_token)
                 .await
             {
                 Ok(messages) => messages,

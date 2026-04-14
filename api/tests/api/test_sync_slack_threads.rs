@@ -16,9 +16,9 @@ use crate::helpers::{
     integration_connection::{create_and_mock_integration_connection, nango_slack_connection},
     notification::{
         slack::{
-            create_notification_from_slack_thread, mock_slack_fetch_channel, mock_slack_fetch_team,
-            mock_slack_fetch_thread, mock_slack_fetch_user, mock_slack_get_chat_permalink,
-            slack_thread,
+            create_notification_from_slack_thread, mock_slack_fetch_channel,
+            mock_slack_fetch_full_thread, mock_slack_fetch_team, mock_slack_fetch_user,
+            mock_slack_get_chat_permalink, slack_thread,
         },
         sync_notifications,
     },
@@ -68,11 +68,10 @@ mod sync_slack_thread_notifications {
 
         // Mock Slack API to return thread with last_read matching the last message
         // (i.e., user read all messages in Slack)
-        mock_slack_fetch_thread(
+        mock_slack_fetch_full_thread(
             &app.app.slack_mock_server,
             "C05XXX",
             &first_message_id,
-            &last_message_id,
             "slack_fetch_thread_response.json",
             true,
             Some(1), // last_read = last message index (message at index 1)
@@ -156,14 +155,12 @@ mod sync_slack_thread_notifications {
         assert_eq!(existing_notification.status, NotificationStatus::Unread);
 
         let first_message_id = slack_thread.messages.first().origin.ts.to_string();
-        let last_message_id = slack_thread.messages.last().origin.ts.to_string();
 
         // Mock Slack API to return thread with subscribed: false
-        mock_slack_fetch_thread(
+        mock_slack_fetch_full_thread(
             &app.app.slack_mock_server,
             "C05XXX",
             &first_message_id,
-            &last_message_id,
             "slack_fetch_thread_response.json",
             false, // subscribed = false (user unsubscribed in Slack)
             None,
@@ -250,14 +247,12 @@ mod sync_slack_thread_notifications {
         assert_eq!(existing_notification.status, NotificationStatus::Unread);
 
         let first_message_id = slack_thread.messages.first().origin.ts.to_string();
-        let last_message_id = slack_thread.messages.last().origin.ts.to_string();
 
         // Mock Slack API to return thread with same status (still unread)
-        mock_slack_fetch_thread(
+        mock_slack_fetch_full_thread(
             &app.app.slack_mock_server,
             "C05XXX",
             &first_message_id,
-            &last_message_id,
             "slack_fetch_thread_response.json",
             true,
             None, // No last_read => still unread
