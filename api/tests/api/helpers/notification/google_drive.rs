@@ -124,6 +124,7 @@ pub async fn mock_google_drive_comments_list_service(
     let mut mock_builder = Mock::given(method("GET"))
         .and(path(format!("/files/{}/comments", file_id)))
         .and(header("authorization", "Bearer google_drive_test_access_token"))
+        .and(query_param("supportsAllDrives", "true"))
         .and(query_param("pageSize", per_page.to_string()))
         .and(query_param(
             "fields",
