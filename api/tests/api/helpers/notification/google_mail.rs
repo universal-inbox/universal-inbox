@@ -295,7 +295,7 @@ pub fn assert_sync_notifications(
                 assert_eq!(notification.status, NotificationStatus::Unread);
                 assert_eq!(
                     notification.get_html_url(),
-                    "https://mail.google.com/mail/u/user@example.com/#inbox/123"
+                    "https://mail.google.com/mail/u/0/?authuser=user@example.com#all/123"
                         .parse::<Url>()
                         .unwrap()
                 );
@@ -312,7 +312,7 @@ pub fn assert_sync_notifications(
                 assert_eq!(notification.status, NotificationStatus::Read);
                 assert_eq!(
                     notification.get_html_url(),
-                    "https://mail.google.com/mail/u/user@example.com/#inbox/456"
+                    "https://mail.google.com/mail/u/0/?authuser=user@example.com#all/456"
                         .parse::<Url>()
                         .unwrap()
                 );
