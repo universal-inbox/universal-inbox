@@ -12,6 +12,7 @@ use tokio_retry::{
     strategy::{ExponentialBackoff, jitter},
 };
 use tracing::{debug, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
@@ -35,14 +36,19 @@ pub fn scope() -> Scope {
         .service(web::resource("/slack/events").route(web::post().to(push_slack_event)))
 }
 
+#[tracing::instrument(level = "debug", skip_all, err)]
 pub async fn push_slack_event(
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     third_party_item_service: web::Data<Arc<RwLock<ThirdPartyItemService>>>,
     slack_push_event: web::Json<SlackPushEvent>,
     storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    let current_span = tracing::Span::current();
+
     match slack_push_event.into_inner() {
         SlackPushEvent::UrlVerification(SlackUrlVerificationEvent { challenge }) => {
+            current_span.set_attribute("slack.event_type", "url_verification");
+            current_span.set_attribute("slack.event.outcome", "url_verification");
             return Ok(HttpResponse::Ok()
                 .content_type("application/json")
                 .body(json!({ "challenge": challenge }).to_string()));
@@ -69,50 +75,107 @@ pub async fn push_slack_event(
                 ..
             },
         ) => {
+            let event_type = match &event.event {
+                SlackEventCallbackBody::ReactionAdded(_) => "reaction_added",
+                SlackEventCallbackBody::ReactionRemoved(_) => "reaction_removed",
+                _ => unreachable!(),
+            };
+            current_span.set_attribute("slack.event_type", event_type);
+            current_span.set_attribute("slack.team_id", event.team_id.to_string());
+            current_span.set_attribute("slack.event_id", event.event_id.to_string());
+            current_span.set_attribute("slack.user_id", user.to_string());
+            current_span.set_attribute("slack.reaction", reaction.to_string());
+
             let service = integration_connection_service.read().await;
             let mut transaction = service
                 .begin()
                 .await
                 .context("Failed to create new transaction while checking Slack user ID")?;
 
-            if let Some(IntegrationConnectionConfig::Slack(SlackConfig {
-                reaction_config:
-                    SlackReactionConfig {
-                        sync_enabled: true,
-                        reaction_name,
-                        ..
-                    },
-                ..
-            })) = service
+            let config = service
                 .get_integration_connection_config_for_provider_user_id(
                     &mut transaction,
                     IntegrationProviderKind::Slack,
                     user.to_string(),
                 )
-                .await?
-                && reaction_name == *reaction
-            {
-                send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
+                .await?;
+
+            match config {
+                Some(IntegrationConnectionConfig::Slack(SlackConfig {
+                    reaction_config:
+                        SlackReactionConfig {
+                            sync_enabled: true,
+                            reaction_name,
+                            ..
+                        },
+                    ..
+                })) if reaction_name == *reaction => {
+                    current_span.set_attribute("slack.event.outcome", "queued");
+                    send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
+                }
+                Some(IntegrationConnectionConfig::Slack(SlackConfig {
+                    reaction_config:
+                        SlackReactionConfig {
+                            sync_enabled: false,
+                            ..
+                        },
+                    ..
+                })) => {
+                    current_span.set_attribute("slack.event.outcome", "discarded");
+                    current_span
+                        .set_attribute("slack.event.discard_reason", "reaction_sync_disabled");
+                }
+                Some(IntegrationConnectionConfig::Slack(_)) => {
+                    current_span.set_attribute("slack.event.outcome", "discarded");
+                    current_span
+                        .set_attribute("slack.event.discard_reason", "reaction_name_mismatch");
+                }
+                _ => {
+                    current_span.set_attribute("slack.event.outcome", "discarded");
+                    current_span.set_attribute("slack.event.discard_reason", "no_slack_config");
+                }
             }
         }
         SlackPushEvent::EventCallback(
             ref event @ SlackPushEventCallback {
                 event:
                     SlackEventCallbackBody::Message(SlackMessageEvent {
-                        origin: SlackMessageOrigin { ref thread_ts, .. },
+                        origin:
+                            SlackMessageOrigin {
+                                ref thread_ts,
+                                ref ts,
+                                ref channel,
+                                ..
+                            },
                         content: Some(ref content),
+                        sender: SlackMessageSender { ref user, .. },
                         ..
                     }),
                 ..
             },
         ) => {
-            //
+            current_span.set_attribute("slack.event_type", "message");
+            current_span.set_attribute("slack.team_id", event.team_id.to_string());
+            current_span.set_attribute("slack.event_id", event.event_id.to_string());
+            current_span.set_attribute("slack.ts", ts.to_string());
+            if let Some(thread_ts) = thread_ts {
+                current_span.set_attribute("slack.thread_ts", thread_ts.to_string());
+            }
+            if let Some(channel) = channel {
+                current_span.set_attribute("slack.channel_id", channel.to_string());
+            }
+            if let Some(user) = user {
+                current_span.set_attribute("slack.user_id", user.to_string());
+            }
+
             let service = third_party_item_service.read().await;
             let mut transaction = service.begin().await.context(
                 "Failed to create new transaction while checking for known Slack threads",
             )?;
 
             if has_slack_references_in_message(content) {
+                current_span.set_attribute("slack.event.outcome", "queued");
+                current_span.set_attribute("slack.event.queue_reason", "has_references");
                 send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
                 return Ok(HttpResponse::Ok().finish());
             }
@@ -127,15 +190,26 @@ pub async fn push_slack_event(
                     )
                     .await?
             {
+                current_span.set_attribute("slack.event.outcome", "queued");
+                current_span.set_attribute("slack.event.queue_reason", "known_thread");
                 send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
                 return Ok(HttpResponse::Ok().finish());
             }
+
+            current_span.set_attribute("slack.event.outcome", "discarded");
+            current_span.set_attribute(
+                "slack.event.discard_reason",
+                "no_references_no_known_thread",
+            );
         }
         SlackPushEvent::AppRateLimited(SlackAppRateLimitedEvent {
             team_id,
             minute_rate_limited,
             api_app_id,
         }) => {
+            current_span.set_attribute("slack.event_type", "app_rate_limited");
+            current_span.set_attribute("slack.team_id", team_id.to_string());
+            current_span.set_attribute("slack.event.outcome", "rate_limited");
             warn!(
                 ?team_id,
                 ?api_app_id,
@@ -149,6 +223,11 @@ pub async fn push_slack_event(
             event_id,
             ..
         }) => {
+            current_span.set_attribute("slack.event_type", "unknown");
+            current_span.set_attribute("slack.team_id", team_id.to_string());
+            current_span.set_attribute("slack.event_id", event_id.to_string());
+            current_span.set_attribute("slack.event.outcome", "discarded");
+            current_span.set_attribute("slack.event.discard_reason", "unknown_event_type");
             warn!(
                 ?team_id,
                 ?api_app_id,

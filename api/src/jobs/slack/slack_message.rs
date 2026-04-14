@@ -5,6 +5,7 @@ use slack_morphism::prelude::*;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::warn;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use universal_inbox::{
     integration_connection::{
@@ -25,6 +26,7 @@ use crate::{
     },
 };
 
+#[tracing::instrument(level = "debug", skip_all, err)]
 pub async fn handle_slack_message_push_event(
     executor: &mut Transaction<'_, Postgres>,
     event: &SlackPushEventCallback,
@@ -33,6 +35,8 @@ pub async fn handle_slack_message_push_event(
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     slack_service: Arc<SlackService>,
 ) -> Result<(), UniversalInboxError> {
+    let current_span = tracing::Span::current();
+
     let (provider_user_ids, thread_ts) = match event {
         SlackPushEventCallback {
             team_id,
@@ -80,10 +84,17 @@ pub async fn handle_slack_message_push_event(
             (user_ids, thread_ts.clone())
         }
         _ => {
+            current_span.set_attribute("slack.message.outcome", "discarded");
+            current_span.set_attribute("slack.message.discard_reason", "not_a_message_event");
             warn!("Slack push event is not a message event");
             return Ok(());
         }
     };
+
+    current_span.set_attribute(
+        "slack.referenced_user_count",
+        provider_user_ids.len() as i64,
+    );
 
     let integration_connections = integration_connection_service
         .read()
@@ -98,6 +109,12 @@ pub async fn handle_slack_message_push_event(
         .iter()
         .map(|integration_connection| integration_connection.id)
         .collect::<Vec<_>>();
+
+    current_span.set_attribute(
+        "slack.matched_integration_connections_count",
+        integration_connections.len() as i64,
+    );
+
     for integration_connection in integration_connections {
         handle_slack_message_push_event_if_enabled(
             executor,
@@ -123,6 +140,11 @@ pub async fn handle_slack_message_push_event(
         )
         .await?;
 
+    current_span.set_attribute(
+        "slack.known_thread_items_count",
+        third_party_items.len() as i64,
+    );
+
     for third_party_item in third_party_items.iter() {
         if !handled_integration_connection_ids.contains(&third_party_item.integration_connection_id)
             && let Some(integration_connection) = integration_connection_service
@@ -145,6 +167,7 @@ pub async fn handle_slack_message_push_event(
     Ok(())
 }
 
+#[tracing::instrument(level = "debug", skip_all, err)]
 async fn handle_slack_message_push_event_if_enabled(
     executor: &mut Transaction<'_, Postgres>,
     event: &SlackPushEventCallback,
@@ -152,6 +175,13 @@ async fn handle_slack_message_push_event_if_enabled(
     existing_third_party_item: Option<&ThirdPartyItem>,
     notification_service: Arc<RwLock<NotificationService>>,
 ) -> Result<(), UniversalInboxError> {
+    let current_span = tracing::Span::current();
+    current_span.set_attribute(
+        "slack.integration_connection_id",
+        integration_connection.id.to_string(),
+    );
+    current_span.set_attribute("user.id", integration_connection.user_id.to_string());
+
     let IntegrationProvider::Slack {
         config: slack_config,
         ..
@@ -173,6 +203,7 @@ async fn handle_slack_message_push_event_if_enabled(
         ..
     } = slack_config
     {
+        current_span.set_attribute("slack.message_sync_enabled", true);
         let user_id = integration_connection.user_id;
         notification_service
             .read()
@@ -188,6 +219,8 @@ async fn handle_slack_message_push_event_if_enabled(
                 user_id,
             )
             .await?;
+    } else {
+        current_span.set_attribute("slack.message_sync_enabled", false);
     }
 
     Ok(())
