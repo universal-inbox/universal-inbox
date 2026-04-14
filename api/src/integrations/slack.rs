@@ -12,7 +12,7 @@ use slack_morphism::{
 };
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 use uuid::Uuid;
@@ -32,7 +32,10 @@ use universal_inbox::{
             SlackMessageDetails, SlackMessageSenderDetails, SlackReaction, SlackReactionItem,
             SlackReactionState, SlackThread,
         },
-        item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
+        item::{
+            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemKind,
+            ThirdPartyItemSourceKind,
+        },
     },
     user::UserId,
     utils::{default_value::DefaultValue, truncate::truncate_with_ellipse},
@@ -41,7 +44,9 @@ use universal_inbox::{
 use crate::{
     integrations::{
         notification::ThirdPartyNotificationSourceService, task::ThirdPartyTaskService,
+        third_party::ThirdPartyItemSourceService,
     },
+    repository::{Repository, third_party::ThirdPartyItemRepository},
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
         slack_bridge::service::SlackBridgeService,
@@ -54,6 +59,7 @@ static SLACK_BASE_URL: &str = "https://api.slack.com/api";
 #[derive(Clone)]
 pub struct SlackService {
     slack_base_url: String,
+    repository: Arc<Repository>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     slack_bridge_service: Arc<SlackBridgeService>,
 }
@@ -61,11 +67,13 @@ pub struct SlackService {
 impl SlackService {
     pub fn new(
         slack_base_url: Option<String>,
+        repository: Arc<Repository>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         slack_bridge_service: Arc<SlackBridgeService>,
     ) -> Self {
         Self {
             slack_base_url: slack_base_url.unwrap_or_else(|| SLACK_BASE_URL.to_string()),
+            repository,
             integration_connection_service,
             slack_bridge_service,
         }
@@ -1146,6 +1154,142 @@ impl TaskSource for SlackService {
 impl IntegrationProviderSource for SlackService {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
         IntegrationProviderKind::Slack
+    }
+}
+
+#[async_trait]
+impl ThirdPartyItemSourceService<SlackThread> for SlackService {
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    async fn fetch_items(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        _last_sync_completed_at: Option<DateTime<Utc>>,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        let (access_token, integration_connection) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Slack, user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!("Cannot sync Slack thread notifications without an access token")
+            })?;
+
+        let existing_items = self
+            .repository
+            .find_third_party_items_with_active_notification_for_user_id(
+                executor,
+                ThirdPartyItemKind::SlackThread,
+                NotificationStatus::Unread,
+                user_id,
+            )
+            .await?;
+
+        debug!(
+            "Found {} Slack threads with Unread notifications to sync for user {user_id}",
+            existing_items.len()
+        );
+
+        let mut updated_items = vec![];
+        for existing_item in existing_items {
+            let ThirdPartyItemData::SlackThread(ref slack_thread) = existing_item.data else {
+                continue;
+            };
+
+            let channel_id = &slack_thread.channel.id;
+            let root_ts = &slack_thread.messages.first().origin.ts;
+
+            let slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()))
+                .with_team_id(slack_thread.team.id.clone());
+
+            let messages = match self
+                .fetch_thread(
+                    channel_id,
+                    root_ts,
+                    &slack_thread.messages.last().origin.ts,
+                    user_id,
+                    &slack_api_token,
+                )
+                .await
+            {
+                Ok(messages) => messages,
+                Err(err) => {
+                    error!(
+                        "Failed to fetch Slack thread {root_ts} in channel {channel_id} for user {user_id}: {err:?}"
+                    );
+                    continue;
+                }
+            };
+
+            let channel = self.fetch_channel(channel_id, &slack_api_token).await?;
+            let team = self
+                .fetch_team(&slack_thread.team.id, &slack_api_token)
+                .await?;
+            let sender_profiles = self
+                .fetch_sender_profiles_from_messages(&slack_api_token, &messages, user_id)
+                .await?;
+            let thread_params = &messages.first().parent;
+            let first_unread_message = SlackThread::first_unread_message_from_last_read(
+                &thread_params.last_read,
+                &messages,
+            );
+            let url = self
+                .get_chat_permalink(
+                    channel_id,
+                    &first_unread_message.origin.ts,
+                    &slack_api_token,
+                )
+                .await?;
+
+            let mut references = SlackReferences::new();
+            for message in messages.iter() {
+                if let Some(refs) = self
+                    .find_and_resolve_slack_references_in_message(
+                        &message.content,
+                        user_id,
+                        &slack_api_token,
+                    )
+                    .await
+                    .inspect_err(|err| {
+                        warn!("Failed to resolve Slack references in the message: {err:?}")
+                    })
+                    .unwrap_or(None)
+                {
+                    references.extend(refs);
+                }
+            }
+
+            let updated_thread = SlackThread {
+                url,
+                subscribed: thread_params.subscribed.unwrap_or(true),
+                last_read: thread_params.last_read.clone(),
+                sender_profiles,
+                messages,
+                channel,
+                team,
+                references: Some(references),
+                user_slack_id: integration_connection.provider_user_id.clone(),
+            };
+
+            updated_items
+                .push(updated_thread.into_third_party_item(user_id, integration_connection.id));
+        }
+
+        Ok(updated_items)
+    }
+
+    fn is_sync_incremental(&self) -> bool {
+        true
+    }
+
+    fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
+        ThirdPartyItemSourceKind::SlackThread
     }
 }
 
