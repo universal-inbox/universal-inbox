@@ -279,10 +279,7 @@ impl GoogleDriveService {
             [
                 format!("{}/about", self.google_drive_base_path),
                 format!("{}/files", self.google_drive_base_path),
-                format!(
-                    "{}/files/{{commment_id}}/comments",
-                    self.google_drive_base_path
-                ),
+                format!("{}/files/{{file_id}}/comments", self.google_drive_base_path),
             ],
             self.max_retry_duration,
         )
@@ -336,7 +333,7 @@ impl GoogleDriveService {
 
         loop {
             let comments_url = format!(
-                "{}/files/{}/comments?pageSize={}&fields=comments(id,content,htmlContent,quotedFileContent,author,createdTime,modifiedTime,resolved,replies),nextPageToken{}",
+                "{}/files/{}/comments?supportsAllDrives=true&pageSize={}&fields=comments(id,content,htmlContent,quotedFileContent,author,createdTime,modifiedTime,resolved,replies),nextPageToken{}",
                 self.google_drive_base_url,
                 file_id,
                 self.page_size,
