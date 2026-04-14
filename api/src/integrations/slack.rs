@@ -13,6 +13,7 @@ use slack_morphism::{
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 use uuid::Uuid;
 use vec1::Vec1;
@@ -389,12 +390,16 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     pub async fn fetch_item_from_event(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         slack_push_event_callback: &SlackPushEventCallback,
         user_id: UserId,
     ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
+        let current_span = tracing::Span::current();
+        current_span.set_attribute("user.id", user_id.to_string());
+
         match &slack_push_event_callback.event {
             SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent {
                 item,
@@ -403,6 +408,7 @@ impl SlackService {
                 event_ts,
                 ..
             }) => {
+                current_span.set_attribute("slack.fetch.item_type", "slack_reaction");
                 self.fetch_item_from_slack_reaction(
                     executor,
                     slack_push_event_callback,
@@ -422,6 +428,7 @@ impl SlackService {
                 event_ts,
                 ..
             }) => {
+                current_span.set_attribute("slack.fetch.item_type", "slack_reaction");
                 self.fetch_item_from_slack_reaction(
                     executor,
                     slack_push_event_callback,
@@ -435,6 +442,7 @@ impl SlackService {
                 .await
             }
             SlackEventCallbackBody::Message(SlackMessageEvent { origin, .. }) => {
+                current_span.set_attribute("slack.fetch.item_type", "slack_thread");
                 self.fetch_item_from_slack_message(
                     executor,
                     slack_push_event_callback,
@@ -444,7 +452,11 @@ impl SlackService {
                 .await
             }
             // Not yet implemented resource type
-            _ => Ok(None),
+            _ => {
+                current_span.set_attribute("slack.fetch.outcome", "skipped");
+                current_span.set_attribute("slack.fetch.skip_reason", "unsupported_event_type");
+                Ok(None)
+            }
         }
     }
 
@@ -509,6 +521,7 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions, clippy::too_many_arguments)]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     pub async fn fetch_item_from_slack_reaction(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -520,6 +533,10 @@ impl SlackService {
         slack_reaction_name: &SlackReactionName,
         user_id: UserId,
     ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
+        let current_span = tracing::Span::current();
+        current_span.set_attribute("user.id", user_id.to_string());
+        current_span.set_attribute("slack.reaction_name", slack_reaction_name.to_string());
+
         let (access_token, integration_connection) = self
             .integration_connection_service
             .read()
@@ -589,16 +606,26 @@ impl SlackService {
             SlackReactionsItem::Message(SlackHistoryMessage {
                 origin: SlackMessageOrigin { channel: None, .. },
                 ..
-            })
-            | SlackReactionsItem::File(_) => return Ok(None),
+            }) => {
+                current_span.set_attribute("slack.fetch.outcome", "skipped");
+                current_span.set_attribute("slack.fetch.skip_reason", "no_channel");
+                return Ok(None);
+            }
+            SlackReactionsItem::File(_) => {
+                current_span.set_attribute("slack.fetch.outcome", "skipped");
+                current_span.set_attribute("slack.fetch.skip_reason", "file_reaction");
+                return Ok(None);
+            }
         };
 
+        current_span.set_attribute("slack.fetch.outcome", "fetched");
         Ok(Some(
             slack_reaction.into_third_party_item(user_id, integration_connection.id),
         ))
     }
 
     #[allow(clippy::blocks_in_conditions, clippy::too_many_arguments)]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     pub async fn fetch_item_from_slack_message(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -606,6 +633,9 @@ impl SlackService {
         origin: &SlackMessageOrigin,
         user_id: UserId,
     ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
+        let current_span = tracing::Span::current();
+        current_span.set_attribute("user.id", user_id.to_string());
+
         let (access_token, integration_connection) = self
             .integration_connection_service
             .read()
@@ -620,8 +650,11 @@ impl SlackService {
             .with_team_id(slack_push_event_callback.team_id.clone());
 
         let Some(channel_id) = &origin.channel else {
+            current_span.set_attribute("slack.fetch.outcome", "skipped");
+            current_span.set_attribute("slack.fetch.skip_reason", "no_channel_id");
             return Ok(None);
         };
+        current_span.set_attribute("slack.channel_id", channel_id.to_string());
         let root_ts = origin.thread_ts.as_ref().unwrap_or(&origin.ts);
         let messages = self
             .fetch_thread(channel_id, root_ts, &origin.ts, user_id, &slack_api_token)
@@ -674,6 +707,7 @@ impl SlackService {
             user_slack_id: integration_connection.provider_user_id.clone(),
         };
 
+        current_span.set_attribute("slack.fetch.outcome", "fetched");
         Ok(Some(
             slack_thread.into_third_party_item(user_id, integration_connection.id),
         ))
