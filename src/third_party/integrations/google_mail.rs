@@ -202,7 +202,7 @@ impl ThirdPartyItemFromSource for GoogleMailThread {
 impl HasHtmlUrl for GoogleMailThread {
     fn get_html_url(&self) -> Url {
         format!(
-            "https://mail.google.com/mail/u/{}/#inbox/{}",
+            "https://mail.google.com/mail/u/0/?authuser={}#all/{}",
             self.user_email_address, self.id
         )
         .parse::<Url>()

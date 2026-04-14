@@ -1080,7 +1080,7 @@ mod tests {
             );
             assert_eq!(
                 google_mail_notification.get_html_url(),
-                "https://mail.google.com/mail/u/test@example.com/#inbox/18a909f8178"
+                "https://mail.google.com/mail/u/0/?authuser=test@example.com#all/18a909f8178"
                     .parse::<Url>()
                     .unwrap()
             );
@@ -1154,7 +1154,7 @@ mod tests {
             assert_eq!(google_mail_notification.title, DEFAULT_SUBJECT.to_string());
             assert_eq!(
                 google_mail_notification.get_html_url(),
-                "https://mail.google.com/mail/u/test@example.com/#inbox/18a909f8178"
+                "https://mail.google.com/mail/u/0/?authuser=test@example.com#all/18a909f8178"
                     .parse::<Url>()
                     .unwrap()
             );
