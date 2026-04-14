@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use slack_morphism::prelude::*;
 use tokio::sync::RwLock;
 
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+
 use crate::{
     integrations::slack::SlackService,
     jobs::slack::{
@@ -35,6 +37,7 @@ pub fn fail_if_needed<T>(
     }
 }
 
+#[tracing::instrument(level = "debug", skip_all, err)]
 pub async fn handle_slack_push_event(
     job: SlackPushEventCallbackJob,
     notification_service: Data<Arc<RwLock<NotificationService>>>,
@@ -43,6 +46,17 @@ pub async fn handle_slack_push_event(
     third_party_item_service: Data<Arc<RwLock<ThirdPartyItemService>>>,
     slack_service: Data<Arc<SlackService>>,
 ) -> Result<(), UniversalInboxError> {
+    let current_span = tracing::Span::current();
+    current_span.set_attribute("slack.team_id", job.0.team_id.to_string());
+    current_span.set_attribute("slack.event_id", job.0.event_id.to_string());
+    let event_type = match &job.0.event {
+        SlackEventCallbackBody::ReactionAdded(_) => "reaction_added",
+        SlackEventCallbackBody::ReactionRemoved(_) => "reaction_removed",
+        SlackEventCallbackBody::Message(_) => "message",
+        _ => "unknown",
+    };
+    current_span.set_attribute("slack.event_type", event_type);
+
     let service = notification_service.read().await;
     let mut transaction = service
         .begin()
