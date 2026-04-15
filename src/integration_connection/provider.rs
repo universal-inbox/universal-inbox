@@ -192,7 +192,7 @@ impl IntegrationProvider {
             IntegrationProvider::Linear { config } => config.sync_notifications_enabled,
             IntegrationProvider::GoogleDrive { config, .. } => config.sync_notifications_enabled,
             IntegrationProvider::GoogleMail { config, .. } => config.sync_notifications_enabled,
-            IntegrationProvider::Slack { .. } => false, // Slack notifications are not synced but received via the webhook
+            IntegrationProvider::Slack { config, .. } => config.message_config.sync_enabled,
             _ => false,
         }
     }

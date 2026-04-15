@@ -235,7 +235,8 @@ macro_attr! {
         Github,
         Linear,
         GoogleMail,
-        GoogleDrive
+        GoogleDrive,
+        Slack
     }
 }
 
@@ -265,7 +266,9 @@ impl TryFrom<ThirdPartyItemSourceKind> for NotificationSourceKind {
             ThirdPartyItemSourceKind::LinearNotification => Ok(Self::Linear),
             ThirdPartyItemSourceKind::GoogleMailThread => Ok(Self::GoogleMail),
             ThirdPartyItemSourceKind::GoogleDriveComment => Ok(Self::GoogleDrive),
-            ThirdPartyItemSourceKind::SlackReaction => Ok(Self::Slack),
+            ThirdPartyItemSourceKind::SlackReaction | ThirdPartyItemSourceKind::SlackThread => {
+                Ok(Self::Slack)
+            }
             ThirdPartyItemSourceKind::WebPage => Ok(Self::API),
             _ => Err(anyhow!(
                 "ThirdPartyItemSourceKind {source_kind} is not a valid NotificationSourceKind"
@@ -284,6 +287,7 @@ impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
             IntegrationProviderKind::Linear => Ok(Self::Linear),
             IntegrationProviderKind::GoogleMail => Ok(Self::GoogleMail),
             IntegrationProviderKind::GoogleDrive => Ok(Self::GoogleDrive),
+            IntegrationProviderKind::Slack => Ok(Self::Slack),
             _ => Err(anyhow!(
                 "IntegrationProviderKind {provider_kind} is not a valid NotificationSyncSourceKind"
             )),
@@ -299,6 +303,7 @@ impl From<NotificationSyncSourceKind> for IntegrationProviderKind {
             NotificationSyncSourceKind::Linear => IntegrationProviderKind::Linear,
             NotificationSyncSourceKind::GoogleMail => IntegrationProviderKind::GoogleMail,
             NotificationSyncSourceKind::GoogleDrive => IntegrationProviderKind::GoogleDrive,
+            NotificationSyncSourceKind::Slack => IntegrationProviderKind::Slack,
         }
     }
 }
