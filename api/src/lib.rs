@@ -614,6 +614,7 @@ pub async fn build_services(
     let slack_bridge_service = Arc::new(SlackBridgeService::new(repository.clone()));
     let slack_service = Arc::new(SlackService::new(
         slack_base_url,
+        repository.clone(),
         integration_connection_service.clone(),
         slack_bridge_service.clone(),
     ));

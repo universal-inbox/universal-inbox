@@ -163,6 +163,44 @@ pub async fn mock_slack_fetch_thread(
         .await;
 }
 
+pub async fn mock_slack_fetch_full_thread(
+    slack_mock_server: &MockServer,
+    channel_id: &str,
+    first_message_id: &str,
+    fixture_response_file: &str,
+    subscribed: bool,
+    last_read_message_index: Option<usize>,
+    access_token: &str,
+) {
+    let mut json_body: Value = load_json_fixture_file(fixture_response_file);
+    json_body["messages"][0]["subscribed"] = Value::Bool(subscribed);
+    json_body["messages"][0]["last_read"] = match last_read_message_index {
+        Some(index) => Value::String(
+            json_body["messages"][index]["ts"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+        ),
+        None => Value::Null,
+    };
+
+    Mock::given(method("GET"))
+        .and(header(
+            "authorization",
+            format!("Bearer {access_token}").as_str(),
+        ))
+        .and(path("/conversations.replies"))
+        .and(query_param("channel", channel_id))
+        .and(query_param("ts", first_message_id))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(json_body),
+        )
+        .mount(slack_mock_server)
+        .await;
+}
+
 pub async fn mock_slack_fetch_channel(
     slack_mock_server: &MockServer,
     channel_id: &str,
