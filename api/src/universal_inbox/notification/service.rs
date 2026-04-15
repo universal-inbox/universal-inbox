@@ -635,6 +635,15 @@ impl NotificationService {
                 )
                 .await
             }
+            NotificationSyncSourceKind::Slack => {
+                self.sync_third_party_notifications(
+                    executor,
+                    self.slack_service.clone(),
+                    user_id,
+                    force_sync,
+                )
+                .await
+            }
         }
     }
 
@@ -710,12 +719,20 @@ impl NotificationService {
                 force_sync,
             )
             .await?;
+        let notifications_from_slack = self
+            .sync_notifications_with_transaction(
+                NotificationSyncSourceKind::Slack,
+                user_id,
+                force_sync,
+            )
+            .await?;
 
         Ok(notifications_from_github
             .into_iter()
             .chain(notifications_from_linear.into_iter())
             .chain(notifications_from_google_drive.into_iter())
             .chain(notifications_from_google_mail.into_iter())
+            .chain(notifications_from_slack.into_iter())
             .collect())
     }
 
