@@ -756,6 +756,59 @@ impl IntegrationConnectionService {
             return Ok(None);
         };
 
+        self.fetch_access_token_for_integration_connection(
+            executor,
+            integration_connection,
+            for_user_id,
+        )
+        .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection.id = integration_connection_id.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn find_access_token_for_connection(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        for_user_id: UserId,
+    ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
+        let integration_connection = self
+            .repository
+            .get_integration_connection(executor, integration_connection_id)
+            .await?;
+
+        let Some(integration_connection) = integration_connection else {
+            return Ok(None);
+        };
+
+        if integration_connection.user_id != for_user_id {
+            return Err(UniversalInboxError::Forbidden(format!(
+                "Integration connection {integration_connection_id} does not belong to user {for_user_id}"
+            )));
+        }
+
+        self.fetch_access_token_for_integration_connection(
+            executor,
+            integration_connection,
+            for_user_id,
+        )
+        .await
+    }
+
+    async fn fetch_access_token_for_integration_connection(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection: IntegrationConnection,
+        for_user_id: UserId,
+    ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
+        let integration_provider_kind = integration_connection.provider.kind();
         if self
             .oauth2_providers
             .contains_key(&integration_provider_kind)

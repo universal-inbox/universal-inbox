@@ -4,6 +4,11 @@
 
 ### Added
 
+- Custom Slack reaction emoji picker in integration settings
+  - Replaces the hardcoded 5-emoji dropdown with a searchable selector
+  - Searches standard Unicode emojis first, then workspace custom emojis to fill up to the result limit
+  - New endpoint `GET /integration-connections/{id}/slack/emojis/search?matches=…` scoped to a specific connection so multiple Slack connections per user remain supported
+  - Graceful degradation: if the workspace emoji list cannot be fetched, the search still returns matching standard emojis
 - Add Slack browser-extension bridge for 2-way sync (delete/unsubscribe actions)
   - Extension polls for queued actions and executes them through Slack's private API using the user's authenticated browser session
   - Credential validation: extension sends live `team_id` + `user_id` pairs matched against the integration connection
