@@ -5,7 +5,8 @@ use chrono::{DateTime, Timelike, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slack_blocks_render::{
-    SlackReferences, render_blocks_as_markdown, text::render_blocks_as_text,
+    SlackReferences, html::render_blocks_as_html, render_blocks_as_markdown,
+    text::render_blocks_as_text,
 };
 use slack_morphism::prelude::*;
 use url::Url;
@@ -162,6 +163,13 @@ impl HasHtmlUrl for SlackMessageDetails {
 
 pub trait SlackMessageRender {
     fn render_content(&self, references: Option<SlackReferences>, as_markdown: bool) -> String;
+    fn render_content_as_html(
+        &self,
+        references: Option<SlackReferences>,
+        default_style_class: &str,
+        highlight_style_class: &str,
+        user_slack_id: Option<String>,
+    ) -> String;
     fn render_title(&self, references: Option<SlackReferences>) -> String;
     fn get_sender(
         &self,
@@ -232,6 +240,77 @@ impl SlackMessageRender for SlackHistoryMessage {
         replace_emoji_code_in_string_with_emoji(&message)
     }
 
+    fn render_content_as_html(
+        &self,
+        references: Option<SlackReferences>,
+        default_style_class: &str,
+        highlight_style_class: &str,
+        user_slack_id: Option<String>,
+    ) -> String {
+        let references = references.map(|mut refs| {
+            refs.user_id_to_highlight = user_slack_id.map(SlackUserId);
+            refs
+        });
+
+        if let Some(blocks) = &self.content.blocks
+            && !blocks.is_empty()
+        {
+            return render_blocks_as_html(
+                blocks.clone(),
+                references.clone().unwrap_or_default(),
+                default_style_class,
+                highlight_style_class,
+            );
+        }
+
+        if let Some(attachments) = &self.content.attachments
+            && !attachments.is_empty()
+        {
+            let str_blocks = attachments
+                .iter()
+                .filter_map(|a| {
+                    if let Some(blocks) = a.blocks.as_ref() {
+                        return Some(render_blocks_as_html(
+                            blocks.clone(),
+                            references.clone().unwrap_or_default(),
+                            default_style_class,
+                            highlight_style_class,
+                        ));
+                    }
+
+                    if let Some(text) = a.text.as_ref() {
+                        let sanitized = sanitize_slack_markdown(text);
+                        let sanitized_text = html_escape::encode_text(&sanitized);
+                        if let Some(title) = a.title.as_ref() {
+                            let escaped_title = html_escape::encode_text(title);
+                            return Some(format!(
+                                "<p>{escaped_title}</p>\n<p>{sanitized_text}</p>\n",
+                            ));
+                        }
+
+                        return Some(format!("<p>{sanitized_text}</p>\n"));
+                    }
+
+                    None
+                })
+                .collect::<Vec<String>>();
+
+            if !str_blocks.is_empty() {
+                return str_blocks.join("");
+            }
+        }
+
+        let message = match &self.content.text {
+            Some(text) => sanitize_slack_markdown(text),
+            _ => "A slack message".to_string(),
+        };
+
+        format!(
+            "<p>{}</p>\n",
+            html_escape::encode_text(&replace_emoji_code_in_string_with_emoji(&message))
+        )
+    }
+
     fn render_title(&self, references: Option<SlackReferences>) -> String {
         if let Some(attachments) = &self.content.attachments
             && let Some(first_attachment) = attachments.first()
@@ -300,6 +379,20 @@ impl SlackMessageDetails {
 
     pub fn render_content(&self) -> String {
         self.message.render_content(self.references.clone(), true)
+    }
+
+    pub fn render_content_as_html(
+        &self,
+        default_style_class: &str,
+        highlight_style_class: &str,
+        user_slack_id: Option<String>,
+    ) -> String {
+        self.message.render_content_as_html(
+            self.references.clone(),
+            default_style_class,
+            highlight_style_class,
+            user_slack_id,
+        )
     }
 }
 
@@ -657,7 +750,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com)"#
+Here is a [link](https://www.universal-inbox.com/)"#
             );
         }
 
@@ -693,7 +786,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com)"#
+Here is a [link](https://www.universal-inbox.com/)"#
             );
         }
 
@@ -797,83 +890,62 @@ Here is a [link](https://www.universal-inbox.com)"#
         #[rstest]
         fn test_render_message_with_blocks_in_attachments(mut slack_message: SlackMessageDetails) {
             let message = &mut slack_message;
-            message.message.content.blocks = Some(vec![SlackBlock::RichText(serde_json::json!({
-                "type": "rich_text",
-                "elements": [
-                    {
-                        "type": "rich_text_section",
-                        "elements": [
-                            {
-                                "type": "user",
-                                "user_id": "user1"
-                            }
-                        ]
-                    },
-                    {
-                        "type": "rich_text_section",
-                        "elements": [
-                            {
-                                "type": "user",
-                                "user_id": "user2"
-                            }
-                        ]
-                    },
-                    {
-                        "type": "rich_text_section",
-                        "elements": [
-                            {
-                                "type": "usergroup",
-                                "usergroup_id": "group1"
-                            }
-                        ]
-                    },
-                    {
-                        "type": "rich_text_section",
-                        "elements": [
-                            {
-                                "type": "usergroup",
-                                "usergroup_id": "group2"
-                            }
-                        ]
-                    },
-                    {
-                        "type": "rich_text_section",
-                        "elements": [
-                            {
-                                "type": "channel",
-                                "channel_id": "C0123456"
-                            }
-                        ]
-                    },
-                    {
-                        "type": "rich_text_section",
-                        "elements": [
-                            {
-                                "type": "channel",
-                                "channel_id": "C0011223"
-                            }
-                        ]
-                    },
-                    {
-                        "type": "rich_text_section",
-                        "elements": [
-                            {
-                                "type": "emoji",
-                                "name": "unknown1"
-                            }
-                        ]
-                    },
-                    {
-                        "type": "rich_text_section",
-                        "elements": [
-                            {
-                                "type": "emoji",
-                                "name": "unknown2"
-                            }
-                        ]
-                    }
-                ]
-            }))]);
+            message.message.content.blocks = Some(vec![SlackBlock::RichText(
+                serde_json::from_value(serde_json::json!({
+                    "type": "rich_text",
+                    "elements": [
+                        {
+                            "type": "rich_text_section",
+                            "elements": [
+                                { "type": "user", "user_id": "user1" }
+                            ]
+                        },
+                        {
+                            "type": "rich_text_section",
+                            "elements": [
+                                { "type": "user", "user_id": "user2" }
+                            ]
+                        },
+                        {
+                            "type": "rich_text_section",
+                            "elements": [
+                                { "type": "usergroup", "usergroup_id": "group1" }
+                            ]
+                        },
+                        {
+                            "type": "rich_text_section",
+                            "elements": [
+                                { "type": "usergroup", "usergroup_id": "group2" }
+                            ]
+                        },
+                        {
+                            "type": "rich_text_section",
+                            "elements": [
+                                { "type": "channel", "channel_id": "C0123456" }
+                            ]
+                        },
+                        {
+                            "type": "rich_text_section",
+                            "elements": [
+                                { "type": "channel", "channel_id": "C0011223" }
+                            ]
+                        },
+                        {
+                            "type": "rich_text_section",
+                            "elements": [
+                                { "type": "emoji", "name": "unknown1" }
+                            ]
+                        },
+                        {
+                            "type": "rich_text_section",
+                            "elements": [
+                                { "type": "emoji", "name": "unknown2" }
+                            ]
+                        }
+                    ]
+                }))
+                .unwrap(),
+            )]);
             message.references = Some(SlackReferences {
                 users: HashMap::from([(
                     SlackUserId("user1".to_string()),
@@ -899,6 +971,7 @@ Here is a [link](https://www.universal-inbox.com)"#
                         )),
                     ),
                 ]),
+                ..SlackReferences::default()
             });
             assert_eq!(
                 slack_message.render_content(),
@@ -966,35 +1039,29 @@ Here is a [link](https://www.universal-inbox.com)"#
             #[rstest]
             fn test_render_thread_with_reference_custom_emoji(mut slack_thread: Box<SlackThread>) {
                 let first_message = slack_thread.messages.first_mut();
-                first_message.content.blocks =
-                    Some(vec![SlackBlock::RichText(serde_json::json!({
+                first_message.content.blocks = Some(vec![SlackBlock::RichText(
+                    serde_json::from_value(serde_json::json!({
                         "type": "rich_text",
                         "elements": [
                             {
                                 "type": "rich_text_section",
                                 "elements": [
-                                    {
-                                        "text": "Hello ",
-                                        "type": "text"
-                                    },
-                                    {
-                                        "type": "emoji",
-                                        "name": "custom_emoji"
-                                    }
+                                    { "text": "Hello ", "type": "text" },
+                                    { "type": "emoji", "name": "custom_emoji" }
                                 ]
                             }
                         ]
-                    }))]);
+                    }))
+                    .unwrap(),
+                )]);
                 let slack_references = SlackReferences {
-                    users: Default::default(),
-                    channels: Default::default(),
-                    usergroups: Default::default(),
                     emojis: HashMap::from([(
                         SlackEmojiName("custom_emoji".to_string()),
                         Some(SlackEmojiRef::Url(
                             "https://emoji.com/custom_emoji.png".parse().unwrap(),
                         )),
                     )]),
+                    ..SlackReferences::default()
                 };
 
                 assert_eq!(
