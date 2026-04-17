@@ -29,6 +29,8 @@ pub struct SlackReactionConfig {
     pub sync_enabled: bool,
     pub reaction_name: SlackReactionName,
     pub sync_type: SlackSyncType,
+    #[serde(default)]
+    pub completion_reaction_name: Option<SlackReactionName>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -56,6 +58,7 @@ impl Default for SlackConfig {
                 sync_enabled: false,
                 reaction_name: SlackReactionName("eyes".to_string()),
                 sync_type: SlackSyncType::AsNotifications,
+                completion_reaction_name: None,
             },
             message_config: SlackMessageConfig {
                 sync_enabled: false,
@@ -73,6 +76,7 @@ impl SlackConfig {
                 sync_enabled: true,
                 reaction_name: SlackReactionName("eyes".to_string()),
                 sync_type: SlackSyncType::AsNotifications,
+                completion_reaction_name: None,
             },
             message_config: SlackMessageConfig {
                 sync_enabled: true,
@@ -88,6 +92,7 @@ impl SlackConfig {
                 sync_enabled: true,
                 reaction_name: SlackReactionName("eyes".to_string()),
                 sync_type: SlackSyncType::AsTasks(SlackSyncTaskConfig::default()),
+                completion_reaction_name: None,
             },
             message_config: SlackMessageConfig {
                 sync_enabled: false,
@@ -103,6 +108,7 @@ impl SlackConfig {
                 sync_enabled: false,
                 reaction_name: SlackReactionName("eyes".to_string()),
                 sync_type: SlackSyncType::AsNotifications,
+                completion_reaction_name: None,
             },
             message_config: SlackMessageConfig {
                 sync_enabled: false,
