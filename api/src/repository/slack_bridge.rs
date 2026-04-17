@@ -201,6 +201,7 @@ impl SlackBridgeRepository for Repository {
                     completed_at = NOW(),
                     updated_at = NOW()
                 WHERE id = $1 AND user_id = $2
+                  AND status IN ('Pending', 'Failed')
                 RETURNING *
             "#,
         )
@@ -235,6 +236,7 @@ impl SlackBridgeRepository for Repository {
                     retry_count = retry_count + 1,
                     updated_at = NOW()
                 WHERE id = $1 AND user_id = $4
+                  AND status IN ('Pending', 'Failed')
                 RETURNING *
             "#,
         )
