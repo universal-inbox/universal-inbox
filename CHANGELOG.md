@@ -4,6 +4,11 @@
 
 ### Added
 
+- Custom Slack reaction emoji picker in integration settings
+  - Replaces the hardcoded 5-emoji dropdown with a searchable selector
+  - Searches standard Unicode emojis first, then workspace custom emojis to fill up to the result limit
+  - New endpoint `GET /integration-connections/{id}/slack/emojis/search?matches=…` scoped to a specific connection so multiple Slack connections per user remain supported
+  - Graceful degradation: if the workspace emoji list cannot be fetched, the search still returns matching standard emojis
 - Add Slack browser-extension bridge for 2-way sync (delete/unsubscribe actions)
   - Extension polls for queued actions and executes them through Slack's private API using the user's authenticated browser session
   - Credential validation: extension sends live `team_id` + `user_id` pairs matched against the integration connection
@@ -28,6 +33,10 @@
 - Update `quinn-proto` to 0.11.14 to fix RUSTSEC-2026-0037 (DoS via invalid QUIC transport parameters)
 - Replace `typed_id` + `paste` crates with inline implementation to resolve RUSTSEC-2024-0436 (unmaintained `paste` crate)
 - Downgrade `zip` from yanked 7.4.0 to 7.2.0 (resolves GH#133)
+
+### Fixed
+
+- Scope the `slack:list_emojis` Redis cache entry by workspace team id so custom emojis from one workspace are no longer served to users of other workspaces
 
 ## 2026-03-17
 
