@@ -387,6 +387,7 @@ pub fn slack_reacted_message() -> Box<SlackReactionItem> {
                     )),
                 ),
             ]),
+            ..SlackReferences::default()
         }),
     }))
 }

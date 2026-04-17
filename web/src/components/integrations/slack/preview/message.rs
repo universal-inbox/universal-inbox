@@ -10,7 +10,7 @@ use crate::components::{
     integrations::slack::{
         SlackTeamDisplay, get_sender_name_and_avatar, preview::reactions::SlackReactions,
     },
-    markdown::SlackMarkdown,
+    markdown::{Markdown, SlackHtml},
 };
 
 #[component]
@@ -37,7 +37,7 @@ pub fn SlackMessagePreview(
                     class: "flex items-center",
                     href: "{slack_message().url}",
                     target: "_blank",
-                    SlackMarkdown { text: "{title}" }
+                    Markdown { text: "{title}" }
                     Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
@@ -62,7 +62,7 @@ pub fn SlackMessagePreview(
 #[component]
 fn SlackMessageDisplay(slack_message: ReadSignal<SlackMessageDetails>) -> Element {
     let posted_at = slack_message().message.origin.ts.to_date_time_opt();
-    let text = slack_message().render_content();
+    let html = slack_message().render_content_as_html("text-primary", "text-warning", None);
     let (user_name, avatar_url) = get_sender_name_and_avatar(&slack_message().sender);
 
     rsx! {
@@ -84,7 +84,7 @@ fn SlackMessageDisplay(slack_message: ReadSignal<SlackMessageDetails>) -> Elemen
 
                 div {
                     class: "flex flex-col",
-                    SlackMarkdown { class: "prose prose-sm", text }
+                    SlackHtml { class: "prose prose-sm", html }
 
                     if let Some(reactions) = slack_message().message.content.reactions {
                         SlackReactions {
