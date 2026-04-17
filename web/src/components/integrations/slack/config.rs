@@ -16,10 +16,11 @@ use chrono::{Local, SecondsFormat};
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnectionId,
         config::IntegrationConnectionConfig,
         integrations::slack::{
-            SlackConfig, SlackContext, SlackMessageConfig, SlackReactionConfig,
-            SlackSyncTaskConfig, SlackSyncType,
+            SlackConfig, SlackContext, SlackEmojiSuggestion, SlackMessageConfig,
+            SlackReactionConfig, SlackSyncTaskConfig, SlackSyncType,
         },
     },
     slack_bridge::SlackBridgeStatus,
@@ -45,6 +46,7 @@ pub fn SlackProviderConfiguration(
     config: ReadSignal<SlackConfig>,
     context: ReadSignal<Option<Option<SlackContext>>>,
     provider_user_id: ReadSignal<Option<Option<String>>>,
+    connection_id: ReadSignal<IntegrationConnectionId>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
@@ -104,7 +106,7 @@ pub fn SlackProviderConfiguration(
                     id: "slack-config-tab-reaction",
                     role: "tabpanel",
                     class: "bg-base-100 border-base-300 p-6 rounded-b-md flex flex-col gap-2",
-                    SlackReactionConfiguration { config, ui_model, on_config_change }
+                    SlackReactionConfiguration { config, connection_id, ui_model, on_config_change }
                 }
 
                 div {
@@ -128,6 +130,7 @@ pub fn SlackProviderConfiguration(
 #[component]
 fn SlackReactionConfiguration(
     config: ReadSignal<SlackConfig>,
+    connection_id: ReadSignal<IntegrationConnectionId>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
@@ -197,27 +200,30 @@ fn SlackReactionConfiguration(
                 class: "label-text cursor-pointer grow text-sm text-base-content",
                 "Emoji reaction to synchronize"
             }
-            FloatingLabelSelect::<String> {
-                label: None,
-                class: "max-w-xs",
+            FloatingLabelInputSearchSelect::<SlackEmojiSuggestion> {
                 name: "reaction-name-input".to_string(),
-                required: true,
-                default_value: default_emoji(),
-                on_select: move |reaction: Option<String>| {
+                class: "max-w-xs",
+                data_select: json!({
+                    "value": default_emoji(),
+                    "apiUrl": format!("{api_base_url}integration-connections/{}/slack/emojis/search", connection_id()),
+                    "apiSearchQueryKey": "matches",
+                    "apiFieldsMap": {
+                        "id": "name",
+                        "val": "name",
+                        "title": "display_name"
+                    }
+                }),
+                on_select: move |emoji: Option<SlackEmojiSuggestion>| {
                     on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
                         reaction_config: SlackReactionConfig {
-                            reaction_name: SlackReactionName(reaction.unwrap_or("eyes".to_string())),
+                            reaction_name: SlackReactionName(
+                                emoji.map(|e| e.name).unwrap_or("eyes".to_string())
+                            ),
                             ..config().reaction_config
                         },
                         ..config()
                     }));
                 },
-
-                option { selected: default_emoji() == *"eyes", value: "eyes", "👀 :eyes:" }
-                option { selected: default_emoji() == *"raising_hand", value: "raising_hand", "🙋 :raising_hand:" }
-                option { selected: default_emoji() == *"inbox_tray", value: "inbox_tray", "📥 :inbox_tray:" }
-                option { selected: default_emoji() == *"white_check_mark", value: "white_check_mark", "✅ :white_check_mark:" }
-                option { selected: default_emoji() == *"bookmark", value: "bookmark", "🔖 :bookmark:" }
             }
         }
 

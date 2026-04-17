@@ -17,7 +17,7 @@ use log::warn;
 use universal_inbox::{
     IntegrationProviderStaticConfig,
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionStatus,
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         provider::{IntegrationProvider, IntegrationProviderKind},
     },
@@ -487,12 +487,14 @@ pub fn IntegrationSettings(
                     if let Some(Some(connection)) = connection() {
                         {
                             let provider_user_id = connection.provider_user_id.clone();
+                            let connection_id = connection.id;
                             rsx! {
                                 IntegrationConnectionProviderConfiguration {
                                     ui_model: ui_model,
                                     on_config_change: move |c| on_config_change.call((connection.clone(), c)),
                                     provider: provider.clone(),
                                     provider_user_id,
+                                    connection_id,
                                 }
                             }
                         }
@@ -525,6 +527,7 @@ pub fn IconForAction(action: String) -> Element {
 pub fn IntegrationConnectionProviderConfiguration(
     provider: IntegrationProvider,
     provider_user_id: ReadSignal<Option<Option<String>>>,
+    connection_id: ReadSignal<IntegrationConnectionId>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
@@ -574,6 +577,7 @@ pub fn IntegrationConnectionProviderConfiguration(
                 config: config.clone(),
                 context: context.clone(),
                 provider_user_id,
+                connection_id,
             }
         },
         _ => rsx! {},

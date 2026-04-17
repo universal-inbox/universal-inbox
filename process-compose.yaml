@@ -10,6 +10,9 @@ processes:
         condition: process_started
     availability:
       restart: no
+    shutdown:
+      signal: 9
+      timeout_seconds: 1
     disabled: true
     namespace: "universal-inbox"
 

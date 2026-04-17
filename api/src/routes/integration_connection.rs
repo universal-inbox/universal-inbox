@@ -2,8 +2,11 @@ use std::sync::Arc;
 
 use actix_http::body::BoxBody;
 use actix_jwt_authc::Authenticated;
-use actix_web::{HttpResponse, Scope, web};
+use actix_web::{
+    HttpResponse, Scope, http::header::CacheControl, http::header::CacheDirective, web,
+};
 use anyhow::Context;
+use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::RwLock;
 
@@ -19,6 +22,7 @@ use crate::{
     universal_inbox::{
         UniversalInboxError, UpdateStatus,
         integration_connection::service::IntegrationConnectionService,
+        notification::service::NotificationService,
     },
     utils::jwt::Claims,
 };
@@ -30,6 +34,10 @@ pub fn scope() -> Scope {
                 .name("integration-connections")
                 .route(web::get().to(list_integration_connections))
                 .route(web::post().to(create_integration_connection)),
+        )
+        .service(
+            web::scope("/{integration_connection_id}/slack")
+                .route("/emojis/search", web::get().to(search_slack_emojis)),
         )
         .service(
             web::resource("/{integration_connection_id}")
@@ -258,4 +266,66 @@ pub async fn disconnect_integration_connection(
                 .to_string(),
             ))),
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchSlackEmojiRequest {
+    matches: Option<String>,
+}
+
+pub async fn search_slack_emojis(
+    path: web::Path<IntegrationConnectionId>,
+    query: web::Query<SearchSlackEmojiRequest>,
+    notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let integration_connection_id = path.into_inner();
+
+    let Some(matches) = &query.matches else {
+        return Ok(HttpResponse::Ok()
+            .content_type("application/json")
+            .insert_header(CacheControl(vec![
+                CacheDirective::Private,
+                CacheDirective::MaxAge(10u32),
+            ]))
+            .body("[]"));
+    };
+
+    let notification_service = notification_service.read().await;
+    let mut transaction = notification_service
+        .begin()
+        .await
+        .context("Failed to create transaction for Slack emoji search")?;
+
+    let results = notification_service
+        .slack_service
+        .search_emojis(
+            &mut transaction,
+            integration_connection_id,
+            user_id,
+            matches,
+            50,
+        )
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit transaction for Slack emoji search")?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .insert_header(CacheControl(vec![
+            CacheDirective::Private,
+            CacheDirective::MaxAge(10u32),
+        ]))
+        .body(
+            serde_json::to_string(&results)
+                .context("Cannot serialize Slack emoji search results")?,
+        ))
 }

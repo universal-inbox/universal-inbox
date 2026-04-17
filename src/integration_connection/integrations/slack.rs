@@ -1,8 +1,22 @@
+use std::fmt;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use slack_morphism::{SlackReactionName, SlackTeamId};
 
 use crate::task::{PresetDueDate, ProjectSummary, TaskPriority};
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct SlackEmojiSuggestion {
+    pub name: String,
+    pub display_name: String,
+}
+
+impl fmt::Display for SlackEmojiSuggestion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.display_name)
+    }
+}
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct SlackConfig {

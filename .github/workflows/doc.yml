@@ -20,7 +20,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install Devbox
-        uses: jetpack-io/devbox-install-action@v0.7.0
+        uses: jetify-com/devbox-install-action@v0.15.0
         with:
           enable-cache: "true"
       - name: Build documentation
