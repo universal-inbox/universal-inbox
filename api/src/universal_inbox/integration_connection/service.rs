@@ -794,6 +794,10 @@ impl IntegrationConnectionService {
             )));
         }
 
+        if integration_connection.status != IntegrationConnectionStatus::Validated {
+            return Ok(None);
+        }
+
         self.fetch_access_token_for_integration_connection(
             executor,
             integration_connection,
