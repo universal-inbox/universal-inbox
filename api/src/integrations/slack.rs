@@ -954,6 +954,28 @@ impl SlackService {
         Ok(())
     }
 
+    async fn get_completion_reaction_name(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+    ) -> Result<Option<SlackReactionName>, UniversalInboxError> {
+        let integration_connection = self
+            .integration_connection_service
+            .read()
+            .await
+            .get_integration_connection(executor, integration_connection_id)
+            .await?;
+        let Some(integration_connection) = integration_connection else {
+            return Ok(None);
+        };
+        match integration_connection.provider {
+            IntegrationProvider::Slack { config, .. } => {
+                Ok(config.reaction_config.completion_reaction_name)
+            }
+            _ => Ok(None),
+        }
+    }
+
     async fn add_slack_reaction(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1780,7 +1802,22 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
             &slack_reaction.name,
             user_id,
         )
-        .await
+        .await?;
+
+        if let Some(completion_reaction_name) = self
+            .get_completion_reaction_name(executor, third_party_item.integration_connection_id)
+            .await?
+        {
+            self.add_slack_reaction(
+                executor,
+                &slack_reaction.item,
+                &completion_reaction_name,
+                user_id,
+            )
+            .await?;
+        }
+
+        Ok(())
     }
 
     #[allow(clippy::blocks_in_conditions)]
@@ -1806,6 +1843,19 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
                 third_party_item.kind()
             )));
         };
+
+        if let Some(completion_reaction_name) = self
+            .get_completion_reaction_name(executor, third_party_item.integration_connection_id)
+            .await?
+        {
+            self.delete_slack_reaction(
+                executor,
+                &slack_reaction.item,
+                &completion_reaction_name,
+                user_id,
+            )
+            .await?;
+        }
 
         self.add_slack_reaction(
             executor,
