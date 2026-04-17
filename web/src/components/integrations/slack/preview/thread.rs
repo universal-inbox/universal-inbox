@@ -11,7 +11,7 @@ use crate::components::{
     integrations::slack::{
         SlackTeamDisplay, get_sender_name_and_avatar, preview::reactions::SlackReactions,
     },
-    markdown::SlackMarkdown,
+    markdown::SlackHtml,
 };
 
 #[component]
@@ -149,7 +149,12 @@ fn SlackThreadMessageDisplay(
     let sender = message()
         .get_sender(&slack_thread().sender_profiles)
         .map(|sender| get_sender_name_and_avatar(&sender));
-    let text = message().render_content(slack_thread().references.clone(), true);
+    let html = message().render_content_as_html(
+        slack_thread().references.clone(),
+        "text-primary",
+        "text-warning",
+        slack_thread().user_slack_id.clone(),
+    );
 
     rsx! {
         div {
@@ -170,7 +175,7 @@ fn SlackThreadMessageDisplay(
 
             div {
                 class: "flex flex-col",
-                SlackMarkdown { class: "prose prose-sm", text }
+                SlackHtml { class: "prose prose-sm", html }
 
                 if let Some(reactions) = message().content.reactions {
                     SlackReactions {

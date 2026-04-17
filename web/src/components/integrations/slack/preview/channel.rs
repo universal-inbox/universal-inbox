@@ -5,7 +5,7 @@ use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 
 use universal_inbox::{HasHtmlUrl, third_party::integrations::slack::SlackChannelDetails};
 
-use crate::components::{integrations::slack::SlackTeamDisplay, markdown::SlackMarkdown};
+use crate::components::{integrations::slack::SlackTeamDisplay, markdown::Markdown};
 
 #[component]
 pub fn SlackChannelPreview(
@@ -43,7 +43,7 @@ pub fn SlackChannelPreview(
                     class: "flex items-center",
                     href: "{slack_channel().get_html_url()}",
                     target: "_blank",
-                    SlackMarkdown { text: "{title}" }
+                    Markdown { text: "{title}" }
                     Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }

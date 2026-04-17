@@ -1224,19 +1224,23 @@ fn add_user_ref_in_message(slack_push_message_event: &mut SlackPushEventCallback
     else {
         unreachable!("Unexpected event type");
     };
-    content.blocks = Some(vec![SlackBlock::RichText(serde_json::json!({
-    "block_id": "12345",
-    "elements": [
-        {
-            "type": "rich_text_section",
+    content.blocks = Some(vec![SlackBlock::RichText(
+        serde_json::from_value(serde_json::json!({
+            "block_id": "12345",
             "elements": [
                 {
-                    "type": "user",
-                    "user_id": user_id
-                }
+                    "type": "rich_text_section",
+                    "elements": [
+                        {
+                            "type": "user",
+                            "user_id": user_id
+                        }
+                    ]
+                },
             ]
-        },
-    ]}))]);
+        }))
+        .unwrap(),
+    )]);
 }
 
 fn add_usergroup_ref_in_message(
@@ -1254,17 +1258,21 @@ fn add_usergroup_ref_in_message(
     else {
         unreachable!("Unexpected event type");
     };
-    content.blocks = Some(vec![SlackBlock::RichText(serde_json::json!({
-    "block_id": "12345",
-    "elements": [
-        {
-            "type": "rich_text_section",
+    content.blocks = Some(vec![SlackBlock::RichText(
+        serde_json::from_value(serde_json::json!({
+            "block_id": "12345",
             "elements": [
                 {
-                    "type": "usergroup",
-                    "usergroup_id": usergroup_id
-                }
+                    "type": "rich_text_section",
+                    "elements": [
+                        {
+                            "type": "usergroup",
+                            "usergroup_id": usergroup_id
+                        }
+                    ]
+                },
             ]
-        },
-    ]}))]);
+        }))
+        .unwrap(),
+    )]);
 }

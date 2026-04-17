@@ -33,29 +33,14 @@ pub fn markdown_to_html(text: &str) -> String {
 }
 
 #[component]
-pub fn SlackMarkdown(text: String, class: Option<String>) -> Element {
+pub fn SlackHtml(html: String, class: Option<String>) -> Element {
     let class = class.unwrap_or("dark:prose-invert".to_string());
     rsx! {
-        p {
+        div {
             class: "w-full max-w-full {class}",
-            dangerous_inner_html: "{markdown_to_html_with_slack_references(&text)}"
+            dangerous_inner_html: "{html}"
         }
     }
-}
-
-pub fn markdown_to_html_with_slack_references(text: &str) -> String {
-    let html = markdown_to_html(text);
-    let slack_reference_re = Regex::new(r"@(@[^@]+)@").unwrap();
-    let html = slack_reference_re
-        .replace_all(&html, "<span class=\"text-primary\">$1</span>")
-        .to_string();
-    let slack_emoji_re = Regex::new(r#"<img src="https://emoji.slack-edge.com([^>]*)>"#).unwrap();
-    slack_emoji_re
-        .replace_all(
-            &html,
-            r#"<img class="slack-emoji" src="https://emoji.slack-edge.com$1>"#,
-        )
-        .to_string()
 }
 
 #[cfg(test)]
@@ -213,41 +198,5 @@ mod markdown_to_html_tests {
             assert!(result.contains(r#"target="_blank""#));
             assert!(result.contains(r#"rel="noopener noreferrer""#));
         }
-    }
-}
-
-#[cfg(test)]
-mod markdown_to_html_with_slack_references_tests {
-    use super::*;
-    use pretty_assertions::assert_eq;
-    use wasm_bindgen_test::*;
-
-    #[wasm_bindgen_test]
-    fn test_markdown_to_html_with_user_slack_reference() {
-        assert_eq!(
-            markdown_to_html_with_slack_references("@@user@"),
-            r#"<p><span class="text-primary">@user</span></p>
-"#
-            .to_string()
-        );
-    }
-
-    #[wasm_bindgen_test]
-    fn test_markdown_to_html_with_emoji_slack_reference() {
-        assert_eq!(
-            markdown_to_html_with_slack_references(
-                "![:custom_emoji:](https://emoji.slack-edge.com/custom_emoji.png)"
-            ),
-            r#"<p><img class="slack-emoji" src="https://emoji.slack-edge.com/custom_emoji.png" alt=":custom_emoji:" /></p>
-"#
-                .to_string()
-        );
-    }
-
-    #[wasm_bindgen_test]
-    fn test_markdown_to_html_with_slack_references_link_has_target_blank() {
-        let result = markdown_to_html_with_slack_references("[Link](https://example.com)");
-        assert!(result.contains(r#"target="_blank""#));
-        assert!(result.contains(r#"rel="noopener noreferrer""#));
     }
 }
