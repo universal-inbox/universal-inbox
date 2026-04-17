@@ -135,12 +135,18 @@ fn SlackReactionConfiguration(
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
     let mut default_emoji = use_signal(|| "eyes".to_string());
+    let mut default_completion_emoji: Signal<Option<String>> = use_signal(|| None);
     let mut default_priority = use_signal(|| Some(TaskPriority::P4));
     let mut default_due_at: Signal<Option<PresetDueDate>> = use_signal(|| None);
     let mut default_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
     let mut task_config_enabled = use_signal(|| false);
     use_memo(move || {
         *default_emoji.write() = config().reaction_config.reaction_name.0.clone();
+        *default_completion_emoji.write() = config()
+            .reaction_config
+            .completion_reaction_name
+            .as_ref()
+            .map(|name| name.0.clone());
         if let SlackSyncType::AsTasks(config) = config().reaction_config.sync_type {
             *default_priority.write() = Some(config.default_priority);
             default_due_at.write().clone_from(&config.default_due_at);
@@ -152,6 +158,13 @@ fn SlackReactionConfiguration(
     });
     let collapse_style = use_memo(move || {
         if task_config_enabled() {
+            ""
+        } else {
+            "hidden overflow-hidden"
+        }
+    });
+    let completion_reaction_collapse_style = use_memo(move || {
+        if config().reaction_config.completion_reaction_name.is_some() {
             ""
         } else {
             "hidden overflow-hidden"
@@ -224,6 +237,83 @@ fn SlackReactionConfiguration(
                         ..config()
                     }));
                 },
+            }
+        }
+
+        div {
+            class: "flex flex-col gap-2 overflow-visible",
+
+            div {
+                class: "flex items-center gap-2",
+                label {
+                    class: "label-text cursor-pointer grow text-sm text-base-content",
+                    "Set an emoji reaction when the task is completed"
+                }
+                div {
+                    class: "relative inline-block",
+                    input {
+                        r#type: "checkbox",
+                        class: "switch switch-primary switch-outline peer",
+                        disabled: !config().reaction_config.sync_enabled,
+                        oninput: move |event| {
+                            let completion_reaction_name = if event.value() == "true" {
+                                Some(SlackReactionName("white_check_mark".to_string()))
+                            } else {
+                                None
+                            };
+                            on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
+                                reaction_config: SlackReactionConfig {
+                                    completion_reaction_name,
+                                    ..config().reaction_config
+                                },
+                                ..config()
+                            }))
+                        },
+                        checked: config().reaction_config.completion_reaction_name.is_some()
+                    }
+                    span {
+                        class: "icon-[tabler--check] text-primary absolute start-1 top-1 hidden size-4 peer-checked:block"
+                    }
+                    span {
+                        class: "icon-[tabler--x] text-neutral absolute end-1 top-1 block size-4 peer-checked:hidden"
+                    }
+                }
+            }
+
+            div {
+                class: "collapse transition-[height] duration-300 {completion_reaction_collapse_style} pb-0 pr-0 flex flex-col gap-2",
+
+                div {
+                    class: "flex items-center gap-2",
+                    label {
+                        class: "label-text cursor-pointer grow text-sm text-base-content",
+                        "Emoji reaction to set on completion"
+                    }
+                    FloatingLabelInputSearchSelect::<SlackEmojiSuggestion> {
+                        name: "completion-reaction-name-input".to_string(),
+                        class: "max-w-xs",
+                        disabled: !config().reaction_config.sync_enabled,
+                        data_select: json!({
+                            "value": default_completion_emoji().unwrap_or_default(),
+                            "apiUrl": format!("{api_base_url}integration-connections/{}/slack/emojis/search", connection_id()),
+                            "apiSearchQueryKey": "matches",
+                            "apiFieldsMap": {
+                                "id": "name",
+                                "val": "name",
+                                "title": "display_name"
+                            }
+                        }),
+                        on_select: move |emoji: Option<SlackEmojiSuggestion>| {
+                            on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
+                                reaction_config: SlackReactionConfig {
+                                    completion_reaction_name: emoji.map(|e| SlackReactionName(e.name)),
+                                    ..config().reaction_config
+                                },
+                                ..config()
+                            }));
+                        },
+                    }
+                }
             }
         }
 

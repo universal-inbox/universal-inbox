@@ -167,6 +167,7 @@ async fn test_receive_reaction_event_for_different_reaction(
                 sync_enabled: true,
                 reaction_name: SlackReactionName("bookmark".to_string()), // slack_push_reaction_added_event uses "eyes" reaction
                 sync_type: SlackSyncType::AsNotifications,
+                completion_reaction_name: None,
             },
             ..SlackConfig::default()
         }),
