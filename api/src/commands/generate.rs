@@ -370,6 +370,7 @@ async fn generate_slack_notifications_and_tasks(
                 sync_enabled: true,
                 reaction_name: SlackReactionName("eyes".to_string()),
                 sync_type: SlackSyncType::AsTasks(SlackSyncTaskConfig::default()),
+                completion_reaction_name: None,
             },
             message_config: SlackMessageConfig {
                 sync_enabled: true,
