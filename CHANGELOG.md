@@ -28,6 +28,13 @@
   - Origin header validation, per-user rate limiting, and token audience validation
   - Backward-compatible with existing API key authentication
 
+### Changed
+
+- Switch Slack preview rendering to direct HTML via `slack-blocks-render` v0.5.0, replacing the Markdown→comrak→regex pipeline
+  - Upgrade `slack-morphism` to 2.20.0
+  - Mentions of the current user are rendered in warning color, other mentions in primary color
+  - Usergroup mentions that include the current user are highlighted as self-mentions
+
 ### Security
 
 - Update `quinn-proto` to 0.11.14 to fix RUSTSEC-2026-0037 (DoS via invalid QUIC transport parameters)

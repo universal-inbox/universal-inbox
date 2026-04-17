@@ -42,8 +42,8 @@ use crate::helpers::{
         slack::{
             mock_slack_fetch_channel, mock_slack_fetch_reply, mock_slack_fetch_team,
             mock_slack_fetch_user, mock_slack_get_chat_permalink, mock_slack_list_emojis,
-            mock_slack_list_usergroups, slack_push_reaction_added_event,
-            slack_push_reaction_removed_event,
+            mock_slack_list_usergroups, mock_slack_list_users_in_usergroup,
+            slack_push_reaction_added_event, slack_push_reaction_removed_event,
         },
     },
     rest::create_resource_response,
@@ -270,6 +270,12 @@ async fn test_receive_reaction_added_event_as_notification(
         "slack_list_usergroups_response.json",
     )
     .await;
+    mock_slack_list_users_in_usergroup(
+        &app.app.slack_mock_server,
+        "S05ZZZ",
+        "slack_list_users_in_usergroup_response.json",
+    )
+    .await;
 
     let response = create_resource_response(
         &app.client,
@@ -343,6 +349,7 @@ async fn test_receive_reaction_added_event_as_notification(
                     ))
                 )
             ]),
+            ..SlackReferences::default()
         })
     );
     match &message.sender {
@@ -440,6 +447,12 @@ async fn test_receive_reaction_removed_event_as_notification(
     let _slack_list_usergroups_mock = mock_slack_list_usergroups(
         &app.app.slack_mock_server,
         "slack_list_usergroups_response.json",
+    )
+    .await;
+    mock_slack_list_users_in_usergroup(
+        &app.app.slack_mock_server,
+        "S05ZZZ",
+        "slack_list_users_in_usergroup_response.json",
     )
     .await;
 
@@ -583,6 +596,12 @@ async fn test_receive_reaction_added_event_as_task(
         "slack_list_usergroups_response.json",
     )
     .await;
+    mock_slack_list_users_in_usergroup(
+        &app.app.slack_mock_server,
+        "S05ZZZ",
+        "slack_list_users_in_usergroup_response.json",
+    )
+    .await;
 
     let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
@@ -613,7 +632,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-inbox
+Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal-inbox
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),
@@ -748,6 +767,12 @@ async fn test_receive_reaction_removed_and_added_event_as_task(
         "slack_list_usergroups_response.json",
     )
     .await;
+    mock_slack_list_users_in_usergroup(
+        &app.app.slack_mock_server,
+        "S05ZZZ",
+        "slack_list_users_in_usergroup_response.json",
+    )
+    .await;
 
     let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
@@ -778,7 +803,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-inbox
+Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal-inbox
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),

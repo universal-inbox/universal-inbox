@@ -574,6 +574,7 @@ impl SlackService {
         message_content: &SlackMessageContent,
         user_id: UserId,
         slack_api_token: &SlackApiToken,
+        provider_user_id: Option<&str>,
     ) -> Result<Option<SlackReferences>, UniversalInboxError> {
         let mut references = find_slack_references_in_message(message_content);
 
@@ -601,13 +602,28 @@ impl SlackService {
         }
 
         let slack_usergroup_ids = references.usergroups.keys().cloned().collect::<Vec<_>>();
-        for slack_usergroup_id in slack_usergroup_ids {
+        for slack_usergroup_id in &slack_usergroup_ids {
             let usergroup = self
-                .fetch_usergroup(&slack_usergroup_id, user_id, slack_api_token)
+                .fetch_usergroup(slack_usergroup_id, user_id, slack_api_token)
                 .await?;
             references
                 .usergroups
                 .insert(slack_usergroup_id.clone(), Some(usergroup.handle));
+        }
+
+        if let Some(user_slack_id) = provider_user_id {
+            let mut highlighted = Vec::new();
+            for usergroup_id in &slack_usergroup_ids {
+                let members = self
+                    .list_users_in_usergroup(usergroup_id, slack_api_token)
+                    .await?;
+                if members.iter().any(|id| id.0 == user_slack_id) {
+                    highlighted.push(usergroup_id.clone());
+                }
+            }
+            if !highlighted.is_empty() {
+                references.usergroup_ids_to_highlight = Some(highlighted);
+            }
         }
 
         let slack_channel_ids = references.channels.keys().cloned().collect::<Vec<_>>();
@@ -688,6 +704,7 @@ impl SlackService {
                         &message.content,
                         user_id,
                         &slack_api_token,
+                        integration_connection.provider_user_id.as_deref(),
                     )
                     .await
                     .inspect_err(|err| {
@@ -799,6 +816,7 @@ impl SlackService {
                     &message.content,
                     user_id,
                     &slack_api_token,
+                    integration_connection.provider_user_id.as_deref(),
                 )
                 .await
                 .inspect_err(|err| {
@@ -1357,6 +1375,7 @@ impl ThirdPartyItemSourceService<SlackThread> for SlackService {
                         &message.content,
                         user_id,
                         &slack_api_token,
+                        integration_connection.provider_user_id.as_deref(),
                     )
                     .await
                     .inspect_err(|err| {
