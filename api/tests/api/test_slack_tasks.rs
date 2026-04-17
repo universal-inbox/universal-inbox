@@ -9,7 +9,10 @@ use uuid::Uuid;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
-        integrations::{slack::SlackConfig, todoist::TodoistConfig},
+        integrations::{
+            slack::{SlackConfig, SlackReactionConfig},
+            todoist::TodoistConfig,
+        },
     },
     notification::{NotificationSourceKind, NotificationStatus},
     task::{Task, TaskCreationResult, TaskSourceKind, TaskStatus, service::TaskPatch},
@@ -480,4 +483,167 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
             ..exiting_task
         })
     );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_patch_slack_task_status_as_done_with_completion_reaction(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    slack_push_reaction_added_event: Box<SlackPushEvent>,
+    slack_reacted_message: Box<SlackReactionItem>,
+    todoist_item: Box<TodoistItem>,
+    sync_todoist_projects_response: TodoistSyncResponse,
+    nango_slack_connection: Box<NangoConnection>,
+    nango_todoist_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    let slack_config = SlackConfig {
+        reaction_config: SlackReactionConfig {
+            completion_reaction_name: Some(SlackReactionName("done".to_string())),
+            ..SlackConfig::enabled_as_tasks().reaction_config
+        },
+        ..SlackConfig::enabled_as_tasks()
+    };
+    let integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Slack(slack_config),
+        &settings,
+        nango_slack_connection,
+        None,
+        None,
+    )
+    .await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        nango_todoist_connection,
+        None,
+        None,
+    )
+    .await;
+
+    mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    )
+    .await;
+
+    mock_todoist_item_add_service(
+        &app.app.todoist_mock_server,
+        &todoist_item.id,
+        "[📥  Universal Inbox new release 📥...](https://example.com/)".to_string(),
+        Some(
+            r#"📥  *Universal Inbox new release* 📥
+- list 1
+- list 2
+
+1. number 1
+1. number 2
+
+> quote
+
+
+```
+$ echo Hello world
+```
+\
+_Some_ `formatted` ~text~.\
+\
+Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal-inbox
+👋![:unknown2:](https://emoji.com/unknown2.png)"#
+                .to_string(),
+        ),
+        Some(todoist_item.project_id.clone()),
+        None,
+        TodoistItemPriority::P1,
+    )
+    .await;
+    mock_todoist_get_item_service(
+        &app.app.todoist_mock_server,
+        Box::new(*todoist_item.clone()),
+    )
+    .await;
+
+    let SlackPushEvent::EventCallback(SlackPushEventCallback {
+        event:
+            SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent {
+                item:
+                    SlackReactionsItem::Message(SlackHistoryMessage {
+                        origin: SlackMessageOrigin { ts: source_id, .. },
+                        ..
+                    }),
+                ..
+            }),
+        ..
+    }) = *slack_push_reaction_added_event
+    else {
+        unreachable!("Unexpected event type");
+    };
+    let creation: Box<ThirdPartyItemCreationResult> = create_resource(
+        &app.client,
+        &app.app.api_address,
+        "third_party/task/items",
+        Box::new(ThirdPartyItem {
+            id: Uuid::new_v4().into(),
+            source_id: source_id.to_string(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
+            user_id: app.user.id,
+            data: ThirdPartyItemData::SlackReaction(Box::new(SlackReaction {
+                name: SlackReactionName("eyes".to_string()),
+                state: SlackReactionState::ReactionAdded,
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                item: *slack_reacted_message,
+            })),
+            integration_connection_id: integration_connection.id,
+            source_item: None,
+        }),
+    )
+    .await;
+
+    let exiting_task = creation.task.as_ref().unwrap().clone();
+    assert_eq!(exiting_task.status, TaskStatus::Active);
+
+    let _todoist_mock = mock_todoist_complete_item_service(
+        &app.app.todoist_mock_server,
+        &exiting_task.sink_item.as_ref().unwrap().source_id,
+    )
+    .await;
+    let _slack_reaction_remove_mock = mock_slack_reactions_remove(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "1707686216.825719",
+        "eyes",
+    )
+    .await;
+    let _slack_reaction_add_mock = mock_slack_reactions_add(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "1707686216.825719",
+        "done",
+    )
+    .await;
+
+    let patched_task: Box<Task> = patch_resource(
+        &app.client,
+        &app.app.api_address,
+        "tasks",
+        exiting_task.id.into(),
+        &TaskPatch {
+            status: Some(TaskStatus::Done),
+            ..Default::default()
+        },
+    )
+    .await;
+
+    assert!(patched_task.completed_at.is_some());
+    assert_eq!(patched_task.status, TaskStatus::Done);
 }

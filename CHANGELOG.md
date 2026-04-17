@@ -5,35 +5,14 @@
 ### Added
 
 - Custom Slack reaction emoji picker in integration settings
-  - Replaces the hardcoded 5-emoji dropdown with a searchable selector
-  - Searches standard Unicode emojis first, then workspace custom emojis to fill up to the result limit
-  - New endpoint `GET /integration-connections/{id}/slack/emojis/search?matches=…` scoped to a specific connection so multiple Slack connections per user remain supported
-  - Graceful degradation: if the workspace emoji list cannot be fetched, the search still returns matching standard emojis
 - Add Slack browser-extension bridge for 2-way sync (delete/unsubscribe actions)
-  - Extension polls for queued actions and executes them through Slack's private API using the user's authenticated browser session
-  - Credential validation: extension sends live `team_id` + `user_id` pairs matched against the integration connection
-  - Three-state action lifecycle: Pending → Failed (with exponential backoff retry) → PermanentlyFailed
-  - Bridge status displayed on integration card and in Extension settings tab with actionable error messages
-  - Extension bridge enabled by default for new Slack integration connections
 - Support multiple authentication methods per user account
-  - Users can now add password, passkey, or Google authentication to an existing account
-  - New "Authentication methods" card on the user profile page to manage auth methods
-  - "Link Google account" button to associate a Google account with an existing user
-  - Auth methods can be removed as long as at least one method remains
 - Add MCP (Model Context Protocol) server for AI agent integration
-  - Streamable HTTP transport at `/api/mcp` endpoint
-  - Tools for notification and task management (list, get, act, bulk act, create task, sync)
-  - OAuth 2.1 authentication with PKCE (Dynamic Client Registration, authorization code flow, refresh token rotation)
-  - OAuth 2.0 Protected Resource Metadata and Authorization Server Metadata discovery endpoints
-  - Origin header validation, per-user rate limiting, and token audience validation
-  - Backward-compatible with existing API key authentication
+- Add configurable emoji on Slack task completion 
 
 ### Changed
 
 - Switch Slack preview rendering to direct HTML via `slack-blocks-render` v0.5.0, replacing the Markdown→comrak→regex pipeline
-  - Upgrade `slack-morphism` to 2.20.0
-  - Mentions of the current user are rendered in warning color, other mentions in primary color
-  - Usergroup mentions that include the current user are highlighted as self-mentions
 
 ### Security
 
