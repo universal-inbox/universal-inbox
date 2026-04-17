@@ -16,6 +16,7 @@ mod test_linear_tasks;
 mod test_mcp;
 mod test_misc;
 mod test_notifications;
+mod test_slack_bridge;
 mod test_slack_notifications;
 mod test_slack_tasks;
 mod test_slack_webhook;
