@@ -148,9 +148,17 @@ impl SlackBridgeService {
         action_id: SlackBridgePendingActionId,
         user_id: UserId,
     ) -> Result<Option<SlackBridgePendingAction>, UniversalInboxError> {
-        self.repository
+        let result = self
+            .repository
             .mark_action_completed(executor, action_id, user_id)
-            .await
+            .await?;
+        if result.is_none() {
+            tracing::warn!(
+                %action_id, %user_id,
+                "Slack bridge action not marked as completed: action missing or in terminal state"
+            );
+        }
+        Ok(result)
     }
 
     #[tracing::instrument(
@@ -166,9 +174,17 @@ impl SlackBridgeService {
         user_id: UserId,
         error: &str,
     ) -> Result<Option<SlackBridgePendingAction>, UniversalInboxError> {
-        self.repository
+        let result = self
+            .repository
             .mark_action_failed(executor, action_id, user_id, error)
-            .await
+            .await?;
+        if result.is_none() {
+            tracing::warn!(
+                %action_id, %user_id,
+                "Slack bridge action not marked as failed: action missing or in terminal state"
+            );
+        }
+        Ok(result)
     }
 
     #[tracing::instrument(
