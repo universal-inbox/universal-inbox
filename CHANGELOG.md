@@ -34,6 +34,10 @@
 - Replace `typed_id` + `paste` crates with inline implementation to resolve RUSTSEC-2024-0436 (unmaintained `paste` crate)
 - Downgrade `zip` from yanked 7.4.0 to 7.2.0 (resolves GH#133)
 
+### Fixed
+
+- Scope the `slack:list_emojis` Redis cache entry by workspace team id so custom emojis from one workspace are no longer served to users of other workspaces
+
 ## 2026-03-17
 
 ### Added
