@@ -6,7 +6,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slack_blocks_render::{
     SlackReferences, html::render_blocks_as_html, render_blocks_as_markdown,
-    text::render_blocks_as_text,
+    render_slack_mrkdwn_text_as_html, text::render_blocks_as_text,
 };
 use slack_morphism::prelude::*;
 use url::Url;
@@ -279,16 +279,20 @@ impl SlackMessageRender for SlackHistoryMessage {
                     }
 
                     if let Some(text) = a.text.as_ref() {
-                        let sanitized = sanitize_slack_markdown(text);
-                        let sanitized_text = html_escape::encode_text(&sanitized);
+                        let rendered_text = render_slack_mrkdwn_text_as_html(
+                            text,
+                            &references.clone().unwrap_or_default(),
+                            default_style_class,
+                            highlight_style_class,
+                        );
                         if let Some(title) = a.title.as_ref() {
                             let escaped_title = html_escape::encode_text(title);
                             return Some(format!(
-                                "<p>{escaped_title}</p>\n<p>{sanitized_text}</p>\n",
+                                "<p>{escaped_title}</p>\n<p>{rendered_text}</p>\n",
                             ));
                         }
 
-                        return Some(format!("<p>{sanitized_text}</p>\n"));
+                        return Some(format!("<p>{rendered_text}</p>\n"));
                     }
 
                     None
@@ -300,14 +304,19 @@ impl SlackMessageRender for SlackHistoryMessage {
             }
         }
 
-        let message = match &self.content.text {
-            Some(text) => sanitize_slack_markdown(text),
-            _ => "A slack message".to_string(),
+        let text = match &self.content.text {
+            Some(text) => text.as_str(),
+            _ => "A slack message",
         };
 
         format!(
             "<p>{}</p>\n",
-            html_escape::encode_text(&replace_emoji_code_in_string_with_emoji(&message))
+            render_slack_mrkdwn_text_as_html(
+                text,
+                &references.unwrap_or_default(),
+                default_style_class,
+                highlight_style_class,
+            )
         )
     }
 
@@ -835,6 +844,93 @@ Here is a [link](https://www.universal-inbox.com/)"#
             message.message.content.text = Some("Test message".to_string());
             message.message.content.blocks = Some(vec![]);
             assert_eq!(slack_message.render_content(), "Test message".to_string());
+        }
+    }
+
+    mod test_message_content_as_html {
+        use super::*;
+
+        fn render_html(slack_message: &SlackMessageDetails) -> String {
+            slack_message.render_content_as_html("text-primary", "text-warning", None)
+        }
+
+        #[rstest]
+        fn test_render_message_with_blocks(slack_message: SlackMessageDetails) {
+            let html = render_html(&slack_message);
+            // Blocks path delegates to render_blocks_as_html — verify it produces HTML tags
+            assert!(html.contains("<strong>"), "Expected HTML bold tag: {html}");
+            assert!(html.contains("<a "), "Expected HTML link tag: {html}");
+        }
+
+        #[rstest]
+        fn test_render_attachment_text_with_slack_link(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
+            message.message.content.attachments = Some(vec![SlackMessageAttachment {
+                id: None,
+                color: None,
+                fallback: None,
+                title: None,
+                fields: None,
+                mrkdwn_in: None,
+                text: Some("Check <https://example.com|this link>".to_string()),
+                blocks: None,
+            }]);
+            message.message.content.blocks = Some(vec![]);
+            let html = render_html(&slack_message);
+            assert!(
+                html.contains(r#"<a target="_blank" rel="noopener noreferrer" href="https://example.com">this link</a>"#),
+                "Slack link should render as HTML anchor: {html}"
+            );
+            assert!(
+                !html.contains("[this link]"),
+                "Should not contain raw Markdown link syntax: {html}"
+            );
+        }
+
+        #[rstest]
+        fn test_render_attachment_text_with_title(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
+            message.message.content.attachments = Some(vec![SlackMessageAttachment {
+                id: None,
+                color: None,
+                fallback: None,
+                title: Some("The title".to_string()),
+                fields: None,
+                mrkdwn_in: None,
+                text: Some("*bold text*".to_string()),
+                blocks: None,
+            }]);
+            message.message.content.blocks = Some(vec![]);
+            let html = render_html(&slack_message);
+            assert!(
+                html.contains("<p>The title</p>"),
+                "Title should be in its own paragraph: {html}"
+            );
+            assert!(
+                html.contains("<strong>bold text</strong>"),
+                "Text should have bold rendered as HTML: {html}"
+            );
+        }
+
+        #[rstest]
+        fn test_render_plain_text_fallback_with_slack_link(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
+            message.message.content.text = Some("Visit <https://example.com|our site>".to_string());
+            message.message.content.blocks = Some(vec![]);
+            let html = render_html(&slack_message);
+            assert!(
+                html.contains(r#"href="https://example.com">our site</a>"#),
+                "Slack link should render as HTML anchor: {html}"
+            );
+        }
+
+        #[rstest]
+        fn test_render_plain_text_fallback_simple(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
+            message.message.content.text = Some("Simple & plain".to_string());
+            message.message.content.blocks = Some(vec![]);
+            let html = render_html(&slack_message);
+            assert_eq!(html, "<p>Simple &amp; plain</p>\n");
         }
     }
 

@@ -6848,9 +6848,9 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slack-blocks-render"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e808b1f62537e6b6d61fc730aeb2f51d4a2c54de6aa25a7a33230bb65b55e25"
+checksum = "264b83f5f9bba1e039ed333a2b492fa0f0526dfc2fa1b499c26058ede7a65893"
 dependencies = [
  "despatma",
  "emojis 0.7.2",

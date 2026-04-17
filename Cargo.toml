@@ -72,7 +72,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
 serde_with = { version = "3.8.0" }
-slack-blocks-render = { version = "0.5.0" }
+slack-blocks-render = { version = "0.5.1" }
 slack-morphism = { version = "2.20.0" }
 strum = { version = "0.27.1", features = ["derive"] }
 thiserror = { version = "2.0" }
