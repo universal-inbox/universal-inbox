@@ -17,11 +17,18 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 use uuid::Uuid;
 use vec1::Vec1;
-use wiremock::MockServer;
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
+};
 
 use universal_inbox::{
     HasHtmlUrl,
-    integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
+    integration_connection::{
+        IntegrationConnectionId,
+        integrations::slack::SlackEmojiSuggestion,
+        provider::{IntegrationProvider, IntegrationProviderKind, IntegrationProviderSource},
+    },
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
         CreateOrUpdateTaskRequest, TaskCreationConfig, TaskSource, TaskSourceKind, TaskStatus,
@@ -38,7 +45,10 @@ use universal_inbox::{
         },
     },
     user::UserId,
-    utils::{default_value::DefaultValue, truncate::truncate_with_ellipse},
+    utils::{
+        default_value::DefaultValue, emoji::search_emojis_by_shortcode,
+        truncate::truncate_with_ellipse,
+    },
 };
 
 use crate::{
@@ -79,7 +89,16 @@ impl SlackService {
         }
     }
 
-    pub async fn mock_all(_mock_server: &MockServer) {}
+    pub async fn mock_all(mock_server: &MockServer) {
+        Mock::given(method("GET"))
+            .and(path("/emoji.list"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "ok": true,
+                "emoji": {},
+            })))
+            .mount(mock_server)
+            .await;
+    }
 
     async fn create_bridge_pending_action_if_enabled(
         &self,
@@ -342,6 +361,88 @@ impl SlackService {
             debug!("`list_emojis` cache hit");
         }
         Ok(result.value)
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = %user_id, integration_connection.id = %integration_connection_id, query))]
+    pub async fn search_emojis(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        user_id: UserId,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<SlackEmojiSuggestion>, UniversalInboxError> {
+        // Search standard Unicode emojis first
+        let mut results: Vec<SlackEmojiSuggestion> = search_emojis_by_shortcode(query, limit)
+            .into_iter()
+            .map(|(shortcode, emoji_char)| SlackEmojiSuggestion {
+                display_name: format!("{emoji_char} :{shortcode}:"),
+                name: shortcode,
+            })
+            .collect();
+
+        // Only fetch custom emojis if we still have room under the limit
+        if results.len() < limit {
+            let workspace_emojis = match self
+                .list_workspace_emojis(executor, integration_connection_id, user_id)
+                .await
+            {
+                Ok(emojis) => emojis,
+                Err(err) => {
+                    warn!(
+                        "Failed to fetch Slack workspace emojis, falling back to standard emojis only: {err:?}"
+                    );
+                    HashMap::new()
+                }
+            };
+            let query_lower = query.to_lowercase();
+            for emoji_name in workspace_emojis.keys() {
+                if results.len() >= limit {
+                    break;
+                }
+                if emoji_name.0.to_lowercase().contains(&query_lower) {
+                    results.push(SlackEmojiSuggestion {
+                        name: emoji_name.0.clone(),
+                        display_name: format!(":{}: (custom)", emoji_name.0),
+                    });
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    async fn list_workspace_emojis(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        user_id: UserId,
+    ) -> Result<HashMap<SlackEmojiName, SlackEmojiRef>, UniversalInboxError> {
+        let integration_connection_service = self.integration_connection_service.read().await;
+        let (access_token, integration_connection) = integration_connection_service
+            .find_access_token_for_connection(executor, integration_connection_id, user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!(
+                    "No access token found for integration connection {integration_connection_id}"
+                )
+            })?;
+
+        let IntegrationProvider::Slack { context, .. } = &integration_connection.provider else {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: format!(
+                    "Integration connection {integration_connection_id} is not a Slack connection"
+                ),
+            });
+        };
+
+        let mut slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()));
+        if let Some(ctx) = context.as_ref() {
+            slack_api_token = slack_api_token.with_team_id(ctx.team_id.clone());
+        }
+
+        self.list_emojis(&slack_api_token).await
     }
 
     pub async fn reactions_add(
@@ -1102,7 +1203,7 @@ async fn cached_fetch_team(
 
 #[io_cached(
     key = "String",
-    convert = r#"{ format!("{}", slack_base_url) }"#,
+    convert = r#"{ format!("{}__{}", slack_base_url, slack_api_token.team_id.as_ref().map(|t| t.0.as_str()).unwrap_or("no-team")) }"#,
     ty = "cached::AsyncRedisCache<String, HashMap<SlackEmojiName, SlackEmojiRef>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_emojis`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:list_emojis", Duration::from_secs(24 * 60 * 60), false).await }"##,
