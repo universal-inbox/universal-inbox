@@ -8,7 +8,8 @@
 - Add Slack browser-extension bridge for 2-way sync (delete/unsubscribe actions)
 - Support multiple authentication methods per user account
 - Add MCP (Model Context Protocol) server for AI agent integration
-- Add configurable emoji on Slack task completion 
+- Add configurable emoji on Slack task completion
+- Hide quoted content in Gmail email previews
 
 ### Changed
 
