@@ -8,7 +8,7 @@
       "labelIds": ["STARRED", "INBOX", "UNREAD"],
       "snippet": "test",
       "payload": {
-        "mimeType": "multipart/alternative",
+        "mimeType": "text/html",
         "headers": [
           {
             "name": "Date",
@@ -26,7 +26,11 @@
             "name": "To",
             "value": "test@example.com"
           }
-        ]
+        ],
+        "body": {
+          "size": 722,
+          "data": "PGRpdiBkaXI9Imx0ciI-SGkgdGVhbSw8YnI-PGJyPkxvb2tzIGdvb2QgdG8gbWUsIHNoaXBwaW5nIHRvZGF5ITxicj48L2Rpdj48ZGl2IGNsYXNzPSJnbWFpbF9xdW90ZSBnbWFpbF9xdW90ZV9jb250YWluZXIiPjxkaXYgZGlyPSJsdHIiIGNsYXNzPSJnbWFpbF9hdHRyIj5PbiBTYXQsIFNlcCAxNiwgMjAyMyBhdCAyOjA1IFBNIEphbmUgU21pdGggJmx0O2phbmVAZXhhbXBsZS5jb20mZ3Q7IHdyb3RlOjxicj48L2Rpdj48YmxvY2txdW90ZSBjbGFzcz0iZ21haWxfcXVvdGUiIHN0eWxlPSJtYXJnaW46MHB4IDBweCAwcHggMC44ZXg7Ym9yZGVyLWxlZnQ6MXB4IHNvbGlkIHJnYigyMDQsMjA0LDIwNCk7cGFkZGluZy1sZWZ0OjFleCI-PGRpdiBkaXI9Imx0ciI-SGV5IHRlYW0sPGJyPjxicj5QbGVhc2UgcmV2aWV3IHRoZSBVbml2ZXJzYWwgSW5ib3ggcm9sbG91dCBwbGFuIGFuZCBjb25maXJtIHdlIGNhbiBzaGlwIGJ5IGVuZCBvZiB3ZWVrLjxicj48YnI-VGhhbmtzITxicj5KYW5lPGJyPjwvZGl2PjwvYmxvY2txdW90ZT48L2Rpdj4="
+        }
       },
       "sizeEstimate": 2222,
       "historyId": "111",
