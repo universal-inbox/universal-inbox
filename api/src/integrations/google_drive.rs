@@ -49,7 +49,7 @@ use crate::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService,
     },
-    utils::api::ApiClient,
+    utils::api::{ApiClient, ApiClientError},
 };
 
 #[derive(Clone)]
@@ -342,20 +342,35 @@ impl GoogleDriveService {
                     .map(|token| format!("&pageToken={token}"))
                     .unwrap_or_default()
             );
-            let comment_list: GoogleDriveCommentList = self
+            match self
                 .build_google_drive_client(access_token)?
-                .get(&comments_url)
+                .get::<GoogleDriveCommentList, _>(&comments_url)
                 .await
-                .context("Failed to fetch Google Drive comments")?;
+            {
+                Ok(comment_list) => {
+                    if let Some(mut new_comments) = comment_list.comments {
+                        comments.append(&mut new_comments);
+                    }
 
-            if let Some(mut new_comments) = comment_list.comments {
-                comments.append(&mut new_comments);
+                    if comment_list.next_page_token.is_none() {
+                        break;
+                    }
+                    page_token = comment_list.next_page_token;
+                }
+                Err(ApiClientError::NetworkError(err))
+                    if err.status() == Some(reqwest_middleware::reqwest::StatusCode::NOT_FOUND) =>
+                {
+                    debug!(
+                        "Google Drive file {file_id} does not support comments (404). Skipping."
+                    );
+                    break;
+                }
+                Err(err) => {
+                    return Err(anyhow!(err)
+                        .context("Failed to fetch Google Drive comments")
+                        .into());
+                }
             }
-
-            if comment_list.next_page_token.is_none() {
-                break;
-            }
-            page_token = comment_list.next_page_token;
         }
 
         Ok(comments)
