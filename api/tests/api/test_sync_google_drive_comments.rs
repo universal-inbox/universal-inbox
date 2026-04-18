@@ -49,8 +49,9 @@ use crate::helpers::{
         google_drive::{
             assert_sync_notifications, create_notification_from_google_drive_comment,
             google_drive_comment_123, google_drive_comment_456, google_drive_comments_list,
-            google_drive_files_list, mock_google_drive_comments_list_service,
-            mock_google_drive_files_list_service, mock_google_drive_get_user_info_service,
+            google_drive_files_list, mock_google_drive_comments_list_404_service,
+            mock_google_drive_comments_list_service, mock_google_drive_files_list_service,
+            mock_google_drive_get_user_info_service,
         },
         sync_notifications, update_notification,
     },
@@ -477,4 +478,106 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
         updated_notification.status,
         expected_notification_status_after_sync
     );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_notifications_skips_files_returning_404_on_comments(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    google_drive_comments_list: GoogleDriveCommentList,
+    google_drive_files_list: GoogleDriveFileList,
+    nango_google_drive_connection: Box<NangoConnection>,
+) {
+    // Some Google Drive file types (Google My Maps, Sites, Forms, Scripts, folders, shortcuts...)
+    // do not expose a `/comments` sub-resource and Drive responds 404 when we try to list their
+    // comments. A single 404 must not abort the entire sync — comments on commentable files
+    // must still be synced.
+    let app = authenticated_app.await;
+    let user_email_address = EmailAddress::from_str("jane.doe@example.com").unwrap();
+    let google_drive_config = GoogleDriveConfig::enabled();
+
+    let google_drive_about_response = GoogleDriveAboutResponse {
+        user: GoogleDriveUserInfo {
+            email_address: user_email_address.to_string(),
+            display_name: "Jane Doe".to_string(),
+        },
+    };
+    let _google_drive_get_user_info_mock = mock_google_drive_get_user_info_service(
+        &app.app.google_drive_mock_server,
+        &google_drive_about_response,
+    )
+    .await;
+
+    let google_drive_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::GoogleDrive(google_drive_config.clone()),
+        &settings,
+        nango_google_drive_connection,
+        None,
+        None,
+    )
+    .await;
+
+    let google_drive_files_list = GoogleDriveFileList {
+        next_page_token: None,
+        ..google_drive_files_list
+    };
+    let _google_drive_files_list_mock = mock_google_drive_files_list_service(
+        &app.app.google_drive_mock_server,
+        None,
+        settings
+            .integrations
+            .get("google_drive")
+            .unwrap()
+            .page_size
+            .unwrap(),
+        google_drive_integration_connection.created_at,
+        &google_drive_files_list,
+    )
+    .await;
+
+    // First file: returns comments normally
+    let google_drive_comments_list = GoogleDriveCommentList {
+        next_page_token: None,
+        ..google_drive_comments_list
+    };
+    let _google_drive_comments_list_mock = mock_google_drive_comments_list_service(
+        &app.app.google_drive_mock_server,
+        None,
+        settings
+            .integrations
+            .get("google_drive")
+            .unwrap()
+            .page_size
+            .unwrap(),
+        &google_drive_files_list.files.as_ref().unwrap()[0].id,
+        &google_drive_comments_list,
+    )
+    .await;
+
+    // Second file: 404 (simulating a non-commentable file type like Google My Maps)
+    let _google_drive_comments_list_404_mock = mock_google_drive_comments_list_404_service(
+        &app.app.google_drive_mock_server,
+        &google_drive_files_list.files.as_ref().unwrap()[1].id,
+    )
+    .await;
+
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::GoogleDrive),
+        false,
+    )
+    .await;
+
+    // The sync must succeed and return the comment_123 notification from the commentable
+    // file (comment_456 would be created as Deleted because the last reply is from the user,
+    // and Deleted notifications are filtered from the sync response). The 404 from the other
+    // file must not abort the sync.
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].kind, NotificationSourceKind::GoogleDrive);
+    assert_eq!(notifications[0].status, NotificationStatus::Unread);
 }
