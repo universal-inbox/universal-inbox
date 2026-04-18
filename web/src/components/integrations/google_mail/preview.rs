@@ -141,12 +141,17 @@ fn GoogleMailThreadMessage(message: ReadSignal<GoogleMailMessage>) -> Element {
         headers
             .push(rsx! { span { class: "text-neutral-content/75", "Date:" }, span { "{date}" } });
     }
-    let message_body = use_memo(move || {
-        ammonia::Builder::default()
+    let message_parts = use_memo(move || {
+        let sanitized = ammonia::Builder::default()
             .set_tag_attribute_value("a", "target", "_blank")
+            .add_tag_attributes("div", &["class"])
+            .add_tag_attributes("blockquote", &["class", "type"])
             .clean(&message().render_content_as_html())
-            .to_string()
+            .to_string();
+        split_quoted_content(&sanitized)
     });
+    let mut show_quoted = use_signal(|| false);
+    let (visible, quoted) = message_parts();
 
     rsx! {
         CardWithHeaders {
@@ -155,8 +160,94 @@ fn GoogleMailThreadMessage(message: ReadSignal<GoogleMailMessage>) -> Element {
 
             span {
                 class: "prose prose-sm prose-table:text-sm prose-img:max-w-none",
-                dangerous_inner_html: "{message_body()}"
+                dangerous_inner_html: "{visible}"
+            }
+            if let Some(quoted) = quoted {
+                button {
+                    class: "btn btn-xs btn-ghost px-2 py-0 min-h-0 h-5 align-middle text-neutral-content/60 hover:text-neutral-content",
+                    title: if show_quoted() { "Hide quoted content" } else { "Show quoted content" },
+                    onclick: move |_| { *show_quoted.write() = !show_quoted(); },
+                    "…"
+                }
+                if show_quoted() {
+                    span {
+                        class: "prose prose-sm prose-table:text-sm prose-img:max-w-none",
+                        dangerous_inner_html: "{quoted}"
+                    }
+                }
             }
         }
+    }
+}
+
+fn split_quoted_content(html: &str) -> (String, Option<String>) {
+    const MARKERS: &[&str] = &[
+        "<div class=\"gmail_quote",
+        "<blockquote type=\"cite\"",
+        "<blockquote class=\"gmail_quote",
+    ];
+    let earliest = MARKERS.iter().filter_map(|m| html.find(m)).min();
+    match earliest {
+        Some(pos) => (html[..pos].to_string(), Some(html[pos..].to_string())),
+        None => (html.to_string(), None),
+    }
+}
+
+#[cfg(test)]
+mod google_mail_preview_tests {
+    use super::split_quoted_content;
+    use pretty_assertions::assert_eq;
+    use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    fn no_quote_markers_returns_whole_html_and_none() {
+        let html = "<p>hello world</p>";
+        let (visible, quoted) = split_quoted_content(html);
+        assert_eq!(visible, html);
+        assert_eq!(quoted, None);
+    }
+
+    #[wasm_bindgen_test]
+    fn splits_at_gmail_quote_div() {
+        let html = r#"<p>new reply</p><div class="gmail_quote gmail_quote_container"><blockquote>old</blockquote></div>"#;
+        let (visible, quoted) = split_quoted_content(html);
+        assert_eq!(visible, "<p>new reply</p>");
+        assert_eq!(
+            quoted.as_deref(),
+            Some(
+                r#"<div class="gmail_quote gmail_quote_container"><blockquote>old</blockquote></div>"#
+            )
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn splits_at_blockquote_type_cite() {
+        let html = r#"<p>new reply</p><blockquote type="cite">old</blockquote>"#;
+        let (visible, quoted) = split_quoted_content(html);
+        assert_eq!(visible, "<p>new reply</p>");
+        assert_eq!(
+            quoted.as_deref(),
+            Some(r#"<blockquote type="cite">old</blockquote>"#)
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn splits_at_blockquote_class_gmail_quote() {
+        let html = r#"reply<br><blockquote class="gmail_quote">quoted</blockquote>"#;
+        let (visible, quoted) = split_quoted_content(html);
+        assert_eq!(visible, "reply<br>");
+        assert_eq!(
+            quoted.as_deref(),
+            Some(r#"<blockquote class="gmail_quote">quoted</blockquote>"#)
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn earliest_marker_wins_when_multiple_present() {
+        let html =
+            r#"<p>reply</p><blockquote type="cite">A</blockquote><div class="gmail_quote">B</div>"#;
+        let (visible, quoted) = split_quoted_content(html);
+        assert_eq!(visible, "<p>reply</p>");
+        assert!(quoted.unwrap().starts_with(r#"<blockquote type="cite""#));
     }
 }
