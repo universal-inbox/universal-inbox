@@ -147,6 +147,21 @@ pub async fn mock_google_drive_comments_list_service(
         .await;
 }
 
+pub async fn mock_google_drive_comments_list_404_service(
+    google_drive_mock_server: &MockServer,
+    file_id: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{}/comments", file_id)))
+        .and(header(
+            "authorization",
+            "Bearer google_drive_test_access_token",
+        ))
+        .respond_with(ResponseTemplate::new(404).insert_header("content-type", "application/json"))
+        .mount(google_drive_mock_server)
+        .await;
+}
+
 #[fixture]
 pub fn google_drive_files_list() -> GoogleDriveFileList {
     load_json_fixture_file("google_drive/google_drive_files_list.json")
