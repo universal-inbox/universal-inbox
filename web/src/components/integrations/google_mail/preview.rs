@@ -151,6 +151,7 @@ fn GoogleMailThreadMessage(message: ReadSignal<GoogleMailMessage>) -> Element {
         split_quoted_content(&sanitized)
     });
     let mut show_quoted = use_signal(|| false);
+    let (visible, quoted) = message_parts();
 
     rsx! {
         CardWithHeaders {
@@ -159,9 +160,9 @@ fn GoogleMailThreadMessage(message: ReadSignal<GoogleMailMessage>) -> Element {
 
             span {
                 class: "prose prose-sm prose-table:text-sm prose-img:max-w-none",
-                dangerous_inner_html: "{message_parts().0}"
+                dangerous_inner_html: "{visible}"
             }
-            if let Some(quoted) = message_parts().1 {
+            if let Some(quoted) = quoted {
                 button {
                     class: "btn btn-xs btn-ghost px-2 py-0 min-h-0 h-5 align-middle text-neutral-content/60 hover:text-neutral-content",
                     title: if show_quoted() { "Hide quoted content" } else { "Show quoted content" },
