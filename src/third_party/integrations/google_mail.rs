@@ -289,7 +289,7 @@ impl GoogleMailMessagePayload {
 
     fn render_text_body_as_html(&self) -> Option<String> {
         self.decode_body_data()
-            .map(|body| body.replace("\r\n", "<br>").replace("\n", "<br>"))
+            .map(|body| wrap_plain_text_quotes_as_html(&body))
     }
 
     fn render_html_body(&self) -> Option<String> {
@@ -323,6 +323,43 @@ impl GoogleMailMessagePayload {
                 .find_map(|part| part.find_attachment_id_for_mime_type(mime_type))
         })
     }
+}
+
+fn wrap_plain_text_quotes_as_html(body: &str) -> String {
+    let normalized = body.replace("\r\n", "\n");
+    let mut out = String::with_capacity(normalized.len() + 32);
+    let mut in_quote = false;
+    for raw in normalized.split_inclusive('\n') {
+        let has_newline = raw.ends_with('\n');
+        let line = if has_newline {
+            &raw[..raw.len() - 1]
+        } else {
+            raw
+        };
+        let trimmed = line.trim_start();
+        let is_quote_line = trimmed.starts_with('>');
+        if is_quote_line && !in_quote {
+            out.push_str("<blockquote class=\"gmail_quote\">");
+            in_quote = true;
+        } else if !is_quote_line && in_quote {
+            out.push_str("</blockquote>");
+            in_quote = false;
+        }
+        if is_quote_line {
+            let after_gt = &trimmed[1..];
+            let content = after_gt.strip_prefix(' ').unwrap_or(after_gt);
+            out.push_str(content);
+        } else {
+            out.push_str(line);
+        }
+        if has_newline {
+            out.push_str("<br>");
+        }
+    }
+    if in_quote {
+        out.push_str("</blockquote>");
+    }
+    out
 }
 
 #[cfg(test)]
@@ -687,6 +724,67 @@ mod tests {
                 .render_content_as_html();
 
                 assert_eq!(content, "<p>this is an invitation</p>\n");
+            }
+        }
+
+        mod plain_text_quote_wrapping {
+            use super::*;
+            use pretty_assertions::assert_eq;
+
+            #[rstest]
+            fn test_no_quote_lines_preserves_existing_behavior() {
+                assert_eq!(
+                    wrap_plain_text_quotes_as_html("test message body\n"),
+                    "test message body<br>"
+                );
+            }
+
+            #[rstest]
+            fn test_crlf_line_endings_are_normalized() {
+                assert_eq!(
+                    wrap_plain_text_quotes_as_html("hello\r\nworld\r\n"),
+                    "hello<br>world<br>"
+                );
+            }
+
+            #[rstest]
+            fn test_single_quoted_block_is_wrapped() {
+                assert_eq!(
+                    wrap_plain_text_quotes_as_html("hi\n> quoted reply\n> more quoted\n"),
+                    "hi<br><blockquote class=\"gmail_quote\">quoted reply<br>more quoted<br></blockquote>"
+                );
+            }
+
+            #[rstest]
+            fn test_quote_without_space_after_marker() {
+                assert_eq!(
+                    wrap_plain_text_quotes_as_html(">quoted\n"),
+                    "<blockquote class=\"gmail_quote\">quoted<br></blockquote>"
+                );
+            }
+
+            #[rstest]
+            fn test_nested_quote_strips_only_one_level() {
+                assert_eq!(
+                    wrap_plain_text_quotes_as_html("> > double quoted\n"),
+                    "<blockquote class=\"gmail_quote\">> double quoted<br></blockquote>"
+                );
+            }
+
+            #[rstest]
+            fn test_quote_then_normal_text_closes_block() {
+                assert_eq!(
+                    wrap_plain_text_quotes_as_html("> quoted\nafter\n"),
+                    "<blockquote class=\"gmail_quote\">quoted<br></blockquote>after<br>"
+                );
+            }
+
+            #[rstest]
+            fn test_trailing_quote_without_newline_still_closes() {
+                assert_eq!(
+                    wrap_plain_text_quotes_as_html("hi\n> quoted"),
+                    "hi<br><blockquote class=\"gmail_quote\">quoted</blockquote>"
+                );
             }
         }
     }
