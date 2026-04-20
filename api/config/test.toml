@@ -31,3 +31,7 @@ oidc_flow_settings.front_client_id = "12345"
 [integrations.github]
 page_size = 2
 
+[integrations.ticktick]
+oauth_client_id = "ticktick_test_client_id"
+oauth_client_secret = "ticktick_test_client_secret"
+

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "tt_proj_1111",
+    "name": "Inbox",
+    "color": "#4772FA",
+    "sortOrder": 0,
+    "groupId": null,
+    "viewMode": "list"
+  },
+  {
+    "id": "tt_proj_2222",
+    "name": "Project2",
+    "color": "#FF6161",
+    "sortOrder": 1,
+    "groupId": null,
+    "viewMode": "list"
+  }
+]

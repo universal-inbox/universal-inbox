@@ -40,6 +40,9 @@ pub static INTEGRATION_CONNECTIONS: GlobalSignal<Option<Vec<IntegrationConnectio
 pub static TASK_SERVICE_INTEGRATION_CONNECTION: GlobalSignal<
     LoadState<Option<IntegrationConnection>>,
 > = Signal::global(|| LoadState::None);
+pub static TASK_SERVICE_INTEGRATION_CONNECTIONS: GlobalSignal<
+    LoadState<Vec<IntegrationConnection>>,
+> = Signal::global(|| LoadState::None);
 
 #[allow(clippy::too_many_arguments)]
 pub async fn integration_connnection_service(
@@ -248,12 +251,17 @@ async fn refresh_integration_connection(
     )
     .await?;
 
-    let task_service_integration_connection = new_integration_connections
-        .iter()
-        .find(|c| c.is_connected_task_service());
-    ui_model.write().is_task_actions_enabled = task_service_integration_connection.is_some();
+    let task_service_integration_connections: Vec<IntegrationConnection> =
+        new_integration_connections
+            .iter()
+            .filter(|c| c.is_connected_task_service())
+            .cloned()
+            .collect();
+    ui_model.write().is_task_actions_enabled = !task_service_integration_connections.is_empty();
     *task_service_integration_connection_ref.write() =
-        LoadState::Loaded(task_service_integration_connection.cloned());
+        LoadState::Loaded(task_service_integration_connections.first().cloned());
+    *TASK_SERVICE_INTEGRATION_CONNECTIONS.write() =
+        LoadState::Loaded(task_service_integration_connections);
 
     let was_syncing = ui_model.read().is_syncing_notifications || ui_model.read().is_syncing_tasks;
     ui_model.write().is_syncing_notifications = new_integration_connections

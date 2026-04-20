@@ -27,6 +27,7 @@ use crate::helpers::{
     settings,
     task::{
         list_tasks, search_projects,
+        ticktick::{ticktick_item, ticktick_projects_response},
         todoist::{
             mock_todoist_sync_resources_service, sync_todoist_projects_response, todoist_item,
         },
@@ -491,7 +492,7 @@ mod search_tasks {
     #[tokio::test]
     async fn test_empty_search_tasks(#[future] authenticated_app: AuthenticatedApp) {
         let app = authenticated_app.await;
-        let tasks = search_tasks(&app.client, &app.app.api_address, "").await;
+        let tasks = search_tasks(&app.client, &app.app.api_address, "", None).await;
 
         assert!(tasks.is_empty());
     }
@@ -580,24 +581,30 @@ mod search_tasks {
         assert_eq!(task2.title, "Other todo".to_string());
 
         // Search by task title
-        let tasks = search_tasks(&app.client, &app.app.api_address, "Release new version").await;
+        let tasks = search_tasks(
+            &app.client,
+            &app.app.api_address,
+            "Release new version",
+            None,
+        )
+        .await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].id, task1.id);
 
-        let tasks = search_tasks(&app.client, &app.app.api_address, "todo").await;
+        let tasks = search_tasks(&app.client, &app.app.api_address, "todo", None).await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].id, task2.id);
 
         // Search by task description
-        let tasks = search_tasks(&app.client, &app.app.api_address, "form").await;
+        let tasks = search_tasks(&app.client, &app.app.api_address, "form", None).await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].id, task2.id);
 
         // Search by task tags
-        let tasks = search_tasks(&app.client, &app.app.api_address, "Food").await;
+        let tasks = search_tasks(&app.client, &app.app.api_address, "Food", None).await;
 
         assert_eq!(tasks.len(), 2);
         assert!(tasks.iter().any(|t| t.id == task1.id));
@@ -607,9 +614,143 @@ mod search_tasks {
         let (client, _user) =
             authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
-        let result = search_tasks(&client, &app.app.api_address, "Task").await;
+        let result = search_tasks(&client, &app.app.api_address, "Task", None).await;
 
         assert_eq!(result.len(), 0);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_search_tasks_filtered_by_provider_kind(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+        ticktick_item: Box<universal_inbox::third_party::integrations::ticktick::TickTickItem>,
+        ticktick_projects_response: Vec<
+            universal_inbox::task::integrations::ticktick::TickTickProject,
+        >,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        nango_todoist_connection: Box<NangoConnection>,
+    ) {
+        use universal_inbox::integration_connection::{
+            integrations::ticktick::TickTickConfig, provider::IntegrationProviderKind,
+        };
+        use universal_inbox::third_party::integrations::ticktick::TickTickItem;
+
+        use crate::helpers::task::ticktick::mock_ticktick_list_projects_service;
+
+        let app = authenticated_app.await;
+
+        // Todoist connection (via Nango) — task seeded with the fixture title "Release new version..."
+        let todoist_ic = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            nango_todoist_connection,
+            None,
+            None,
+        )
+        .await;
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        )
+        .await;
+
+        // TickTick connection (internal OAuth helper) — task sharing the word "Universal" in its title
+        let ticktick_ic =
+            crate::helpers::integration_connection::create_ticktick_integration_connection(
+                &app.app,
+                app.user.id,
+                &settings,
+                IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+                None,
+            )
+            .await;
+        mock_ticktick_list_projects_service(
+            &app.app.ticktick_mock_server,
+            &ticktick_projects_response,
+        )
+        .await;
+
+        let _todoist_created: Box<ThirdPartyItemCreationResult> = create_resource(
+            &app.client,
+            &app.app.api_address,
+            "third_party/task/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: todoist_item.id.clone(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                    project_id: "1111".to_string(),
+                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                    ..*todoist_item.clone()
+                })),
+                integration_connection_id: todoist_ic.id,
+                source_item: None,
+            }),
+        )
+        .await;
+
+        // TickTick task has a distinct title so we can assert which provider each match came from,
+        // even though the word "Universal" appears in both.
+        let _ticktick_created: Box<ThirdPartyItemCreationResult> = create_resource(
+            &app.client,
+            &app.app.api_address,
+            "third_party/task/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: ticktick_item.id.clone(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
+                    title: "Universal ticktick task".to_string(),
+                    project_id: "tt_proj_1111".to_string(),
+                    ..*ticktick_item.clone()
+                })),
+                integration_connection_id: ticktick_ic.id,
+                source_item: None,
+            }),
+        )
+        .await;
+
+        // No filter → both providers are searchable.
+        let tasks = search_tasks(&app.client, &app.app.api_address, "Universal", None).await;
+        let titles: Vec<String> = tasks.iter().map(|t| t.title.clone()).collect();
+        assert_eq!(
+            tasks.len(),
+            2,
+            "expected both Todoist + TickTick tasks, got: {titles:?}"
+        );
+
+        // Filter to Todoist only.
+        let tasks = search_tasks(
+            &app.client,
+            &app.app.api_address,
+            "Universal",
+            Some(IntegrationProviderKind::Todoist),
+        )
+        .await;
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].title, "Release new version of Universal Inbox");
+
+        // Filter to TickTick only.
+        let tasks = search_tasks(
+            &app.client,
+            &app.app.api_address,
+            "Universal",
+            Some(IntegrationProviderKind::TickTick),
+        )
+        .await;
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].title, "Universal ticktick task");
     }
 }
 
@@ -645,7 +786,7 @@ mod search_projects {
         )
         .await;
 
-        let projects = search_projects(&app.client, &app.app.api_address, "in").await;
+        let projects = search_projects(&app.client, &app.app.api_address, "in", None).await;
 
         assert_eq!(projects.len(), 1);
         assert_eq!(
@@ -655,7 +796,7 @@ mod search_projects {
                 name: "Inbox".to_string()
             }
         );
-        let projects = search_projects(&app.client, &app.app.api_address, "box").await;
+        let projects = search_projects(&app.client, &app.app.api_address, "box", None).await;
 
         assert_eq!(projects.len(), 1);
         assert_eq!(
@@ -666,7 +807,7 @@ mod search_projects {
             }
         );
 
-        let projects = search_projects(&app.client, &app.app.api_address, "jec").await;
+        let projects = search_projects(&app.client, &app.app.api_address, "jec", None).await;
 
         assert_eq!(projects.len(), 1);
         assert_eq!(

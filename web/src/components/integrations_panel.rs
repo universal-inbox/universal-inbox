@@ -21,21 +21,28 @@ use universal_inbox::{
         config::IntegrationConnectionConfig,
         provider::{IntegrationProvider, IntegrationProviderKind},
     },
+    user::UserPreferencesPatch,
 };
 
 use crate::{
     components::{
+        floating_label_inputs::FloatingLabelSelect,
         integrations::{
             github::config::GithubProviderConfiguration,
             google_calendar::config::GoogleCalendarProviderConfiguration,
             google_drive::config::GoogleDriveProviderConfiguration,
             google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
             linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
+            ticktick::config::TickTickProviderConfiguration,
             todoist::config::TodoistProviderConfiguration,
         },
         markdown::Markdown,
     },
-    model::UniversalInboxUIModel,
+    model::{LoadState, UniversalInboxUIModel},
+    services::{
+        integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTIONS,
+        user_preferences_service::{USER_PREFERENCES, UserPreferencesCommand},
+    },
 };
 
 #[component]
@@ -55,6 +62,16 @@ pub fn IntegrationsPanel(
         .into_iter()
         .sorted_by(|(k1, _), (k2, _)| Ord::cmp(&k1.to_string(), &k2.to_string()))
         .collect();
+
+    let user_preferences_service = use_coroutine_handle::<UserPreferencesCommand>();
+    let show_default_task_manager = matches!(
+        &*TASK_SERVICE_INTEGRATION_CONNECTIONS.read(),
+        LoadState::Loaded(connections) if connections.len() >= 2
+    );
+    let default_task_manager = USER_PREFERENCES
+        .read()
+        .as_ref()
+        .and_then(|p| p.default_task_manager_provider_kind);
 
     rsx! {
         div {
@@ -111,6 +128,38 @@ pub fn IntegrationsPanel(
                     span { class: "relative text-2xl", "Todo list services" }
                 }
                 div { class: "divider grow" }
+            }
+
+            if show_default_task_manager {
+                div {
+                    class: "card w-full bg-base-200",
+                    div {
+                        class: "card-body text-sm",
+                        div {
+                            class: "flex items-center gap-2",
+                            label {
+                                class: "label-text cursor-pointer grow text-sm text-base-content",
+                                "Default task manager for quick actions"
+                            }
+                            FloatingLabelSelect::<IntegrationProviderKind> {
+                                label: None,
+                                class: "max-w-xs",
+                                name: "default-task-manager-input".to_string(),
+                                default_value: default_task_manager.map(|p| p.to_string()).unwrap_or_default(),
+                                on_select: move |provider_kind: Option<IntegrationProviderKind>| {
+                                    user_preferences_service.send(
+                                        UserPreferencesCommand::Patch(UserPreferencesPatch {
+                                            default_task_manager_provider_kind: Some(provider_kind),
+                                        })
+                                    );
+                                },
+
+                                option { selected: default_task_manager == Some(IntegrationProviderKind::Todoist), value: "Todoist", "Todoist" }
+                                option { selected: default_task_manager == Some(IntegrationProviderKind::TickTick), value: "TickTick", "TickTick" }
+                            }
+                        }
+                    }
+                }
             }
 
             for (kind, config) in (sorted_integration_providers.clone()) {
@@ -553,6 +602,12 @@ pub fn IntegrationConnectionProviderConfiguration(
         },
         IntegrationProvider::Github { config } => rsx! {
             GithubProviderConfiguration {
+                on_config_change: move |c| on_config_change.call(c),
+                config: config.clone()
+            }
+        },
+        IntegrationProvider::TickTick { config, .. } => rsx! {
+            TickTickProviderConfiguration {
                 on_config_change: move |c| on_config_change.call(c),
                 config: config.clone()
             }

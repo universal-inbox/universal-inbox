@@ -18,8 +18,7 @@ use tracing::{debug, error, info};
 use universal_inbox::{
     Page, PageToken,
     integration_connection::{
-        IntegrationConnection,
-        integrations::todoist::TodoistConfig,
+        integrations::{ticktick::TickTickConfig, todoist::TodoistConfig},
         provider::{IntegrationProvider, IntegrationProviderKind},
     },
     notification::{
@@ -240,7 +239,7 @@ impl NotificationService {
                     )));
                 }
             },
-            NotificationSourceKind::Todoist => {
+            NotificationSourceKind::Todoist | NotificationSourceKind::TickTick => {
                 if let Some(NotificationStatus::Deleted) = patch.status {
                     if let Some(task_id) = notification.task_id {
                         if apply_task_side_effects {
@@ -262,15 +261,16 @@ impl NotificationService {
                         }
                     } else {
                         return Err(UniversalInboxError::Unexpected(anyhow!(
-                            "Todoist notification {} is expected to be linked to a task",
+                            "{} notification {} is expected to be linked to a task",
+                            notification.kind,
                             notification.id
                         )));
                     }
                     // Other actions than delete or snoozing is not supported
                 } else if patch.snoozed_until.is_none() {
                     return Err(UniversalInboxError::UnsupportedAction(format!(
-                        "Cannot update the status of Todoist notification {}, update task's project",
-                        notification.id
+                        "Cannot update the status of {} notification {}, update task's project",
+                        notification.kind, notification.id
                     )));
                 }
             }
@@ -644,6 +644,25 @@ impl NotificationService {
                 )
                 .await
             }
+            // Todoist and TickTick notifications are produced as a side effect
+            // of task sync (see `create_notification_from_inbox_task`), so
+            // delegate to the task service here.
+            NotificationSyncSourceKind::Todoist | NotificationSyncSourceKind::TickTick => {
+                let task_sync_source = source
+                    .try_into()
+                    .context("Unable to convert notification source to task sync source")?;
+                self.task_service
+                    .upgrade()
+                    .context("Unable to access task_service from notification_service")?
+                    .read()
+                    .await
+                    .sync_tasks(executor, task_sync_source, user_id, force_sync)
+                    .await?;
+                // Notifications have been upserted by the task sync; the
+                // current API contract returns the list of notifications, but
+                // for task-derived notifications we don't enumerate them here.
+                Ok(vec![])
+            }
         }
     }
 
@@ -726,6 +745,20 @@ impl NotificationService {
                 force_sync,
             )
             .await?;
+        let notifications_from_todoist = self
+            .sync_notifications_with_transaction(
+                NotificationSyncSourceKind::Todoist,
+                user_id,
+                force_sync,
+            )
+            .await?;
+        let notifications_from_ticktick = self
+            .sync_notifications_with_transaction(
+                NotificationSyncSourceKind::TickTick,
+                user_id,
+                force_sync,
+            )
+            .await?;
 
         Ok(notifications_from_github
             .into_iter()
@@ -733,6 +766,8 @@ impl NotificationService {
             .chain(notifications_from_google_drive.into_iter())
             .chain(notifications_from_google_mail.into_iter())
             .chain(notifications_from_slack.into_iter())
+            .chain(notifications_from_todoist.into_iter())
+            .chain(notifications_from_ticktick.into_iter())
             .collect())
     }
 
@@ -960,39 +995,75 @@ impl NotificationService {
                 anyhow!("Cannot create task from unknown notification {notification_id}")
             })?;
 
+        // Resolve the task provider kind:
+        // 1. From task_creation.task_provider_kind (explicit user choice)
+        // 2. From user preferences default_task_manager_provider_kind
+        // 3. Fall back to Todoist
+        let explicit_provider_kind = task_creation.as_ref().and_then(|tc| tc.task_provider_kind);
+        let resolved_provider_kind = if let Some(kind) = explicit_provider_kind {
+            kind
+        } else if let Some(prefs) = self
+            .user_service
+            .get_user_preferences(executor, for_user_id)
+            .await?
+        {
+            prefs
+                .default_task_manager_provider_kind
+                .unwrap_or(IntegrationProviderKind::Todoist)
+        } else {
+            IntegrationProviderKind::Todoist
+        };
+
         let task_creation = if let Some(task_creation) = task_creation {
             task_creation
         } else {
             debug!(
-                "No task creation details provided, using default values from Todoist integration connection config"
+                "No task creation details provided, using default values from {resolved_provider_kind} integration connection config"
             );
-            let Some(IntegrationConnection {
-                provider:
-                    IntegrationProvider::Todoist {
-                        config:
-                            TodoistConfig {
-                                default_project,
-                                default_due_at,
-                                default_priority,
-                                ..
-                            },
-                        ..
-                    },
-                ..
-            }) = self
+            let Some(integration_connection) = self
                 .integration_connection_service
                 .read()
                 .await
                 .get_validated_integration_connection_per_kind(
                     executor,
-                    IntegrationProviderKind::Todoist,
+                    resolved_provider_kind,
                     for_user_id,
                 )
                 .await?
             else {
                 return Err(UniversalInboxError::Unexpected(anyhow!(
-                    "Cannot create task from notification {notification_id} as no Todoist integration is connected for user {for_user_id}"
+                    "Cannot create task from notification {notification_id} as no {resolved_provider_kind} integration is connected for user {for_user_id}"
                 )));
+            };
+
+            let (default_project, default_due_at, default_priority) = match integration_connection
+                .provider
+            {
+                IntegrationProvider::Todoist {
+                    config:
+                        TodoistConfig {
+                            default_project,
+                            default_due_at,
+                            default_priority,
+                            ..
+                        },
+                    ..
+                } => (default_project, default_due_at, default_priority),
+                IntegrationProvider::TickTick {
+                    config:
+                        TickTickConfig {
+                            default_project,
+                            default_due_at,
+                            default_priority,
+                            ..
+                        },
+                    ..
+                } => (default_project, default_due_at, default_priority),
+                _ => {
+                    return Err(UniversalInboxError::Unexpected(anyhow!(
+                        "Cannot create task from notification {notification_id}: unsupported provider {resolved_provider_kind}"
+                    )));
+                }
             };
 
             TaskCreation {
@@ -1001,6 +1072,7 @@ impl NotificationService {
                 project_name: default_project.map(|p| p.name),
                 due_at: default_due_at.map(|d| d.into()),
                 priority: default_priority.unwrap_or_default(),
+                task_provider_kind: Some(resolved_provider_kind),
             }
         };
 
@@ -1010,7 +1082,12 @@ impl NotificationService {
             .context("Unable to access task_service from notification_service")?
             .read()
             .await
-            .create_task_from_notification(executor, &task_creation, &notification)
+            .create_task_from_notification(
+                executor,
+                &task_creation,
+                &notification,
+                resolved_provider_kind,
+            )
             .await?;
 
         let delete_patch = NotificationPatch {

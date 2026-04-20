@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     DEFAULT_PAGE_SIZE, Page, PageToken,
+    integration_connection::provider::IntegrationProviderKind,
     task::{
         CreateOrUpdateTaskRequest, DueDate, Task, TaskId, TaskPriority, TaskSourceKind, TaskStatus,
         TaskSummary, service::TaskPatch,
@@ -46,6 +47,7 @@ pub trait TaskRepository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         matches: &str,
+        provider_kind: Option<IntegrationProviderKind>,
         user_id: UserId,
     ) -> Result<Vec<TaskSummary>, UniversalInboxError>;
     async fn create_task(
@@ -374,6 +376,7 @@ impl TaskRepository for Repository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         matches: &str,
+        provider_kind: Option<IntegrationProviderKind>,
         user_id: UserId,
     ) -> Result<Vec<TaskSummary>, UniversalInboxError> {
         // TODO: cleanup, only keep [a-zA-Z0-9]
@@ -382,6 +385,8 @@ impl TaskRepository for Repository {
             .map(|word| format!("{word}:*"))
             .collect::<Vec<String>>()
             .join(" & ");
+
+        let provider_kind_filter = provider_kind.map(|kind| kind.to_string());
 
         let rows = sqlx::query_as!(
             TaskSummaryRow,
@@ -404,11 +409,13 @@ impl TaskRepository for Repository {
                   AND task.status::TEXT = 'Active'
                   AND task.user_id = $2
                   AND task.sink_item_id = sink_item.id
+                  AND ($3::TEXT IS NULL OR task.kind::TEXT = $3)
                 ORDER BY ts_rank_cd(title_body_project_tags_tsv, query) DESC
                 LIMIT 10;
             "#,
             ts_query,
-            user_id.0
+            user_id.0,
+            provider_kind_filter,
         )
         .fetch_all(&mut **executor)
         .await

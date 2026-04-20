@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::integration_connection::provider::IntegrationProviderKind;
 use crate::task::{PresetDueDate, ProjectSummary};
 
 fn default_true() -> bool {
@@ -44,6 +45,7 @@ pub struct LinearSyncTaskConfig {
     pub default_due_at: Option<PresetDueDate>,
     #[serde(default = "default_true")]
     pub auto_delete_notifications: bool,
+    pub task_manager_provider_kind: Option<IntegrationProviderKind>,
 }
 
 impl Default for LinearSyncTaskConfig {
@@ -53,6 +55,7 @@ impl Default for LinearSyncTaskConfig {
             target_project: None,
             default_due_at: None,
             auto_delete_notifications: true,
+            task_manager_provider_kind: None,
         }
     }
 }
@@ -64,6 +67,7 @@ impl LinearSyncTaskConfig {
             target_project: None,
             default_due_at: None,
             auto_delete_notifications: true,
+            task_manager_provider_kind: None,
         }
     }
 
@@ -73,6 +77,7 @@ impl LinearSyncTaskConfig {
             target_project: None,
             default_due_at: None,
             auto_delete_notifications: false,
+            task_manager_provider_kind: None,
         }
     }
 }

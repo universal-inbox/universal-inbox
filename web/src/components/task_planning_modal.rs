@@ -9,14 +9,17 @@ use serde_json::json;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionId, integrations::todoist::TodoistConfig,
-        provider::IntegrationProvider,
+        IntegrationConnection, IntegrationConnectionId,
+        integrations::ticktick::TickTickConfig,
+        integrations::todoist::TodoistConfig,
+        provider::{IntegrationProvider, IntegrationProviderKind},
     },
     notification::{NotificationId, NotificationWithTask},
     task::{
         DueDate, ProjectSummary, TaskCreation, TaskId, TaskPlanning, TaskPriority,
         integrations::todoist::TODOIST_INBOX_PROJECT,
     },
+    third_party::integrations::ticktick::TICKTICK_INBOX_PROJECT,
 };
 use url::Url;
 
@@ -26,7 +29,9 @@ use crate::{
         floating_label_inputs::{
             FloatingLabelInputSearchSelect, FloatingLabelInputText, FloatingLabelSelect,
         },
-        integrations::todoist::icons::Todoist,
+        task_manager_picker::{
+            TaskManagerPicker, default_task_manager_kind, user_default_task_manager_kind,
+        },
     },
     model::{LoadState, UniversalInboxUIModel},
     services::flyonui::{close_flyonui_modal, forget_flyonui_modal, init_flyonui_modal},
@@ -38,11 +43,13 @@ pub fn TaskPlanningModal(
     api_base_url: Url,
     notification_to_plan: ReadSignal<NotificationWithTask>,
     task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
+    task_service_integration_connections: Signal<LoadState<Vec<IntegrationConnection>>>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_task_planning: EventHandler<(TaskPlanning, TaskId)>,
     on_task_creation: EventHandler<TaskCreation>,
 ) -> Element {
-    let icon = rsx! { div { class: "h-5 w-5 flex-none", Todoist {} } };
+    let mut selected_task_provider_kind: Signal<Option<IntegrationProviderKind>> =
+        use_signal(|| None);
     let mut project: Signal<Option<String>> = use_signal(|| None);
     let mut due_at = use_signal(|| Utc::now().format("%Y-%m-%d").to_string());
     let mut priority = use_signal(|| Some(TaskPriority::P4));
@@ -84,9 +91,25 @@ pub fn TaskPlanningModal(
         }
 
         if notification_to_plan().task.is_none()
-            && let LoadState::Loaded(Some(IntegrationConnection {
-                id,
-                provider:
+            && let LoadState::Loaded(connections) = task_service_integration_connections()
+        {
+            // Auto-select the default task service if none selected.
+            // Prefer the user's configured preference, fall back to the first connection.
+            if selected_task_provider_kind.peek().is_none()
+                && let Some(kind) =
+                    default_task_manager_kind(&connections, user_default_task_manager_kind())
+            {
+                *selected_task_provider_kind.write() = Some(kind);
+            }
+
+            // Set default project based on the selected provider
+            if let Some(selected_kind) = selected_task_provider_kind()
+                && let Some(connection) = connections
+                    .iter()
+                    .find(|c| c.provider.kind() == selected_kind)
+            {
+                let connection_id = connection.id;
+                match &connection.provider {
                     IntegrationProvider::Todoist {
                         config:
                             TodoistConfig {
@@ -94,15 +117,35 @@ pub fn TaskPlanningModal(
                                 ..
                             },
                         ..
-                    },
-                ..
-            })) = task_service_integration_connection()
-            && !create_notification_from_inbox_task
-            && Some(id) != current_task_service_integration_connection_id()
-        {
-            *current_task_service_integration_connection_id.write() = Some(id);
-            if project.peek().is_none() {
-                *project.write() = Some(TODOIST_INBOX_PROJECT.to_string());
+                    } if !create_notification_from_inbox_task
+                        && Some(connection_id)
+                            != current_task_service_integration_connection_id() =>
+                    {
+                        *current_task_service_integration_connection_id.write() =
+                            Some(connection_id);
+                        if project.peek().is_none() {
+                            *project.write() = Some(TODOIST_INBOX_PROJECT.to_string());
+                        }
+                    }
+                    IntegrationProvider::TickTick {
+                        config:
+                            TickTickConfig {
+                                create_notification_from_inbox_task,
+                                ..
+                            },
+                        ..
+                    } if !create_notification_from_inbox_task
+                        && Some(connection_id)
+                            != current_task_service_integration_connection_id() =>
+                    {
+                        *current_task_service_integration_connection_id.write() =
+                            Some(connection_id);
+                        if project.peek().is_none() {
+                            *project.write() = Some(TICKTICK_INBOX_PROJECT.to_string());
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
     });
@@ -150,7 +193,7 @@ pub fn TaskPlanningModal(
                                     *force_validation.write() = true;
                                 }
                             } else if let Some(task_creation_parameters) = validate_creation_form(
-                                &evt.data.values(), project()
+                                &evt.data.values(), project(), selected_task_provider_kind()
                             ) {
                                 on_task_creation.call(task_creation_parameters);
                                 close_flyonui_modal("#task-planning-modal");
@@ -164,46 +207,71 @@ pub fn TaskPlanningModal(
 
                             div {
                                 class: "flex flex-none items-center gap-2 w-full",
+
+                                TaskManagerPicker {
+                                    task_service_integration_connections,
+                                    selected_task_provider_kind,
+                                    on_select: move |kind: IntegrationProviderKind| {
+                                        *selected_task_provider_kind.write() = Some(kind);
+                                        // Reset project when switching task manager
+                                        *project.write() = None;
+                                    },
+                                }
+
                                 if task_to_plan().is_some() {
-                                    { icon }
                                     span { class: "grow", "{task_title}" }
                                 } else {
-                                    FloatingLabelInputText::<String> {
-                                        name: "task-title-input".to_string(),
-                                        label: Some("Task's title".to_string()),
-                                        required: true,
-                                        value: task_title,
-                                        autofocus: true,
-                                        force_validation: force_validation(),
-                                        icon: icon,
+                                    div {
+                                        class: "grow",
+                                        FloatingLabelInputText::<String> {
+                                            name: "task-title-input".to_string(),
+                                            label: Some("Task's title".to_string()),
+                                            required: true,
+                                            value: task_title,
+                                            autofocus: true,
+                                            force_validation: force_validation(),
+                                        }
                                     }
                                 }
                             }
 
-                            FloatingLabelInputSearchSelect::<ProjectSummary> {
-                                name: "project-search-input".to_string(),
-                                label: "Project",
-                                required: true,
-                                data_select: json!({
-                                    "value": project(),
-                                    "apiUrl": format!("{api_base_url}tasks/projects/search"),
-                                    "apiSearchQueryKey": "matches",
-                                    "apiFieldsMap": {
-                                        "id": "source_id",
-                                        "val": "name",
-                                        "title": "name"
-                                    }
-                                }),
-                                on_select: move |selected_project: Option<ProjectSummary>| {
-                                    *project.write() = selected_project.map(|p| p.name);
-                                    spawn({
-                                        async move {
-                                            if let Err(error) = focus_element("task-planning-modal-submit").await {
-                                                error!("Error focusing element task-planning-modal-submit: {error:?}");
+                            {
+                                let kind = selected_task_provider_kind();
+                                let api_query = kind
+                                    .map(|k| json!({ "provider_kind": k.to_string() }))
+                                    .unwrap_or_else(|| json!({}));
+                                let key = kind
+                                    .map(|k| k.to_string())
+                                    .unwrap_or_else(|| "none".to_string());
+                                rsx! {
+                                    FloatingLabelInputSearchSelect::<ProjectSummary> {
+                                        key: "project-search-{key}",
+                                        name: "project-search-input".to_string(),
+                                        label: "Project",
+                                        required: true,
+                                        data_select: json!({
+                                            "value": project(),
+                                            "apiUrl": format!("{api_base_url}tasks/projects/search"),
+                                            "apiSearchQueryKey": "matches",
+                                            "apiQuery": api_query,
+                                            "apiFieldsMap": {
+                                                "id": "source_id",
+                                                "val": "name",
+                                                "title": "name"
                                             }
-                                        }
-                                    });
-                                },
+                                        }),
+                                        on_select: move |selected_project: Option<ProjectSummary>| {
+                                            *project.write() = selected_project.map(|p| p.name);
+                                            spawn({
+                                                async move {
+                                                    if let Err(error) = focus_element("task-planning-modal-submit").await {
+                                                        error!("Error focusing element task-planning-modal-submit: {error:?}");
+                                                    }
+                                                }
+                                            });
+                                        },
+                                    }
+                                }
                             }
 
                             DatePicker::<NaiveDate> {
@@ -297,6 +365,7 @@ fn validate_planning_form(
 fn validate_creation_form(
     values: &[(String, FormValue)],
     selected_project: Option<String>,
+    task_provider_kind: Option<IntegrationProviderKind>,
 ) -> Option<TaskCreation> {
     let title = get_form_text(values, "task-title-input")
         .ok_or_else(|| "Task title is required".to_string());
@@ -327,6 +396,7 @@ fn validate_creation_form(
             project_name: Some(project_name),
             due_at,
             priority,
+            task_provider_kind,
         });
     }
 

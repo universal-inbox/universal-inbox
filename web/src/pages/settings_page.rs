@@ -12,21 +12,24 @@ use crate::{
     components::{integrations_panel::IntegrationsPanel, loading::Loading},
     config::APP_CONFIG,
     model::UI_MODEL,
-    services::integration_connection_service::{
-        INTEGRATION_CONNECTIONS, IntegrationConnectionCommand,
+    services::{
+        integration_connection_service::{INTEGRATION_CONNECTIONS, IntegrationConnectionCommand},
+        user_preferences_service::UserPreferencesCommand,
     },
 };
 
 pub fn SettingsPage() -> Element {
     let integration_connection_service = use_coroutine_handle::<IntegrationConnectionCommand>();
+    let user_preferences_service = use_coroutine_handle::<UserPreferencesCommand>();
 
     debug!("Rendering settings page");
 
     let _resource = use_resource(move || {
-        to_owned![integration_connection_service];
+        to_owned![integration_connection_service, user_preferences_service];
 
         async move {
             integration_connection_service.send(IntegrationConnectionCommand::Refresh);
+            user_preferences_service.send(UserPreferencesCommand::Refresh);
         }
     });
 
