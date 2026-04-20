@@ -121,6 +121,7 @@ pub fn TodoistProviderConfiguration(
                                 "value": default_project().map(|p| p.source_id.to_string()),
                                 "apiUrl": format!("{api_base_url}tasks/projects/search"),
                                 "apiSearchQueryKey": "matches",
+                                "apiQuery": { "provider_kind": "Todoist" },
                                 "apiFieldsMap": {
                                     "id": "source_id",
                                     "val": "source_id",

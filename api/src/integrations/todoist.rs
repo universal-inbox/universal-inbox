@@ -699,7 +699,7 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         level = "debug",
         skip_all,
         fields(
-            task_id = id,
+            task_id = third_party_item.source_id,
             user.id = user_id.to_string()
         ),
         err
@@ -707,10 +707,11 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
     async fn update_task(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        id: &str,
+        third_party_item: &ThirdPartyItem,
         patch: &TaskPatch,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
+        let id = third_party_item.source_id.as_str();
         let (access_token, _) = self
             .integration_connection_service
             .read()

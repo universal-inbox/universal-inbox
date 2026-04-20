@@ -167,7 +167,10 @@ impl NotificationWithTask {
     }
 
     pub fn is_built_from_task(&self) -> bool {
-        matches!(self.kind, NotificationSourceKind::Todoist)
+        matches!(
+            self.kind,
+            NotificationSourceKind::Todoist | NotificationSourceKind::TickTick
+        )
     }
 
     pub fn into_notification(self) -> Notification {
@@ -236,7 +239,9 @@ macro_attr! {
         Linear,
         GoogleMail,
         GoogleDrive,
-        Slack
+        Slack,
+        Todoist,
+        TickTick
     }
 }
 
@@ -247,6 +252,7 @@ macro_attr! {
     pub enum NotificationSourceKind {
         Github,
         Todoist,
+        TickTick,
         Linear,
         GoogleMail,
         GoogleCalendar,
@@ -262,6 +268,7 @@ impl TryFrom<ThirdPartyItemSourceKind> for NotificationSourceKind {
     fn try_from(source_kind: ThirdPartyItemSourceKind) -> Result<Self, Self::Error> {
         match source_kind {
             ThirdPartyItemSourceKind::Todoist => Ok(Self::Todoist),
+            ThirdPartyItemSourceKind::TickTick => Ok(Self::TickTick),
             ThirdPartyItemSourceKind::GithubNotification => Ok(Self::Github),
             ThirdPartyItemSourceKind::LinearNotification => Ok(Self::Linear),
             ThirdPartyItemSourceKind::GoogleMailThread => Ok(Self::GoogleMail),
@@ -288,6 +295,8 @@ impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
             IntegrationProviderKind::GoogleMail => Ok(Self::GoogleMail),
             IntegrationProviderKind::GoogleDrive => Ok(Self::GoogleDrive),
             IntegrationProviderKind::Slack => Ok(Self::Slack),
+            IntegrationProviderKind::Todoist => Ok(Self::Todoist),
+            IntegrationProviderKind::TickTick => Ok(Self::TickTick),
             _ => Err(anyhow!(
                 "IntegrationProviderKind {provider_kind} is not a valid NotificationSyncSourceKind"
             )),
@@ -304,6 +313,22 @@ impl From<NotificationSyncSourceKind> for IntegrationProviderKind {
             NotificationSyncSourceKind::GoogleMail => IntegrationProviderKind::GoogleMail,
             NotificationSyncSourceKind::GoogleDrive => IntegrationProviderKind::GoogleDrive,
             NotificationSyncSourceKind::Slack => IntegrationProviderKind::Slack,
+            NotificationSyncSourceKind::Todoist => IntegrationProviderKind::Todoist,
+            NotificationSyncSourceKind::TickTick => IntegrationProviderKind::TickTick,
+        }
+    }
+}
+
+impl TryFrom<NotificationSyncSourceKind> for crate::task::TaskSyncSourceKind {
+    type Error = anyhow::Error;
+
+    fn try_from(source: NotificationSyncSourceKind) -> Result<Self, Self::Error> {
+        match source {
+            NotificationSyncSourceKind::Todoist => Ok(crate::task::TaskSyncSourceKind::Todoist),
+            NotificationSyncSourceKind::TickTick => Ok(crate::task::TaskSyncSourceKind::TickTick),
+            other => Err(anyhow!(
+                "NotificationSyncSourceKind {other} does not have a matching TaskSyncSourceKind"
+            )),
         }
     }
 }
@@ -320,6 +345,7 @@ impl TryFrom<IntegrationProviderKind> for NotificationSourceKind {
             IntegrationProviderKind::GoogleCalendar => Ok(Self::GoogleCalendar),
             IntegrationProviderKind::GoogleDrive => Ok(Self::GoogleDrive),
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
+            IntegrationProviderKind::TickTick => Ok(Self::TickTick),
             IntegrationProviderKind::Slack => Ok(Self::Slack),
             _ => Err(()),
         }
@@ -336,6 +362,7 @@ impl From<NotificationSourceKind> for IntegrationProviderKind {
             NotificationSourceKind::GoogleCalendar => Self::GoogleCalendar,
             NotificationSourceKind::GoogleDrive => Self::GoogleDrive,
             NotificationSourceKind::Todoist => Self::Todoist,
+            NotificationSourceKind::TickTick => Self::TickTick,
             NotificationSourceKind::Slack => Self::Slack,
             NotificationSourceKind::API => Self::API,
         }

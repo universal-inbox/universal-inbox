@@ -23,6 +23,7 @@ use crate::{
         google_mail::GoogleMailThread,
         linear::{LinearIssue, LinearNotification, LinearWorkflowState, LinearWorkflowStateType},
         slack::{SlackReaction, SlackReactionState, SlackThread},
+        ticktick::{TickTickItem, TickTickTaskStatus},
         todoist::TodoistItem,
     },
     user::UserId,
@@ -55,6 +56,7 @@ impl HasHtmlUrl for ThirdPartyItem {
     fn get_html_url(&self) -> Url {
         match self.data {
             ThirdPartyItemData::TodoistItem(ref item) => item.get_html_url(),
+            ThirdPartyItemData::TickTickItem(ref item) => item.get_html_url(),
             ThirdPartyItemData::SlackReaction(ref reaction) => reaction.get_html_url(),
             ThirdPartyItemData::SlackThread(ref thread) => thread.get_html_url(),
             ThirdPartyItemData::LinearIssue(ref issue) => issue.get_html_url(),
@@ -74,6 +76,7 @@ pub type ThirdPartyItemId = TypedId<Uuid, ThirdPartyItem>;
 #[serde(tag = "type", content = "content")]
 pub enum ThirdPartyItemData {
     TodoistItem(Box<TodoistItem>),
+    TickTickItem(Box<TickTickItem>),
     SlackReaction(Box<SlackReaction>),
     SlackThread(Box<SlackThread>),
     LinearIssue(Box<LinearIssue>),
@@ -89,6 +92,7 @@ impl ThirdPartyItemData {
     pub fn kind(&self) -> ThirdPartyItemKind {
         match self {
             ThirdPartyItemData::TodoistItem(_) => ThirdPartyItemKind::TodoistItem,
+            ThirdPartyItemData::TickTickItem(_) => ThirdPartyItemKind::TickTickItem,
             ThirdPartyItemData::SlackReaction(_) => ThirdPartyItemKind::SlackReaction,
             ThirdPartyItemData::SlackThread(_) => ThirdPartyItemKind::SlackThread,
             ThirdPartyItemData::LinearIssue(_) => ThirdPartyItemKind::LinearIssue,
@@ -106,6 +110,7 @@ macro_attr! {
     #[derive(Copy, Clone, PartialEq, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum ThirdPartyItemKind {
         TodoistItem,
+        TickTickItem,
         SlackReaction,
         SlackThread,
         LinearIssue,
@@ -126,6 +131,7 @@ impl IntegrationProviderSource for ThirdPartyItem {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
         match self.data {
             ThirdPartyItemData::TodoistItem(_) => IntegrationProviderKind::Todoist,
+            ThirdPartyItemData::TickTickItem(_) => IntegrationProviderKind::TickTick,
             ThirdPartyItemData::SlackReaction(_) | ThirdPartyItemData::SlackThread(_) => {
                 IntegrationProviderKind::Slack
             }
@@ -145,6 +151,7 @@ impl ThirdPartyItemSource for ThirdPartyItem {
     fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
         match self.data {
             ThirdPartyItemData::TodoistItem(_) => ThirdPartyItemSourceKind::Todoist,
+            ThirdPartyItemData::TickTickItem(_) => ThirdPartyItemSourceKind::TickTick,
             ThirdPartyItemData::SlackReaction(_) => ThirdPartyItemSourceKind::SlackReaction,
             ThirdPartyItemData::SlackThread(_) => ThirdPartyItemSourceKind::SlackThread,
             ThirdPartyItemData::LinearIssue(_) => ThirdPartyItemSourceKind::LinearIssue,
@@ -198,6 +205,13 @@ impl ThirdPartyItem {
                     ..*item.clone()
                 }))
             }
+            ThirdPartyItemData::TickTickItem(ref item) => {
+                ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
+                    status: TickTickTaskStatus::Completed,
+                    completed_time: Some(Utc::now()),
+                    ..*item.clone()
+                }))
+            }
             ThirdPartyItemData::SlackReaction(ref slack_reaction) => {
                 ThirdPartyItemData::SlackReaction(Box::new(SlackReaction {
                     state: SlackReactionState::ReactionRemoved,
@@ -224,7 +238,12 @@ impl ThirdPartyItem {
                     ..*issue.clone()
                 }))
             }
-            _ => {
+            ThirdPartyItemData::LinearNotification(_)
+            | ThirdPartyItemData::GithubNotification(_)
+            | ThirdPartyItemData::GoogleMailThread(_)
+            | ThirdPartyItemData::GoogleCalendarEvent(_)
+            | ThirdPartyItemData::GoogleDriveComment(_)
+            | ThirdPartyItemData::WebPage(_) => {
                 return self.clone();
             }
         };
@@ -252,6 +271,7 @@ macro_attr! {
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum ThirdPartyItemSyncSourceKind {
         Todoist,
+        TickTick,
         Linear,
         Github,
     }
@@ -261,6 +281,7 @@ macro_attr! {
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum ThirdPartyItemSourceKind {
         Todoist,
+        TickTick,
         SlackReaction,
         SlackThread,
         LinearIssue,
@@ -279,6 +300,7 @@ impl TryFrom<IntegrationProviderKind> for ThirdPartyItemSyncSourceKind {
     fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
         match provider_kind {
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
+            IntegrationProviderKind::TickTick => Ok(Self::TickTick),
             IntegrationProviderKind::Linear => Ok(Self::Linear),
             IntegrationProviderKind::Github => Ok(Self::Github),
             _ => Err(anyhow!(

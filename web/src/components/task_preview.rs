@@ -12,7 +12,7 @@ use crate::{
         integrations::{
             icons::TaskIcon, linear::preview::issue::LinearIssuePreview,
             slack::preview::slack_reaction::SlackReactionTaskPreview,
-            todoist::preview::TodoistTaskPreview,
+            ticktick::preview::TickTickTaskPreview, todoist::preview::TodoistTaskPreview,
         },
         tasks_list::{TaskListContext, get_task_list_item_action_buttons},
     },
@@ -53,10 +53,17 @@ pub fn TaskPreview(
             ""
         };
     let task_type = match task().source_item.kind() {
+        ThirdPartyItemKind::TickTickItem => "Task",
         ThirdPartyItemKind::TodoistItem => "Task",
         ThirdPartyItemKind::SlackReaction => "Reaction",
         ThirdPartyItemKind::LinearIssue => "Issue",
-        _ => "Task",
+        ThirdPartyItemKind::SlackThread
+        | ThirdPartyItemKind::LinearNotification
+        | ThirdPartyItemKind::GithubNotification
+        | ThirdPartyItemKind::GoogleMailThread
+        | ThirdPartyItemKind::GoogleCalendarEvent
+        | ThirdPartyItemKind::GoogleDriveComment
+        | ThirdPartyItemKind::WebPage => "Task",
     };
 
     rsx! {
@@ -158,6 +165,9 @@ pub fn TaskPreview(
 #[component]
 pub fn TaskDetailsPreview(task: ReadSignal<Task>, expand_details: ReadSignal<bool>) -> Element {
     match task().source_item.data {
+        ThirdPartyItemData::TickTickItem(ticktick_item) => rsx! {
+            TickTickTaskPreview { ticktick_item: *ticktick_item, task }
+        },
         ThirdPartyItemData::TodoistItem(todoist_item) => rsx! {
             TodoistTaskPreview { todoist_item: *todoist_item, task }
         },
@@ -171,6 +181,12 @@ pub fn TaskDetailsPreview(task: ReadSignal<Task>, expand_details: ReadSignal<boo
                 expand_details
             }
         },
-        _ => rsx! {},
+        ThirdPartyItemData::SlackThread(_)
+        | ThirdPartyItemData::LinearNotification(_)
+        | ThirdPartyItemData::GithubNotification(_)
+        | ThirdPartyItemData::GoogleMailThread(_)
+        | ThirdPartyItemData::GoogleCalendarEvent(_)
+        | ThirdPartyItemData::GoogleDriveComment(_)
+        | ThirdPartyItemData::WebPage(_) => rsx! {},
     }
 }

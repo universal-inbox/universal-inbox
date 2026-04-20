@@ -36,7 +36,8 @@
               "Enum": [
                 "Todoist",
                 "Slack",
-                "Linear"
+                "Linear",
+                "TickTick"
               ]
             }
           }

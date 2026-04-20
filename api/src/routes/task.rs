@@ -15,6 +15,7 @@ use tokio::sync::RwLock;
 
 use universal_inbox::{
     Page,
+    integration_connection::provider::IntegrationProviderKind,
     task::{
         ProjectSummary, Task, TaskId, TaskStatus, TaskSummary, service::SyncTasksParameters,
         service::TaskPatch,
@@ -97,6 +98,7 @@ pub async fn list_tasks(
 #[derive(Debug, Deserialize)]
 pub struct SearchTaskRequest {
     matches: Option<String>,
+    provider_kind: Option<IntegrationProviderKind>,
 }
 
 pub async fn search_tasks(
@@ -126,7 +128,12 @@ pub async fn search_tasks(
         .await
         .context("Failed to create new transaction while listing tasks")?;
     let tasks: Vec<TaskSummary> = service
-        .search_tasks(&mut transaction, matches, user_id)
+        .search_tasks(
+            &mut transaction,
+            matches,
+            search_task_request.provider_kind,
+            user_id,
+        )
         .await?;
 
     Ok(HttpResponse::Ok()
@@ -278,6 +285,7 @@ pub async fn patch_task(
 #[derive(Debug, Deserialize)]
 pub struct SearchProjectRequest {
     matches: Option<String>,
+    provider_kind: Option<IntegrationProviderKind>,
 }
 
 pub async fn search_projects(
@@ -301,13 +309,17 @@ pub async fn search_projects(
             .body("[]"));
     };
 
+    let provider_kind = search_project_request
+        .provider_kind
+        .unwrap_or(IntegrationProviderKind::Todoist);
+
     let service = task_service.read().await;
     let mut transaction = service
         .begin()
         .await
         .context("Failed to create new transaction while listing tasks")?;
     let task_projects: Vec<ProjectSummary> = service
-        .search_projects(&mut transaction, matches, user_id)
+        .search_projects(&mut transaction, matches, user_id, provider_kind)
         .await?;
 
     Ok(HttpResponse::Ok()

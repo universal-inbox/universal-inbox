@@ -29,6 +29,7 @@ pub mod oauth_clients_card;
 pub mod resizable_panel;
 pub mod spinner;
 pub mod task_link_modal;
+pub mod task_manager_picker;
 pub mod task_planning_modal;
 pub mod task_preview;
 pub mod tasks_list;

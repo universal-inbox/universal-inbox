@@ -2,6 +2,19 @@ fail_fast: true
 repos:
   - repo: local
     hooks:
+      - id: fmt
+        name: Format Rust code
+        description: Format files with cargo fmt
+        entry: just format
+        language: system
+        files: \.rs$
+        pass_filenames: false
+        args: []
+        stages: [pre-commit]
+        priority: 0
+  
+  - repo: local
+    hooks:
       - id: clippy
         name: Check Rust code
         language: system

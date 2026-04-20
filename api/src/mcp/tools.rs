@@ -552,7 +552,7 @@ pub async fn execute_tool(
             let service = services.task_service.read().await;
             let mut transaction = service.begin().await.map_err(ToolCallError::execution)?;
             let tasks: Vec<TaskSummary> = service
-                .search_tasks(&mut transaction, &args.matches, user_id)
+                .search_tasks(&mut transaction, &args.matches, None, user_id)
                 .await
                 .map_err(ToolCallError::execution)?;
             transaction

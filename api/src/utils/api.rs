@@ -38,6 +38,16 @@ pub enum ApiClientError {
     #[error("Json parsing error: {0}")]
     JsonParsingError(#[from] SerdeError),
 
+    #[error(
+        "Upstream returned non-JSON response ({content_type}, status {status}). \
+         The service may be temporarily unavailable. First bytes: {body_preview}"
+    )]
+    NonJsonResponse {
+        status: u16,
+        content_type: String,
+        body_preview: String,
+    },
+
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }
@@ -89,6 +99,37 @@ impl RetryableStrategy for RateLimitRetryableStrategy {
 pub struct ApiClient {
     rate_limit_detector: Arc<dyn RateLimitDetector>,
     client: ClientWithMiddleware,
+}
+
+struct JsonBody {
+    status: u16,
+    content_type: Option<String>,
+    body: String,
+}
+
+impl JsonBody {
+    fn parse_json<R: DeserializeOwned>(self) -> Result<R, ApiClientError> {
+        let body = self.body;
+        let content_type = self.content_type.as_deref();
+        let looks_like_json = content_type
+            .map(|ct| ct.contains("json"))
+            .unwrap_or_else(|| {
+                // No content-type: fall back to sniffing the body, trimming whitespace.
+                let trimmed = body.trim_start();
+                trimmed.starts_with('{') || trimmed.starts_with('[')
+            });
+
+        if !looks_like_json {
+            let body_preview: String = body.chars().take(200).collect();
+            return Err(ApiClientError::NonJsonResponse {
+                status: self.status,
+                content_type: content_type.unwrap_or("<missing>").to_string(),
+                body_preview,
+            });
+        }
+
+        serde_json::from_str(&body).map_err(|err| ApiClientError::from_json_serde_error(err, body))
+    }
 }
 
 impl ApiClient {
@@ -159,7 +200,7 @@ impl ApiClient {
     async fn handle_response(
         &self,
         response: Result<Response, reqwest_middleware::Error>,
-    ) -> Result<String, ApiClientError> {
+    ) -> Result<JsonBody, ApiClientError> {
         let response = response.map_err(ApiClientError::MiddlewareError)?;
 
         if self.rate_limit_detector.is_rate_limit_response(&response) {
@@ -168,21 +209,33 @@ impl ApiClient {
             ));
         }
 
-        response
+        let response = response
             .error_for_status()
-            .map_err(ApiClientError::NetworkError)?
+            .map_err(ApiClientError::NetworkError)?;
+
+        let status = response.status().as_u16();
+        let content_type = response
+            .headers()
+            .get(reqwest_middleware::reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let body = response
             .text()
             .await
-            .map_err(ApiClientError::NetworkError)
+            .map_err(ApiClientError::NetworkError)?;
+
+        Ok(JsonBody {
+            status,
+            content_type,
+            body,
+        })
     }
 
     pub async fn get<R: DeserializeOwned, U: IntoUrl>(&self, url: U) -> Result<R, ApiClientError> {
-        let response_body = self
+        let response = self
             .handle_response(self.client.get(url).send().await)
             .await?;
-
-        serde_json::from_str(&response_body)
-            .map_err(|err| ApiClientError::from_json_serde_error(err, response_body.clone()))
+        response.parse_json()
     }
 
     pub async fn post<R: DeserializeOwned, U: IntoUrl, T: Serialize + ?Sized>(
@@ -195,11 +248,7 @@ impl ApiClient {
             response_builder = response_builder.json(body);
         }
         let response = response_builder.send().await;
-
-        let response_body = self.handle_response(response).await?;
-
-        serde_json::from_str(&response_body)
-            .map_err(|err| ApiClientError::from_json_serde_error(err, response_body.clone()))
+        self.handle_response(response).await?.parse_json()
     }
 
     pub async fn post_no_response<U: IntoUrl, T: Serialize + ?Sized>(
@@ -223,12 +272,9 @@ impl ApiClient {
         url: U,
         request_body: &T,
     ) -> Result<R, ApiClientError> {
-        let response_body = self
-            .handle_response(self.client.post(url).form(request_body).send().await)
-            .await?;
-
-        serde_json::from_str(&response_body)
-            .map_err(|err| ApiClientError::from_json_serde_error(err, response_body.clone()))
+        self.handle_response(self.client.post(url).form(request_body).send().await)
+            .await?
+            .parse_json()
     }
 
     pub async fn patch<R: DeserializeOwned, U: IntoUrl, T: Serialize + ?Sized>(
@@ -241,11 +287,7 @@ impl ApiClient {
             response_builder = response_builder.json(body);
         }
         let response = response_builder.send().await;
-
-        let response_body = self.handle_response(response).await?;
-
-        serde_json::from_str(&response_body)
-            .map_err(|err| ApiClientError::from_json_serde_error(err, response_body.clone()))
+        self.handle_response(response).await?.parse_json()
     }
 
     pub async fn patch_no_response<U: IntoUrl, T: Serialize + ?Sized>(
@@ -274,11 +316,7 @@ impl ApiClient {
             response_builder = response_builder.json(body);
         }
         let response = response_builder.send().await;
-
-        let response_body = self.handle_response(response).await?;
-
-        serde_json::from_str(&response_body)
-            .map_err(|err| ApiClientError::from_json_serde_error(err, response_body.clone()))
+        self.handle_response(response).await?.parse_json()
     }
 
     pub async fn put_no_response<U: IntoUrl, T: Serialize + ?Sized>(

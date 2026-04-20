@@ -17,10 +17,14 @@ use universal_inbox::{
 use universal_inbox_api::{
     configuration::Settings,
     integrations::oauth2::NangoConnection,
-    repository::integration_connection::{
-        IntegrationConnectionRepository, IntegrationConnectionSyncedBeforeFilter,
+    repository::{
+        integration_connection::{
+            IntegrationConnectionRepository, IntegrationConnectionSyncedBeforeFilter,
+        },
+        oauth_credential::OAuthCredentialRepository,
     },
     universal_inbox::UpdateStatus,
+    utils::crypto::{TokenEncryptionKey, encrypt_token},
 };
 
 use crate::helpers::{TestedApp, auth::AuthenticatedApp, load_json_fixture_file};
@@ -338,4 +342,58 @@ pub fn nango_slack_connection() -> Box<NangoConnection> {
 #[fixture]
 pub fn nango_todoist_connection() -> Box<NangoConnection> {
     load_json_fixture_file("nango_todoist_connection.json")
+}
+
+pub const TICKTICK_TEST_ACCESS_TOKEN: &str = "ticktick_test_access_token";
+
+pub async fn create_ticktick_integration_connection(
+    app: &TestedApp,
+    user_id: UserId,
+    settings: &Settings,
+    config: IntegrationConnectionConfig,
+    initial_sync_failures: Option<u32>,
+) -> Box<IntegrationConnection> {
+    let registered_oauth_scopes = Some(vec!["tasks:read".to_string(), "tasks:write".to_string()]);
+    let integration_connection = create_integration_connection(
+        app,
+        user_id,
+        config,
+        IntegrationConnectionStatus::Validated,
+        None,
+        None,
+        initial_sync_failures,
+        None,
+        registered_oauth_scopes,
+    )
+    .await;
+
+    let token_encryption_key_hex = settings
+        .oauth2
+        .token_encryption_key
+        .as_ref()
+        .expect("token_encryption_key must be set for TickTick internal OAuth tests");
+    let token_encryption_key = TokenEncryptionKey::from_hex(token_encryption_key_hex).unwrap();
+    let aad_context = integration_connection.id.0.as_bytes();
+    let encrypted_access_token = encrypt_token(
+        TICKTICK_TEST_ACCESS_TOKEN,
+        aad_context,
+        &token_encryption_key,
+    )
+    .unwrap();
+
+    let mut transaction = app.repository.begin().await.unwrap();
+    app.repository
+        .store_oauth_credential(
+            &mut transaction,
+            integration_connection.id,
+            encrypted_access_token,
+            None,
+            None,
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+
+    integration_connection
 }
