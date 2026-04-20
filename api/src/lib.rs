@@ -55,15 +55,18 @@ use webauthn_rs::prelude::*;
 use crate::{
     configuration::Settings,
     integrations::{
-        github::GithubService,
+        github::{GithubService, oauth::GithubOAuth2Provider},
         google_drive::GoogleDriveService,
         google_mail::GoogleMailService,
+        google_oauth::GoogleOAuth2Provider,
         linear::{LinearService, oauth::LinearOAuth2Provider},
         oauth2::{
             NangoService,
             provider::{OAuth2FlowService, OAuth2Provider},
         },
+        slack_oauth::SlackOAuth2Provider,
         todoist::TodoistService,
+        todoist_oauth::TodoistOAuth2Provider,
     },
     jobs::handle_universal_inbox_job,
     observability::AuthenticatedRootSpanBuilder,
@@ -505,6 +508,73 @@ pub async fn build_services(
                 linear_settings.required_oauth_scopes.clone(),
             )),
         );
+    }
+    if let Some(github_settings) = settings.integrations.get("github")
+        && let (Some(client_id), Some(client_secret)) = (
+            github_settings.oauth_client_id.as_ref(),
+            github_settings.oauth_client_secret.as_ref(),
+        )
+    {
+        oauth2_providers.insert(
+            IntegrationProviderKind::Github,
+            Arc::new(GithubOAuth2Provider::new(
+                client_id.clone(),
+                SecretBox::new(Box::new(client_secret.clone())),
+                github_settings.required_oauth_scopes.clone(),
+            )),
+        );
+    }
+    if let Some(slack_settings) = settings.integrations.get("slack")
+        && let (Some(client_id), Some(client_secret)) = (
+            slack_settings.oauth_client_id.as_ref(),
+            slack_settings.oauth_client_secret.as_ref(),
+        )
+    {
+        oauth2_providers.insert(
+            IntegrationProviderKind::Slack,
+            Arc::new(SlackOAuth2Provider::new(
+                client_id.clone(),
+                SecretBox::new(Box::new(client_secret.clone())),
+                slack_settings.required_oauth_scopes.clone(),
+            )),
+        );
+    }
+    if let Some(todoist_settings) = settings.integrations.get("todoist")
+        && let (Some(client_id), Some(client_secret)) = (
+            todoist_settings.oauth_client_id.as_ref(),
+            todoist_settings.oauth_client_secret.as_ref(),
+        )
+    {
+        oauth2_providers.insert(
+            IntegrationProviderKind::Todoist,
+            Arc::new(TodoistOAuth2Provider::new(
+                client_id.clone(),
+                SecretBox::new(Box::new(client_secret.clone())),
+                todoist_settings.required_oauth_scopes.clone(),
+            )),
+        );
+    }
+    for (settings_key, provider_kind) in [
+        ("google_mail", IntegrationProviderKind::GoogleMail),
+        ("google_calendar", IntegrationProviderKind::GoogleCalendar),
+        ("google_drive", IntegrationProviderKind::GoogleDrive),
+    ] {
+        if let Some(google_settings) = settings.integrations.get(settings_key)
+            && let (Some(client_id), Some(client_secret)) = (
+                google_settings.oauth_client_id.as_ref(),
+                google_settings.oauth_client_secret.as_ref(),
+            )
+        {
+            oauth2_providers.insert(
+                provider_kind,
+                Arc::new(GoogleOAuth2Provider::new(
+                    provider_kind,
+                    client_id.clone(),
+                    SecretBox::new(Box::new(client_secret.clone())),
+                    google_settings.required_oauth_scopes.clone(),
+                )),
+            );
+        }
     }
 
     let token_encryption_key = settings

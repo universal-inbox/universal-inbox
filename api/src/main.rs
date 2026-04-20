@@ -132,6 +132,7 @@ async fn main() -> std::io::Result<()> {
         )
         .expect("Failed to build an SmtpMailer"),
     ));
+    info!("Starting server on {}", settings.application.front_base_url);
     let webauthn = Arc::new(
         build_webauthn(&settings.application.front_base_url)
             .expect("Failed to build a Webauthn context"),

@@ -22,10 +22,13 @@ pub mod github;
 pub mod google_calendar;
 pub mod google_drive;
 pub mod google_mail;
+pub mod google_oauth;
 pub mod linear;
 pub mod oauth2;
 pub mod slack;
+pub mod slack_oauth;
 pub mod todoist;
+pub mod todoist_oauth;
 
 pub mod third_party {
     use super::*;
