@@ -12,6 +12,7 @@ use crate::{
         integrations::{
             linear::task_list_item::LinearTaskListItem,
             slack::task_list_item::SlackReactionTaskListItem,
+            ticktick::task_list_item::TickTickTaskListItem,
             todoist::task_list_item::TodoistTaskListItem,
         },
         list::{List, ListItemActionButton},
@@ -101,7 +102,21 @@ fn TaskListItem(
                 on_select,
             }
         },
-        _ => rsx! {},
+        ThirdPartyItemData::TickTickItem(ticktick_item) => rsx! {
+            TickTickTaskListItem {
+                task,
+                ticktick_item: *ticktick_item,
+                is_selected,
+                on_select,
+            }
+        },
+        ThirdPartyItemData::SlackThread(_)
+        | ThirdPartyItemData::LinearNotification(_)
+        | ThirdPartyItemData::GithubNotification(_)
+        | ThirdPartyItemData::GoogleMailThread(_)
+        | ThirdPartyItemData::GoogleCalendarEvent(_)
+        | ThirdPartyItemData::GoogleDriveComment(_)
+        | ThirdPartyItemData::WebPage(_) => rsx! {},
     }
 }
 

@@ -11,6 +11,7 @@
 - Add configurable emoji on Slack task completion
 - Hide quoted content in Gmail email previews
 - Internalize OAuth for GitHub, Slack, Todoist, Google Mail, Google Calendar, and Google Drive (replace Nango).
+- Add TickTick integration with internalized OAuth2 (PKCE), task sync, plan/link flows, and emoji-aware task completion
 
 ### Changed
 

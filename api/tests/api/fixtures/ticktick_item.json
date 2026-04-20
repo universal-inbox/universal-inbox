@@ -1,0 +1,17 @@
+{
+  "id": "tt_task_1123",
+  "projectId": "tt_proj_1111",
+  "title": "Release new version of Universal Inbox",
+  "content": "",
+  "desc": "",
+  "allDay": false,
+  "startDate": null,
+  "dueDate": "2016-09-01T12:00:00.000+0000",
+  "timeZone": "Europe/Moscow",
+  "priority": 0,
+  "status": 0,
+  "tags": ["Food", "Shopping"],
+  "items": [],
+  "createdTime": "2019-12-11T22:36:50.000+0000",
+  "modifiedTime": "2019-12-11T22:36:50.000+0000"
+}

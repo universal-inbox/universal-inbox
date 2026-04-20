@@ -475,6 +475,7 @@ mod patch_task {
                 project_name: Some("Project2".to_string()),
                 due_at,
                 priority: todoist_item.priority.into(),
+                task_provider_kind: None,
             }),
         )
         .await;
