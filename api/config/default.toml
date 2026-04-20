@@ -216,8 +216,11 @@ use_as_oauth_user_scopes = true
 name = "Tick Tick"
 kind = "TickTick"
 nango_key = "ticktick"
+# OAuth client credentials from https://developer.ticktick.com
+# oauth_client_id = ""
+# oauth_client_secret = ""
 required_oauth_scopes = ["tasks:read", "tasks:write"]
-is_enabled = false
+is_enabled = true
 
 [oauth2]
 nango_base_url = "http://localhost:3003"

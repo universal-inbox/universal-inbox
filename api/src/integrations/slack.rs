@@ -1871,7 +1871,7 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
     async fn update_task(
         &self,
         _executor: &mut Transaction<'_, Postgres>,
-        _id: &str,
+        _third_party_item: &ThirdPartyItem,
         _patch: &TaskPatch,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {

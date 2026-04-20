@@ -5,12 +5,14 @@ use tokio_retry::{Retry, strategy::FixedInterval};
 
 use universal_inbox::{
     Page,
+    integration_connection::provider::IntegrationProviderKind,
     task::{
         ProjectSummary, Task, TaskCreationResult, TaskId, TaskSourceKind, TaskStatus, TaskSummary,
     },
 };
 
 pub mod linear;
+pub mod ticktick;
 pub mod todoist;
 
 pub async fn list_tasks_response(
@@ -98,16 +100,30 @@ pub async fn get_task(client: &Client, api_address: &str, task_id: TaskId) -> Op
         .expect("Cannot parse JSON result")
 }
 
-pub async fn search_tasks_response(client: &Client, api_address: &str, matches: &str) -> Response {
+pub async fn search_tasks_response(
+    client: &Client,
+    api_address: &str,
+    matches: &str,
+    provider_kind: Option<IntegrationProviderKind>,
+) -> Response {
+    let mut url = format!("{api_address}tasks/search?matches={matches}");
+    if let Some(kind) = provider_kind {
+        url.push_str(&format!("&provider_kind={kind}"));
+    }
     client
-        .get(format!("{api_address}tasks/search?matches={matches}"))
+        .get(url)
         .send()
         .await
         .expect("Failed to execute request")
 }
 
-pub async fn search_tasks(client: &Client, api_address: &str, matches: &str) -> Vec<TaskSummary> {
-    search_tasks_response(client, api_address, matches)
+pub async fn search_tasks(
+    client: &Client,
+    api_address: &str,
+    matches: &str,
+    provider_kind: Option<IntegrationProviderKind>,
+) -> Vec<TaskSummary> {
+    search_tasks_response(client, api_address, matches, provider_kind)
         .await
         .json()
         .await
@@ -149,11 +165,14 @@ pub async fn search_projects_response(
     client: &Client,
     api_address: &str,
     matches: &str,
+    provider_kind: Option<IntegrationProviderKind>,
 ) -> Response {
+    let mut url = format!("{api_address}tasks/projects/search?matches={matches}");
+    if let Some(kind) = provider_kind {
+        url.push_str(&format!("&provider_kind={kind}"));
+    }
     client
-        .get(format!(
-            "{api_address}tasks/projects/search?matches={matches}"
-        ))
+        .get(url)
         .send()
         .await
         .expect("Failed to execute request")
@@ -163,8 +182,9 @@ pub async fn search_projects(
     client: &Client,
     api_address: &str,
     matches: &str,
+    provider_kind: Option<IntegrationProviderKind>,
 ) -> Vec<ProjectSummary> {
-    search_projects_response(client, api_address, matches)
+    search_projects_response(client, api_address, matches, provider_kind)
         .await
         .json()
         .await

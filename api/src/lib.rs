@@ -65,6 +65,7 @@ use crate::{
             provider::{OAuth2FlowService, OAuth2Provider},
         },
         slack_oauth::SlackOAuth2Provider,
+        ticktick::{TickTickService, oauth::TickTickOAuth2Provider},
         todoist::TodoistService,
         todoist_oauth::TodoistOAuth2Provider,
     },
@@ -461,6 +462,7 @@ pub async fn build_services(
     google_calendar_base_url: Option<String>,
     slack_base_url: Option<String>,
     todoist_address: Option<String>,
+    ticktick_address: Option<String>,
     nango_service: NangoService,
     mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
     webauthn: Arc<Webauthn>,
@@ -576,6 +578,21 @@ pub async fn build_services(
             );
         }
     }
+    if let Some(ticktick_settings) = settings.integrations.get("ticktick")
+        && let (Some(client_id), Some(client_secret)) = (
+            ticktick_settings.oauth_client_id.as_ref(),
+            ticktick_settings.oauth_client_secret.as_ref(),
+        )
+    {
+        oauth2_providers.insert(
+            IntegrationProviderKind::TickTick,
+            Arc::new(TickTickOAuth2Provider::new(
+                client_id.clone(),
+                SecretBox::new(Box::new(client_secret.clone())),
+                ticktick_settings.required_oauth_scopes.clone(),
+            )),
+        );
+    }
 
     let token_encryption_key = settings
         .oauth2
@@ -617,6 +634,14 @@ pub async fn build_services(
             settings.get_integration_max_retry_duration(execution_context, "todoist"),
         )
         .expect("Failed to create new TodoistService"),
+    );
+    let ticktick_service = Arc::new(
+        TickTickService::new(
+            ticktick_address,
+            integration_connection_service.clone(),
+            settings.get_integration_max_retry_duration(execution_context, "ticktick"),
+        )
+        .expect("Failed to create new TickTickService"),
     );
     // tag: New notification integration
     let github_settings = settings
@@ -696,6 +721,7 @@ pub async fn build_services(
         Weak::new(),
         integration_connection_service.clone(),
         todoist_service.clone(),
+        ticktick_service.clone(),
         slack_service.clone(),
         linear_service.clone(),
         api_service.clone(),
@@ -731,6 +757,7 @@ pub async fn build_services(
     let task_service = Arc::new(RwLock::new(TaskService::new(
         repository.clone(),
         todoist_service.clone(),
+        ticktick_service.clone(),
         linear_service.clone(),
         Arc::downgrade(&notification_service),
         slack_service.clone(),

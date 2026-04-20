@@ -6,6 +6,7 @@ use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
         integrations::linear::{LinearConfig, LinearSyncTaskConfig},
+        provider::IntegrationProviderKind,
     },
     task::{PresetDueDate, ProjectSummary},
 };
@@ -14,9 +15,11 @@ use crate::{
     components::{
         floating_label_inputs::{FloatingLabelInputSearchSelect, FloatingLabelSelect},
         flyonui::tooltip::{Tooltip, TooltipPlacement},
+        task_manager_picker::resolve_task_manager_kind,
     },
     config::get_api_base_url,
-    model::UniversalInboxUIModel,
+    model::{LoadState, UniversalInboxUIModel},
+    services::integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTIONS,
 };
 
 #[component]
@@ -27,18 +30,26 @@ pub fn LinearProviderConfiguration(
 ) -> Element {
     let mut default_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
     let mut default_due_at: Signal<Option<PresetDueDate>> = use_signal(|| None);
+    let mut default_task_manager_provider_kind: Signal<Option<IntegrationProviderKind>> =
+        use_signal(|| None);
     let mut task_config_enabled = use_signal(|| false);
     use_memo(move || {
         *default_project.write() = config().sync_task_config.target_project;
         default_due_at
             .write()
             .clone_from(&config().sync_task_config.default_due_at);
+        *default_task_manager_provider_kind.write() =
+            config().sync_task_config.task_manager_provider_kind;
         *task_config_enabled.write() = if !ui_model.read().is_task_actions_enabled {
             false
         } else {
             config().sync_task_config.enabled
         };
     });
+    let show_task_manager_select = matches!(
+        &*TASK_SERVICE_INTEGRATION_CONNECTIONS.read(),
+        LoadState::Loaded(connections) if connections.len() >= 2
+    );
     let collapse_style = use_memo(move || {
         if task_config_enabled() {
             ""
@@ -133,29 +144,36 @@ pub fn LinearProviderConfiguration(
                             class: "label-text cursor-pointer grow text-sm text-base-content",
                             "Project to assign synchronized tasks to"
                         }
-                        FloatingLabelInputSearchSelect::<ProjectSummary> {
-                            name: "linear-project-search-input".to_string(),
-                            class: "w-full max-w-xs bg-base-100 rounded-sm",
-                            required: true,
-                            disabled: !ui_model.read().is_task_actions_enabled,
-                            data_select: json!({
-                                "value": default_project().map(|p| p.source_id.to_string()),
-                                "apiUrl": format!("{api_base_url}tasks/projects/search"),
-                                "apiSearchQueryKey": "matches",
-                                "apiFieldsMap": {
-                                    "id": "source_id",
-                                    "val": "source_id",
-                                    "title": "name"
+                        {
+                            let kind = resolve_task_manager_kind(default_task_manager_provider_kind());
+                            rsx! {
+                                FloatingLabelInputSearchSelect::<ProjectSummary> {
+                                    key: "linear-project-search-{kind}",
+                                    name: "linear-project-search-input".to_string(),
+                                    class: "w-full max-w-xs bg-base-100 rounded-sm",
+                                    required: true,
+                                    disabled: !ui_model.read().is_task_actions_enabled,
+                                    data_select: json!({
+                                        "value": default_project().map(|p| p.source_id.to_string()),
+                                        "apiUrl": format!("{api_base_url}tasks/projects/search"),
+                                        "apiSearchQueryKey": "matches",
+                                        "apiQuery": { "provider_kind": kind.to_string() },
+                                        "apiFieldsMap": {
+                                            "id": "source_id",
+                                            "val": "source_id",
+                                            "title": "name"
+                                        }
+                                    }),
+                                    on_select: move |project: Option<ProjectSummary>| {
+                                        on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
+                                            sync_task_config: LinearSyncTaskConfig {
+                                                target_project: project.clone(),
+                                                ..config().sync_task_config
+                                            },
+                                            ..config()
+                                        }))
+                                    }
                                 }
-                            }),
-                            on_select: move |project: Option<ProjectSummary>| {
-                                on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
-                                    sync_task_config: LinearSyncTaskConfig {
-                                        target_project: project.clone(),
-                                        ..config().sync_task_config
-                                    },
-                                    ..config()
-                                }))
                             }
                         }
                     }
@@ -187,6 +205,37 @@ pub fn LinearProviderConfiguration(
                             option { selected: default_due_at() == Some(PresetDueDate::Tomorrow), "{PresetDueDate::Tomorrow}" }
                             option { selected: default_due_at() == Some(PresetDueDate::ThisWeekend), "{PresetDueDate::ThisWeekend}" }
                             option { selected: default_due_at() == Some(PresetDueDate::NextWeek), "{PresetDueDate::NextWeek}" }
+                        }
+                    }
+
+                    if show_task_manager_select {
+                        div {
+                            class: "flex items-center gap-2",
+                            label {
+                                class: "label-text cursor-pointer grow text-sm text-base-content",
+                                "Task manager to sync with"
+                            }
+                            FloatingLabelSelect::<IntegrationProviderKind> {
+                                label: None,
+                                class: "max-w-xs",
+                                name: "linear-task-manager-input".to_string(),
+                                disabled: !ui_model.read().is_task_actions_enabled,
+                                default_value: default_task_manager_provider_kind().map(|p| p.to_string()).unwrap_or_default(),
+                                on_select: move |task_manager_provider_kind| {
+                                    *default_project.write() = None;
+                                    on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
+                                        sync_task_config: LinearSyncTaskConfig {
+                                            task_manager_provider_kind,
+                                            target_project: None,
+                                            ..config().sync_task_config
+                                        },
+                                        ..config()
+                                    }));
+                                },
+
+                                option { selected: default_task_manager_provider_kind() == Some(IntegrationProviderKind::Todoist), value: "Todoist", "Todoist" }
+                                option { selected: default_task_manager_provider_kind() == Some(IntegrationProviderKind::TickTick), value: "TickTick", "TickTick" }
+                            }
                         }
                     }
                 }

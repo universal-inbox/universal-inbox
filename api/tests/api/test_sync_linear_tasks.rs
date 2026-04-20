@@ -667,6 +667,7 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
                 project_name: Some(project.name.clone()),
                 due_at: Some(PresetDueDate::Today.into()),
                 priority: TaskPriority::default(),
+                task_manager_provider_kind: None,
             }),
             app.user.id,
         )
@@ -989,4 +990,319 @@ async fn test_create_notification_should_auto_delete_when_task_already_exists(
         NotificationStatus::Deleted,
         "Notification for a Linear issue that already has a synced task should be auto-deleted"
     );
+}
+
+// --- Sink-provider resolution regression tests ---------------------------
+//
+// Until recently `apply_synced_task_side_effect` hard-coded Todoist as the
+// sink for any Linear/Slack-sourced task, ignoring both the per-integration
+// `task_manager_provider_kind` and the user preferences default. The tests
+// below lock in the three-step resolution:
+//   1) explicit LinearSyncTaskConfig.task_manager_provider_kind
+//   2) UserPreferences.default_task_manager_provider_kind
+//   3) fallback Todoist (already covered by test_sync_tasks_should_create_new_task)
+mod sink_provider_resolution {
+    use super::*;
+    use serde_json::json;
+    use universal_inbox::third_party::integrations::ticktick::{
+        TickTickItem, TickTickItemPriority, TickTickTaskStatus,
+    };
+    use universal_inbox::user::UserPreferencesPatch;
+    use universal_inbox_api::integrations::ticktick::TickTickCreateTaskResponse;
+
+    use crate::helpers::{
+        integration_connection::create_ticktick_integration_connection,
+        task::ticktick::{
+            mock_ticktick_get_task_service, mock_ticktick_list_projects_service,
+            ticktick_projects_response,
+        },
+    };
+    use universal_inbox::integration_connection::integrations::ticktick::TickTickConfig;
+    use universal_inbox::task::integrations::ticktick::TickTickProject;
+
+    fn ticktick_response_for(linear_issue_title: &str) -> TickTickCreateTaskResponse {
+        TickTickCreateTaskResponse {
+            id: "tt_sink_from_linear".to_string(),
+            project_id: "tt_proj_2222".to_string(),
+            title: linear_issue_title.to_string(),
+            content: None,
+            desc: None,
+            all_day: None,
+            start_date: None,
+            due_date: None,
+            time_zone: None,
+            priority: TickTickItemPriority::High,
+            status: TickTickTaskStatus::Normal,
+            tags: None,
+        }
+    }
+
+    fn ticktick_item_for(linear_issue_title: &str) -> TickTickItem {
+        TickTickItem {
+            id: "tt_sink_from_linear".to_string(),
+            project_id: "tt_proj_2222".to_string(),
+            title: linear_issue_title.to_string(),
+            content: None,
+            desc: None,
+            all_day: None,
+            start_date: None,
+            due_date: None,
+            time_zone: None,
+            reminders: None,
+            repeat: None,
+            priority: TickTickItemPriority::High,
+            status: TickTickTaskStatus::Normal,
+            completed_time: None,
+            sort_order: None,
+            items: None,
+            tags: None,
+            created_time: None,
+            modified_time: None,
+        }
+    }
+
+    /// Linear config sets `task_manager_provider_kind = TickTick` → sink is a
+    /// TickTick item. Assert that no Todoist traffic occurs by *not* mocking
+    /// any Todoist endpoint (wiremock returns 404 for unmocked paths which
+    /// would fail the sync if Todoist were hit).
+    #[rstest]
+    #[tokio::test]
+    async fn test_sync_linear_task_routes_to_ticktick_when_config_says_so(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+        ticktick_projects_response: Vec<TickTickProject>,
+        nango_linear_connection: Box<NangoConnection>,
+    ) {
+        let app = authenticated_app.await;
+
+        create_ticktick_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings,
+            IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+            None,
+        )
+        .await;
+        create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Linear(LinearConfig {
+                sync_notifications_enabled: true,
+                sync_task_config: LinearSyncTaskConfig {
+                    enabled: true,
+                    target_project: Some(ProjectSummary {
+                        name: "Project2".to_string(),
+                        source_id: "tt_proj_2222".into(),
+                    }),
+                    default_due_at: Some(PresetDueDate::Today),
+                    task_manager_provider_kind: Some(IntegrationProviderKind::TickTick),
+                    ..Default::default()
+                },
+            }),
+            &settings,
+            nango_linear_connection,
+            None,
+            None,
+        )
+        .await;
+
+        let sync_linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+            .data
+            .clone()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let expected_task_title = format!(
+            "[{}]({})",
+            sync_linear_issues[0].title,
+            sync_linear_issues[0].get_html_url()
+        );
+        let _linear_assigned_issues_mock = mock_linear_assigned_issues_query(
+            &app.app.linear_mock_server,
+            &sync_linear_tasks_response,
+        )
+        .await;
+
+        mock_ticktick_list_projects_service(
+            &app.app.ticktick_mock_server,
+            &ticktick_projects_response,
+        )
+        .await;
+        let ticktick_item = ticktick_item_for(&expected_task_title);
+        // Loose POST /task mock — the Linear issue's priority may vary across
+        // fixtures; this test only cares that TickTick (not Todoist) is hit.
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/task"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(ticktick_response_for(&expected_task_title)),
+            )
+            .mount(&app.app.ticktick_mock_server)
+            .await;
+        mock_ticktick_get_task_service(
+            &app.app.ticktick_mock_server,
+            &ticktick_item.project_id,
+            &ticktick_item.id,
+            &ticktick_item,
+        )
+        .await;
+
+        let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
+            &app.client,
+            &app.app.api_address,
+            Some(TaskSourceKind::Linear),
+            false,
+        )
+        .await;
+
+        assert_eq!(task_creation_results.len(), 1);
+        let task = &task_creation_results[0].task;
+        assert_eq!(task.kind, TaskSourceKind::Linear);
+        let sink_item = task.sink_item.clone().expect("expected a TickTick sink");
+        assert_eq!(
+            sink_item.kind(),
+            ThirdPartyItemKind::TickTickItem,
+            "sink should be a TickTick item (task_manager_provider_kind = TickTick)"
+        );
+        assert!(
+            matches!(sink_item.data, ThirdPartyItemData::TickTickItem(_)),
+            "sink item data should be a TickTickItem, got {:?}",
+            sink_item.data
+        );
+    }
+
+    /// Linear config leaves `task_manager_provider_kind = None` but the user
+    /// has set `default_task_manager_provider_kind = TickTick` → sink is still
+    /// TickTick, via the UserPreferences fallback.
+    #[rstest]
+    #[tokio::test]
+    async fn test_sync_linear_task_falls_back_to_user_default_task_manager(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+        ticktick_projects_response: Vec<TickTickProject>,
+        nango_linear_connection: Box<NangoConnection>,
+    ) {
+        let app = authenticated_app.await;
+
+        create_ticktick_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings,
+            IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+            None,
+        )
+        .await;
+        create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Linear(LinearConfig {
+                sync_notifications_enabled: true,
+                sync_task_config: LinearSyncTaskConfig {
+                    enabled: true,
+                    target_project: Some(ProjectSummary {
+                        name: "Project2".to_string(),
+                        source_id: "tt_proj_2222".into(),
+                    }),
+                    default_due_at: Some(PresetDueDate::Today),
+                    // No task_manager_provider_kind on the Linear config —
+                    // we rely on user preferences below.
+                    ..Default::default()
+                },
+            }),
+            &settings,
+            nango_linear_connection,
+            None,
+            None,
+        )
+        .await;
+
+        // Set the user preference to TickTick.
+        let response = app
+            .client
+            .patch(format!("{}users/me/preferences", app.app.api_address))
+            .json(&UserPreferencesPatch {
+                default_task_manager_provider_kind: Some(Some(IntegrationProviderKind::TickTick)),
+            })
+            .send()
+            .await
+            .expect("Failed to patch user preferences");
+        assert_eq!(response.status(), 200);
+
+        let sync_linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+            .data
+            .clone()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let expected_task_title = format!(
+            "[{}]({})",
+            sync_linear_issues[0].title,
+            sync_linear_issues[0].get_html_url()
+        );
+        let _linear_assigned_issues_mock = mock_linear_assigned_issues_query(
+            &app.app.linear_mock_server,
+            &sync_linear_tasks_response,
+        )
+        .await;
+
+        mock_ticktick_list_projects_service(
+            &app.app.ticktick_mock_server,
+            &ticktick_projects_response,
+        )
+        .await;
+        let ticktick_item = ticktick_item_for(&expected_task_title);
+        // Loose POST /task mock — the Linear issue's priority may vary across
+        // fixtures; this test only cares that TickTick (not Todoist) is hit.
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/task"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(ticktick_response_for(&expected_task_title)),
+            )
+            .mount(&app.app.ticktick_mock_server)
+            .await;
+        mock_ticktick_get_task_service(
+            &app.app.ticktick_mock_server,
+            &ticktick_item.project_id,
+            &ticktick_item.id,
+            &ticktick_item,
+        )
+        .await;
+
+        let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
+            &app.client,
+            &app.app.api_address,
+            Some(TaskSourceKind::Linear),
+            false,
+        )
+        .await;
+
+        assert_eq!(task_creation_results.len(), 1);
+        let sink_item = task_creation_results[0]
+            .task
+            .sink_item
+            .clone()
+            .expect("expected a TickTick sink via user preference fallback");
+        assert!(
+            matches!(sink_item.data, ThirdPartyItemData::TickTickItem(_)),
+            "sink item data should be a TickTickItem, got {:?}",
+            sink_item.data
+        );
+    }
+
+    // The default-Todoist fallback is already covered end-to-end by
+    // test_sync_tasks_should_create_new_task above (no config hint + no user
+    // preference → Todoist sink).
+
+    // Quick json helper retained for signature use
+    #[allow(dead_code)]
+    fn _ensure_json_used() {
+        let _ = json!({});
+    }
 }

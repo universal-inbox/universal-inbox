@@ -80,6 +80,10 @@ impl OAuth2Provider for LinearOAuth2Provider {
         true
     }
 
+    fn scope_delimiter(&self) -> &'static str {
+        ","
+    }
+
     fn migration_url(&self) -> Option<&Url> {
         Some(&self.migration_url)
     }

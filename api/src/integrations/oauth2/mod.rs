@@ -139,12 +139,6 @@ impl NangoConnection {
                 .split(',')
                 .map(|scope| scope.to_string())
                 .collect()),
-            "ticktick" => Ok(self.credentials.raw["scope"]
-                .as_str()
-                .unwrap_or_default()
-                .split(' ')
-                .map(|scope| scope.to_string())
-                .collect()),
             key => Err(UniversalInboxError::Unexpected(anyhow!(
                 "Don't know how to extract registered OAuth scopes for Nango key `{key}`"
             ))),
@@ -290,10 +284,34 @@ impl NangoService {
             return Ok(None);
         };
 
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
         let response_body = response
             .text()
             .await
             .context(format!("Failed to fetch connection response for {connection_id} for provider {provider_config_key} from Nango API"))?;
+
+        // When the Nango host (e.g. Cloudron) is down, it returns a HTML "app
+        // down" page with a 200 status. Detect that early so we surface a
+        // recoverable error with context instead of a serde parse dump.
+        let looks_like_json = content_type
+            .as_deref()
+            .map(|ct| ct.contains("json"))
+            .unwrap_or_else(|| {
+                let trimmed = response_body.trim_start();
+                trimmed.starts_with('{') || trimmed.starts_with('[')
+            });
+        if !looks_like_json {
+            let preview: String = response_body.chars().take(200).collect();
+            return Err(UniversalInboxError::Recoverable(anyhow!(
+                "Nango returned a non-JSON response (status {status}, content-type {}). The OAuth proxy may be temporarily unavailable. First bytes: {preview}",
+                content_type.as_deref().unwrap_or("<missing>"),
+            )));
+        }
 
         let connection: NangoConnection = serde_json::from_str(&response_body)
             .map_err(|err| UniversalInboxError::from_json_serde_error(err, response_body))?;
@@ -337,6 +355,7 @@ fn build_nango_client(
     let mut auth_header_value: HeaderValue = format!("Bearer {secret_key}").parse().unwrap();
     auth_header_value.set_sensitive(true);
     headers.insert("Authorization", auth_header_value);
+    headers.insert("Accept", HeaderValue::from_static("application/json"));
 
     let reqwest_client = reqwest::Client::builder()
         .default_headers(headers)
