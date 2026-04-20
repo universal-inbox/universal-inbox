@@ -33,7 +33,7 @@ use universal_inbox::{
 use crate::{
     integrations::oauth2::{
         AccessToken, AuthorizationCode, NangoService, PkceVerifier, RefreshToken,
-        provider::{OAuth2FlowService, OAuth2Provider},
+        provider::{OAuth2FlowService, OAuth2Provider, OAuthTokenResponse},
     },
     jobs::{
         UniversalInboxJob,
@@ -1423,22 +1423,23 @@ impl IntegrationConnectionService {
             ))
         })?;
 
-        // Collect providers that support migration
+        // Collect providers available for migration (any internal OAuth2 provider).
+        // Providers with `migration_url()` swap the Nango token for a fresh one via
+        // the provider's migration endpoint (Linear). Providers without it copy the
+        // Nango-held tokens directly into the encrypted local store.
         let migratable_providers: Vec<_> = self
             .oauth2_providers
             .iter()
-            .filter(|(kind, provider)| {
-                provider.migration_url().is_some() && provider_kind.is_none_or(|pk| pk == **kind)
-            })
+            .filter(|(kind, _)| provider_kind.is_none_or(|pk| pk == **kind))
             .collect();
 
         if migratable_providers.is_empty() {
-            info!("No providers with migration support found");
+            info!("No internal OAuth2 providers configured");
             return Ok((0, 0));
         }
 
         info!(
-            "Found {} provider(s) supporting token migration: {:?}",
+            "Found {} provider(s) to consider for token migration: {:?}",
             migratable_providers.len(),
             migratable_providers
                 .iter()
@@ -1476,13 +1477,10 @@ impl IntegrationConnectionService {
             for integration_connection in integration_connections {
                 let ic_provider_kind = integration_connection.provider.kind();
 
-                // Skip if this provider doesn't support migration
+                // Skip if no internal OAuth2 provider is configured for this provider kind
                 let Some(oauth2_provider) = self.oauth2_providers.get(&ic_provider_kind) else {
                     continue;
                 };
-                if oauth2_provider.migration_url().is_none() {
-                    continue;
-                }
                 // Skip if filtering by provider_kind and this doesn't match
                 if provider_kind.is_some() && provider_kind != Some(ic_provider_kind) {
                     continue;
@@ -1539,23 +1537,71 @@ impl IntegrationConnectionService {
                     }
                 };
 
-                // Step 2: Call migration endpoint
-                let token_response = match oauth2_flow_service
-                    .migrate_old_token(
-                        oauth2_provider.as_ref(),
-                        &nango_connection.credentials.access_token,
-                    )
-                    .await
-                {
-                    Ok(response) => response,
-                    Err(err) => {
-                        error!(
-                            "Failed to migrate token for connection {} (user {}): {err:?}",
-                            integration_connection.id, user.id
-                        );
-                        failed_count += 1;
-                        continue;
-                    }
+                // Step 2: Obtain token material. If the provider exposes a migration
+                // endpoint (Linear), swap the old token for a fresh pair. Otherwise,
+                // copy what Nango already holds — tokens were issued against the same
+                // client_id/client_secret, so they remain valid under the internal flow.
+                let (token_response, raw_response) = if oauth2_provider.migration_url().is_some() {
+                    let resp = match oauth2_flow_service
+                        .migrate_old_token(
+                            oauth2_provider.as_ref(),
+                            &nango_connection.credentials.access_token,
+                        )
+                        .await
+                    {
+                        Ok(response) => response,
+                        Err(err) => {
+                            error!(
+                                "Failed to migrate token for connection {} (user {}): {err:?}",
+                                integration_connection.id, user.id
+                            );
+                            failed_count += 1;
+                            continue;
+                        }
+                    };
+                    let raw = serde_json::to_value(resp.as_safe_token_response())
+                        .unwrap_or(serde_json::Value::Null);
+                    (resp, raw)
+                } else {
+                    let creds = &nango_connection.credentials;
+                    let expires_in = creds
+                        .expires_at
+                        .map(|at| (at - Utc::now()).num_seconds())
+                        .filter(|secs| *secs > 0);
+                    // Slack returns both a bot token (top-level `access_token`) and a user
+                    // token (`authed_user.access_token`). We request user scopes, so the user
+                    // token is the one we need; Nango stores the bot token at the top level.
+                    // Mirror the read-path special case in `fetch_access_token_from_nango`.
+                    let (access_token, refresh_token) =
+                        if ic_provider_kind == IntegrationProviderKind::Slack {
+                            let user_access_token = creds.raw["authed_user"]["access_token"]
+                                .as_str()
+                                .map(|t| AccessToken(t.to_string()))
+                                .unwrap_or_else(|| creds.access_token.clone());
+                            let user_refresh_token = creds.raw["authed_user"]["refresh_token"]
+                                .as_str()
+                                .map(|t| RefreshToken(t.to_string()))
+                                .or_else(|| creds.refresh_token.clone());
+                            (user_access_token, user_refresh_token)
+                        } else {
+                            (creds.access_token.clone(), creds.refresh_token.clone())
+                        };
+                    let resp = OAuthTokenResponse {
+                        access_token: SecretBox::new(Box::new(access_token)),
+                        refresh_token: refresh_token.map(|rt| SecretBox::new(Box::new(rt))),
+                        token_type: creds
+                            .raw
+                            .get("token_type")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        expires_in,
+                        extra: creds.raw.clone(),
+                    };
+                    // Preserve Nango's raw response so extract_registered_scopes and
+                    // provider-specific field readers (Slack authed_user.*, etc.) keep working,
+                    // but strip plaintext token material before it hits the raw_response column.
+                    let sanitized_raw = oauth2_provider.sanitize_raw_response(&creds.raw);
+                    (resp, sanitized_raw)
                 };
 
                 // Step 3: Encrypt and store (bind ciphertext to this connection via AAD)
@@ -1597,9 +1643,6 @@ impl IntegrationConnectionService {
                         continue;
                     }
                 };
-
-                let raw_response = serde_json::to_value(token_response.as_safe_token_response())
-                    .unwrap_or(serde_json::Value::Null);
 
                 let mut store_transaction = self.begin().await.context(format!(
                     "Failed to create transaction for connection {} (user {})",
@@ -1920,10 +1963,18 @@ impl IntegrationConnectionService {
 
         let mut auth_request = client.authorize_url(CsrfToken::new_random);
 
-        // Add scopes as an extra param (some providers use non-standard separators)
+        // Add scopes as an extra param (each provider controls delimiter & param name)
         let scopes = provider.required_scopes();
         if !scopes.is_empty() {
-            auth_request = auth_request.add_extra_param("scope", scopes.join(","));
+            auth_request = auth_request.add_extra_param(
+                provider.scope_param_name(),
+                scopes.join(provider.scope_delimiter()),
+            );
+        }
+
+        // Provider-specific extra authorize params (e.g. Google's access_type=offline)
+        for (key, value) in provider.extra_authorize_params() {
+            auth_request = auth_request.add_extra_param(key, value);
         }
 
         // Add PKCE if supported
@@ -2055,6 +2106,7 @@ impl IntegrationConnectionService {
             )));
         }
 
+        let stored_raw_response = provider.sanitize_raw_response(&raw_response);
         self.repository
             .store_oauth_credential(
                 executor,
@@ -2062,9 +2114,29 @@ impl IntegrationConnectionService {
                 encrypted_access_token,
                 encrypted_refresh_token,
                 expires_at,
-                raw_response,
+                stored_raw_response,
             )
             .await?;
+
+        if let Some(provider_user_id) = provider.extract_provider_user_id(&raw_response) {
+            self.repository
+                .update_integration_connection_provider_user_id(
+                    executor,
+                    state_data.integration_connection_id,
+                    Some(provider_user_id),
+                )
+                .await?;
+        }
+
+        if let Some(provider_context) = provider.extract_provider_context(&raw_response) {
+            self.repository
+                .update_integration_connection_context(
+                    executor,
+                    state_data.integration_connection_id,
+                    Some(provider_context),
+                )
+                .await?;
+        }
 
         self.update_integration_connection_status(
             executor,

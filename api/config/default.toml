@@ -116,6 +116,9 @@ kind = "Github"
 nango_key = "github"
 page_size = 50
 required_oauth_scopes = ["notifications", "read:discussion", "read:org", "repo"]
+# OAuth client credentials from https://github.com/settings/developers
+# oauth_client_id = ""
+# oauth_client_secret = ""
 # Rate limiting configuration
 api_max_retry_duration_http_seconds = 30
 api_max_retry_duration_worker_seconds = 600
@@ -138,6 +141,9 @@ kind = "GoogleMail"
 nango_key = "google-mail"
 page_size = 500
 required_oauth_scopes = ["https://www.googleapis.com/auth/gmail.modify"]
+# OAuth client credentials from https://console.cloud.google.com/apis/credentials
+# oauth_client_id = ""
+# oauth_client_secret = ""
 warning_message = "Google Mail integration is not yet public, it requires your email address to be whitelisted and you will see a warning message from Google while connecting. If you still want to connect it, please send the Google email address you want to use to the [support](mailto:support@universal-inbox.com)."
 # Rate limiting configuration
 api_max_retry_duration_http_seconds = 30
@@ -148,6 +154,9 @@ name = "Google Calendar"
 kind = "GoogleCalendar"
 nango_key = "google-calendar"
 required_oauth_scopes = ["https://www.googleapis.com/auth/calendar"]
+# OAuth client credentials from https://console.cloud.google.com/apis/credentials
+# oauth_client_id = ""
+# oauth_client_secret = ""
 # Rate limiting configuration
 api_max_retry_duration_http_seconds = 30
 api_max_retry_duration_worker_seconds = 600
@@ -158,6 +167,9 @@ kind = "GoogleDrive"
 nango_key = "google-drive"
 page_size = 100
 required_oauth_scopes = ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/drive.metadata.readonly"]
+# OAuth client credentials from https://console.cloud.google.com/apis/credentials
+# oauth_client_id = ""
+# oauth_client_secret = ""
 warning_message = "Google Drive integration is not yet public, it requires your email address to be whitelisted and you will see a warning message from Google while connecting. If you still want to connect it, please send the Google email address you want to use to the [support](mailto:support@universal-inbox.com)."
 # Rate limiting configuration
 api_max_retry_duration_http_seconds = 30
@@ -168,6 +180,9 @@ name = "Todoist"
 kind = "Todoist"
 nango_key = "todoist"
 required_oauth_scopes = ["data:read_write", "data:delete"]
+# OAuth client credentials from https://app.todoist.com/app/settings/integrations/app-management
+# oauth_client_id = ""
+# oauth_client_secret = ""
 # Rate limiting configuration
 api_max_retry_duration_http_seconds = 30
 api_max_retry_duration_worker_seconds = 600
@@ -193,6 +208,9 @@ required_oauth_scopes = [
   "users:read",
 ]
 use_as_oauth_user_scopes = true
+# OAuth client credentials from https://api.slack.com/apps
+# oauth_client_id = ""
+# oauth_client_secret = ""
 
 [integrations.ticktick]
 name = "Tick Tick"
