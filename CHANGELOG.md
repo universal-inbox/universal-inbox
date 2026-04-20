@@ -10,6 +10,7 @@
 - Add MCP (Model Context Protocol) server for AI agent integration
 - Add configurable emoji on Slack task completion
 - Hide quoted content in Gmail email previews
+- Internalize OAuth for GitHub, Slack, Todoist, Google Mail, Google Calendar, and Google Drive (replace Nango).
 
 ### Changed
 
