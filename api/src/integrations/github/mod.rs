@@ -47,6 +47,7 @@ use crate::{
 
 pub mod graphql;
 pub mod notification;
+pub mod oauth;
 
 #[derive(Clone)]
 pub struct GithubService {

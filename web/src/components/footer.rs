@@ -259,14 +259,14 @@ pub fn IntegrationConnectionsStatus(
 
 #[component]
 pub fn IntegrationConnectionStatus(
-    connection: IntegrationConnection,
-    config: IntegrationProviderStaticConfig,
+    connection: ReadSignal<IntegrationConnection>,
+    config: ReadSignal<IntegrationProviderStaticConfig>,
     icon_class: Option<&'static str>,
 ) -> Element {
     let icon_style = icon_class.unwrap_or("w-4 h-4");
-    let provider_kind = connection.provider.kind();
-    let connection_is_syncing = connection.is_syncing();
-    let (connection_style, tooltip_style, tooltip) = use_memo(move || match &connection {
+    let provider_kind = connection().provider.kind();
+    let connection_is_syncing = connection().is_syncing();
+    let (connection_style, tooltip_style, tooltip) = use_memo(move || match connection() {
         IntegrationConnection {
             status: ConnectionStatus::Validated,
             last_notifications_sync_started_at: notifs_started_at,
@@ -275,7 +275,7 @@ pub fn IntegrationConnectionStatus(
             last_tasks_sync_failure_message: None,
             ..
         } => {
-            if connection.has_oauth_scopes(&config.required_oauth_scopes) {
+            if connection().has_oauth_scopes(&config().required_oauth_scopes) {
                 let started_at = match (notifs_started_at, tasks_started_at) {
                     (Some(notifs_started_at), Some(tasks_started_at)) => {
                         Some(notifs_started_at.max(tasks_started_at))
