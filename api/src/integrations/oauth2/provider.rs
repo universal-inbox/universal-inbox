@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use chrono::{DateTime, TimeDelta, Utc};
+use http::HeaderMap;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
 use reqwest_tracing::{DisableOtelPropagation, SpanBackendWithUrl, TracingMiddleware};
 use secrecy::{ExposeSecret, SecretBox};
@@ -86,6 +87,56 @@ pub trait OAuth2Provider: Send + Sync + std::fmt::Debug {
         &self,
         raw_response: &Value,
     ) -> Option<IntegrationConnectionContext>;
+
+    /// Extra query params to append to the authorize URL (e.g. Google's
+    /// `access_type=offline` / `prompt=consent`). Default: none.
+    fn extra_authorize_params(&self) -> Vec<(&'static str, &'static str)> {
+        Vec::new()
+    }
+
+    /// Delimiter used when joining scopes in the authorize URL scope param.
+    /// Defaults to "," (Linear / GitHub). Providers using RFC 6749 space
+    /// separation override to " ".
+    fn scope_delimiter(&self) -> &'static str {
+        ","
+    }
+
+    /// Name of the scope query parameter. Defaults to "scope". Slack with
+    /// `use_as_oauth_user_scopes = true` overrides to "user_scope".
+    fn scope_param_name(&self) -> &'static str {
+        "scope"
+    }
+
+    /// Extra HTTP headers to send with token exchange / refresh requests
+    /// (e.g. GitHub requires `Accept: application/json`). Default: none.
+    fn token_request_headers(&self) -> HeaderMap {
+        HeaderMap::new()
+    }
+
+    /// Parse the raw token endpoint response body into an `OAuthTokenResponse`.
+    /// Default implementation parses standard OAuth2 JSON; providers with
+    /// non-standard response shapes (e.g. Slack v2) can override.
+    fn parse_token_response(&self, body: &str) -> Result<OAuthTokenResponse, UniversalInboxError> {
+        serde_json::from_str(body)
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, body.to_string()))
+    }
+
+    /// Return a copy of the raw provider response with secret material stripped
+    /// (access tokens, refresh tokens, id tokens). The result is what gets
+    /// persisted to `oauth_credential.raw_response`.
+    ///
+    /// Default: strip well-known top-level OAuth2 token fields. Providers with
+    /// non-standard shapes (e.g. Slack) MUST override to also strip nested
+    /// occurrences.
+    fn sanitize_raw_response(&self, raw: &Value) -> Value {
+        let mut cleaned = raw.clone();
+        if let Some(obj) = cleaned.as_object_mut() {
+            for key in ["access_token", "refresh_token", "id_token"] {
+                obj.remove(key);
+            }
+        }
+        cleaned
+    }
 }
 
 /// Service that executes OAuth2 flows (authorization URL generation, code exchange,
@@ -147,6 +198,7 @@ impl OAuth2FlowService {
         let response = self
             .client
             .post(provider.token_url().as_str())
+            .headers(provider.token_request_headers())
             .form(&params)
             .send()
             .await
@@ -164,8 +216,7 @@ impl OAuth2FlowService {
             )));
         }
 
-        serde_json::from_str(&body)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, body))
+        provider.parse_token_response(&body)
     }
 
     pub async fn refresh_access_token(
@@ -190,6 +241,7 @@ impl OAuth2FlowService {
         let response = self
             .client
             .post(provider.token_url().as_str())
+            .headers(provider.token_request_headers())
             .form(&params)
             .send()
             .await
@@ -207,8 +259,7 @@ impl OAuth2FlowService {
             )));
         }
 
-        serde_json::from_str(&body)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, body))
+        provider.parse_token_response(&body)
     }
 
     /// Migrate an existing long-lived token to short-lived + refresh token.
@@ -240,6 +291,7 @@ impl OAuth2FlowService {
         let response = self
             .client
             .post(migration_url.as_str())
+            .headers(provider.token_request_headers())
             .form(&params)
             .send()
             .await
@@ -257,8 +309,7 @@ impl OAuth2FlowService {
             )));
         }
 
-        serde_json::from_str(&body)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, body))
+        provider.parse_token_response(&body)
     }
 }
 
