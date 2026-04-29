@@ -7,11 +7,6 @@ cat >> .local_envrc << EOF
 export PGPORT={{ ('db-' ~ branch) | hash_port }}
 export REDIS_PORT={{ ('redis-' ~ branch) | hash_port }}
 export DX_SERVE_PORT={{ ('web-' ~ branch) | hash_port }}
-export NANGO_PORT={{ ('nango-' ~ branch) | hash_port }}
-export NANGO_CONTAINER_NAME="nango-{{ ('nango-' ~ branch) | sanitize_db }}"
-export NANGO_DB_PORT={{ ('nango-db-' ~ branch) | hash_port }}
-export NANGO_DB_CONTAINER_NAME="nango-db-{{ ('nango-db-' ~ branch) | sanitize_db }}"
-export NANGO_DB_VOLUME_NAME="nango-db-{{ ('nango-db-' ~ branch) | sanitize_db }}"
 export API_PORT={{ ('api-' ~ branch) | hash_port }}
 export PROCESS_COMPOSE_PORT={{ ('pc-' ~ branch) | hash_port }}
 
@@ -19,7 +14,6 @@ export DATABASE_URL="postgres://postgres:password@127.0.0.1:{{ ('db-' ~ branch) 
 export UNIVERSAL_INBOX__DATABASE__PORT={{ ('db-' ~ branch) | hash_port }}
 export UNIVERSAL_INBOX__REDIS__PORT={{ ('redis-' ~ branch) | hash_port }}
 export UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL=http://localhost:{{ ('web-' ~ branch) | hash_port }}
-export UNIVERSAL_INBOX__OAUTH2__NANGO_BASE_URL=http://localhost:{{ ('nango-' ~ branch) | hash_port }}
 export UNIVERSAL_INBOX__APPLICATION__LISTEN_PORT={{ ('api-' ~ branch) | hash_port }}
 
 # default PGHOST can became too long
@@ -31,13 +25,6 @@ web_install = "cd web && npm install"
 
 [pre-remove]
 stop_services = "direnv exec . process-compose down -p ${PROCESS_COMPOSE_PORT:-9999} || true"
-
-[post-remove]
-clean_docker = """
-docker rm -f "nango-db-{{ ('nango-db-' ~ branch) | sanitize_db }}"
-docker volume rm -f "nango-db-{{ ('nango-db-' ~ branch) | sanitize_db }}"
-docker rm -f "nango-{{ ('nango-' ~ branch) | sanitize_db }}"
-"""
 
 [pre-commit]
 check = "just check-commit"

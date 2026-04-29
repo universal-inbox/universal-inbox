@@ -21,7 +21,6 @@ use url::Url;
 use universal_inbox::{
     integration_connection::{
         IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
-        NangoProviderKey,
         config::IntegrationConnectionConfig,
         provider::{IntegrationConnectionContext, IntegrationProviderKind},
     },
@@ -32,8 +31,8 @@ use universal_inbox::{
 
 use crate::{
     integrations::oauth2::{
-        AccessToken, AuthorizationCode, NangoService, PkceVerifier, RefreshToken,
-        provider::{OAuth2FlowService, OAuth2Provider, OAuthTokenResponse},
+        AccessToken, AuthorizationCode, PkceVerifier, RefreshToken,
+        provider::{OAuth2FlowService, OAuth2Provider},
     },
     jobs::{
         UniversalInboxJob,
@@ -48,7 +47,7 @@ use crate::{
         notification::NotificationRepository,
         oauth_credential::OAuthCredentialRepository,
     },
-    universal_inbox::{UniversalInboxError, UpdateStatus, user::service::UserService},
+    universal_inbox::{UniversalInboxError, UpdateStatus},
     utils::{
         cache::{Cache, build_redis_cache},
         crypto::{TokenEncryptionKey, decrypt_token, encrypt_token},
@@ -67,21 +66,16 @@ struct OAuthStateData {
 
 pub struct IntegrationConnectionService {
     repository: Arc<Repository>,
-    nango_service: NangoService,
-    nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
     required_oauth_scopes: HashMap<IntegrationProviderKind, Vec<String>>,
     oauth2_providers: HashMap<IntegrationProviderKind, Arc<dyn OAuth2Provider>>,
-    oauth2_flow_service: Option<OAuth2FlowService>,
-    token_encryption_key: Option<SecretBox<TokenEncryptionKey>>,
-    user_service: Arc<UserService>,
+    oauth2_flow_service: OAuth2FlowService,
+    token_encryption_key: SecretBox<TokenEncryptionKey>,
     min_sync_notifications_interval_in_minutes: i64,
     min_sync_tasks_interval_in_minutes: i64,
     sync_backoff_base_delay_in_seconds: u64,
     sync_backoff_max_delay_in_seconds: u64,
     sync_failure_window_in_hours: i64,
 }
-
-pub const UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE: &str = "🔌 The OAuth connection is failing due to a technical issue on our end. Please try to reconnect the integration. If the issue keeps happening, please contact our support.";
 
 #[derive(Debug)]
 pub enum IntegrationConnectionSyncType {
@@ -102,13 +96,10 @@ impl IntegrationConnectionService {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         repository: Arc<Repository>,
-        nango_service: NangoService,
-        nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
         required_oauth_scopes: HashMap<IntegrationProviderKind, Vec<String>>,
         oauth2_providers: HashMap<IntegrationProviderKind, Arc<dyn OAuth2Provider>>,
-        oauth2_flow_service: Option<OAuth2FlowService>,
-        token_encryption_key: Option<SecretBox<TokenEncryptionKey>>,
-        user_service: Arc<UserService>,
+        oauth2_flow_service: OAuth2FlowService,
+        token_encryption_key: SecretBox<TokenEncryptionKey>,
         min_sync_notifications_interval_in_minutes: i64,
         min_sync_tasks_interval_in_minutes: i64,
         sync_backoff_base_delay_in_seconds: u64,
@@ -117,13 +108,10 @@ impl IntegrationConnectionService {
     ) -> IntegrationConnectionService {
         IntegrationConnectionService {
             repository,
-            nango_service,
-            nango_provider_keys,
             required_oauth_scopes,
             oauth2_providers,
             oauth2_flow_service,
             token_encryption_key,
-            user_service,
             min_sync_notifications_interval_in_minutes,
             min_sync_tasks_interval_in_minutes,
             sync_backoff_base_delay_in_seconds,
@@ -446,97 +434,6 @@ impl IntegrationConnectionService {
 
         Ok(updated_integration_connection_config)
     }
-
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            integration_connection_id = integration_connection_id.to_string(),
-            user.id = for_user_id.to_string()
-        ),
-        err
-    )]
-    pub async fn verify_integration_connection(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        integration_connection_id: IntegrationConnectionId,
-        for_user_id: UserId,
-    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        let Some(integration_connection) = self
-            .repository
-            .get_integration_connection(executor, integration_connection_id)
-            .await?
-        else {
-            return Ok(UpdateStatus {
-                updated: false,
-                result: None,
-            });
-        };
-
-        if integration_connection.user_id != for_user_id {
-            return Err(UniversalInboxError::Forbidden(format!(
-                "Only the owner of the integration connection {integration_connection_id} can verify it"
-            )));
-        }
-
-        let provider_kind = integration_connection.provider.kind();
-        let provider_config_key = self
-            .nango_provider_keys
-            .get(&provider_kind)
-            .context(format!(
-                "No Nango provider config key found for {provider_kind}"
-            ))?;
-
-        let nango_connection = self
-            .nango_service
-            .get_connection(integration_connection.connection_id, provider_config_key)
-            .await?;
-        let Some(nango_connection) = nango_connection else {
-            return self
-                .repository
-                .update_integration_connection_status(
-                    executor,
-                    integration_connection_id,
-                    IntegrationConnectionStatus::Failing,
-                    Some(UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE.to_string()),
-                    None,
-                    for_user_id,
-                )
-                .await;
-        };
-
-        if let Some(provider_user_id) = nango_connection.get_provider_user_id() {
-            self.repository
-                .update_integration_connection_provider_user_id(
-                    executor,
-                    integration_connection_id,
-                    Some(provider_user_id),
-                )
-                .await?;
-        }
-
-        if let Some(provider_context) = nango_connection.get_provider_context() {
-            self.repository
-                .update_integration_connection_context(
-                    executor,
-                    integration_connection_id,
-                    Some(provider_context),
-                )
-                .await?;
-        }
-
-        self.repository
-            .update_integration_connection_status(
-                executor,
-                integration_connection_id,
-                IntegrationConnectionStatus::Validated,
-                None,
-                Some(nango_connection.get_registered_oauth_scopes()?),
-                for_user_id,
-            )
-            .await
-    }
-
     #[tracing::instrument(
         level = "debug",
         skip_all,
@@ -559,28 +456,13 @@ impl IntegrationConnectionService {
         {
             if integration_connection.user_id != for_user_id {
                 return Err(UniversalInboxError::Forbidden(format!(
-                    "Only the owner of the integration connection {integration_connection_id} can verify it"
+                    "Only the owner of the integration connection {integration_connection_id} can disconnect it"
                 )));
             }
 
-            let provider_kind = integration_connection.provider.kind();
-
-            if self.oauth2_providers.contains_key(&provider_kind) {
-                self.repository
-                    .delete_oauth_credential(executor, integration_connection_id)
-                    .await?;
-            } else {
-                let provider_config_key =
-                    self.nango_provider_keys
-                        .get(&provider_kind)
-                        .context(format!(
-                            "No Nango provider config key found for {provider_kind}"
-                        ))?;
-
-                self.nango_service
-                    .delete_connection(integration_connection.connection_id, provider_config_key)
-                    .await?;
-            }
+            self.repository
+                .delete_oauth_credential(executor, integration_connection_id)
+                .await?;
 
             return self
                 .repository
@@ -722,7 +604,7 @@ impl IntegrationConnectionService {
             return Ok(None);
         };
 
-        self.fetch_access_token_from_nango(executor, integration_connection, None)
+        self.fetch_access_token_locally(executor, integration_connection)
             .await
     }
 
@@ -756,12 +638,8 @@ impl IntegrationConnectionService {
             return Ok(None);
         };
 
-        self.fetch_access_token_for_integration_connection(
-            executor,
-            integration_connection,
-            for_user_id,
-        )
-        .await
+        self.fetch_access_token_locally(executor, integration_connection)
+            .await
     }
 
     #[tracing::instrument(
@@ -798,44 +676,8 @@ impl IntegrationConnectionService {
             return Ok(None);
         }
 
-        self.fetch_access_token_for_integration_connection(
-            executor,
-            integration_connection,
-            for_user_id,
-        )
-        .await
-    }
-
-    async fn fetch_access_token_for_integration_connection(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        integration_connection: IntegrationConnection,
-        for_user_id: UserId,
-    ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
-        let integration_provider_kind = integration_connection.provider.kind();
-        if self
-            .oauth2_providers
-            .contains_key(&integration_provider_kind)
-        {
-            // Try local credential first; if none exists yet (unmigrated connection),
-            // fall back to Nango so both migrated and unmigrated connections work
-            // during the transition period.
-            let result = self
-                .fetch_access_token_locally(
-                    executor,
-                    integration_connection.clone(),
-                    Some(for_user_id),
-                )
-                .await?;
-            if result.is_some() {
-                return Ok(result);
-            }
-            self.fetch_access_token_from_nango(executor, integration_connection, Some(for_user_id))
-                .await
-        } else {
-            self.fetch_access_token_from_nango(executor, integration_connection, Some(for_user_id))
-                .await
-        }
+        self.fetch_access_token_locally(executor, integration_connection)
+            .await
     }
 
     #[tracing::instrument(
@@ -850,7 +692,6 @@ impl IntegrationConnectionService {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         integration_connection: IntegrationConnection,
-        _for_user_id: Option<UserId>,
     ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
         let credential = self
             .repository
@@ -861,28 +702,16 @@ impl IntegrationConnectionService {
             return Ok(None);
         };
 
-        // Check if access token is expired
         if let Some(expires_at) = credential.access_token_expires_at
             && expires_at < Utc::now()
         {
-            // Token expired - the eager refresh command should handle this
             return Err(UniversalInboxError::Recoverable(anyhow!(
                 "Access token expired for integration connection {}. Token refresh should happen via the refresh-oauth-tokens command.",
                 integration_connection.id
             )));
         }
 
-        // Decrypt the access token
-        let token_encryption_key = self
-            .token_encryption_key
-            .as_ref()
-            .map(|k| k.expose_secret())
-            .ok_or_else(|| {
-                UniversalInboxError::Unexpected(anyhow!(
-                    "Token encryption key not configured but required for local OAuth credentials"
-                ))
-            })?;
-
+        let token_encryption_key = self.token_encryption_key.expose_secret();
         let aad_context = integration_connection.id.0.as_bytes();
         let access_token = AccessToken(decrypt_token(
             &credential.encrypted_access_token,
@@ -891,75 +720,6 @@ impl IntegrationConnectionService {
         )?);
 
         Ok(Some((access_token, integration_connection)))
-    }
-
-    async fn fetch_access_token_from_nango(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        integration_connection: IntegrationConnection,
-        for_user_id: Option<UserId>,
-    ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
-        let provider_kind = integration_connection.provider.kind();
-        let provider_config_key = self
-            .nango_provider_keys
-            .get(&provider_kind)
-            .context(format!(
-                "No Nango provider config key found for {provider_kind}"
-            ))?;
-
-        let Some(nango_connection) = self
-            .nango_service
-            .get_connection(integration_connection.connection_id, provider_config_key)
-            .await?
-        else {
-            // Only mark the connection as failing if we have a user_id to notify
-            if let Some(for_user_id) = for_user_id {
-                self.repository
-                    .update_integration_connection_status(
-                        executor,
-                        integration_connection.id,
-                        IntegrationConnectionStatus::Failing,
-                        Some(UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE.to_string()),
-                        None,
-                        for_user_id,
-                    )
-                    .await?;
-            }
-
-            return Err(UniversalInboxError::Recoverable(anyhow!(
-                "Unknown Nango connection: {}",
-                integration_connection.connection_id
-            )));
-        };
-
-        // This is only useful to update incomplete connection context as it was added
-        // during the validation afterward
-        if integration_connection.provider.context_is_empty()
-            && let Some(provider_context) = nango_connection.get_provider_context()
-        {
-            self.repository
-                .update_integration_connection_context(
-                    executor,
-                    integration_connection.id,
-                    Some(provider_context),
-                )
-                .await?;
-        }
-
-        if provider_kind == IntegrationProviderKind::Slack
-            && let Some(access_token) =
-                nango_connection.credentials.raw["authed_user"]["access_token"].as_str()
-        {
-            return Ok(Some((
-                AccessToken(access_token.to_string()),
-                integration_connection,
-            )));
-        }
-
-        Ok(Some((
-            nango_connection.credentials.access_token,
-            integration_connection,
-        )))
     }
 
     #[tracing::instrument(
@@ -1247,453 +1007,6 @@ impl IntegrationConnectionService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(provider_kind = provider_kind.map(|kind| kind.to_string())),
-        err
-    )]
-    pub async fn sync_oauth_scopes_for_all_users(
-        &self,
-        provider_kind: Option<IntegrationProviderKind>,
-    ) -> Result<(), UniversalInboxError> {
-        let service = self.user_service.clone();
-        let mut transaction = service
-            .begin()
-            .await
-            .context("Failed to create new transaction while syncing OAuth scopes for all users")?;
-        let users = service.fetch_all_users(&mut transaction).await?;
-
-        for user in users {
-            let _ = self
-                .sync_oauth_scopes_for_user(provider_kind, user.id)
-                .await;
-        }
-
-        Ok(())
-    }
-
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            provider_kind = provider_kind.map(|kind| kind.to_string()),
-            user.id = user_id.to_string()
-        ),
-        err
-    )]
-    pub async fn sync_oauth_scopes_for_user(
-        &self,
-        provider_kind: Option<IntegrationProviderKind>,
-        user_id: UserId,
-    ) -> Result<(), UniversalInboxError> {
-        info!("Syncing OAuth scopes for user {user_id}");
-
-        let mut transaction = self.begin().await.context(format!(
-            "Failed to create new transaction while syncing {provider_kind:?} OAuth scopes"
-        ))?;
-
-        match self
-            .sync_oauth_scopes(&mut transaction, provider_kind, user_id)
-            .await
-        {
-            Ok(_) => {
-                transaction.commit().await.context(format!(
-                    "Failed to commit while syncing {provider_kind:?} OAuth scopes"
-                ))?;
-                info!("Successfully synced OAuth scopes for user {user_id}");
-                Ok(())
-            }
-            Err(error @ UniversalInboxError::Recoverable(_)) => {
-                transaction.commit().await.context(format!(
-                    "Failed to commit while syncing {provider_kind:?} OAuth scopes"
-                ))?;
-                error!("Failed to sync OAuth scopes for user {user_id}: {error:?}");
-                Err(error)
-            }
-            Err(error) => {
-                transaction.rollback().await.context(format!(
-                    "Failed to rollback while syncing {provider_kind:?} OAuth scopes"
-                ))?;
-                error!("Failed to sync OAuth scopes for user {user_id}: {error:?}");
-                Err(error)
-            }
-        }
-    }
-
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            provider_kind = provider_kind.map(|kind| kind.to_string()),
-            user.id = user_id.to_string()
-        ),
-        err
-    )]
-    async fn sync_oauth_scopes(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        provider_kind: Option<IntegrationProviderKind>,
-        user_id: UserId,
-    ) -> Result<(), UniversalInboxError> {
-        let integration_connections = self
-            .fetch_all_integration_connections(
-                executor,
-                user_id,
-                Some(IntegrationConnectionStatus::Validated),
-                true,
-            )
-            .await?;
-
-        for integration_connection in integration_connections {
-            if let Some(provider_kind) = provider_kind
-                && integration_connection.provider.kind() != provider_kind
-            {
-                continue;
-            }
-
-            let provider_kind = integration_connection.provider.kind();
-            let provider_config_key =
-                self.nango_provider_keys
-                    .get(&provider_kind)
-                    .context(format!(
-                        "No Nango provider config key found for {provider_kind}"
-                    ))?;
-
-            let nango_connection = self
-                .nango_service
-                .get_connection(integration_connection.connection_id, provider_config_key)
-                .await?;
-            let Some(nango_connection) = nango_connection else {
-                warn!(
-                    "Unknown Nango connection {}, skipping OAuth scopes sync",
-                    integration_connection.connection_id
-                );
-                continue;
-            };
-
-            info!(
-                "Updating OAuth scopes for {provider_kind} integration connection {} for user {user_id}",
-                integration_connection.id
-            );
-            self.repository
-                .update_integration_connection_status(
-                    executor,
-                    integration_connection.id,
-                    IntegrationConnectionStatus::Validated,
-                    None,
-                    Some(nango_connection.get_registered_oauth_scopes()?),
-                    user_id,
-                )
-                .await?;
-        }
-
-        Ok(())
-    }
-
-    /// Migrate existing Nango-managed OAuth tokens to locally-managed OAuth credentials.
-    ///
-    /// For each integration connection whose provider has a `migration_url()`, this method:
-    /// 1. Fetches the current access token from Nango
-    /// 2. Calls the provider's migration endpoint to exchange for short-lived + refresh token
-    /// 3. Encrypts and stores the new tokens locally
-    ///
-    /// Returns `(migrated_count, failed_count)`.
-    #[tracing::instrument(
-        level = "info",
-        skip_all,
-        fields(provider_kind = provider_kind.map(|kind| kind.to_string())),
-        err
-    )]
-    pub async fn migrate_nango_tokens(
-        &self,
-        provider_kind: Option<IntegrationProviderKind>,
-        dry_run: bool,
-    ) -> Result<(usize, usize), UniversalInboxError> {
-        let token_encryption_key = self
-            .token_encryption_key
-            .as_ref()
-            .map(|k| k.expose_secret())
-            .ok_or_else(|| {
-                UniversalInboxError::Unexpected(anyhow!(
-                    "Token encryption key not configured but required for OAuth token migration"
-                ))
-            })?;
-
-        let oauth2_flow_service = self.oauth2_flow_service.as_ref().ok_or_else(|| {
-            UniversalInboxError::Unexpected(anyhow!(
-                "OAuth2 flow service not configured but required for OAuth token migration"
-            ))
-        })?;
-
-        // Collect providers available for migration (any internal OAuth2 provider).
-        // Providers with `migration_url()` swap the Nango token for a fresh one via
-        // the provider's migration endpoint (Linear). Providers without it copy the
-        // Nango-held tokens directly into the encrypted local store.
-        let migratable_providers: Vec<_> = self
-            .oauth2_providers
-            .iter()
-            .filter(|(kind, _)| provider_kind.is_none_or(|pk| pk == **kind))
-            .collect();
-
-        if migratable_providers.is_empty() {
-            info!("No internal OAuth2 providers configured");
-            return Ok((0, 0));
-        }
-
-        info!(
-            "Found {} provider(s) to consider for token migration: {:?}",
-            migratable_providers.len(),
-            migratable_providers
-                .iter()
-                .map(|(k, _)| k.to_string())
-                .collect::<Vec<_>>()
-        );
-
-        let service = self.user_service.clone();
-        let mut user_transaction = service
-            .begin()
-            .await
-            .context("Failed to create new transaction while listing users for migration")?;
-        let users = service.fetch_all_users(&mut user_transaction).await?;
-        drop(user_transaction);
-
-        let mut migrated_count: usize = 0;
-        let mut failed_count: usize = 0;
-
-        for user in &users {
-            let mut list_transaction = self.begin().await.context(format!(
-                "Failed to create new transaction while listing connections for user {}",
-                user.id
-            ))?;
-
-            let integration_connections = self
-                .fetch_all_integration_connections(
-                    &mut list_transaction,
-                    user.id,
-                    Some(IntegrationConnectionStatus::Validated),
-                    false,
-                )
-                .await?;
-            drop(list_transaction);
-
-            for integration_connection in integration_connections {
-                let ic_provider_kind = integration_connection.provider.kind();
-
-                // Skip if no internal OAuth2 provider is configured for this provider kind
-                let Some(oauth2_provider) = self.oauth2_providers.get(&ic_provider_kind) else {
-                    continue;
-                };
-                // Skip if filtering by provider_kind and this doesn't match
-                if provider_kind.is_some() && provider_kind != Some(ic_provider_kind) {
-                    continue;
-                }
-
-                let nango_provider_key = match self.nango_provider_keys.get(&ic_provider_kind) {
-                    Some(key) => key,
-                    None => {
-                        warn!(
-                            "No Nango provider config key found for {ic_provider_kind}, skipping connection {}",
-                            integration_connection.id
-                        );
-                        failed_count += 1;
-                        continue;
-                    }
-                };
-
-                if dry_run {
-                    info!(
-                        "[DRY RUN] Would migrate {ic_provider_kind} token for connection {} (user {})",
-                        integration_connection.id, user.id
-                    );
-                    migrated_count += 1;
-                    continue;
-                }
-
-                info!(
-                    "Migrating {ic_provider_kind} token for connection {} (user {})",
-                    integration_connection.id, user.id
-                );
-
-                // Step 1: Fetch current access token from Nango
-                let nango_connection = match self
-                    .nango_service
-                    .get_connection(integration_connection.connection_id, nango_provider_key)
-                    .await
-                {
-                    Ok(Some(conn)) => conn,
-                    Ok(None) => {
-                        warn!(
-                            "No Nango connection found for connection {} (user {}), skipping",
-                            integration_connection.id, user.id
-                        );
-                        failed_count += 1;
-                        continue;
-                    }
-                    Err(err) => {
-                        error!(
-                            "Failed to fetch Nango connection for {} (user {}): {err:?}",
-                            integration_connection.id, user.id
-                        );
-                        failed_count += 1;
-                        continue;
-                    }
-                };
-
-                // Step 2: Obtain token material. If the provider exposes a migration
-                // endpoint (Linear), swap the old token for a fresh pair. Otherwise,
-                // copy what Nango already holds — tokens were issued against the same
-                // client_id/client_secret, so they remain valid under the internal flow.
-                let (token_response, raw_response) = if oauth2_provider.migration_url().is_some() {
-                    let resp = match oauth2_flow_service
-                        .migrate_old_token(
-                            oauth2_provider.as_ref(),
-                            &nango_connection.credentials.access_token,
-                        )
-                        .await
-                    {
-                        Ok(response) => response,
-                        Err(err) => {
-                            error!(
-                                "Failed to migrate token for connection {} (user {}): {err:?}",
-                                integration_connection.id, user.id
-                            );
-                            failed_count += 1;
-                            continue;
-                        }
-                    };
-                    let raw = serde_json::to_value(resp.as_safe_token_response())
-                        .unwrap_or(serde_json::Value::Null);
-                    (resp, raw)
-                } else {
-                    let creds = &nango_connection.credentials;
-                    let expires_in = creds
-                        .expires_at
-                        .map(|at| (at - Utc::now()).num_seconds())
-                        .filter(|secs| *secs > 0);
-                    // Slack returns both a bot token (top-level `access_token`) and a user
-                    // token (`authed_user.access_token`). We request user scopes, so the user
-                    // token is the one we need; Nango stores the bot token at the top level.
-                    // Mirror the read-path special case in `fetch_access_token_from_nango`.
-                    let (access_token, refresh_token) =
-                        if ic_provider_kind == IntegrationProviderKind::Slack {
-                            let user_access_token = creds.raw["authed_user"]["access_token"]
-                                .as_str()
-                                .map(|t| AccessToken(t.to_string()))
-                                .unwrap_or_else(|| creds.access_token.clone());
-                            let user_refresh_token = creds.raw["authed_user"]["refresh_token"]
-                                .as_str()
-                                .map(|t| RefreshToken(t.to_string()))
-                                .or_else(|| creds.refresh_token.clone());
-                            (user_access_token, user_refresh_token)
-                        } else {
-                            (creds.access_token.clone(), creds.refresh_token.clone())
-                        };
-                    let resp = OAuthTokenResponse {
-                        access_token: SecretBox::new(Box::new(access_token)),
-                        refresh_token: refresh_token.map(|rt| SecretBox::new(Box::new(rt))),
-                        token_type: creds
-                            .raw
-                            .get("token_type")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string()),
-                        expires_in,
-                        extra: creds.raw.clone(),
-                    };
-                    // Preserve Nango's raw response so extract_registered_scopes and
-                    // provider-specific field readers (Slack authed_user.*, etc.) keep working,
-                    // but strip plaintext token material before it hits the raw_response column.
-                    let sanitized_raw = oauth2_provider.sanitize_raw_response(&creds.raw);
-                    (resp, sanitized_raw)
-                };
-
-                // Step 3: Encrypt and store (bind ciphertext to this connection via AAD)
-                let aad_context = integration_connection.id.0.as_bytes();
-                let encrypted_access_token = match encrypt_token(
-                    token_response.access_token.expose_secret().as_str(),
-                    aad_context,
-                    token_encryption_key,
-                ) {
-                    Ok(token) => token,
-                    Err(err) => {
-                        error!(
-                            "Failed to encrypt access token for connection {} (user {}): {err:?}",
-                            integration_connection.id, user.id
-                        );
-                        failed_count += 1;
-                        continue;
-                    }
-                };
-                let encrypted_refresh_token = match token_response
-                    .refresh_token
-                    .as_ref()
-                    .map(|rt| {
-                        encrypt_token(
-                            rt.expose_secret().as_str(),
-                            aad_context,
-                            token_encryption_key,
-                        )
-                    })
-                    .transpose()
-                {
-                    Ok(token) => token,
-                    Err(err) => {
-                        error!(
-                            "Failed to encrypt refresh token for connection {} (user {}): {err:?}",
-                            integration_connection.id, user.id
-                        );
-                        failed_count += 1;
-                        continue;
-                    }
-                };
-
-                let mut store_transaction = self.begin().await.context(format!(
-                    "Failed to create transaction for connection {} (user {})",
-                    integration_connection.id, user.id
-                ))?;
-
-                match self
-                    .repository
-                    .store_oauth_credential(
-                        &mut store_transaction,
-                        integration_connection.id,
-                        encrypted_access_token,
-                        encrypted_refresh_token,
-                        token_response.expires_at(),
-                        raw_response,
-                    )
-                    .await
-                {
-                    Ok(_) => {
-                        if let Err(err) = store_transaction.commit().await {
-                            error!(
-                                "Failed to commit migrated credential for connection {} (user {}): {err:?}",
-                                integration_connection.id, user.id
-                            );
-                            failed_count += 1;
-                        } else {
-                            info!(
-                                "Successfully migrated token for {ic_provider_kind} connection {} (user {})",
-                                integration_connection.id, user.id
-                            );
-                            migrated_count += 1;
-                        }
-                    }
-                    Err(err) => {
-                        error!(
-                            "Failed to store migrated credential for connection {} (user {}): {err:?}",
-                            integration_connection.id, user.id
-                        );
-                        failed_count += 1;
-                    }
-                }
-            }
-        }
-
-        info!("Token migration summary: {migrated_count} migrated, {failed_count} failed");
-        Ok((migrated_count, failed_count))
-    }
-
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
         fields(
             provider_kind = provider_kind.to_string(),
             provider_user_id
@@ -1757,20 +1070,8 @@ impl IntegrationConnectionService {
         minutes_before_expiry: i64,
         provider_kind: Option<IntegrationProviderKind>,
     ) -> Result<(usize, usize), UniversalInboxError> {
-        let token_encryption_key = self
-            .token_encryption_key
-            .as_ref()
-            .map(|k| k.expose_secret())
-            .ok_or_else(|| {
-                UniversalInboxError::Unexpected(anyhow!(
-                    "Token encryption key is not configured, cannot refresh tokens"
-                ))
-            })?;
-        let flow_service = self.oauth2_flow_service.as_ref().ok_or_else(|| {
-            UniversalInboxError::Unexpected(anyhow!(
-                "OAuth2 flow service is not configured, cannot refresh tokens"
-            ))
-        })?;
+        let token_encryption_key = self.token_encryption_key.expose_secret();
+        let flow_service = &self.oauth2_flow_service;
 
         let expiring_before = Utc::now()
             + TimeDelta::try_minutes(minutes_before_expiry).ok_or_else(|| {
@@ -1935,11 +1236,7 @@ impl IntegrationConnectionService {
             ))
         })?;
 
-        let oauth2_flow_service = self.oauth2_flow_service.as_ref().ok_or_else(|| {
-            UniversalInboxError::Unexpected(anyhow::anyhow!("OAuth2 flow service not configured"))
-        })?;
-
-        let redirect_uri = oauth2_flow_service.redirect_uri();
+        let redirect_uri = self.oauth2_flow_service.redirect_uri();
 
         // Build an OAuth2 client from the provider configuration
         let client = oauth2::basic::BasicClient::new(oauth2::ClientId::new(
@@ -2039,21 +1336,10 @@ impl IntegrationConnectionService {
                 ))
             })?;
 
-        let oauth2_flow_service = self.oauth2_flow_service.as_ref().ok_or_else(|| {
-            UniversalInboxError::Unexpected(anyhow::anyhow!("OAuth2 flow service not configured"))
-        })?;
+        let token_encryption_key = self.token_encryption_key.expose_secret();
 
-        let token_encryption_key = self
-            .token_encryption_key
-            .as_ref()
-            .map(|k| k.expose_secret())
-            .ok_or_else(|| {
-                UniversalInboxError::Unexpected(anyhow::anyhow!(
-                    "Token encryption key not configured"
-                ))
-            })?;
-
-        let token_response = oauth2_flow_service
+        let token_response = self
+            .oauth2_flow_service
             .exchange_code_for_token(
                 provider,
                 authorization_code,

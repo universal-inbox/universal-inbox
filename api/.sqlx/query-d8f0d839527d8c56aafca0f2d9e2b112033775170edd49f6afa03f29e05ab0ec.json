@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO integration_connection\n                  (\n                    id,\n                    user_id,\n                    provider_kind,\n                    status,\n                    failure_message,\n                    notifications_sync_failures,\n                    tasks_sync_failures,\n                    first_notifications_sync_failed_at,\n                    first_tasks_sync_failed_at,\n                    created_at,\n                    updated_at\n                  )\n                VALUES\n                  (\n                    $1,\n                    $2,\n                    $3::integration_provider_kind,\n                    $4::integration_connection_status,\n                    $5,\n                    $6,\n                    $7,\n                    $8,\n                    $9,\n                    $10,\n                    $11\n                  )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "integration_provider_kind",
+            "kind": {
+              "Enum": [
+                "Github",
+                "Todoist",
+                "Linear",
+                "GoogleMail",
+                "Slack",
+                "TickTick",
+                "GoogleCalendar",
+                "API",
+                "GoogleDrive"
+              ]
+            }
+          }
+        },
+        {
+          "Custom": {
+            "name": "integration_connection_status",
+            "kind": {
+              "Enum": [
+                "Created",
+                "Validated",
+                "Failing"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Int4",
+        "Int4",
+        "Timestamp",
+        "Timestamp",
+        "Timestamp",
+        "Timestamp"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d8f0d839527d8c56aafca0f2d9e2b112033775170edd49f6afa03f29e05ab0ec"
+}

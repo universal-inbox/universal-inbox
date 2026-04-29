@@ -34,16 +34,16 @@ use universal_inbox_api::{
             GoogleDriveAboutResponse, GoogleDriveCommentList, GoogleDriveFileList,
             GoogleDriveUserInfo, RawGoogleDriveComment, RawGoogleDriveCommentReply,
         },
-        oauth2::NangoConnection,
         todoist::TodoistSyncResponse,
     },
 };
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, get_integration_connection,
-        nango_google_drive_connection, nango_todoist_connection,
+        google_drive_oauth_credential, todoist_oauth_credential,
     },
     notification::{
         google_drive::{
@@ -73,8 +73,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     google_drive_files_list: GoogleDriveFileList,
     todoist_item: Box<TodoistItem>,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_google_drive_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    google_drive_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let user_email_address = EmailAddress::from_str("jane.doe@example.com").unwrap();
@@ -82,10 +82,9 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -124,10 +123,9 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let google_drive_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleDrive(google_drive_config.clone()),
         &settings,
-        nango_google_drive_connection,
+        google_drive_oauth_credential,
         None,
         None,
     )
@@ -337,7 +335,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     google_drive_comment_123: GoogleDriveComment,
     mut google_drive_files_list: GoogleDriveFileList,
     mut google_drive_comments_list: GoogleDriveCommentList,
-    nango_google_drive_connection: Box<NangoConnection>,
+    google_drive_oauth_credential: OAuthCredentialFixture,
     #[case] has_new_message_addressed_directly: bool,
     #[case] has_new_unread_message: bool,
     #[case] expected_notification_status_after_sync: NotificationStatus,
@@ -390,10 +388,9 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     let google_drive_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleDrive(google_drive_config.clone()),
         &settings,
-        nango_google_drive_connection,
+        google_drive_oauth_credential,
         None,
         None,
     )
@@ -487,7 +484,7 @@ async fn test_sync_notifications_skips_files_returning_404_on_comments(
     #[future] authenticated_app: AuthenticatedApp,
     google_drive_comments_list: GoogleDriveCommentList,
     google_drive_files_list: GoogleDriveFileList,
-    nango_google_drive_connection: Box<NangoConnection>,
+    google_drive_oauth_credential: OAuthCredentialFixture,
 ) {
     // Some Google Drive file types (Google My Maps, Sites, Forms, Scripts, folders, shortcuts...)
     // do not expose a `/comments` sub-resource and Drive responds 404 when we try to list their
@@ -512,10 +509,9 @@ async fn test_sync_notifications_skips_files_returning_404_on_comments(
     let google_drive_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleDrive(google_drive_config.clone()),
         &settings,
-        nango_google_drive_connection,
+        google_drive_oauth_credential,
         None,
         None,
     )

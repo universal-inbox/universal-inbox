@@ -16,8 +16,7 @@ use universal_inbox_api::{
     integrations::{
         github::GithubService, google_calendar::GoogleCalendarService,
         google_drive::GoogleDriveService, google_mail::GoogleMailService, linear::LinearService,
-        oauth2::NangoService, slack::SlackService, ticktick::TickTickService,
-        todoist::TodoistService,
+        slack::SlackService, ticktick::TickTickService, todoist::TodoistService,
     },
     mailer::SmtpMailer,
     observability::{
@@ -101,13 +100,6 @@ async fn main() -> std::io::Result<()> {
             .expect("Failed to connect to Postgresql"),
     );
 
-    info!("Connecting to Nango on {}", &settings.oauth2.nango_base_url);
-    let nango_service = NangoService::new(
-        settings.oauth2.nango_base_url.clone(),
-        &settings.oauth2.nango_secret_key,
-    )
-    .expect("Failed to create new NangoService");
-
     info!(
         "Connecting to SMTP server on {}",
         &settings.application.email.safe_connection_string()
@@ -172,7 +164,6 @@ async fn main() -> std::io::Result<()> {
         slack_mock_server.map(|mock| mock.uri()),
         todoist_mock_server.map(|mock| mock.uri()),
         ticktick_mock_server.map(|mock| mock.uri()),
-        nango_service,
         mailer,
         webauthn,
         execution_context,

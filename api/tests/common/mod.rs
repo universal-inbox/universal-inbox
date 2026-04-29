@@ -7,13 +7,12 @@ use sqlx::{
 };
 use tokio::sync::RwLock;
 use tracing::info;
-use url::Url;
 use uuid::Uuid;
 use wiremock::MockServer;
 
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::{oauth2::NangoService, slack::SlackService},
+    integrations::slack::SlackService,
     jobs::UniversalInboxJob,
     observability::{get_subscriber, init_subscriber},
     universal_inbox::{
@@ -116,7 +115,6 @@ pub struct MockServers {
     pub slack: MockServer,
     pub todoist: MockServer,
     pub ticktick: MockServer,
-    pub nango: MockServer,
 }
 
 impl MockServers {
@@ -130,7 +128,6 @@ impl MockServers {
         let slack = MockServer::start().await;
         let todoist = MockServer::start().await;
         let ticktick = MockServer::start().await;
-        let nango = MockServer::start().await;
 
         Self {
             github,
@@ -141,7 +138,6 @@ impl MockServers {
             slack,
             todoist,
             ticktick,
-            nango,
         }
     }
 }
@@ -173,12 +169,6 @@ pub async fn build_test_services(
             .expect("Failed to build a Webauthn context"),
     );
 
-    let nango_service = NangoService::new(
-        mock_servers.nango.uri().parse::<Url>().unwrap(),
-        &settings.oauth2.nango_secret_key,
-    )
-    .expect("Failed to create new NangoService");
-
     let (
         notification_service,
         task_service,
@@ -200,7 +190,6 @@ pub async fn build_test_services(
         Some(mock_servers.slack.uri()),
         Some(mock_servers.todoist.uri()),
         Some(mock_servers.ticktick.uri()),
-        nango_service,
         mailer,
         webauthn,
         universal_inbox_api::ExecutionContext::Http,
