@@ -6,7 +6,10 @@ use hex;
 use openidconnect::{ClientId, ClientSecret as OidcClientSecret, IntrospectionUrl, IssuerUrl};
 use ring::hmac;
 use secrecy::{CloneableSecret, ExposeSecret, SecretBox, zeroize::Zeroize};
-use serde::{Deserialize, Deserializer};
+use serde::{
+    Deserialize, Deserializer,
+    de::{self, SeqAccess, Visitor},
+};
 use serde_with::{DisplayFromStr, serde_as};
 use url::Url;
 
@@ -53,8 +56,53 @@ pub struct ApplicationSettings {
     pub chat_support: Option<ChatSupportSettings>,
 }
 
+/// Deserialize a list of strings from either a TOML array (`["a", "b"]`)
+/// or a comma-separated environment variable (`"a,b"`).
+///
+/// Required because env vars are loaded without `try_parsing`, so the config
+/// crate's built-in `list_separator` no longer applies. `try_parsing` was
+/// dropped because it eagerly parses every env value as f64/i64/bool, which
+/// destroys precision for numeric-looking strings (e.g. OAuth client IDs).
+fn deserialize_string_list<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct StringListVisitor;
+
+    impl<'de> Visitor<'de> for StringListVisitor {
+        type Value = Vec<String>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a sequence of strings or a comma-separated string")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(v.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect())
+        }
+
+        fn visit_string<E: de::Error>(self, v: String) -> Result<Self::Value, E> {
+            self.visit_str(&v)
+        }
+
+        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+            let mut out = Vec::new();
+            while let Some(item) = seq.next_element::<String>()? {
+                out.push(item);
+            }
+            Ok(out)
+        }
+    }
+
+    deserializer.deserialize_any(StringListVisitor)
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct SecuritySettings {
+    #[serde(deserialize_with = "deserialize_string_list")]
     pub csp_extra_connect_src: Vec<String>,
     /// Extra origins allowed to access the MCP endpoint (e.g. MCP inspector URL).
     /// The server's own origin is always allowed.
@@ -349,13 +397,7 @@ impl Settings {
 
         serde_path_to_error::deserialize(
             config_builder
-                .add_source(
-                    Environment::with_prefix("universal_inbox")
-                        .try_parsing(true)
-                        .separator("__")
-                        .list_separator(",")
-                        .with_list_parse_key("application.security.csp_extra_connect_src"),
-                )
+                .add_source(Environment::with_prefix("universal_inbox").separator("__"))
                 .build()?,
         )
         .map_err(|e| ConfigError::Message(e.to_string()))
@@ -597,6 +639,98 @@ mod tests {
         let result =
             security_settings.get_authentication_settings(UserAuthKind::OIDCAuthorizationCodePKCE);
         assert!(matches!(result, Some(oidc_auth_settings)));
+    }
+
+    mod env_source {
+        use super::*;
+        use config::Map;
+
+        /// Numeric-looking env values must reach String fields verbatim.
+        /// Regression test for `try_parsing(true)` coercing OAuth client IDs to f64.
+        #[test]
+        fn float_like_env_var_keeps_full_precision() {
+            #[derive(Deserialize)]
+            struct Holder {
+                client_id: String,
+            }
+
+            let mut env = Map::new();
+            env.insert(
+                "TEST__CLIENT_ID".to_string(),
+                "5775363312438.6774811086659".to_string(),
+            );
+
+            let cfg = Config::builder()
+                .add_source(
+                    Environment::with_prefix("TEST")
+                        .separator("__")
+                        .source(Some(env)),
+                )
+                .build()
+                .unwrap();
+
+            let holder: Holder = cfg.try_deserialize().unwrap();
+            assert_eq!(holder.client_id, "5775363312438.6774811086659");
+        }
+
+        #[test]
+        fn csp_list_parses_comma_separated_env_var() {
+            #[derive(Deserialize)]
+            struct Holder {
+                #[serde(deserialize_with = "deserialize_string_list")]
+                items: Vec<String>,
+            }
+
+            let mut env = Map::new();
+            env.insert(
+                "TEST__ITEMS".to_string(),
+                "https://a.example, https://b.example".to_string(),
+            );
+
+            let cfg = Config::builder()
+                .add_source(
+                    Environment::with_prefix("TEST")
+                        .separator("__")
+                        .source(Some(env)),
+                )
+                .build()
+                .unwrap();
+
+            let holder: Holder = cfg.try_deserialize().unwrap();
+            assert_eq!(
+                holder.items,
+                vec![
+                    "https://a.example".to_string(),
+                    "https://b.example".to_string()
+                ]
+            );
+        }
+
+        #[test]
+        fn csp_list_parses_toml_array() {
+            #[derive(Deserialize)]
+            struct Holder {
+                #[serde(deserialize_with = "deserialize_string_list")]
+                items: Vec<String>,
+            }
+
+            let cfg = Config::builder()
+                .add_source(config::File::from_str(
+                    r#"items = ["https://a.example", "https://b.example"]"#,
+                    config::FileFormat::Toml,
+                ))
+                .build()
+                .unwrap();
+
+            let holder: Holder = cfg.try_deserialize().unwrap();
+            assert_eq!(
+                holder.items,
+                vec![
+                    "https://a.example".to_string(),
+                    "https://b.example".to_string()
+                ]
+            );
+        }
     }
 
     mod sign_email {
