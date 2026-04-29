@@ -29,19 +29,19 @@ use universal_inbox_api::{
     configuration::Settings,
     integrations::{
         github::graphql::{discussion_query, pull_request_query},
-        oauth2::NangoConnection,
         todoist::TodoistSyncResponse,
     },
     repository::integration_connection::TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE,
 };
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     TestedApp,
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection,
         create_and_mock_integration_connection_with_backoff, create_integration_connection,
-        get_integration_connection_per_provider, nango_github_connection, nango_todoist_connection,
+        get_integration_connection_per_provider, github_oauth_credential, todoist_oauth_credential,
     },
     notification::{
         github::{
@@ -72,17 +72,16 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     github_pull_request_123_response: Response<pull_request_query::ResponseData>,
     todoist_item: Box<TodoistItem>,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_github_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    github_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -120,10 +119,9 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let github_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
-        nango_github_connection,
+        github_oauth_credential,
         None,
         None,
     )
@@ -259,7 +257,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
     sync_github_notifications: Vec<GithubNotification>,
     github_pull_request_123_response: Response<pull_request_query::ResponseData>,
-    nango_github_connection: Box<NangoConnection>,
+    github_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = tested_app_with_local_auth.await;
 
@@ -269,10 +267,9 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     let other_github_integration_connection = create_and_mock_integration_connection(
         &app,
         other_user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
-        nango_github_connection.clone(),
+        github_oauth_credential.clone(),
         None,
         None,
     )
@@ -295,10 +292,9 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     let github_integration_connection = create_and_mock_integration_connection(
         &app,
         user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
-        nango_github_connection,
+        github_oauth_credential,
         None,
         None,
     )
@@ -399,17 +395,16 @@ async fn test_sync_all_notifications_asynchronously(
     // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
     sync_github_notifications: Vec<GithubNotification>,
     github_pull_request_123_response: Response<pull_request_query::ResponseData>,
-    nango_github_connection: Box<NangoConnection>,
+    github_oauth_credential: OAuthCredentialFixture,
     #[case] trigger_sync_when_listing_notifications: bool,
 ) {
     let app = authenticated_app.await;
     let github_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
-        nango_github_connection,
+        github_oauth_credential,
         None,
         None,
     )
@@ -581,16 +576,15 @@ async fn test_sync_all_notifications_with_no_validated_integration_connections(
 async fn test_sync_all_notifications_with_synchronization_disabled(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
-    nango_github_connection: Box<NangoConnection>,
+    github_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::disabled()),
         &settings,
-        nango_github_connection,
+        github_oauth_credential,
         None,
         None,
     )
@@ -617,7 +611,7 @@ async fn test_sync_all_notifications_with_synchronization_disabled(
 async fn test_sync_all_notifications_asynchronously_in_error(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
-    nango_github_connection: Box<NangoConnection>,
+    github_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     // Set first_notifications_sync_failed_at beyond the failure window (dev config = 1h)
@@ -625,10 +619,9 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     create_and_mock_integration_connection_with_backoff(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
-        nango_github_connection,
+        github_oauth_credential,
         Some(5),
         Some(Utc::now() - TimeDelta::hours(2)),
         None,
@@ -722,7 +715,7 @@ async fn test_sync_discussion_notification_with_details(
     #[future] authenticated_app: AuthenticatedApp,
     mut github_notification: Box<GithubNotification>,
     github_discussion_123_response: Response<discussion_query::ResponseData>,
-    nango_github_connection: Box<NangoConnection>,
+    github_oauth_credential: OAuthCredentialFixture,
 ) {
     github_notification.subject = GithubNotificationSubject {
         title: "test discussion".to_string(),
@@ -739,10 +732,9 @@ async fn test_sync_discussion_notification_with_details(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
-        nango_github_connection,
+        github_oauth_credential,
         None,
         None,
     )
@@ -813,7 +805,7 @@ async fn test_sync_discussion_notification_with_error(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     mut github_notification: Box<GithubNotification>,
-    nango_github_connection: Box<NangoConnection>,
+    github_oauth_credential: OAuthCredentialFixture,
 ) {
     github_notification.subject = GithubNotificationSubject {
         title: "test discussion".to_string(),
@@ -830,10 +822,9 @@ async fn test_sync_discussion_notification_with_error(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
-        nango_github_connection,
+        github_oauth_credential,
         None,
         None,
     )

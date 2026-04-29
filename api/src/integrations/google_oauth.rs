@@ -84,10 +84,6 @@ impl OAuth2Provider for GoogleOAuth2Provider {
         true
     }
 
-    fn migration_url(&self) -> Option<&Url> {
-        None
-    }
-
     fn scope_delimiter(&self) -> &'static str {
         " "
     }
@@ -161,12 +157,6 @@ mod tests {
     fn test_supports_pkce() {
         assert!(mail_provider().supports_pkce());
     }
-
-    #[test]
-    fn test_migration_url_is_none() {
-        assert!(mail_provider().migration_url().is_none());
-    }
-
     #[test]
     fn test_scope_delimiter_is_space() {
         assert_eq!(mail_provider().scope_delimiter(), " ");

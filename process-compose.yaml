@@ -48,23 +48,6 @@ processes:
     disabled: true
     namespace: "universal-inbox"
 
-  nango-db:
-    command: "just run-nango-db"
-    shutdown:
-      command: "docker stop nango-db"
-    disabled: true
-    namespace: "nango"
-
-  nango-server:
-    command: "just run-nango-server"
-    shutdown:
-      command: "docker stop nango-server"
-    depends_on:
-      nango-db:
-        condition: process_started
-    disabled: true
-    namespace: "nango"
-
   caddy:
     command: "caddy run --config=$CADDY_CONFIG"
     is_tty: true

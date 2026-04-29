@@ -17,20 +17,18 @@ use universal_inbox::{
     user::UserPreferences,
 };
 
-use universal_inbox_api::{
-    configuration::Settings,
-    integrations::{oauth2::NangoConnection, ticktick::TickTickService},
-};
+use universal_inbox_api::{configuration::Settings, integrations::ticktick::TickTickService};
 
 use universal_inbox::task::integrations::ticktick::TickTickProject;
 use universal_inbox::third_party::integrations::github::GithubNotification;
 use universal_inbox_api::integrations::ticktick::TickTickCreateTaskResponse;
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, create_ticktick_integration_connection,
-        nango_github_connection, nango_todoist_connection,
+        github_oauth_credential, todoist_oauth_credential,
     },
     notification::{
         create_task_from_notification,
@@ -136,8 +134,8 @@ mod create_task_with_explicit_provider {
         github_notification: Box<GithubNotification>,
         ticktick_item: Box<TickTickItem>,
         ticktick_projects_response: Vec<TickTickProject>,
-        nango_github_connection: Box<NangoConnection>,
-        nango_todoist_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
@@ -145,10 +143,9 @@ mod create_task_with_explicit_provider {
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -158,10 +155,9 @@ mod create_task_with_explicit_provider {
         let _todoist_ic = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -353,8 +349,8 @@ mod create_task_with_default_preference {
         github_notification: Box<GithubNotification>,
         ticktick_item: Box<TickTickItem>,
         ticktick_projects_response: Vec<TickTickProject>,
-        nango_github_connection: Box<NangoConnection>,
-        nango_todoist_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
@@ -362,10 +358,9 @@ mod create_task_with_default_preference {
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -375,10 +370,9 @@ mod create_task_with_default_preference {
         let _todoist_ic = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )

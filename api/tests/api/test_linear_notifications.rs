@@ -11,13 +11,13 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::{
-    configuration::Settings,
-    integrations::{linear::graphql::notifications_query, oauth2::NangoConnection},
+    configuration::Settings, integrations::linear::graphql::notifications_query,
 };
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
-    integration_connection::{create_and_mock_integration_connection, nango_linear_connection},
+    integration_connection::{create_and_mock_integration_connection, linear_oauth_credential},
     notification::linear::{
         mock_linear_archive_notification_query, mock_linear_issue_notification_subscribers_query,
         mock_linear_project_notification_subscribers_query,
@@ -38,7 +38,7 @@ mod patch_resource {
     async fn test_patch_linear_notification_status_as_deleted(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_linear_connection: Box<NangoConnection>,
+        linear_oauth_credential: OAuthCredentialFixture,
         sync_linear_notifications_response: Response<notifications_query::ResponseData>,
     ) {
         let app = authenticated_app.await;
@@ -51,10 +51,9 @@ mod patch_resource {
         let linear_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
-            nango_linear_connection,
+            linear_oauth_credential,
             None,
             None,
         )
@@ -102,7 +101,7 @@ mod patch_resource {
     async fn test_patch_linear_notification_status_as_deleted_with_linear_error_response(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_linear_connection: Box<NangoConnection>,
+        linear_oauth_credential: OAuthCredentialFixture,
         sync_linear_notifications_response: Response<notifications_query::ResponseData>,
     ) {
         let app = authenticated_app.await;
@@ -115,10 +114,9 @@ mod patch_resource {
         let linear_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
-            nango_linear_connection,
+            linear_oauth_credential,
             None,
             None,
         )
@@ -169,7 +167,7 @@ mod patch_resource {
     async fn test_patch_linear_notification_status_as_deleted_with_linear_unsuccessful_response(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_linear_connection: Box<NangoConnection>,
+        linear_oauth_credential: OAuthCredentialFixture,
         sync_linear_notifications_response: Response<notifications_query::ResponseData>,
     ) {
         let app = authenticated_app.await;
@@ -182,10 +180,9 @@ mod patch_resource {
         let linear_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
-            nango_linear_connection,
+            linear_oauth_credential,
             None,
             None,
         )
@@ -231,7 +228,7 @@ mod patch_resource {
     async fn test_patch_linear_issue_notification_status_as_unsubscribed(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_linear_connection: Box<NangoConnection>,
+        linear_oauth_credential: OAuthCredentialFixture,
         sync_linear_notifications_response: Response<notifications_query::ResponseData>,
     ) {
         let app = authenticated_app.await;
@@ -244,10 +241,9 @@ mod patch_resource {
         let linear_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
-            nango_linear_connection,
+            linear_oauth_credential,
             None,
             None,
         )
@@ -314,7 +310,7 @@ mod patch_resource {
     async fn test_patch_linear_project_notification_status_as_unsubscribed(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_linear_connection: Box<NangoConnection>,
+        linear_oauth_credential: OAuthCredentialFixture,
         sync_linear_notifications_response: Response<notifications_query::ResponseData>,
     ) {
         // ProjectNotification has no subscriber list. Notification should not be updated, just archived
@@ -328,10 +324,9 @@ mod patch_resource {
         let linear_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
-            nango_linear_connection,
+            linear_oauth_credential,
             None,
             None,
         )
@@ -386,7 +381,7 @@ mod patch_resource {
     async fn test_patch_linear_notification_snoozed_until(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_linear_connection: Box<NangoConnection>,
+        linear_oauth_credential: OAuthCredentialFixture,
         sync_linear_notifications_response: Response<notifications_query::ResponseData>,
     ) {
         let app = authenticated_app.await;
@@ -399,10 +394,9 @@ mod patch_resource {
         let linear_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
-            nango_linear_connection,
+            linear_oauth_credential,
             None,
             None,
         )

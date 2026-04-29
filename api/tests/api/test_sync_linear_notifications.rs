@@ -24,16 +24,15 @@ use universal_inbox::{
 
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::{
-        linear::graphql::notifications_query, oauth2::NangoConnection, todoist::TodoistSyncResponse,
-    },
+    integrations::{linear::graphql::notifications_query, todoist::TodoistSyncResponse},
 };
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, get_integration_connection_per_provider,
-        nango_linear_connection, nango_todoist_connection,
+        linear_oauth_credential, todoist_oauth_credential,
     },
     notification::{
         linear::{
@@ -57,17 +56,16 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     sync_linear_notifications_response: Response<notifications_query::ResponseData>,
     todoist_item: Box<TodoistItem>,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_linear_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -144,10 +142,9 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
         &settings,
-        nango_linear_connection,
+        linear_oauth_credential,
         None,
         None,
     )
@@ -268,16 +265,15 @@ async fn test_sync_linear_notifications_should_mark_existing_notifications_for_s
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     mut sync_linear_notifications_response: Response<notifications_query::ResponseData>,
-    nango_linear_connection: Box<NangoConnection>,
+    linear_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
         &settings,
-        nango_linear_connection,
+        linear_oauth_credential,
         None,
         None,
     )

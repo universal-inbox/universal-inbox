@@ -35,7 +35,6 @@ use universal_inbox_api::{
     configuration::Settings,
     integrations::{
         linear::graphql::{assigned_issues_query, notifications_query},
-        oauth2::NangoConnection,
         task::ThirdPartyTaskService,
         todoist::{
             TodoistCommandStatus, TodoistSyncCommandItemCompleteArgs, TodoistSyncResponse,
@@ -45,11 +44,12 @@ use universal_inbox_api::{
     repository::{task::TaskRepository, third_party::ThirdPartyItemRepository},
 };
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, get_integration_connection_per_provider,
-        nango_linear_connection, nango_todoist_connection,
+        linear_oauth_credential, todoist_oauth_credential,
     },
     notification::{
         linear::{
@@ -80,17 +80,16 @@ async fn test_sync_tasks_should_create_new_task(
     sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
     todoist_item: Box<TodoistItem>,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_linear_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let _todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -98,7 +97,6 @@ async fn test_sync_tasks_should_create_new_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
@@ -112,7 +110,7 @@ async fn test_sync_tasks_should_create_new_task(
             },
         }),
         &settings,
-        nango_linear_connection,
+        linear_oauth_credential,
         None,
         None,
     )
@@ -224,17 +222,16 @@ async fn test_sync_tasks_should_not_update_default_values(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
-    nango_linear_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -246,7 +243,6 @@ async fn test_sync_tasks_should_not_update_default_values(
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
@@ -258,7 +254,7 @@ async fn test_sync_tasks_should_not_update_default_values(
             },
         }),
         &settings,
-        nango_linear_connection,
+        linear_oauth_credential,
         None,
         None,
     )
@@ -337,17 +333,16 @@ async fn test_sync_tasks_should_complete_existing_task(
     #[future] authenticated_app: AuthenticatedApp,
     sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_linear_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -359,7 +354,6 @@ async fn test_sync_tasks_should_complete_existing_task(
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
@@ -370,7 +364,7 @@ async fn test_sync_tasks_should_complete_existing_task(
             },
         }),
         &settings,
-        nango_linear_connection,
+        linear_oauth_credential,
         None,
         None,
     )
@@ -441,17 +435,16 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
     #[future] authenticated_app: AuthenticatedApp,
     sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_linear_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -463,7 +456,6 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
@@ -474,7 +466,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
             },
         }),
         &settings,
-        nango_linear_connection,
+        linear_oauth_credential,
         None,
         None,
     )
@@ -591,17 +583,16 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
     sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
     sync_todoist_projects_response: TodoistSyncResponse,
     todoist_item: Box<TodoistItem>,
-    nango_linear_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let _todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -613,7 +604,6 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
@@ -624,7 +614,7 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
             },
         }),
         &settings,
-        nango_linear_connection,
+        linear_oauth_credential,
         None,
         None,
     )
@@ -770,17 +760,16 @@ async fn test_sync_tasks_should_auto_delete_existing_linear_notification(
     sync_linear_notifications_response: Response<notifications_query::ResponseData>,
     todoist_item: Box<TodoistItem>,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_linear_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let _todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -788,7 +777,6 @@ async fn test_sync_tasks_should_auto_delete_existing_linear_notification(
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
@@ -802,7 +790,7 @@ async fn test_sync_tasks_should_auto_delete_existing_linear_notification(
             },
         }),
         &settings,
-        nango_linear_connection,
+        linear_oauth_credential,
         None,
         None,
     )
@@ -910,17 +898,16 @@ async fn test_create_notification_should_auto_delete_when_task_already_exists(
     #[future] authenticated_app: AuthenticatedApp,
     sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
     sync_linear_notifications_response: Response<notifications_query::ResponseData>,
-    nango_linear_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -932,7 +919,6 @@ async fn test_create_notification_should_auto_delete_when_task_already_exists(
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
@@ -943,7 +929,7 @@ async fn test_create_notification_should_auto_delete_when_task_already_exists(
             },
         }),
         &settings,
-        nango_linear_connection,
+        linear_oauth_credential,
         None,
         None,
     )
@@ -1072,7 +1058,7 @@ mod sink_provider_resolution {
         #[future] authenticated_app: AuthenticatedApp,
         sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
         ticktick_projects_response: Vec<TickTickProject>,
-        nango_linear_connection: Box<NangoConnection>,
+        linear_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
@@ -1087,7 +1073,6 @@ mod sink_provider_resolution {
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig {
                 sync_notifications_enabled: true,
                 sync_task_config: LinearSyncTaskConfig {
@@ -1102,7 +1087,7 @@ mod sink_provider_resolution {
                 },
             }),
             &settings,
-            nango_linear_connection,
+            linear_oauth_credential,
             None,
             None,
         )
@@ -1184,7 +1169,7 @@ mod sink_provider_resolution {
         #[future] authenticated_app: AuthenticatedApp,
         sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
         ticktick_projects_response: Vec<TickTickProject>,
-        nango_linear_connection: Box<NangoConnection>,
+        linear_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
@@ -1199,7 +1184,6 @@ mod sink_provider_resolution {
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig {
                 sync_notifications_enabled: true,
                 sync_task_config: LinearSyncTaskConfig {
@@ -1215,7 +1199,7 @@ mod sink_provider_resolution {
                 },
             }),
             &settings,
-            nango_linear_connection,
+            linear_oauth_credential,
             None,
             None,
         )

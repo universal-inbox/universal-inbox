@@ -81,10 +81,6 @@ impl OAuth2Provider for SlackOAuth2Provider {
         false
     }
 
-    fn migration_url(&self) -> Option<&Url> {
-        None
-    }
-
     fn scope_param_name(&self) -> &'static str {
         // Slack requested scopes are user scopes (use_as_oauth_user_scopes = true)
         "user_scope"
@@ -209,12 +205,6 @@ mod tests {
     fn test_supports_pkce() {
         assert!(!provider().supports_pkce());
     }
-
-    #[test]
-    fn test_migration_url_is_none() {
-        assert!(provider().migration_url().is_none());
-    }
-
     #[test]
     fn test_scope_param_name() {
         assert_eq!(provider().scope_param_name(), "user_scope");

@@ -1,14 +1,13 @@
+use chrono::{DateTime, Utc};
 use reqwest::{Client, Response};
 use rstest::fixture;
-use wiremock::matchers::{header, method, path, query_param};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use slack_morphism::SlackTeamId;
 
-use chrono::{DateTime, Utc};
 use universal_inbox::{
     integration_connection::{
         IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
-        NangoProviderKey,
         config::IntegrationConnectionConfig,
+        integrations::slack::SlackContext,
         provider::{IntegrationConnectionContext, IntegrationProviderKind},
     },
     user::UserId,
@@ -16,7 +15,7 @@ use universal_inbox::{
 
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::oauth2::NangoConnection,
+    integrations::oauth2::{AccessToken, RefreshToken},
     repository::{
         integration_connection::{
             IntegrationConnectionRepository, IntegrationConnectionSyncedBeforeFilter,
@@ -27,7 +26,21 @@ use universal_inbox_api::{
     utils::crypto::{TokenEncryptionKey, encrypt_token},
 };
 
-use crate::helpers::{TestedApp, auth::AuthenticatedApp, load_json_fixture_file};
+use crate::helpers::{TestedApp, auth::AuthenticatedApp};
+
+/// Lightweight test fixture describing the OAuth credential state of an
+/// integration connection. Replaces the legacy Nango-shaped JSON fixtures and
+/// the bespoke `NangoConnection` struct. Tests build one of these (typically
+/// via the per-provider fixture functions below) and pass it to
+/// [`create_and_mock_integration_connection`], which persists the data the
+/// same way the runtime OAuth callback would.
+#[derive(Debug, Clone)]
+pub struct OAuthCredentialFixture {
+    pub access_token: AccessToken,
+    pub refresh_token: Option<RefreshToken>,
+    pub provider_user_id: Option<String>,
+    pub registered_oauth_scopes: Vec<String>,
+}
 
 pub async fn list_integration_connections_response(client: &Client, api_address: &str) -> Response {
     client
@@ -46,79 +59,6 @@ pub async fn list_integration_connections(
         .json()
         .await
         .expect("Cannot parse JSON result")
-}
-
-pub async fn verify_integration_connection_response(
-    client: &Client,
-    api_address: &str,
-    integration_connection_id: IntegrationConnectionId,
-) -> Response {
-    client
-        .patch(format!(
-            "{api_address}integration-connections/{integration_connection_id}/status"
-        ))
-        .send()
-        .await
-        .expect("Failed to execute request")
-}
-
-pub async fn verify_integration_connection(
-    client: &Client,
-    api_address: &str,
-    integration_connection_id: IntegrationConnectionId,
-) -> IntegrationConnection {
-    verify_integration_connection_response(client, api_address, integration_connection_id)
-        .await
-        .json()
-        .await
-        .expect("Cannot parse JSON result")
-}
-
-pub async fn mock_nango_connection_service(
-    nango_mock_server: &MockServer,
-    nango_secret_key: &str,
-    connection_id: &str,
-    provider_config_key: &NangoProviderKey,
-    result: Box<NangoConnection>,
-) {
-    Mock::given(method("GET"))
-        .and(path(format!("/connection/{connection_id}")))
-        .and(header(
-            "authorization",
-            format!("Bearer {nango_secret_key}").as_str(),
-        ))
-        .and(query_param(
-            "provider_config_key",
-            provider_config_key.to_string(),
-        ))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/json")
-                .set_body_json(&result),
-        )
-        .mount(nango_mock_server)
-        .await;
-}
-
-pub async fn mock_nango_delete_connection_service(
-    nango_mock_server: &MockServer,
-    nango_secret_key: &str,
-    connection_id: &str,
-    provider_config_key: &NangoProviderKey,
-) {
-    Mock::given(method("DELETE"))
-        .and(path(format!("/connection/{connection_id}")))
-        .and(header(
-            "authorization",
-            format!("Bearer {nango_secret_key}").as_str(),
-        ))
-        .and(query_param(
-            "provider_config_key",
-            provider_config_key.to_string(),
-        ))
-        .respond_with(ResponseTemplate::new(204).insert_header("content-type", "application/json"))
-        .mount(nango_mock_server)
-        .await;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -244,24 +184,24 @@ pub async fn update_integration_connection_context(
     result
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Create an integration connection in `Validated` state and persist the access
+/// token from the given fixture as an encrypted `oauth_credential` row.
+/// Mirrors what the production OAuth callback does after a successful exchange.
 pub async fn create_and_mock_integration_connection(
     app: &TestedApp,
     user_id: UserId,
-    nango_secret_key: &str,
     config: IntegrationConnectionConfig,
     settings: &Settings,
-    nango_connection: Box<NangoConnection>,
+    credential: OAuthCredentialFixture,
     initial_sync_failures: Option<u32>,
     context: Option<IntegrationConnectionContext>,
 ) -> Box<IntegrationConnection> {
     create_and_mock_integration_connection_with_backoff(
         app,
         user_id,
-        nango_secret_key,
         config,
         settings,
-        nango_connection,
+        credential,
         initial_sync_failures,
         None,
         context,
@@ -273,113 +213,39 @@ pub async fn create_and_mock_integration_connection(
 pub async fn create_and_mock_integration_connection_with_backoff(
     app: &TestedApp,
     user_id: UserId,
-    nango_secret_key: &str,
     config: IntegrationConnectionConfig,
     settings: &Settings,
-    nango_connection: Box<NangoConnection>,
+    credential: OAuthCredentialFixture,
     initial_sync_failures: Option<u32>,
     first_notifications_sync_failed_at: Option<DateTime<Utc>>,
     context: Option<IntegrationConnectionContext>,
 ) -> Box<IntegrationConnection> {
-    let provider_kind = config.kind();
-    let registered_oauth_scopes = nango_connection.get_registered_oauth_scopes().ok();
     let integration_connection = create_integration_connection(
         app,
         user_id,
         config,
         IntegrationConnectionStatus::Validated,
         context,
-        nango_connection.get_provider_user_id(),
+        credential.provider_user_id.clone(),
         initial_sync_failures,
         first_notifications_sync_failed_at,
-        registered_oauth_scopes,
-    )
-    .await;
-    let nango_provider_keys = settings.nango_provider_keys();
-    let config_key = nango_provider_keys.get(&provider_kind).unwrap();
-    mock_nango_connection_service(
-        &app.nango_mock_server,
-        nango_secret_key,
-        &integration_connection.connection_id.to_string(),
-        config_key,
-        nango_connection,
+        Some(credential.registered_oauth_scopes.clone()),
     )
     .await;
 
-    integration_connection
-}
-
-#[fixture]
-pub fn nango_github_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("nango_github_connection.json")
-}
-
-#[fixture]
-pub fn nango_linear_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("nango_linear_connection.json")
-}
-
-#[fixture]
-pub fn nango_google_calendar_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("nango_google_calendar_connection.json")
-}
-
-#[fixture]
-pub fn nango_google_mail_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("nango_google_mail_connection.json")
-}
-
-#[fixture]
-pub fn nango_google_drive_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("google_drive/nango_google_drive_connection.json")
-}
-
-#[fixture]
-pub fn nango_slack_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("nango_slack_connection.json")
-}
-
-#[fixture]
-pub fn nango_todoist_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("nango_todoist_connection.json")
-}
-
-pub const TICKTICK_TEST_ACCESS_TOKEN: &str = "ticktick_test_access_token";
-
-pub async fn create_ticktick_integration_connection(
-    app: &TestedApp,
-    user_id: UserId,
-    settings: &Settings,
-    config: IntegrationConnectionConfig,
-    initial_sync_failures: Option<u32>,
-) -> Box<IntegrationConnection> {
-    let registered_oauth_scopes = Some(vec!["tasks:read".to_string(), "tasks:write".to_string()]);
-    let integration_connection = create_integration_connection(
-        app,
-        user_id,
-        config,
-        IntegrationConnectionStatus::Validated,
-        None,
-        None,
-        initial_sync_failures,
-        None,
-        registered_oauth_scopes,
-    )
-    .await;
-
-    let token_encryption_key_hex = settings
-        .oauth2
-        .token_encryption_key
-        .as_ref()
-        .expect("token_encryption_key must be set for TickTick internal OAuth tests");
-    let token_encryption_key = TokenEncryptionKey::from_hex(token_encryption_key_hex).unwrap();
+    let token_encryption_key =
+        TokenEncryptionKey::from_hex(&settings.oauth2.token_encryption_key).unwrap();
     let aad_context = integration_connection.id.0.as_bytes();
     let encrypted_access_token = encrypt_token(
-        TICKTICK_TEST_ACCESS_TOKEN,
+        credential.access_token.as_str(),
         aad_context,
         &token_encryption_key,
     )
     .unwrap();
+    let encrypted_refresh_token = credential
+        .refresh_token
+        .as_ref()
+        .map(|rt| encrypt_token(rt.as_str(), aad_context, &token_encryption_key).unwrap());
 
     let mut transaction = app.repository.begin().await.unwrap();
     app.repository
@@ -387,7 +253,10 @@ pub async fn create_ticktick_integration_connection(
             &mut transaction,
             integration_connection.id,
             encrypted_access_token,
-            None,
+            encrypted_refresh_token,
+            // Tests don't exercise the eager-refresh path, so we leave the
+            // expiry unset and the runtime read path will skip the refresh
+            // check.
             None,
             serde_json::json!({}),
         )
@@ -396,4 +265,142 @@ pub async fn create_ticktick_integration_connection(
     transaction.commit().await.unwrap();
 
     integration_connection
+}
+
+// --- Per-provider fixture builders. Each returns a fresh, mutable
+// `OAuthCredentialFixture` so individual tests can tweak it (e.g., bumping
+// `provider_user_id` to simulate a different Slack workspace member) before
+// passing it to `create_and_mock_integration_connection`.
+
+#[fixture]
+pub fn github_oauth_credential() -> OAuthCredentialFixture {
+    OAuthCredentialFixture {
+        access_token: AccessToken("github_test_access_token".to_string()),
+        refresh_token: Some(RefreshToken("github_test_refresh_token".to_string())),
+        provider_user_id: None,
+        registered_oauth_scopes: vec![
+            "notifications".to_string(),
+            "read:discussion".to_string(),
+            "read:org".to_string(),
+            "repo".to_string(),
+        ],
+    }
+}
+
+#[fixture]
+pub fn linear_oauth_credential() -> OAuthCredentialFixture {
+    OAuthCredentialFixture {
+        access_token: AccessToken("linear_test_access_token".to_string()),
+        refresh_token: Some(RefreshToken("linear_test_refresh_token".to_string())),
+        provider_user_id: None,
+        registered_oauth_scopes: vec!["read".to_string(), "write".to_string()],
+    }
+}
+
+#[fixture]
+pub fn google_calendar_oauth_credential() -> OAuthCredentialFixture {
+    OAuthCredentialFixture {
+        access_token: AccessToken("google_calendar_test_access_token".to_string()),
+        refresh_token: Some(RefreshToken(
+            "google_calendar_test_refresh_token".to_string(),
+        )),
+        provider_user_id: None,
+        registered_oauth_scopes: vec!["https://www.googleapis.com/auth/calendar".to_string()],
+    }
+}
+
+#[fixture]
+pub fn google_mail_oauth_credential() -> OAuthCredentialFixture {
+    OAuthCredentialFixture {
+        access_token: AccessToken("google_mail_test_access_token".to_string()),
+        refresh_token: Some(RefreshToken("google_mail_test_refresh_token".to_string())),
+        provider_user_id: None,
+        registered_oauth_scopes: vec!["https://www.googleapis.com/auth/gmail.modify".to_string()],
+    }
+}
+
+#[fixture]
+pub fn google_drive_oauth_credential() -> OAuthCredentialFixture {
+    OAuthCredentialFixture {
+        access_token: AccessToken("google_drive_test_access_token".to_string()),
+        refresh_token: Some(RefreshToken("google_drive_test_refresh_token".to_string())),
+        provider_user_id: None,
+        registered_oauth_scopes: vec![
+            "https://www.googleapis.com/auth/drive.readonly".to_string(),
+            "https://www.googleapis.com/auth/drive.metadata.readonly".to_string(),
+        ],
+    }
+}
+
+#[fixture]
+pub fn slack_oauth_credential() -> OAuthCredentialFixture {
+    OAuthCredentialFixture {
+        access_token: AccessToken("slack_test_user_access_token".to_string()),
+        refresh_token: None,
+        provider_user_id: Some("U05XXX".to_string()),
+        registered_oauth_scopes: vec![
+            "channels:history".to_string(),
+            "channels:read".to_string(),
+            "emoji:read".to_string(),
+            "groups:history".to_string(),
+            "groups:read".to_string(),
+            "im:history".to_string(),
+            "im:read".to_string(),
+            "mpim:history".to_string(),
+            "mpim:read".to_string(),
+            "reactions:read".to_string(),
+            "reactions:write".to_string(),
+            "team:read".to_string(),
+            "usergroups:read".to_string(),
+            "users:read".to_string(),
+        ],
+    }
+}
+
+/// Convenience helper: a Slack `IntegrationConnectionContext` carrying a team id.
+pub fn slack_context(team_id: impl Into<String>) -> IntegrationConnectionContext {
+    IntegrationConnectionContext::Slack(SlackContext {
+        team_id: SlackTeamId(team_id.into()),
+        extension_credentials: vec![],
+        last_extension_heartbeat_at: None,
+    })
+}
+
+#[fixture]
+pub fn todoist_oauth_credential() -> OAuthCredentialFixture {
+    OAuthCredentialFixture {
+        access_token: AccessToken("todoist_test_access_token".to_string()),
+        refresh_token: None,
+        provider_user_id: None,
+        registered_oauth_scopes: vec![],
+    }
+}
+
+#[fixture]
+pub fn ticktick_oauth_credential() -> OAuthCredentialFixture {
+    OAuthCredentialFixture {
+        access_token: AccessToken("ticktick_test_access_token".to_string()),
+        refresh_token: None,
+        provider_user_id: None,
+        registered_oauth_scopes: vec!["tasks:read".to_string(), "tasks:write".to_string()],
+    }
+}
+
+pub async fn create_ticktick_integration_connection(
+    app: &TestedApp,
+    user_id: UserId,
+    settings: &Settings,
+    config: IntegrationConnectionConfig,
+    initial_sync_failures: Option<u32>,
+) -> Box<IntegrationConnection> {
+    create_and_mock_integration_connection(
+        app,
+        user_id,
+        config,
+        settings,
+        ticktick_oauth_credential(),
+        initial_sync_failures,
+        None,
+    )
+    .await
 }

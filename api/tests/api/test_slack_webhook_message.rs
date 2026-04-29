@@ -2,7 +2,6 @@
 use anyhow::Context;
 use apalis::prelude::*;
 use rstest::*;
-use serde_json::json;
 use slack_morphism::prelude::*;
 
 use universal_inbox::{
@@ -16,16 +15,17 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::{
-    configuration::Settings, integrations::oauth2::NangoConnection,
-    jobs::slack::slack_message::handle_slack_message_push_event,
+    configuration::Settings, jobs::slack::slack_message::handle_slack_message_push_event,
 };
+
+use universal_inbox_api::integrations::oauth2::AccessToken;
 
 use crate::helpers::{
     TestedApp,
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, create_integration_connection,
-        nango_slack_connection,
+        OAuthCredentialFixture, create_and_mock_integration_connection,
+        create_integration_connection, slack_context, slack_oauth_credential,
     },
     notification::{
         list_notifications,
@@ -116,7 +116,7 @@ mod webhook {
     async fn test_receive_slack_message_in_known_thread(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_slack_connection: Box<NangoConnection>,
+        slack_oauth_credential: OAuthCredentialFixture,
         mut slack_push_message_in_thread_event: Box<SlackPushEvent>,
         mut slack_thread: Box<SlackThread>,
         #[case] subscribed: bool,
@@ -125,10 +125,9 @@ mod webhook {
         let slack_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
-            nango_slack_connection,
+            slack_oauth_credential,
             None,
             None,
         )
@@ -172,7 +171,7 @@ mod webhook {
     async fn test_receive_slack_message_in_known_thread_from_known_user(
         settings: Settings,
         #[future] tested_app_with_local_auth: TestedApp,
-        mut nango_slack_connection: Box<NangoConnection>,
+        mut slack_oauth_credential: OAuthCredentialFixture,
         mut slack_push_message_in_thread_event: Box<SlackPushEvent>,
         mut slack_thread: Box<SlackThread>,
     ) {
@@ -180,22 +179,18 @@ mod webhook {
         // `slack_thread` contains 2 messages from 2 different users:
         // - first (read) message from user U01
         // - second (unread) message from user U02 (this message is also the one that is received in the event)
-        nango_slack_connection.credentials.raw = json !({
-            "authed_user": { "id": "U02", "access_token": "slack_test_user_access_token" },
-            "team": { "id": "T01" }
-        });
+        slack_oauth_credential.provider_user_id = Some("U02".to_string());
         let (client, user) =
             create_user_and_login(&app, "john@doe.net".parse().unwrap(), "password").await;
 
         let slack_integration_connection = create_and_mock_integration_connection(
             &app,
             user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
-            nango_slack_connection.clone(),
+            slack_oauth_credential.clone(),
             None,
-            None,
+            Some(slack_context("T01")),
         )
         .await;
 
@@ -431,7 +426,7 @@ mod job {
     async fn test_handle_slack_message_in_channel_with_ping_to_known_user_from_known_user(
         settings: Settings,
         #[future] tested_app_with_local_auth: TestedApp,
-        mut nango_slack_connection: Box<NangoConnection>,
+        mut slack_oauth_credential: OAuthCredentialFixture,
         mut message_event: Box<SlackPushEventCallback>,
     ) {
         // Group `G01` contains user `U01` and user `U02`
@@ -449,19 +444,17 @@ mod job {
         )
         .await;
 
-        nango_slack_connection.credentials.raw["authed_user"]["id"] = json!("U02");
-        nango_slack_connection.credentials.raw["authed_user"]["access_token"] =
-            json!("slack_other_user_access_token");
-        nango_slack_connection.credentials.raw["team"]["id"] = json!("T01");
+        slack_oauth_credential.provider_user_id = Some("U02".to_string());
+        slack_oauth_credential.access_token =
+            AccessToken("slack_other_user_access_token".to_string());
         let (client_u02, user_u02) =
             create_user_and_login(&app, "john@doe.net".parse().unwrap(), "password").await;
         create_and_mock_integration_connection(
             &app,
             user_u02.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
-            nango_slack_connection.clone(),
+            slack_oauth_credential.clone(),
             None,
             Some(IntegrationConnectionContext::Slack(SlackContext {
                 team_id: SlackTeamId("T01".to_string()),
@@ -471,19 +464,17 @@ mod job {
         )
         .await;
 
-        nango_slack_connection.credentials.raw["authed_user"]["id"] = json!("U01");
-        nango_slack_connection.credentials.raw["authed_user"]["access_token"] =
-            json!("slack_test_user_access_token");
-        nango_slack_connection.credentials.raw["team"]["id"] = json!("T01");
+        slack_oauth_credential.provider_user_id = Some("U01".to_string());
+        slack_oauth_credential.access_token =
+            AccessToken("slack_test_user_access_token".to_string());
         let (client_u01, user_u01) =
             create_user_and_login(&app, "jane@doe.net".parse().unwrap(), "password").await;
         create_and_mock_integration_connection(
             &app,
             user_u01.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
-            nango_slack_connection,
+            slack_oauth_credential,
             None,
             Some(IntegrationConnectionContext::Slack(SlackContext {
                 team_id: SlackTeamId("T01".to_string()),
@@ -639,7 +630,7 @@ mod job {
     async fn test_handle_slack_message_in_channel_with_ping_to_known_user(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        mut nango_slack_connection: Box<NangoConnection>,
+        mut slack_oauth_credential: OAuthCredentialFixture,
         mut message_event: Box<SlackPushEventCallback>,
         #[case] user_in_group: bool,
         #[case] embedded_user_profiles: bool,
@@ -658,17 +649,15 @@ mod job {
         } else {
             add_user_ref_in_message(&mut message_event, "U01");
         }
-        nango_slack_connection.credentials.raw["authed_user"]["id"] = json!("U01");
-        nango_slack_connection.credentials.raw["authed_user"]["access_token"] =
-            json!("slack_test_user_access_token");
-        nango_slack_connection.credentials.raw["team"]["id"] = json!("T01");
+        slack_oauth_credential.provider_user_id = Some("U01".to_string());
+        slack_oauth_credential.access_token =
+            AccessToken("slack_test_user_access_token".to_string());
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
-            nango_slack_connection,
+            slack_oauth_credential,
             None,
             Some(IntegrationConnectionContext::Slack(SlackContext {
                 team_id: SlackTeamId("T01".to_string()),
@@ -834,7 +823,7 @@ mod job {
     async fn test_handle_slack_message_in_known_thread(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        mut nango_slack_connection: Box<NangoConnection>,
+        mut slack_oauth_credential: OAuthCredentialFixture,
         mut message_in_thread_event: Box<SlackPushEventCallback>,
         mut slack_thread: Box<SlackThread>,
         #[case] is_2way_sync: bool,
@@ -845,20 +834,16 @@ mod job {
         let app = authenticated_app.await;
         if pinged {
             add_user_ref_in_message(&mut message_in_thread_event, "U01");
-            nango_slack_connection.credentials.raw = json!({
-                "authed_user": { "id": "U01", "access_token": "slack_test_user_access_token" },
-                "team": { "id": "T01" }
-            });
+            slack_oauth_credential.provider_user_id = Some("U01".to_string());
         }
         let mut config = SlackConfig::enabled_as_notifications();
         config.message_config.is_2way_sync = is_2way_sync;
         let slack_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(config),
             &settings,
-            nango_slack_connection,
+            slack_oauth_credential,
             None,
             Some(IntegrationConnectionContext::Slack(SlackContext {
                 team_id: SlackTeamId("T01".to_string()),
@@ -1013,7 +998,7 @@ mod job {
     async fn test_handle_slack_message_in_known_thread_from_known_user(
         settings: Settings,
         #[future] tested_app_with_local_auth: TestedApp,
-        mut nango_slack_connection: Box<NangoConnection>,
+        mut slack_oauth_credential: OAuthCredentialFixture,
         mut message_in_thread_event: Box<SlackPushEventCallback>,
         mut slack_thread: Box<SlackThread>,
     ) {
@@ -1026,22 +1011,20 @@ mod job {
         // the notification will be marked as unread.
         // U02 has not read the first message and when receiving the second message,
         // as they are the sender, the notification will be marked as read.
-        nango_slack_connection.credentials.raw = json !({
-            "authed_user": { "id": "U02", "access_token": "slack_other_user_access_token" },
-            "team": { "id": "T01" }
-        });
+        slack_oauth_credential.provider_user_id = Some("U02".to_string());
+        slack_oauth_credential.access_token =
+            AccessToken("slack_other_user_access_token".to_string());
         let (client_u02, user_u02) =
             create_user_and_login(&app, "john@doe.net".parse().unwrap(), "password").await;
 
         let slack_integration_connection_u02 = create_and_mock_integration_connection(
             &app,
             user_u02.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
-            nango_slack_connection.clone(),
+            slack_oauth_credential.clone(),
             None,
-            None,
+            Some(slack_context("T01")),
         )
         .await;
 
@@ -1107,19 +1090,17 @@ mod job {
         // Creating user U01 and its Slack connection
         let (client_u01, user_u01) =
             create_user_and_login(&app, "jane@doe.net".parse().unwrap(), "password").await;
-        nango_slack_connection.credentials.raw = json !({
-            "authed_user": { "id": "U01", "access_token": "slack_test_user_access_token" },
-            "team": { "id": "T01" }
-        });
+        slack_oauth_credential.provider_user_id = Some("U01".to_string());
+        slack_oauth_credential.access_token =
+            AccessToken("slack_test_user_access_token".to_string());
         let slack_integration_connection_u01 = create_and_mock_integration_connection(
             &app,
             user_u01.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
-            nango_slack_connection,
+            slack_oauth_credential,
             None,
-            None,
+            Some(slack_context("T01")),
         )
         .await;
         let slack_first_unread_message_id_u01 = slack_thread.messages.last().origin.ts.clone();

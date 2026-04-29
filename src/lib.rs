@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use strum::Display;
 use url::Url;
 
-use integration_connection::{NangoProviderKey, NangoPublicKey, provider::IntegrationProviderKind};
+use integration_connection::provider::IntegrationProviderKind;
 use utils::base64::{decode_base64, encode_base64};
 
 #[macro_use]
@@ -28,8 +28,6 @@ pub mod utils;
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct FrontConfig {
     pub authentication_configs: Vec<FrontAuthenticationConfig>,
-    pub nango_base_url: Url,
-    pub nango_public_key: NangoPublicKey,
     pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
     pub support_href: Option<String>,
     pub show_changelog: bool,
@@ -38,26 +36,13 @@ pub struct FrontConfig {
     pub version: Option<String>,
 }
 
-/// How an integration authenticates via OAuth.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Default)]
-pub enum OAuthMethod {
-    /// Legacy: uses the Nango frontend SDK
-    #[default]
-    Nango,
-    /// New: redirects to backend /oauth/authorize endpoint
-    Internal,
-}
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct IntegrationProviderStaticConfig {
     pub name: String,
-    pub nango_config_key: NangoProviderKey,
     pub warning_message: Option<String>,
     pub is_enabled: bool,
     pub oauth_user_scopes: Vec<String>,
     pub required_oauth_scopes: Vec<String>,
-    #[serde(default)]
-    pub oauth_method: OAuthMethod,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]

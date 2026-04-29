@@ -8,12 +8,13 @@ use universal_inbox::{
     third_party::integrations::google_drive::GoogleDriveComment,
 };
 
-use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
+use universal_inbox_api::configuration::Settings;
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, nango_google_drive_connection,
+        create_and_mock_integration_connection, google_drive_oauth_credential,
     },
     notification::google_drive::{
         create_notification_from_google_drive_comment, google_drive_comment_123,
@@ -31,17 +32,16 @@ mod patch_resource {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         google_drive_comment_123: GoogleDriveComment,
-        nango_google_drive_connection: Box<NangoConnection>,
+        google_drive_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let google_drive_config = GoogleDriveConfig::enabled();
         let google_drive_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleDrive(google_drive_config.clone()),
             &settings,
-            nango_google_drive_connection,
+            google_drive_oauth_credential,
             None,
             None,
         )
@@ -76,17 +76,16 @@ mod patch_resource {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         google_drive_comment_123: GoogleDriveComment,
-        nango_google_drive_connection: Box<NangoConnection>,
+        google_drive_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let google_drive_config = GoogleDriveConfig::enabled();
         let google_drive_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleDrive(google_drive_config.clone()),
             &settings,
-            nango_google_drive_connection,
+            google_drive_oauth_credential,
             None,
             None,
         )

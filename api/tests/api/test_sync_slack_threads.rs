@@ -9,11 +9,12 @@ use universal_inbox::{
     third_party::integrations::slack::SlackThread,
 };
 
-use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
+use universal_inbox_api::configuration::Settings;
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
-    integration_connection::{create_and_mock_integration_connection, nango_slack_connection},
+    integration_connection::{create_and_mock_integration_connection, slack_oauth_credential},
     notification::{
         slack::{
             create_notification_from_slack_thread, mock_slack_fetch_channel,
@@ -34,17 +35,16 @@ mod sync_slack_thread_notifications {
     async fn test_sync_slack_thread_marked_as_read(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_slack_connection: Box<NangoConnection>,
+        slack_oauth_credential: OAuthCredentialFixture,
         slack_thread: Box<SlackThread>,
     ) {
         let app = authenticated_app.await;
         let slack_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
-            nango_slack_connection,
+            slack_oauth_credential,
             None,
             None,
         )
@@ -127,17 +127,16 @@ mod sync_slack_thread_notifications {
     async fn test_sync_slack_thread_marked_as_unsubscribed(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_slack_connection: Box<NangoConnection>,
+        slack_oauth_credential: OAuthCredentialFixture,
         slack_thread: Box<SlackThread>,
     ) {
         let app = authenticated_app.await;
         let slack_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
-            nango_slack_connection,
+            slack_oauth_credential,
             None,
             None,
         )
@@ -219,17 +218,16 @@ mod sync_slack_thread_notifications {
     async fn test_sync_slack_thread_no_change(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_slack_connection: Box<NangoConnection>,
+        slack_oauth_credential: OAuthCredentialFixture,
         slack_thread: Box<SlackThread>,
     ) {
         let app = authenticated_app.await;
         let slack_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
-            nango_slack_connection,
+            slack_oauth_credential,
             None,
             None,
         )

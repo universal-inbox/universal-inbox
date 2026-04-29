@@ -25,15 +25,13 @@ use universal_inbox::{
     },
 };
 
-use universal_inbox_api::{
-    configuration::Settings,
-    integrations::{oauth2::NangoConnection, todoist::TodoistSyncResponse},
-};
+use universal_inbox_api::{configuration::Settings, integrations::todoist::TodoistSyncResponse};
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, nango_slack_connection, nango_todoist_connection,
+        create_and_mock_integration_connection, slack_oauth_credential, todoist_oauth_credential,
     },
     notification::{
         list_notifications_with_tasks,
@@ -70,8 +68,8 @@ async fn test_sync_todoist_slack_task(
     sync_todoist_projects_response: TodoistSyncResponse,
     slack_push_reaction_added_event: Box<SlackPushEvent>,
     slack_push_reaction_removed_event: Box<SlackPushEvent>,
-    nango_slack_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    slack_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
     #[case] new_project_id: &str,
     #[case] expected_new_task_status: TaskStatus,
 ) {
@@ -79,10 +77,9 @@ async fn test_sync_todoist_slack_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_tasks()),
         &settings,
-        nango_slack_connection,
+        slack_oauth_credential,
         None,
         None,
     )
@@ -90,10 +87,9 @@ async fn test_sync_todoist_slack_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -338,17 +334,16 @@ async fn test_patch_slack_task_status_as_done(
     slack_reacted_message: Box<SlackReactionItem>,
     todoist_item: Box<TodoistItem>,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_slack_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    slack_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_tasks()),
         &settings,
-        nango_slack_connection,
+        slack_oauth_credential,
         None,
         None,
     )
@@ -356,10 +351,9 @@ async fn test_patch_slack_task_status_as_done(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -494,8 +488,8 @@ async fn test_patch_slack_task_status_as_done_with_completion_reaction(
     slack_reacted_message: Box<SlackReactionItem>,
     todoist_item: Box<TodoistItem>,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_slack_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    slack_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let slack_config = SlackConfig {
@@ -508,10 +502,9 @@ async fn test_patch_slack_task_status_as_done_with_completion_reaction(
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Slack(slack_config),
         &settings,
-        nango_slack_connection,
+        slack_oauth_credential,
         None,
         None,
     )
@@ -519,10 +512,9 @@ async fn test_patch_slack_task_status_as_done_with_completion_reaction(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )

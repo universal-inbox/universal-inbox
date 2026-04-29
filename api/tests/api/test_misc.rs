@@ -1,9 +1,7 @@
 use http::HeaderValue;
 use rstest::*;
 
-use universal_inbox_api::configuration::Settings;
-
-use crate::helpers::{TestedApp, settings, tested_app};
+use crate::helpers::{TestedApp, tested_app};
 
 mod content_security_policy {
     use super::*;
@@ -12,10 +10,8 @@ mod content_security_policy {
 
     #[rstest]
     #[tokio::test]
-    async fn test_csp_header_on_html_page(#[future] tested_app: TestedApp, settings: Settings) {
+    async fn test_csp_header_on_html_page(#[future] tested_app: TestedApp) {
         let app = tested_app.await;
-        let mut nango_ws_base_url = settings.oauth2.nango_base_url.clone();
-        nango_ws_base_url.set_scheme("ws").unwrap();
 
         let response = reqwest::Client::new()
             .get(&app.app_address)
@@ -32,8 +28,8 @@ mod content_security_policy {
                    Some(
                        &HeaderValue::from_str(
                            &format!(
-                               "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' 'unsafe-eval' https://client.crisp.chat https://cdn.headwayapp.co; style-src 'self' 'unsafe-inline' https://client.crisp.chat; object-src 'none'; connect-src 'self' {} {} {} https://client.crisp.chat wss://client.relay.crisp.chat; img-src * 'self' data:; font-src 'self' https://client.crisp.chat; worker-src 'none'; frame-src 'self' https://headway-widget.net",
-                               nango_ws_base_url, settings.oauth2.nango_base_url, app.oidc_issuer_mock_server.as_ref().unwrap().uri()
+                               "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' 'unsafe-eval' https://client.crisp.chat https://cdn.headwayapp.co; style-src 'self' 'unsafe-inline' https://client.crisp.chat; object-src 'none'; connect-src 'self' {} https://client.crisp.chat wss://client.relay.crisp.chat; img-src * 'self' data:; font-src 'self' https://client.crisp.chat; worker-src 'none'; frame-src 'self' https://headway-widget.net",
+                               app.oidc_issuer_mock_server.as_ref().unwrap().uri()
                            )
                        ).unwrap()
                    )

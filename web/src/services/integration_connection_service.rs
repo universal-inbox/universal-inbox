@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use dioxus::prelude::*;
 
 use futures_util::StreamExt;
@@ -6,13 +6,10 @@ use log::{debug, error};
 use reqwest::Method;
 use url::Url;
 
-use universal_inbox::{
-    IntegrationProviderStaticConfig, OAuthMethod,
-    integration_connection::{
-        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
-        IntegrationConnectionStatus, NangoPublicKey, config::IntegrationConnectionConfig,
-        provider::IntegrationProviderKind,
-    },
+use universal_inbox::integration_connection::{
+    IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
+    IntegrationConnectionStatus, config::IntegrationConnectionConfig,
+    provider::IntegrationProviderKind,
 };
 
 use crate::{
@@ -20,8 +17,8 @@ use crate::{
     config::AppConfig,
     model::{LoadState, UniversalInboxUIModel},
     services::{
-        api::call_api, nango::nango_auth, notification_service::NotificationCommand,
-        task_service::TaskCommand, toast_service::ToastCommand,
+        api::call_api, notification_service::NotificationCommand, task_service::TaskCommand,
+        toast_service::ToastCommand,
     },
 };
 
@@ -78,11 +75,8 @@ pub async fn integration_connnection_service(
                 match create_integration_connection(
                     integration_provider_kind,
                     integration_connections,
-                    task_service_integration_connection,
                     app_config,
                     ui_model,
-                    &notification_service,
-                    &task_service,
                 )
                 .await
                 {
@@ -145,16 +139,7 @@ pub async fn integration_connnection_service(
             Some(IntegrationConnectionCommand::AuthenticateIntegrationConnection(
                 integration_connection,
             )) => {
-                match authenticate_integration_connection(
-                    &integration_connection,
-                    integration_connections,
-                    task_service_integration_connection,
-                    app_config,
-                    ui_model,
-                    &notification_service,
-                    &task_service,
-                )
-                .await
+                match authenticate_integration_connection(&integration_connection, app_config).await
                 {
                     Ok(integration_connection) => sync_integration_connection(
                         &integration_connection,
@@ -287,11 +272,8 @@ async fn refresh_integration_connection(
 async fn create_integration_connection(
     integration_provider_kind: IntegrationProviderKind,
     mut integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
-    task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
     app_config: ReadSignal<Option<AppConfig>>,
     ui_model: Signal<UniversalInboxUIModel>,
-    notification_service: &Coroutine<NotificationCommand>,
-    task_service: &Coroutine<TaskCommand>,
 ) -> Result<IntegrationConnection> {
     let api_base_url = get_api_base_url(app_config)?;
 
@@ -316,115 +298,32 @@ async fn create_integration_connection(
         }
     }
 
-    authenticate_integration_connection(
-        &new_connection,
-        integration_connections,
-        task_service_integration_connection,
-        app_config,
-        ui_model,
-        notification_service,
-        task_service,
-    )
-    .await
+    authenticate_integration_connection(&new_connection, app_config).await
 }
 
 async fn authenticate_integration_connection(
     integration_connection: &IntegrationConnection,
-    integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
-    task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
     app_config: ReadSignal<Option<AppConfig>>,
-    ui_model: Signal<UniversalInboxUIModel>,
-    notification_service: &Coroutine<NotificationCommand>,
-    task_service: &Coroutine<TaskCommand>,
 ) -> Result<IntegrationConnection> {
     let provider_kind = integration_connection.provider.kind();
-    let (nango_base_url, nango_public_key, provider_config) =
-        get_configs(app_config, provider_kind)?;
 
     debug!(
         "Authenticating integration_connection {} for {provider_kind}",
         integration_connection.id
     );
 
-    match provider_config.oauth_method {
-        OAuthMethod::Nango => {
-            nango_auth(
-                &nango_base_url,
-                &nango_public_key,
-                &provider_config.nango_config_key,
-                &integration_connection.connection_id,
-                provider_config.oauth_user_scopes.clone(),
-            )
-            .await?;
-
-            verify_integration_connection(
-                integration_connection.id,
-                integration_connections,
-                task_service_integration_connection,
-                app_config,
-                ui_model,
-                notification_service,
-                task_service,
-            )
-            .await
-        }
-        OAuthMethod::Internal => {
-            let api_base_url = get_api_base_url(app_config)?;
-            let authorize_url = format!(
-                "{api_base_url}oauth/authorize/{}",
-                integration_connection.id
-            );
-            web_sys::window()
-                .ok_or_else(|| anyhow!("No window object"))?
-                .location()
-                .set_href(&authorize_url)
-                .map_err(|_| anyhow!("Failed to redirect to OAuth authorization URL"))?;
-            // Return the connection as-is; the page will navigate away
-            Ok(integration_connection.clone())
-        }
-    }
-}
-
-async fn verify_integration_connection(
-    integration_connection_id: IntegrationConnectionId,
-    integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
-    task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
-    app_config: ReadSignal<Option<AppConfig>>,
-    ui_model: Signal<UniversalInboxUIModel>,
-    notification_service: &Coroutine<NotificationCommand>,
-    task_service: &Coroutine<TaskCommand>,
-) -> Result<IntegrationConnection> {
     let api_base_url = get_api_base_url(app_config)?;
-
-    debug!("Verifying integration connection {integration_connection_id}");
-    let result: IntegrationConnection = call_api(
-        Method::PATCH,
-        &api_base_url,
-        &format!("integration-connections/{integration_connection_id}/status"),
-        // random type as we don't care about the body's type
-        None::<i32>,
-        Some(ui_model),
-    )
-    .await?;
-
-    update_integration_connection_status(
-        result.id,
-        result.status,
-        result.failure_message.clone(),
-        integration_connections,
+    let authorize_url = format!(
+        "{api_base_url}oauth/authorize/{}",
+        integration_connection.id
     );
-
-    refresh_integration_connection(
-        integration_connections,
-        task_service_integration_connection,
-        app_config,
-        ui_model,
-        notification_service,
-        task_service,
-    )
-    .await?;
-
-    Ok(result)
+    web_sys::window()
+        .ok_or_else(|| anyhow!("No window object"))?
+        .location()
+        .set_href(&authorize_url)
+        .map_err(|_| anyhow!("Failed to redirect to OAuth authorization URL"))?;
+    // Return the connection as-is; the page will navigate away
+    Ok(integration_connection.clone())
 }
 
 async fn disconnect_integration_connection(
@@ -487,16 +386,7 @@ async fn reconnect_integration_connection(
     )
     .await?;
 
-    authenticate_integration_connection(
-        integration_connection,
-        integration_connections,
-        task_service_integration_connection,
-        app_config,
-        ui_model,
-        notification_service,
-        task_service,
-    )
-    .await
+    authenticate_integration_connection(integration_connection, app_config).await
 }
 
 fn update_integration_connection_status(
@@ -528,27 +418,6 @@ fn sync_integration_connection(
         if let Ok(source) = integration_connection.provider.kind().try_into() {
             task_service.send(TaskCommand::Sync(Some(source)));
         }
-    }
-}
-
-fn get_configs(
-    app_config: ReadSignal<Option<AppConfig>>,
-    integration_provider_kind: IntegrationProviderKind,
-) -> Result<(Url, NangoPublicKey, IntegrationProviderStaticConfig)> {
-    if let Some(app_config) = app_config.read().as_ref() {
-        Ok((
-            app_config.nango_base_url.clone(),
-            app_config.nango_public_key.clone(),
-            app_config
-                .integration_providers
-                .get(&integration_provider_kind)
-                .cloned()
-                .context(format!(
-                    "No provider config found for {integration_provider_kind}"
-                ))?,
-        ))
-    } else {
-        Err(anyhow!("Application not yet loaded, it is unexpected."))
     }
 }
 

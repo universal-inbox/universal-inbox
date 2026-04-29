@@ -22,15 +22,13 @@ use universal_inbox::{
     },
 };
 
-use universal_inbox_api::{
-    configuration::Settings,
-    integrations::{oauth2::NangoConnection, todoist::TodoistSyncResponse},
-};
+use universal_inbox_api::{configuration::Settings, integrations::todoist::TodoistSyncResponse};
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, nango_github_connection, nango_todoist_connection,
+        create_and_mock_integration_connection, github_oauth_credential, todoist_oauth_credential,
     },
     notification::{
         github::{create_notification_from_github_notification, github_notification},
@@ -51,21 +49,20 @@ mod patch_resource {
     async fn test_patch_github_notification_status_as_deleted(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
         github_notification: Box<GithubNotification>,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
         #[values(205, 304, 404)] github_status_code: u16,
     ) {
         let app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -79,10 +76,9 @@ mod patch_resource {
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -171,17 +167,16 @@ mod patch_resource {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
         #[values(205, 304, 404)] _github_status_code: u16,
     ) {
         let app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -233,16 +228,15 @@ mod patch_resource {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -293,16 +287,15 @@ mod patch_resource {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -343,16 +336,15 @@ mod patch_resource {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -402,16 +394,15 @@ mod patch_resource {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )

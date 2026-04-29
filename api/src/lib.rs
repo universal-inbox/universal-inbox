@@ -60,10 +60,7 @@ use crate::{
         google_mail::GoogleMailService,
         google_oauth::GoogleOAuth2Provider,
         linear::{LinearService, oauth::LinearOAuth2Provider},
-        oauth2::{
-            NangoService,
-            provider::{OAuth2FlowService, OAuth2Provider},
-        },
+        oauth2::provider::{OAuth2FlowService, OAuth2Provider},
         slack_oauth::SlackOAuth2Provider,
         ticktick::{TickTickService, oauth::TickTickOAuth2Provider},
         todoist::TodoistService,
@@ -463,7 +460,6 @@ pub async fn build_services(
     slack_base_url: Option<String>,
     todoist_address: Option<String>,
     ticktick_address: Option<String>,
-    nango_service: NangoService,
     mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
     webauthn: Arc<Webauthn>,
     execution_context: ExecutionContext,
@@ -492,66 +488,46 @@ pub async fn build_services(
         webauthn.clone(),
     ));
 
-    // Build the map of internal OAuth2 providers (integrations not using Nango)
+    // Build the map of internal OAuth2 providers
     use ::universal_inbox::integration_connection::provider::IntegrationProviderKind;
     let mut oauth2_providers: HashMap<IntegrationProviderKind, Arc<dyn OAuth2Provider>> =
         HashMap::new();
-    if let Some(linear_settings) = settings.integrations.get("linear")
-        && let (Some(client_id), Some(client_secret)) = (
-            linear_settings.oauth_client_id.as_ref(),
-            linear_settings.oauth_client_secret.as_ref(),
-        )
-    {
+    if let Some(linear_settings) = settings.integrations.get("linear") {
         oauth2_providers.insert(
             IntegrationProviderKind::Linear,
             Arc::new(LinearOAuth2Provider::new(
-                client_id.clone(),
-                SecretBox::new(Box::new(client_secret.clone())),
+                linear_settings.oauth_client_id.clone(),
+                SecretBox::new(Box::new(linear_settings.oauth_client_secret.clone())),
                 linear_settings.required_oauth_scopes.clone(),
             )),
         );
     }
-    if let Some(github_settings) = settings.integrations.get("github")
-        && let (Some(client_id), Some(client_secret)) = (
-            github_settings.oauth_client_id.as_ref(),
-            github_settings.oauth_client_secret.as_ref(),
-        )
-    {
+    if let Some(github_settings) = settings.integrations.get("github") {
         oauth2_providers.insert(
             IntegrationProviderKind::Github,
             Arc::new(GithubOAuth2Provider::new(
-                client_id.clone(),
-                SecretBox::new(Box::new(client_secret.clone())),
+                github_settings.oauth_client_id.clone(),
+                SecretBox::new(Box::new(github_settings.oauth_client_secret.clone())),
                 github_settings.required_oauth_scopes.clone(),
             )),
         );
     }
-    if let Some(slack_settings) = settings.integrations.get("slack")
-        && let (Some(client_id), Some(client_secret)) = (
-            slack_settings.oauth_client_id.as_ref(),
-            slack_settings.oauth_client_secret.as_ref(),
-        )
-    {
+    if let Some(slack_settings) = settings.integrations.get("slack") {
         oauth2_providers.insert(
             IntegrationProviderKind::Slack,
             Arc::new(SlackOAuth2Provider::new(
-                client_id.clone(),
-                SecretBox::new(Box::new(client_secret.clone())),
+                slack_settings.oauth_client_id.clone(),
+                SecretBox::new(Box::new(slack_settings.oauth_client_secret.clone())),
                 slack_settings.required_oauth_scopes.clone(),
             )),
         );
     }
-    if let Some(todoist_settings) = settings.integrations.get("todoist")
-        && let (Some(client_id), Some(client_secret)) = (
-            todoist_settings.oauth_client_id.as_ref(),
-            todoist_settings.oauth_client_secret.as_ref(),
-        )
-    {
+    if let Some(todoist_settings) = settings.integrations.get("todoist") {
         oauth2_providers.insert(
             IntegrationProviderKind::Todoist,
             Arc::new(TodoistOAuth2Provider::new(
-                client_id.clone(),
-                SecretBox::new(Box::new(client_secret.clone())),
+                todoist_settings.oauth_client_id.clone(),
+                SecretBox::new(Box::new(todoist_settings.oauth_client_secret.clone())),
                 todoist_settings.required_oauth_scopes.clone(),
             )),
         );
@@ -561,63 +537,47 @@ pub async fn build_services(
         ("google_calendar", IntegrationProviderKind::GoogleCalendar),
         ("google_drive", IntegrationProviderKind::GoogleDrive),
     ] {
-        if let Some(google_settings) = settings.integrations.get(settings_key)
-            && let (Some(client_id), Some(client_secret)) = (
-                google_settings.oauth_client_id.as_ref(),
-                google_settings.oauth_client_secret.as_ref(),
-            )
-        {
+        if let Some(google_settings) = settings.integrations.get(settings_key) {
             oauth2_providers.insert(
                 provider_kind,
                 Arc::new(GoogleOAuth2Provider::new(
                     provider_kind,
-                    client_id.clone(),
-                    SecretBox::new(Box::new(client_secret.clone())),
+                    google_settings.oauth_client_id.clone(),
+                    SecretBox::new(Box::new(google_settings.oauth_client_secret.clone())),
                     google_settings.required_oauth_scopes.clone(),
                 )),
             );
         }
     }
-    if let Some(ticktick_settings) = settings.integrations.get("ticktick")
-        && let (Some(client_id), Some(client_secret)) = (
-            ticktick_settings.oauth_client_id.as_ref(),
-            ticktick_settings.oauth_client_secret.as_ref(),
-        )
-    {
+    if let Some(ticktick_settings) = settings.integrations.get("ticktick") {
         oauth2_providers.insert(
             IntegrationProviderKind::TickTick,
             Arc::new(TickTickOAuth2Provider::new(
-                client_id.clone(),
-                SecretBox::new(Box::new(client_secret.clone())),
+                ticktick_settings.oauth_client_id.clone(),
+                SecretBox::new(Box::new(ticktick_settings.oauth_client_secret.clone())),
                 ticktick_settings.required_oauth_scopes.clone(),
             )),
         );
     }
 
-    let token_encryption_key = settings
-        .oauth2
-        .token_encryption_key
-        .as_ref()
-        .map(|hex| TokenEncryptionKey::from_hex(hex).map(|k| SecretBox::new(Box::new(k))))
-        .transpose()
-        .expect("Invalid token encryption key");
+    let token_encryption_key = SecretBox::new(Box::new(
+        TokenEncryptionKey::from_hex(&settings.oauth2.token_encryption_key)
+            .expect("Invalid token encryption key"),
+    ));
 
     let redirect_uri = settings
         .application
         .get_oauth_redirect_url()
         .expect("Failed to compute OAuth redirect URL");
     let oauth2_flow_service =
-        Some(OAuth2FlowService::new(redirect_uri).expect("Failed to create OAuth2FlowService"));
+        OAuth2FlowService::new(redirect_uri).expect("Failed to create OAuth2FlowService");
 
     let integration_connection_service = Arc::new(RwLock::new(IntegrationConnectionService::new(
         repository.clone(),
-        nango_service,
-        settings.nango_provider_keys(),
         settings.required_oauth_scopes(),
         oauth2_providers,
         oauth2_flow_service,
         token_encryption_key,
-        user_service.clone(),
         settings
             .application
             .min_sync_notifications_interval_in_minutes,
@@ -812,17 +772,7 @@ pub async fn build_services(
 }
 
 fn build_csp_header(settings: &Settings) -> String {
-    let nango_ws_scheme = if settings.oauth2.nango_base_url.scheme() == "http" {
-        "ws"
-    } else {
-        "wss"
-    };
-    let nango_base_url = settings.oauth2.nango_base_url.to_string();
-    let mut nango_ws_base_url = settings.oauth2.nango_base_url.clone();
-    nango_ws_base_url.set_scheme(nango_ws_scheme).unwrap();
-    let mut connect_srcs = Sources::new_with(Source::Self_)
-        .push(Source::Host(nango_ws_base_url.as_str()))
-        .push(Source::Host(&nango_base_url));
+    let mut connect_srcs = Sources::new_with(Source::Self_);
     for oidc_issuer_url in settings
         .application
         .security

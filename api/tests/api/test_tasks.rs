@@ -15,14 +15,12 @@ use universal_inbox::{
     },
 };
 
-use universal_inbox_api::{
-    configuration::Settings,
-    integrations::{oauth2::NangoConnection, todoist::TodoistSyncResponse},
-};
+use universal_inbox_api::{configuration::Settings, integrations::todoist::TodoistSyncResponse};
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticate_user, authenticated_app},
-    integration_connection::{create_and_mock_integration_connection, nango_todoist_connection},
+    integration_connection::{create_and_mock_integration_connection, todoist_oauth_credential},
     rest::{create_resource, get_resource_response, patch_resource_response},
     settings,
     task::{
@@ -63,16 +61,15 @@ mod get_task {
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -145,16 +142,15 @@ mod list_tasks {
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -249,16 +245,15 @@ mod patch_task {
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -315,16 +310,15 @@ mod patch_task {
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -384,16 +378,15 @@ mod patch_task {
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -504,16 +497,15 @@ mod search_tasks {
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -630,7 +622,7 @@ mod search_tasks {
             universal_inbox::task::integrations::ticktick::TickTickProject,
         >,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         use universal_inbox::integration_connection::{
             integrations::ticktick::TickTickConfig, provider::IntegrationProviderKind,
@@ -645,10 +637,9 @@ mod search_tasks {
         let todoist_ic = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -764,16 +755,15 @@ mod search_projects {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )

@@ -56,7 +56,7 @@ universal-inbox/
 - **Backend**: Actix-web 4.0, SQLx 0.8 (PostgreSQL), Tokio, Apalis (job queue)
 - **Frontend**: Dioxus 0.6 (WASM), compiled to wasm32-unknown-unknown
 - **Auth**: OpenID Connect, JWT (EdDSA), Passkeys/WebAuthn, Argon2 password hashing
-- **External Services**: Nango (OAuth proxy), Redis (cache/sessions)
+- **External Services**: Redis (cache/sessions)
 - **Integrations**: GitHub, Linear, Todoist, Slack, Google Mail/Calendar/Drive
 
 ## Code Conventions
@@ -288,7 +288,6 @@ just test "test_name" debug
 ### Required Services
 - PostgreSQL (primary database)
 - Redis (sessions, cache, job queue)
-- Nango (OAuth proxy, Docker container at http://localhost:3003)
 
 ### Key Environment Variables
 ```bash
@@ -329,10 +328,6 @@ The generated user includes sample data for all integrations: Todoist, GitHub, L
 
 The following commands will start the required server via process-compose.
 ```bash
-# Start nango (OAuth proxy)
-just start nango-db
-just start nango-server
-
 # Start Universal Inbox API, workers and Web
 just start ui-api
 just start ui-workers
