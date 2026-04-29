@@ -58,8 +58,7 @@ impl OAuthTokenResponse {
     }
 }
 
-/// Configuration for an OAuth2 provider that manages its own token lifecycle
-/// (as opposed to using Nango).
+/// Configuration for an OAuth2 provider that manages its own token lifecycle.
 pub trait OAuth2Provider: Send + Sync + std::fmt::Debug {
     fn provider_kind(&self) -> IntegrationProviderKind;
     fn authorize_url(&self) -> &Url;
@@ -68,10 +67,6 @@ pub trait OAuth2Provider: Send + Sync + std::fmt::Debug {
     fn client_secret(&self) -> &SecretBox<ClientSecret>;
     fn required_scopes(&self) -> &[String];
     fn supports_pkce(&self) -> bool;
-
-    /// URL for migrating existing long-lived tokens to short-lived + refresh token.
-    /// Returns `None` if this provider doesn't support token migration.
-    fn migration_url(&self) -> Option<&Url>;
 
     /// Parse the token response and extract registered scopes.
     fn extract_registered_scopes(
@@ -256,56 +251,6 @@ impl OAuth2FlowService {
         if !status.is_success() {
             return Err(UniversalInboxError::Unexpected(anyhow::anyhow!(
                 "Token refresh failed with status {status}: {body}"
-            )));
-        }
-
-        provider.parse_token_response(&body)
-    }
-
-    /// Migrate an existing long-lived token to short-lived + refresh token.
-    pub async fn migrate_old_token(
-        &self,
-        provider: &dyn OAuth2Provider,
-        old_access_token: &AccessToken,
-    ) -> Result<OAuthTokenResponse, UniversalInboxError> {
-        let migration_url = provider.migration_url().ok_or_else(|| {
-            UniversalInboxError::Unexpected(anyhow::anyhow!(
-                "Provider {:?} does not support token migration",
-                provider.provider_kind()
-            ))
-        })?;
-
-        let client_secret = provider.client_secret().expose_secret().as_str();
-        let params = HashMap::from([
-            ("access_token", old_access_token.as_str()),
-            ("client_id", provider.client_id()),
-            ("client_secret", client_secret),
-        ]);
-
-        debug!(
-            "Migrating old token at {} for {:?}",
-            migration_url,
-            provider.provider_kind()
-        );
-
-        let response = self
-            .client
-            .post(migration_url.as_str())
-            .headers(provider.token_request_headers())
-            .form(&params)
-            .send()
-            .await
-            .context("Failed to migrate old token")?;
-
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .context("Failed to read token migration response body")?;
-
-        if !status.is_success() {
-            return Err(UniversalInboxError::Unexpected(anyhow::anyhow!(
-                "Token migration failed with status {status}: {body}"
             )));
         }
 

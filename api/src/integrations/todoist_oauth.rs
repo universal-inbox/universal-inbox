@@ -76,10 +76,6 @@ impl OAuth2Provider for TodoistOAuth2Provider {
         false
     }
 
-    fn migration_url(&self) -> Option<&Url> {
-        None
-    }
-
     fn extract_registered_scopes(
         &self,
         _raw_response: &Value,
@@ -123,12 +119,6 @@ mod tests {
     fn test_supports_pkce() {
         assert!(!provider().supports_pkce());
     }
-
-    #[test]
-    fn test_migration_url_is_none() {
-        assert!(provider().migration_url().is_none());
-    }
-
     #[test]
     fn test_scope_delimiter_is_comma() {
         assert_eq!(provider().scope_delimiter(), ",");

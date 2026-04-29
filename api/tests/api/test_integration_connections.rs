@@ -1,7 +1,5 @@
 use http::StatusCode;
 use rstest::*;
-use serde_json::json;
-use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
@@ -15,27 +13,13 @@ use universal_inbox::{
     third_party::integrations::google_mail::{GoogleMailLabel, GoogleMailThread},
 };
 
-use wiremock::{
-    Mock, ResponseTemplate,
-    matchers::{method, path},
-};
-
-use universal_inbox_api::{
-    configuration::Settings, integrations::oauth2::NangoConnection,
-    universal_inbox::integration_connection::service::UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE,
-};
-
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticate_user, authenticated_app},
     integration_connection::{
         create_integration_connection, get_integration_connection, list_integration_connections,
-        mock_nango_connection_service, mock_nango_delete_connection_service,
-        nango_github_connection, verify_integration_connection,
-        verify_integration_connection_response,
     },
     notification::{google_mail::google_mail_thread_get_123, list_notifications},
     rest::{create_resource, delete_resource},
-    settings,
 };
 
 mod list_integration_connections {
@@ -123,283 +107,6 @@ mod create_integration_connections {
     }
 }
 
-mod verify_integration_connections {
-    use crate::helpers::integration_connection::nango_slack_connection;
-
-    use super::*;
-    use pretty_assertions::assert_eq;
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_verify_valid_integration_connection(
-        settings: Settings,
-        #[future] authenticated_app: AuthenticatedApp,
-        nango_github_connection: Box<NangoConnection>,
-    ) {
-        let app = authenticated_app.await;
-        let integration_connection: Box<IntegrationConnection> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "integration-connections",
-            Box::new(IntegrationConnectionCreation {
-                provider_kind: IntegrationProviderKind::Github,
-            }),
-        )
-        .await;
-        let nango_provider_keys = settings.nango_provider_keys();
-        let github_config_key = nango_provider_keys
-            .get(&IntegrationProviderKind::Github)
-            .unwrap();
-        let _nango_mock = mock_nango_connection_service(
-            &app.app.nango_mock_server,
-            &settings.oauth2.nango_secret_key,
-            &integration_connection.connection_id.to_string(),
-            github_config_key,
-            nango_github_connection.clone(),
-        )
-        .await;
-
-        let result: IntegrationConnection = verify_integration_connection(
-            &app.client,
-            &app.app.api_address,
-            integration_connection.id,
-        )
-        .await;
-
-        assert_eq!(result.status, IntegrationConnectionStatus::Validated);
-        assert_eq!(result.failure_message, None);
-        assert_eq!(
-            result.registered_oauth_scopes,
-            vec!["public_repo".to_string(), "user".to_string()]
-        );
-
-        // Verifying again should keep validating the status with Nango and return the connection
-        let result: IntegrationConnection = verify_integration_connection(
-            &app.client,
-            &app.app.api_address,
-            integration_connection.id,
-        )
-        .await;
-
-        assert_eq!(result.status, IntegrationConnectionStatus::Validated);
-        assert_eq!(result.failure_message, None);
-        assert_eq!(
-            result.registered_oauth_scopes,
-            vec!["public_repo".to_string(), "user".to_string()]
-        );
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_verify_valid_slack_integration_connection(
-        settings: Settings,
-        #[future] authenticated_app: AuthenticatedApp,
-        nango_slack_connection: Box<NangoConnection>,
-    ) {
-        let app = authenticated_app.await;
-        let integration_connection: Box<IntegrationConnection> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "integration-connections",
-            Box::new(IntegrationConnectionCreation {
-                provider_kind: IntegrationProviderKind::Slack,
-            }),
-        )
-        .await;
-        let nango_provider_keys = settings.nango_provider_keys();
-        let slack_config_key = nango_provider_keys
-            .get(&IntegrationProviderKind::Slack)
-            .unwrap();
-        let _nango_mock = mock_nango_connection_service(
-            &app.app.nango_mock_server,
-            &settings.oauth2.nango_secret_key,
-            &integration_connection.connection_id.to_string(),
-            slack_config_key,
-            nango_slack_connection.clone(),
-        )
-        .await;
-
-        let result: IntegrationConnection = verify_integration_connection(
-            &app.client,
-            &app.app.api_address,
-            integration_connection.id,
-        )
-        .await;
-
-        assert_eq!(result.status, IntegrationConnectionStatus::Validated);
-        assert_eq!(result.failure_message, None);
-        assert_eq!(result.provider_user_id, Some("U05XXX".to_string()));
-        assert_eq!(
-            result.registered_oauth_scopes,
-            vec![
-                "channels:history".to_string(),
-                "channels:read".to_string(),
-                "emoji:read".to_string(),
-                "groups:history".to_string(),
-                "groups:read".to_string(),
-                "im:history".to_string(),
-                "im:read".to_string(),
-                "mpim:history".to_string(),
-                "mpim:read".to_string(),
-                "reactions:read".to_string(),
-                "reactions:write".to_string(),
-                "team:read".to_string(),
-                "usergroups:read".to_string(),
-                "users:read".to_string()
-            ]
-        );
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_verify_unknown_integration_connection(
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
-        let app = authenticated_app.await;
-
-        let response = verify_integration_connection_response(
-            &app.client,
-            &app.app.api_address,
-            Uuid::new_v4().into(),
-        )
-        .await;
-
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_verify_unknown_integration_connection_by_nango(
-        settings: Settings,
-        #[future] authenticated_app: AuthenticatedApp,
-        nango_github_connection: Box<NangoConnection>,
-    ) {
-        let app = authenticated_app.await;
-        let integration_connection: Box<IntegrationConnection> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "integration-connections",
-            Box::new(IntegrationConnectionCreation {
-                provider_kind: IntegrationProviderKind::Github,
-            }),
-        )
-        .await;
-
-        // Validate it first
-        let nango_provider_keys = settings.nango_provider_keys();
-        let github_config_key = nango_provider_keys
-            .get(&IntegrationProviderKind::Github)
-            .unwrap();
-        let _nango_mock = mock_nango_connection_service(
-            &app.app.nango_mock_server,
-            &settings.oauth2.nango_secret_key,
-            &integration_connection.connection_id.to_string(),
-            github_config_key,
-            nango_github_connection.clone(),
-        )
-        .await;
-
-        let result: IntegrationConnection = verify_integration_connection(
-            &app.client,
-            &app.app.api_address,
-            integration_connection.id,
-        )
-        .await;
-
-        assert_eq!(result.status, IntegrationConnectionStatus::Validated);
-        assert_eq!(result.failure_message, None);
-        assert_eq!(
-            result.registered_oauth_scopes,
-            vec!["public_repo".to_string(), "user".to_string()]
-        );
-
-        app.app.nango_mock_server.reset().await;
-
-        Mock::given(method("GET"))
-            .and(path(format!(
-                "/connection/{}",
-                integration_connection.connection_id
-            )))
-            .respond_with(ResponseTemplate::new(400).set_body_json(json!({
-                "error": "No connection matching params 'connection_id' and 'provider_config_key'.",
-                "payload": {},
-                "type": "unknown_connection"
-            })))
-            .mount(&app.app.nango_mock_server)
-            .await;
-
-        let result: IntegrationConnection = verify_integration_connection(
-            &app.client,
-            &app.app.api_address,
-            integration_connection.id,
-        )
-        .await;
-
-        assert_eq!(result.status, IntegrationConnectionStatus::Failing);
-        assert_eq!(
-            result.failure_message,
-            Some(UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE.to_string())
-        );
-
-        // Test failure recovery
-        app.app.nango_mock_server.reset().await;
-        let nango_provider_keys = settings.nango_provider_keys();
-        let github_config_key = nango_provider_keys
-            .get(&IntegrationProviderKind::Github)
-            .unwrap();
-        let _nango_mock = mock_nango_connection_service(
-            &app.app.nango_mock_server,
-            &settings.oauth2.nango_secret_key,
-            &integration_connection.connection_id.to_string(),
-            github_config_key,
-            nango_github_connection.clone(),
-        )
-        .await;
-
-        let result: IntegrationConnection = verify_integration_connection(
-            &app.client,
-            &app.app.api_address,
-            integration_connection.id,
-        )
-        .await;
-
-        assert_eq!(result.status, IntegrationConnectionStatus::Validated);
-        assert_eq!(result.failure_message, None);
-        assert_eq!(
-            result.registered_oauth_scopes,
-            vec!["public_repo".to_string(), "user".to_string()]
-        );
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_verify_integration_connection_of_another_user(
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
-        let app = authenticated_app.await;
-        let integration_connection: Box<IntegrationConnection> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "integration-connections",
-            Box::new(IntegrationConnectionCreation {
-                provider_kind: IntegrationProviderKind::Github,
-            }),
-        )
-        .await;
-
-        let (client, _user) =
-            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
-        let response = verify_integration_connection_response(
-            &client,
-            &app.app.api_address,
-            integration_connection.id,
-        )
-        .await;
-
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    }
-}
-
 mod disconnect_integration_connections {
     use pretty_assertions::assert_eq;
 
@@ -408,7 +115,6 @@ mod disconnect_integration_connections {
     #[rstest]
     #[tokio::test]
     async fn test_disconnect_validated_integration_connection(
-        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
@@ -424,66 +130,6 @@ mod disconnect_integration_connections {
             None,
         )
         .await;
-        let nango_provider_keys = settings.nango_provider_keys();
-        let github_config_key = nango_provider_keys
-            .get(&IntegrationProviderKind::Github)
-            .unwrap();
-
-        let _nango_mock = mock_nango_delete_connection_service(
-            &app.app.nango_mock_server,
-            &settings.oauth2.nango_secret_key,
-            &integration_connection.connection_id.to_string(),
-            github_config_key,
-        )
-        .await;
-
-        let disconnected_connection: Box<IntegrationConnection> = delete_resource(
-            &app.client,
-            &app.app.api_address,
-            "integration-connections",
-            integration_connection.id.into(),
-        )
-        .await;
-
-        assert_eq!(
-            disconnected_connection.status,
-            IntegrationConnectionStatus::Created
-        );
-        assert_eq!(disconnected_connection.failure_message, None);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_disconnect_unknown_integration_connection_by_nango(
-        _settings: Settings,
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
-        let app = authenticated_app.await;
-        let integration_connection = create_integration_connection(
-            &app.app,
-            app.user.id,
-            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
-            IntegrationConnectionStatus::Validated,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-        .await;
-
-        Mock::given(method("DELETE"))
-            .and(path(format!(
-                "/connection/{}",
-                integration_connection.connection_id
-            )))
-            .respond_with(ResponseTemplate::new(400).set_body_json(json!({
-                "error": "No connection matching params 'connection_id' and 'provider_config_key'.",
-                "payload": {},
-                "type": "unknown_connection"
-            })))
-            .mount(&app.app.nango_mock_server)
-            .await;
 
         let disconnected_connection: Box<IntegrationConnection> = delete_resource(
             &app.client,

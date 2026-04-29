@@ -124,18 +124,14 @@ It will start the following services:
 
 - `postgresql` to store Universal Inbox data
 - `redis` to store the HTTP sessions
-- `nango-server` (and its database `nango-db`) running as Docker container. [Nango](https://github.com/NangoHQ/nango) is used to manage all OAuth2 connections and token with third party services (used to fetch notifications and tasks)
 - `ui-api` is the Universal Inbox rest API
 - `ui-web` is the Universal Inbox frontend
 
 You can the connect the development application on [http://localhost:8080](http://localhost:8080).
 
-### Configure Nango
+### Configure third-party OAuth applications
 
-To be able to connect to the implemented integrations (for notifications or tasks), Universal Inbox must be declared as an OAuth2 application for each integrations to fetch a `Client ID` and a `Client Secret`.
-
-Each integrations must then be configured in Nango (accessible at [http://localhost:3003](http://localhost:3003)).
-To be able to complete an OAuth2 connection, the Nango server must be accessible from internet. The public address for development is by default <https://oauth-dev.universal-inbox.com>
+Universal Inbox handles the OAuth2 authorization flow natively. For each integration you want to enable (GitHub, Linear, Slack, Google Mail/Calendar/Drive, Todoist, TickTick), declare Universal Inbox as an OAuth2 application with the provider and copy the resulting `oauth_client_id` / `oauth_client_secret` into the matching `[integrations.<name>]` section in `api/config/local.toml` (or via `UNIVERSAL_INBOX__INTEGRATIONS__<NAME>__OAUTH_CLIENT_ID` environment variables). The OAuth redirect URI registered with each provider must be `{front_base_url}/api/oauth/callback`.
 
 ## License
 

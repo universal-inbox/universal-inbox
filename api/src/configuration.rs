@@ -14,8 +14,7 @@ use serde_with::{DisplayFromStr, serde_as};
 use url::Url;
 
 use universal_inbox::{
-    integration_connection::{NangoProviderKey, NangoPublicKey, provider::IntegrationProviderKind},
-    user::UserAuthKind,
+    integration_connection::provider::IntegrationProviderKind, user::UserAuthKind,
 };
 
 use crate::{
@@ -230,19 +229,14 @@ pub struct RedisSettings {
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Oauth2Settings {
-    pub nango_base_url: Url,
-    pub nango_secret_key: String,
-    pub nango_public_key: NangoPublicKey,
     /// Hex-encoded 32-byte AES-256 key for encrypting OAuth tokens at rest.
-    /// Required when any integration uses internal OAuth (not Nango).
-    pub token_encryption_key: Option<String>,
+    pub token_encryption_key: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct IntegrationSettings {
     pub name: String,
     pub kind: IntegrationProviderKind,
-    pub nango_key: NangoProviderKey,
     pub required_oauth_scopes: Vec<String>,
     pub use_as_oauth_user_scopes: Option<bool>,
     pub page_size: Option<usize>,
@@ -251,8 +245,8 @@ pub struct IntegrationSettings {
     pub is_enabled: bool,
     pub api_max_retry_duration_http_seconds: Option<u64>,
     pub api_max_retry_duration_worker_seconds: Option<u64>,
-    pub oauth_client_id: Option<String>,
-    pub oauth_client_secret: Option<ClientSecret>,
+    pub oauth_client_id: String,
+    pub oauth_client_secret: ClientSecret,
 }
 
 #[derive(Debug, Clone)]
@@ -405,14 +399,6 @@ impl Settings {
 
     pub fn new() -> Result<Self, ConfigError> {
         Settings::new_from_file(None)
-    }
-
-    pub fn nango_provider_keys(&self) -> HashMap<IntegrationProviderKind, NangoProviderKey> {
-        HashMap::from_iter(
-            self.integrations
-                .values()
-                .map(|config| (config.kind, config.nango_key.clone())),
-        )
     }
 
     pub fn required_oauth_scopes(&self) -> HashMap<IntegrationProviderKind, Vec<String>> {

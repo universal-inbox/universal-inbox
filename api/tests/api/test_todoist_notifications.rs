@@ -15,14 +15,12 @@ use universal_inbox::{
     },
 };
 
-use universal_inbox_api::{
-    configuration::Settings,
-    integrations::{oauth2::NangoConnection, todoist::TodoistSyncResponse},
-};
+use universal_inbox_api::{configuration::Settings, integrations::todoist::TodoistSyncResponse};
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
-    integration_connection::{create_and_mock_integration_connection, nango_todoist_connection},
+    integration_connection::{create_and_mock_integration_connection, todoist_oauth_credential},
     rest::{create_resource, get_resource, patch_resource, patch_resource_response},
     settings,
     task::todoist::{
@@ -43,16 +41,15 @@ mod patch_notification {
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -132,16 +129,15 @@ mod patch_notification {
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -207,16 +203,15 @@ mod patch_notification {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let todoist_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )

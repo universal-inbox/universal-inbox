@@ -47,10 +47,6 @@ pub fn scope() -> Scope {
             web::resource("/{integration_connection_id}/config")
                 .route(web::put().to(update_integration_connection_config)),
         )
-        .service(
-            web::resource("/{integration_connection_id}/status")
-                .route(web::patch().to(verify_integration_connection)),
-        )
 }
 
 pub async fn list_integration_connections(
@@ -166,55 +162,6 @@ pub async fn update_integration_connection_config(
                     })
                         .to_string(),
                 ))),
-    }
-}
-
-pub async fn verify_integration_connection(
-    path: web::Path<IntegrationConnectionId>,
-    integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
-    authenticated: Authenticated<Claims>,
-) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = authenticated
-        .claims
-        .sub
-        .parse::<UserId>()
-        .context("Wrong user ID format")?;
-    let integration_connection_id = path.into_inner();
-    let service = integration_connection_service.read().await;
-    let mut transaction = service.begin().await.context(format!(
-        "Failed to verify integration connection {integration_connection_id}"
-    ))?;
-
-    let updated_integration_connection = service
-        .verify_integration_connection(&mut transaction, integration_connection_id, user_id)
-        .await?;
-
-    transaction.commit().await.context(format!(
-        "Failed to commit while verifying integration connection {integration_connection_id}"
-    ))?;
-
-    match updated_integration_connection {
-        UpdateStatus {
-            updated: _,
-            result: Some(integration_connection),
-        } => Ok(HttpResponse::Ok().content_type("application/json").body(
-            serde_json::to_string(&integration_connection)
-                .context("Cannot serialize integration connection")?,
-        )),
-        UpdateStatus {
-            updated: _,
-            result: None,
-        } => Ok(HttpResponse::NotFound()
-            .content_type("application/json")
-            .body(BoxBody::new(
-                json!({
-                    "message":
-                    format!(
-                        "Cannot update unknown integration_connection {integration_connection_id}"
-                    )
-                })
-                .to_string(),
-            ))),
     }
 }
 

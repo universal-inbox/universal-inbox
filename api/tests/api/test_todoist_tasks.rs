@@ -28,19 +28,17 @@ use wiremock::{
 
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::{
-        oauth2::NangoConnection,
-        todoist::{
-            TodoistService, TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUpdateArgs,
-            TodoistSyncResponse,
-        },
+    integrations::todoist::{
+        TodoistService, TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUpdateArgs,
+        TodoistSyncResponse,
     },
 };
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, nango_github_connection, nango_todoist_connection,
+        create_and_mock_integration_connection, github_oauth_credential, todoist_oauth_credential,
     },
     notification::{
         create_task_from_notification,
@@ -71,16 +69,15 @@ mod patch_task {
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -160,16 +157,15 @@ mod patch_task {
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -251,16 +247,15 @@ mod patch_task {
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -390,18 +385,17 @@ mod patch_task {
         github_notification: Box<GithubNotification>,
         sync_todoist_projects_response: TodoistSyncResponse,
         todoist_item: Box<TodoistItem>,
-        nango_todoist_connection: Box<NangoConnection>,
-        nango_github_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -431,10 +425,9 @@ mod patch_task {
         let todoist_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -564,18 +557,17 @@ mod patch_task {
         github_notification: Box<GithubNotification>,
         sync_todoist_projects_response: TodoistSyncResponse,
         todoist_item: Box<TodoistItem>,
-        nango_todoist_connection: Box<NangoConnection>,
-        nango_github_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -604,7 +596,6 @@ mod patch_task {
         let todoist_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig {
                 default_project: Some(ProjectSummary {
                     source_id: project_id.clone().into(),
@@ -615,7 +606,7 @@ mod patch_task {
                 ..TodoistConfig::enabled()
             }),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
@@ -739,17 +730,16 @@ mod patch_notification {
         github_notification: Box<GithubNotification>,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
-        nango_todoist_connection: Box<NangoConnection>,
-        nango_github_connection: Box<NangoConnection>,
+        todoist_oauth_credential: OAuthCredentialFixture,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -764,10 +754,9 @@ mod patch_notification {
         let todoist_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )
