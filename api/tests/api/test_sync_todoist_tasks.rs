@@ -23,17 +23,15 @@ use universal_inbox::{
         item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
 };
-use universal_inbox_api::{
-    configuration::Settings,
-    integrations::{oauth2::NangoConnection, todoist::TodoistSyncResponse},
-};
+use universal_inbox_api::{configuration::Settings, integrations::todoist::TodoistSyncResponse};
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, create_integration_connection,
         get_integration_connection, get_integration_connection_per_provider,
-        nango_todoist_connection, update_integration_connection_context,
+        todoist_oauth_credential, update_integration_connection_context,
     },
     notification::list_notifications_with_tasks,
     rest::{create_resource, get_resource},
@@ -55,7 +53,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     #[future] authenticated_app: AuthenticatedApp,
     sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_todoist_connection: Box<NangoConnection>,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     // existing task will be updated
     // the linked notification will be marked as deleted as the task's project will not be Inbox anymore
@@ -65,10 +63,9 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -274,7 +271,7 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
     #[future] authenticated_app: AuthenticatedApp,
     sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_todoist_connection: Box<NangoConnection>,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     // When disabling the creation of notifications from Inbox tasks, no notification should be created
     let app = authenticated_app.await;
@@ -282,13 +279,12 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
     let _integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig {
             create_notification_from_inbox_task: false,
             ..TodoistConfig::enabled()
         }),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -343,17 +339,16 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
 async fn test_sync_tasks_should_add_new_empty_task(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
-    nango_todoist_connection: Box<NangoConnection>,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     // Somehow, Todoist may return empty TodoistItems not attached to any project
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -440,16 +435,15 @@ async fn test_sync_tasks_should_add_new_empty_task(
 async fn test_sync_tasks_should_reuse_existing_sync_token(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
-    nango_todoist_connection: Box<NangoConnection>,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -515,16 +509,15 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     #[future] authenticated_app: AuthenticatedApp,
     mut sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_todoist_connection: Box<NangoConnection>,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -636,16 +629,15 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
     #[future] authenticated_app: AuthenticatedApp,
     mut sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_todoist_connection: Box<NangoConnection>,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -790,16 +782,15 @@ async fn test_sync_tasks_with_no_validated_integration_connections(
 async fn test_sync_tasks_with_synchronization_disabled(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
-    nango_todoist_connection: Box<NangoConnection>,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::disabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -829,17 +820,16 @@ async fn test_sync_all_tasks_asynchronously(
     #[future] authenticated_app: AuthenticatedApp,
     sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_todoist_connection: Box<NangoConnection>,
+    todoist_oauth_credential: OAuthCredentialFixture,
     #[case] trigger_sync_when_listing_tasks: bool,
 ) {
     let app = authenticated_app.await;
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -959,16 +949,15 @@ async fn test_sync_all_tasks_asynchronously(
 async fn test_sync_all_tasks_asynchronously_in_error(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
-    nango_todoist_connection: Box<NangoConnection>,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )

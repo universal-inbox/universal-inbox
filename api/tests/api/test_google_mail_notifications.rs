@@ -9,16 +9,17 @@ use universal_inbox::{
     third_party::integrations::google_mail::{GOOGLE_MAIL_INBOX_LABEL, GoogleMailThread},
 };
 
-use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
+use universal_inbox_api::configuration::Settings;
 use wiremock::{
     Mock, ResponseTemplate,
     matchers::{method, path},
 };
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, nango_google_mail_connection,
+        create_and_mock_integration_connection, google_mail_oauth_credential,
     },
     notification::google_mail::{
         create_notification_from_google_mail_thread, google_mail_thread_get_123,
@@ -37,7 +38,7 @@ mod patch_resource {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         google_mail_thread_get_123: GoogleMailThread,
-        nango_google_mail_connection: Box<NangoConnection>,
+        google_mail_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let google_mail_config = GoogleMailConfig::enabled();
@@ -45,10 +46,9 @@ mod patch_resource {
         let google_mail_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
-            nango_google_mail_connection,
+            google_mail_oauth_credential,
             None,
             None,
         )
@@ -97,7 +97,7 @@ mod patch_resource {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         google_mail_thread_get_123: GoogleMailThread,
-        nango_google_mail_connection: Box<NangoConnection>,
+        google_mail_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let google_mail_config = GoogleMailConfig::enabled();
@@ -105,10 +105,9 @@ mod patch_resource {
         let google_mail_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
-            nango_google_mail_connection,
+            google_mail_oauth_credential,
             None,
             None,
         )
@@ -154,7 +153,7 @@ mod patch_resource {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         google_mail_thread_get_123: GoogleMailThread,
-        nango_google_mail_connection: Box<NangoConnection>,
+        google_mail_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let google_mail_config = GoogleMailConfig::enabled();
@@ -162,10 +161,9 @@ mod patch_resource {
         let google_mail_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
-            nango_google_mail_connection,
+            google_mail_oauth_credential,
             None,
             None,
         )
@@ -216,7 +214,7 @@ mod patch_resource {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         google_mail_thread_get_123: GoogleMailThread,
-        nango_google_mail_connection: Box<NangoConnection>,
+        google_mail_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let google_mail_config = GoogleMailConfig::enabled();
@@ -224,10 +222,9 @@ mod patch_resource {
         let google_mail_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
-            nango_google_mail_connection,
+            google_mail_oauth_credential,
             None,
             None,
         )

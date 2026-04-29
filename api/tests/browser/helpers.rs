@@ -50,7 +50,6 @@ pub struct BrowserTestedApp {
     pub _google_drive_mock_server: MockServer,
     pub _slack_mock_server: MockServer,
     pub _todoist_mock_server: MockServer,
-    pub _nango_mock_server: MockServer,
 }
 
 impl Drop for BrowserTestedApp {
@@ -124,7 +123,6 @@ pub async fn browser_tested_app(
         _google_drive_mock_server: mock_servers.google_drive,
         _slack_mock_server: mock_servers.slack,
         _todoist_mock_server: mock_servers.todoist,
-        _nango_mock_server: mock_servers.nango,
     }
 }
 

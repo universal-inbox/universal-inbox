@@ -7,7 +7,7 @@ use url::Url;
 
 use universal_inbox::{
     FrontAuthenticationConfig, FrontConfig, IntegrationProviderStaticConfig,
-    integration_connection::{NangoPublicKey, provider::IntegrationProviderKind},
+    integration_connection::provider::IntegrationProviderKind,
 };
 
 use crate::{
@@ -19,8 +19,6 @@ use crate::{
 pub struct AppConfig {
     pub authentication_configs: Vec<FrontAuthenticationConfig>,
     pub api_base_url: Url,
-    pub nango_base_url: Url,
-    pub nango_public_key: NangoPublicKey,
     pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
     pub support_href: Option<String>,
     pub show_changelog: bool,
@@ -56,8 +54,6 @@ pub async fn get_app_config() -> Result<AppConfig> {
     let app_config = AppConfig {
         api_base_url,
         authentication_configs: front_config.authentication_configs,
-        nango_base_url: front_config.nango_base_url,
-        nango_public_key: front_config.nango_public_key,
         integration_providers: front_config.integration_providers,
         support_href: front_config.support_href,
         show_changelog: front_config.show_changelog,

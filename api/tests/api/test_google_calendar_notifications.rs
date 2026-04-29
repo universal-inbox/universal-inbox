@@ -13,13 +13,14 @@ use universal_inbox::{
     },
 };
 
-use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
+use universal_inbox_api::configuration::Settings;
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, nango_google_calendar_connection,
-        nango_google_mail_connection,
+        create_and_mock_integration_connection, google_calendar_oauth_credential,
+        google_mail_oauth_credential,
     },
     notification::{
         google_calendar::{
@@ -42,8 +43,8 @@ mod patch_resource {
         #[future] authenticated_app: AuthenticatedApp,
         google_mail_thread_get_123: GoogleMailThread,
         google_calendar_event: GoogleCalendarEvent,
-        nango_google_mail_connection: Box<NangoConnection>,
-        nango_google_calendar_connection: Box<NangoConnection>,
+        google_mail_oauth_credential: OAuthCredentialFixture,
+        google_calendar_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
@@ -52,10 +53,9 @@ mod patch_resource {
         let google_mail_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
-            nango_google_mail_connection,
+            google_mail_oauth_credential,
             None,
             None,
         )
@@ -64,10 +64,9 @@ mod patch_resource {
         let google_calendar_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
             &settings,
-            nango_google_calendar_connection,
+            google_calendar_oauth_credential,
             None,
             None,
         )
@@ -126,8 +125,8 @@ mod patch_resource {
         #[future] authenticated_app: AuthenticatedApp,
         google_mail_thread_get_123: GoogleMailThread,
         google_calendar_event: GoogleCalendarEvent,
-        nango_google_mail_connection: Box<NangoConnection>,
-        nango_google_calendar_connection: Box<NangoConnection>,
+        google_mail_oauth_credential: OAuthCredentialFixture,
+        google_calendar_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
@@ -136,10 +135,9 @@ mod patch_resource {
         let google_mail_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
-            nango_google_mail_connection,
+            google_mail_oauth_credential,
             None,
             None,
         )
@@ -148,10 +146,9 @@ mod patch_resource {
         let google_calendar_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
             &settings,
-            nango_google_calendar_connection,
+            google_calendar_oauth_credential,
             None,
             None,
         )
@@ -217,18 +214,17 @@ mod patch_resource {
         #[future] authenticated_app: AuthenticatedApp,
         google_mail_thread_get_123: GoogleMailThread,
         google_calendar_event: GoogleCalendarEvent,
-        nango_google_mail_connection: Box<NangoConnection>,
-        nango_google_calendar_connection: Box<NangoConnection>,
+        google_mail_oauth_credential: OAuthCredentialFixture,
+        google_calendar_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
         let google_mail_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
             &settings,
-            nango_google_mail_connection,
+            google_mail_oauth_credential,
             None,
             None,
         )
@@ -237,10 +233,9 @@ mod patch_resource {
         let google_calendar_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
             &settings,
-            nango_google_calendar_connection,
+            google_calendar_oauth_credential,
             None,
             None,
         )
@@ -308,8 +303,8 @@ mod update_invitation {
         #[future] authenticated_app: AuthenticatedApp,
         google_mail_thread_get_123: GoogleMailThread,
         google_calendar_event: GoogleCalendarEvent,
-        nango_google_mail_connection: Box<NangoConnection>,
-        nango_google_calendar_connection: Box<NangoConnection>,
+        google_mail_oauth_credential: OAuthCredentialFixture,
+        google_calendar_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
@@ -318,10 +313,9 @@ mod update_invitation {
         let google_mail_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
-            nango_google_mail_connection,
+            google_mail_oauth_credential,
             None,
             None,
         )
@@ -330,10 +324,9 @@ mod update_invitation {
         let google_calendar_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
             &settings,
-            nango_google_calendar_connection,
+            google_calendar_oauth_credential,
             None,
             None,
         )

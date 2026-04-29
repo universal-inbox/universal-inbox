@@ -12,7 +12,6 @@
     "typescript": "5.3.3"
   },
   "dependencies": {
-    "@nangohq/frontend": "git+https://github.com/dax/nango-frontend.git",
     "crisp-sdk-web": "^1.0.26"
   }
 }

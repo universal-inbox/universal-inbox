@@ -23,7 +23,6 @@ pub struct IntegrationConnection {
     pub id: IntegrationConnectionId,
     pub user_id: UserId,
     pub provider_user_id: Option<String>,
-    pub connection_id: ConnectionId,
     pub status: IntegrationConnectionStatus,
     pub failure_message: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -54,7 +53,6 @@ impl IntegrationConnection {
     ) -> Self {
         Self {
             id: Uuid::new_v4().into(),
-            connection_id: Uuid::new_v4().into(),
             user_id,
             provider_user_id: None,
             status,
@@ -95,7 +93,9 @@ impl IntegrationConnection {
 
     pub fn has_oauth_scopes(&self, scopes: &[String]) -> bool {
         if self.provider.kind() == IntegrationProviderKind::Todoist {
-            // Todoist scopes are not registered in Nango, let's consider them as always valid
+            // Todoist's token response does not include a `scope` field, so
+            // `registered_oauth_scopes` is always empty; treat the connection as
+            // satisfying whatever scopes are requested.
             return true;
         }
         scopes
@@ -265,68 +265,6 @@ impl FromStr for IntegrationConnectionId {
 
     fn from_str(uuid: &str) -> Result<Self, Self::Err> {
         Ok(Self(Uuid::parse_str(uuid)?))
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
-#[serde(transparent)]
-pub struct ConnectionId(pub Uuid);
-
-impl fmt::Display for ConnectionId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<Uuid> for ConnectionId {
-    fn from(uuid: Uuid) -> Self {
-        Self(uuid)
-    }
-}
-
-impl From<ConnectionId> for Uuid {
-    fn from(connection_id: ConnectionId) -> Self {
-        connection_id.0
-    }
-}
-
-impl FromStr for ConnectionId {
-    type Err = uuid::Error;
-
-    fn from_str(uuid: &str) -> Result<Self, Self::Err> {
-        Ok(Self(Uuid::parse_str(uuid)?))
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
-#[serde(transparent)]
-pub struct NangoProviderKey(pub String);
-
-impl fmt::Display for NangoProviderKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<String> for NangoProviderKey {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
-#[serde(transparent)]
-pub struct NangoPublicKey(pub String);
-
-impl fmt::Display for NangoPublicKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<String> for NangoPublicKey {
-    fn from(s: String) -> Self {
-        Self(s)
     }
 }
 

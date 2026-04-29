@@ -24,13 +24,13 @@ use wiremock::{
 
 use universal_inbox_api::{
     configuration::Settings, integrations::linear::graphql::notifications_query,
-    integrations::oauth2::NangoConnection,
 };
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticate_user, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, nango_github_connection, nango_linear_connection,
+        create_and_mock_integration_connection, github_oauth_credential, linear_oauth_credential,
     },
     notification::{
         github::{create_notification_from_github_notification, github_notification},
@@ -75,17 +75,16 @@ mod list_notifications {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -258,17 +257,16 @@ mod list_notifications {
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
         sync_linear_notifications_response: Response<notifications_query::ResponseData>,
-        nango_github_connection: Box<NangoConnection>,
-        nango_linear_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
+        linear_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -291,10 +289,9 @@ mod list_notifications {
         let linear_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
-            nango_linear_connection,
+            linear_oauth_credential,
             None,
             None,
         )
@@ -359,17 +356,16 @@ mod get_notification {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -445,16 +441,15 @@ mod patch_notifications_bulk {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let mut app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -553,16 +548,15 @@ mod patch_notification {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -603,17 +597,16 @@ mod patch_notification {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -658,17 +651,16 @@ mod patch_notification {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -717,16 +709,15 @@ mod patch_notification {
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )

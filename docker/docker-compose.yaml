@@ -1,24 +1,6 @@
 name: "universal-inbox"
 
 services:
-  nango-db:
-    image: "postgres:15"
-    networks:
-      - universal-inbox
-    volumes:
-      - nango-db:/var/lib/postgresql/data
-    env_file:
-      - nango-db.env
-
-  nango-server:
-    image: "nangohq/nango-server:hosted-02c1ee2bcbd92741057582169c95c4157ba98262"
-    networks:
-      - universal-inbox
-    ports:
-      - "3003:3003"
-    env_file:
-      - nango-server.env
-
   universal-inbox-db:
     image: "postgres:15"
     healthcheck:
@@ -85,5 +67,4 @@ networks:
   universal-inbox:
 
 volumes:
-  nango-db:
   universal-inbox-db:

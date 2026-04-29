@@ -9,7 +9,7 @@ use anyhow::Context;
 
 use universal_inbox::{
     FrontAuthenticationConfig, FrontConfig, FrontOIDCAuthorizationCodePKCEFlowConfig,
-    FrontOIDCGoogleAuthorizationCodeFlowConfig, IntegrationProviderStaticConfig, OAuthMethod,
+    FrontOIDCGoogleAuthorizationCodeFlowConfig, IntegrationProviderStaticConfig,
 };
 
 use crate::{
@@ -72,7 +72,6 @@ pub async fn front_config(
             config.kind,
             IntegrationProviderStaticConfig {
                 name: config.name.clone(),
-                nango_config_key: config.nango_key.clone(),
                 oauth_user_scopes: if config.use_as_oauth_user_scopes.unwrap_or_default() {
                     config.required_oauth_scopes.clone()
                 } else {
@@ -81,18 +80,11 @@ pub async fn front_config(
                 required_oauth_scopes: config.required_oauth_scopes.clone(),
                 warning_message: config.warning_message.clone(),
                 is_enabled: config.is_enabled,
-                oauth_method: if config.oauth_client_id.is_some() {
-                    OAuthMethod::Internal
-                } else {
-                    OAuthMethod::Nango
-                },
             },
         )
     }));
     let config = FrontConfig {
         authentication_configs,
-        nango_base_url: settings.oauth2.nango_base_url.clone(),
-        nango_public_key: settings.oauth2.nango_public_key.clone(),
         integration_providers,
         support_href: settings.application.support_href.clone(),
         show_changelog: settings.application.show_changelog,

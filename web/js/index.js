@@ -1,19 +1,4 @@
 import { Crisp } from "crisp-sdk-web";
-import Nango from "@nangohq/frontend";
-
-export function auth_provider(
-    nangoHost,
-    publicKey,
-    configKey,
-    connectionId,
-    oauthUserScopes,
-) {
-    return new Nango({
-        host: nangoHost,
-        publicKey: publicKey,
-        debug: true,
-    }).auth(configKey, connectionId, { user_scope: oauthUserScopes });
-}
 
 import "flyonui/dist/dropdown";
 import "flyonui/dist/collapse";

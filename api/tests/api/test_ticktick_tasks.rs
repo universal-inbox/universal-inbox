@@ -16,16 +16,14 @@ use universal_inbox::{
     },
 };
 
-use universal_inbox_api::{
-    configuration::Settings,
-    integrations::{oauth2::NangoConnection, ticktick::TickTickService},
-};
+use universal_inbox_api::{configuration::Settings, integrations::ticktick::TickTickService};
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, create_ticktick_integration_connection,
-        nango_github_connection,
+        github_oauth_credential,
     },
     notification::{
         create_task_from_notification,
@@ -224,17 +222,16 @@ mod patch_task {
         github_notification: Box<GithubNotification>,
         ticktick_item: Box<TickTickItem>,
         ticktick_projects_response: Vec<TickTickProject>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -420,7 +417,7 @@ mod patch_task {
         github_notification: Box<GithubNotification>,
         ticktick_item: Box<TickTickItem>,
         ticktick_projects_response: Vec<TickTickProject>,
-        nango_github_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
 
@@ -428,10 +425,9 @@ mod patch_task {
         let github_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )

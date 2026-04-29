@@ -44,16 +44,16 @@ use universal_inbox_api::{
             GoogleMailLabelList, GoogleMailThreadList, GoogleMailThreadMinimal,
             GoogleMailUserProfile,
         },
-        oauth2::NangoConnection,
         todoist::TodoistSyncResponse,
     },
 };
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, get_integration_connection,
-        nango_google_calendar_connection, nango_google_mail_connection, nango_todoist_connection,
+        google_calendar_oauth_credential, google_mail_oauth_credential, todoist_oauth_credential,
     },
     notification::{
         google_calendar::{
@@ -91,8 +91,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     google_mail_labels_list: GoogleMailLabelList,
     todoist_item: Box<TodoistItem>,
     sync_todoist_projects_response: TodoistSyncResponse,
-    nango_google_mail_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    google_mail_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let user_email_address =
@@ -117,10 +117,9 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -159,10 +158,9 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let google_mail_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
-        nango_google_mail_connection,
+        google_mail_oauth_credential,
         None,
         None,
     )
@@ -326,7 +324,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     mut google_mail_thread_get_456: GoogleMailThread,
     google_mail_user_profile: GoogleMailUserProfile,
     google_mail_labels_list: GoogleMailLabelList,
-    nango_google_mail_connection: Box<NangoConnection>,
+    google_mail_oauth_credential: OAuthCredentialFixture,
     #[case] has_new_message_addressed_directly: bool,
     #[case] has_new_unread_message: bool,
     #[case] expected_notification_status_after_sync: NotificationStatus,
@@ -377,10 +375,9 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     let google_mail_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
-        nango_google_mail_connection,
+        google_mail_oauth_credential,
         None,
         None,
     )
@@ -508,8 +505,8 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
     google_mail_invitation_attachment: GoogleMailMessageBody,
     _google_calendar_event: GoogleCalendarEvent,
     google_calendar_events_list: GoogleCalendarEventsList,
-    nango_google_mail_connection: Box<NangoConnection>,
-    nango_google_calendar_connection: Box<NangoConnection>,
+    google_mail_oauth_credential: OAuthCredentialFixture,
+    google_calendar_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let google_mail_threads_list = GoogleMailThreadList {
@@ -527,10 +524,9 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
         &settings,
-        nango_google_calendar_connection,
+        google_calendar_oauth_credential,
         None,
         None,
     )
@@ -540,10 +536,9 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
-        nango_google_mail_connection,
+        google_mail_oauth_credential,
         None,
         None,
     )
@@ -684,8 +679,8 @@ async fn test_sync_notifications_should_update_a_google_calendar_notification_fr
     google_mail_invitation_attachment: GoogleMailMessageBody,
     google_calendar_event: GoogleCalendarEvent,
     google_calendar_events_list: GoogleCalendarEventsList,
-    nango_google_mail_connection: Box<NangoConnection>,
-    nango_google_calendar_connection: Box<NangoConnection>,
+    google_mail_oauth_credential: OAuthCredentialFixture,
+    google_calendar_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let google_mail_threads_list = GoogleMailThreadList {
@@ -703,10 +698,9 @@ async fn test_sync_notifications_should_update_a_google_calendar_notification_fr
     let google_calendar_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
         &settings,
-        nango_google_calendar_connection,
+        google_calendar_oauth_credential,
         None,
         None,
     )
@@ -716,10 +710,9 @@ async fn test_sync_notifications_should_update_a_google_calendar_notification_fr
     let google_mail_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
-        nango_google_mail_connection,
+        google_mail_oauth_credential,
         None,
         None,
     )
@@ -879,8 +872,8 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
     google_mail_invitation_reply_attachment: GoogleMailMessageBody,
     google_calendar_event_reply: GoogleCalendarEvent,
     google_calendar_events_list_reply: GoogleCalendarEventsList,
-    nango_google_mail_connection: Box<NangoConnection>,
-    nango_google_calendar_connection: Box<NangoConnection>,
+    google_mail_oauth_credential: OAuthCredentialFixture,
+    google_calendar_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
     let google_mail_threads_list = GoogleMailThreadList {
@@ -898,10 +891,9 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
         &settings,
-        nango_google_calendar_connection,
+        google_calendar_oauth_credential,
         None,
         None,
     )
@@ -911,10 +903,9 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
-        nango_google_mail_connection,
+        google_mail_oauth_credential,
         None,
         None,
     )
@@ -1046,7 +1037,7 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
     mut google_mail_thread_get_456: GoogleMailThread,
     google_mail_user_profile: GoogleMailUserProfile,
     google_mail_labels_list: GoogleMailLabelList,
-    nango_google_mail_connection: Box<NangoConnection>,
+    google_mail_oauth_credential: OAuthCredentialFixture,
     #[case] last_message_from_user: bool,
     #[case] expected_notification_status: NotificationStatus,
 ) {
@@ -1093,10 +1084,9 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
     let google_mail_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
-        nango_google_mail_connection,
+        google_mail_oauth_credential,
         None,
         None,
     )

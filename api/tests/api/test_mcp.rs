@@ -16,16 +16,14 @@ use universal_inbox::{
     notification::{NotificationStatus, service::NotificationPatch},
     third_party::integrations::todoist::TodoistItem,
 };
-use universal_inbox_api::{
-    configuration::Settings,
-    integrations::{oauth2::NangoConnection, todoist::TodoistSyncResponse},
-};
+use universal_inbox_api::{configuration::Settings, integrations::todoist::TodoistSyncResponse};
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     TestedApp,
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, nango_github_connection, nango_todoist_connection,
+        create_and_mock_integration_connection, github_oauth_credential, todoist_oauth_credential,
     },
     notification::{
         github::{create_notification_from_github_notification, sync_github_notifications},
@@ -426,8 +424,8 @@ mod scenario {
         sync_github_notifications: Vec<
             universal_inbox::third_party::integrations::github::GithubNotification,
         >,
-        nango_github_connection: Box<NangoConnection>,
-        nango_todoist_connection: Box<NangoConnection>,
+        github_oauth_credential: OAuthCredentialFixture,
+        todoist_oauth_credential: OAuthCredentialFixture,
         sync_todoist_projects_response: TodoistSyncResponse,
         todoist_item: Box<TodoistItem>,
     ) {
@@ -438,10 +436,9 @@ mod scenario {
         let github_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
-            nango_github_connection,
+            github_oauth_credential,
             None,
             None,
         )
@@ -449,10 +446,9 @@ mod scenario {
         let _todoist_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            nango_todoist_connection,
+            todoist_oauth_credential,
             None,
             None,
         )

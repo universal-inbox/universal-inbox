@@ -22,16 +22,14 @@ use universal_inbox::{
 
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::{
-        linear::graphql::assigned_issues_query, oauth2::NangoConnection,
-        todoist::TodoistSyncResponse,
-    },
+    integrations::{linear::graphql::assigned_issues_query, todoist::TodoistSyncResponse},
 };
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, nango_linear_connection, nango_todoist_connection,
+        create_and_mock_integration_connection, linear_oauth_credential, todoist_oauth_credential,
     },
     notification::{
         linear::{mock_linear_update_issue_state_query, sync_linear_tasks_response},
@@ -61,8 +59,8 @@ async fn test_sync_todoist_linear_task(
     mut sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
     sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
-    nango_linear_connection: Box<NangoConnection>,
-    nango_todoist_connection: Box<NangoConnection>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
     #[case] new_project_id: &str,
     #[case] expected_new_task_status: TaskStatus,
 ) {
@@ -70,10 +68,9 @@ async fn test_sync_todoist_linear_task(
     let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
-        nango_todoist_connection,
+        todoist_oauth_credential,
         None,
         None,
     )
@@ -85,7 +82,6 @@ async fn test_sync_todoist_linear_task(
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
@@ -97,7 +93,7 @@ async fn test_sync_todoist_linear_task(
             },
         }),
         &settings,
-        nango_linear_connection,
+        linear_oauth_credential,
         None,
         None,
     )

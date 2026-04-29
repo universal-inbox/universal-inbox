@@ -13,7 +13,6 @@ use crate::{
 pub struct LinearOAuth2Provider {
     authorize_url: Url,
     token_url: Url,
-    migration_url: Url,
     client_id: String,
     client_secret: SecretBox<ClientSecret>,
     required_scopes: Vec<String>,
@@ -24,7 +23,6 @@ impl std::fmt::Debug for LinearOAuth2Provider {
         f.debug_struct("LinearOAuth2Provider")
             .field("authorize_url", &self.authorize_url)
             .field("token_url", &self.token_url)
-            .field("migration_url", &self.migration_url)
             .field("client_id", &self.client_id)
             .field("required_scopes", &self.required_scopes)
             .finish_non_exhaustive()
@@ -42,8 +40,6 @@ impl LinearOAuth2Provider {
                 .expect("Invalid Linear authorize URL"),
             token_url: Url::parse("https://api.linear.app/oauth/token")
                 .expect("Invalid Linear token URL"),
-            migration_url: Url::parse("https://api.linear.app/oauth/migrate_old_token")
-                .expect("Invalid Linear migration URL"),
             client_id,
             client_secret,
             required_scopes,
@@ -82,10 +78,6 @@ impl OAuth2Provider for LinearOAuth2Provider {
 
     fn scope_delimiter(&self) -> &'static str {
         ","
-    }
-
-    fn migration_url(&self) -> Option<&Url> {
-        Some(&self.migration_url)
     }
 
     fn extract_registered_scopes(
@@ -143,16 +135,6 @@ mod tests {
     fn test_supports_pkce() {
         assert!(provider().supports_pkce());
     }
-
-    #[test]
-    fn test_migration_url_is_some() {
-        assert!(provider().migration_url().is_some());
-        assert_eq!(
-            provider().migration_url().unwrap().as_str(),
-            "https://api.linear.app/oauth/migrate_old_token"
-        );
-    }
-
     #[test]
     fn test_extract_scopes_from_array() {
         let raw = json!({ "scope": ["read", "write"] });

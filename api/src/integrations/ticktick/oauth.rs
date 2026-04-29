@@ -76,10 +76,6 @@ impl OAuth2Provider for TickTickOAuth2Provider {
         true
     }
 
-    fn migration_url(&self) -> Option<&Url> {
-        None
-    }
-
     fn scope_delimiter(&self) -> &'static str {
         " "
     }
@@ -138,12 +134,6 @@ mod tests {
     fn test_supports_pkce() {
         assert!(provider().supports_pkce());
     }
-
-    #[test]
-    fn test_migration_url_is_none() {
-        assert!(provider().migration_url().is_none());
-    }
-
     #[test]
     fn test_extract_scopes_from_space_separated_string() {
         let raw = json!({ "scope": "tasks:read tasks:write" });
