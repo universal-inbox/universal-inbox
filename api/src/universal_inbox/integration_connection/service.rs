@@ -42,7 +42,7 @@ use crate::{
         Repository,
         integration_connection::{
             IntegrationConnectionRepository, IntegrationConnectionSyncStatusUpdate,
-            IntegrationConnectionSyncedBeforeFilter,
+            IntegrationConnectionSyncedBeforeFilter, OAUTH_INVALID_GRANT_ERROR_MESSAGE,
         },
         notification::NotificationRepository,
         oauth_credential::OAuthCredentialRepository,
@@ -1125,6 +1125,30 @@ impl IntegrationConnectionService {
                 .await
             {
                 Ok(resp) => resp,
+                Err(UniversalInboxError::OAuth2InvalidGrant(detail)) => {
+                    warn!(
+                        "Refresh token for connection {conn_id} ({pk:?}) is no longer valid \
+                         (invalid_grant): {detail}. Marking connection as Failing."
+                    );
+                    if let Err(update_err) = self
+                        .repository
+                        .update_integration_connection_status(
+                            executor,
+                            conn_id,
+                            IntegrationConnectionStatus::Failing,
+                            Some(OAUTH_INVALID_GRANT_ERROR_MESSAGE.to_string()),
+                            None,
+                            credential.user_id,
+                        )
+                        .await
+                    {
+                        error!(
+                            "Failed to mark connection {conn_id} as Failing after invalid_grant: {update_err:?}"
+                        );
+                    }
+                    failed += 1;
+                    continue;
+                }
                 Err(err) => {
                     error!(
                         "Failed to refresh access token for connection {conn_id} ({pk:?}): {err:?}"

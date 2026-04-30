@@ -76,6 +76,8 @@ pub enum UniversalInboxError {
     Forbidden(String),
     #[error("Recoverable error: {0}")]
     Recoverable(#[source] anyhow::Error),
+    #[error("OAuth2 refresh token is no longer valid (invalid_grant): {0}")]
+    OAuth2InvalidGrant(String),
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }

@@ -139,6 +139,9 @@ pub trait IntegrationConnectionRepository {
 
 pub const TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE: &str = "♻️ Synchronization has been failing for too long. Please try to reconnect the integration. If the issue keeps happening, please contact our support.";
 
+pub const OAUTH_INVALID_GRANT_ERROR_MESSAGE: &str =
+    "🔌 Authorization has expired or been revoked. Please reconnect this integration.";
+
 #[async_trait]
 impl IntegrationConnectionRepository for Repository {
     #[tracing::instrument(

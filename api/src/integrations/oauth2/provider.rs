@@ -249,6 +249,17 @@ impl OAuth2FlowService {
             .context("Failed to read token refresh response body")?;
 
         if !status.is_success() {
+            // RFC 6749 §5.2: an authorization server returns HTTP 400 with
+            // `{"error":"invalid_grant",...}` when the refresh token has expired
+            // or been revoked. Surface this as a typed error so the caller can
+            // mark the integration connection Failing and prompt re-auth.
+            if status == http::StatusCode::BAD_REQUEST
+                && let Ok(error_body) = serde_json::from_str::<OAuth2ErrorBody>(&body)
+                && error_body.error == "invalid_grant"
+            {
+                let detail = error_body.error_description.unwrap_or_default();
+                return Err(UniversalInboxError::OAuth2InvalidGrant(detail));
+            }
             return Err(UniversalInboxError::Unexpected(anyhow::anyhow!(
                 "Token refresh failed with status {status}: {body}"
             )));
@@ -258,9 +269,136 @@ impl OAuth2FlowService {
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct OAuth2ErrorBody {
+    error: String,
+    error_description: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[derive(Debug)]
+    struct StubProvider {
+        token_url: Url,
+        client_secret: SecretBox<ClientSecret>,
+    }
+
+    impl StubProvider {
+        fn new(token_url: Url) -> Self {
+            Self {
+                token_url,
+                client_secret: SecretBox::new(Box::new(ClientSecret("secret".to_string()))),
+            }
+        }
+    }
+
+    impl OAuth2Provider for StubProvider {
+        fn provider_kind(&self) -> IntegrationProviderKind {
+            IntegrationProviderKind::Linear
+        }
+        fn authorize_url(&self) -> &Url {
+            &self.token_url
+        }
+        fn token_url(&self) -> &Url {
+            &self.token_url
+        }
+        fn client_id(&self) -> &str {
+            "test-client"
+        }
+        fn client_secret(&self) -> &SecretBox<ClientSecret> {
+            &self.client_secret
+        }
+        fn required_scopes(&self) -> &[String] {
+            &[]
+        }
+        fn supports_pkce(&self) -> bool {
+            true
+        }
+        fn extract_registered_scopes(
+            &self,
+            _raw_response: &Value,
+        ) -> Result<Vec<String>, UniversalInboxError> {
+            Ok(vec![])
+        }
+        fn extract_provider_user_id(&self, _raw_response: &Value) -> Option<String> {
+            None
+        }
+        fn extract_provider_context(
+            &self,
+            _raw_response: &Value,
+        ) -> Option<IntegrationConnectionContext> {
+            None
+        }
+    }
+
+    async fn refresh_with_response(template: ResponseTemplate) -> UniversalInboxError {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/token"))
+            .respond_with(template)
+            .mount(&server)
+            .await;
+
+        let token_url = Url::parse(&format!("{}/token", server.uri())).unwrap();
+        let provider = StubProvider::new(token_url);
+        let flow =
+            OAuth2FlowService::new(Url::parse("https://example.com/callback").unwrap()).unwrap();
+        let refresh_token = RefreshToken("refresh-value".to_string());
+
+        flow.refresh_access_token(&provider, &refresh_token)
+            .await
+            .expect_err("expected refresh failure")
+    }
+
+    #[tokio::test]
+    async fn test_refresh_invalid_grant_returns_typed_error() {
+        let body = serde_json::json!({
+            "error": "invalid_grant",
+            "error_description": "Token has been revoked",
+        });
+        let err = refresh_with_response(ResponseTemplate::new(400).set_body_json(body)).await;
+        match err {
+            UniversalInboxError::OAuth2InvalidGrant(detail) => {
+                assert_eq!(detail, "Token has been revoked");
+            }
+            other => panic!("expected OAuth2InvalidGrant, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_refresh_invalid_grant_without_description() {
+        let body = serde_json::json!({ "error": "invalid_grant" });
+        let err = refresh_with_response(ResponseTemplate::new(400).set_body_json(body)).await;
+        assert!(matches!(err, UniversalInboxError::OAuth2InvalidGrant(s) if s.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn test_refresh_other_400_error_stays_unexpected() {
+        let body = serde_json::json!({
+            "error": "invalid_request",
+            "error_description": "missing client_id",
+        });
+        let err = refresh_with_response(ResponseTemplate::new(400).set_body_json(body)).await;
+        assert!(
+            matches!(err, UniversalInboxError::Unexpected(_)),
+            "non-invalid_grant 4xx must not flip to OAuth2InvalidGrant, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_refresh_500_error_stays_unexpected() {
+        let body = serde_json::json!({ "error": "server_error" });
+        let err = refresh_with_response(ResponseTemplate::new(500).set_body_json(body)).await;
+        assert!(
+            matches!(err, UniversalInboxError::Unexpected(_)),
+            "5xx must not flip to OAuth2InvalidGrant, got {err:?}"
+        );
+    }
 
     #[test]
     fn test_oauth_token_response_expires_at() {

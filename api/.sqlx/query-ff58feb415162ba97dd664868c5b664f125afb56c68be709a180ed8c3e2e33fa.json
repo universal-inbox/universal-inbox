@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  oc.integration_connection_id,\n                  oc.encrypted_refresh_token,\n                  ic.provider_kind AS \"provider_kind: String\"\n                FROM oauth_credential oc\n                JOIN integration_connection ic ON ic.id = oc.integration_connection_id\n                WHERE oc.encrypted_refresh_token IS NOT NULL\n                  AND oc.access_token_expires_at IS NOT NULL\n                  AND oc.access_token_expires_at < $1\n                  AND ic.status = 'Validated'\n                  AND ($2::TEXT IS NULL OR ic.provider_kind::TEXT = $2)\n                FOR UPDATE OF oc SKIP LOCKED\n            ",
+  "query": "\n                SELECT\n                  oc.integration_connection_id,\n                  ic.user_id,\n                  oc.encrypted_refresh_token,\n                  ic.provider_kind AS \"provider_kind: String\"\n                FROM oauth_credential oc\n                JOIN integration_connection ic ON ic.id = oc.integration_connection_id\n                WHERE oc.encrypted_refresh_token IS NOT NULL\n                  AND oc.access_token_expires_at IS NOT NULL\n                  AND oc.access_token_expires_at < $1\n                  AND ic.status = 'Validated'\n                  AND ($2::TEXT IS NULL OR ic.provider_kind::TEXT = $2)\n                FOR UPDATE OF oc SKIP LOCKED\n            ",
   "describe": {
     "columns": [
       {
@@ -10,11 +10,16 @@
       },
       {
         "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
         "name": "encrypted_refresh_token",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "provider_kind: String",
         "type_info": {
           "Custom": {
@@ -44,9 +49,10 @@
     },
     "nullable": [
       false,
+      false,
       true,
       false
     ]
   },
-  "hash": "3a30daa8388ca53f56d06976d4b738d7692c83d8ef14873d51316186b3bd2031"
+  "hash": "ff58feb415162ba97dd664868c5b664f125afb56c68be709a180ed8c3e2e33fa"
 }

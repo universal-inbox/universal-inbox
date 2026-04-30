@@ -36,6 +36,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::Forbidden(_) => StatusCode::FORBIDDEN,
             UniversalInboxError::UnsupportedAction(_) => StatusCode::BAD_REQUEST,
             UniversalInboxError::DatabaseError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            UniversalInboxError::OAuth2InvalidGrant(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
