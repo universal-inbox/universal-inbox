@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::IntegrationConnectionId,
-    integration_connection::provider::IntegrationProviderKind,
+    integration_connection::provider::IntegrationProviderKind, user::UserId,
 };
 
 use crate::{repository::Repository, universal_inbox::UniversalInboxError};
@@ -28,6 +28,7 @@ pub struct StoredOAuthCredential {
 #[derive(Debug, Clone)]
 pub struct ExpiringOAuthCredential {
     pub integration_connection_id: IntegrationConnectionId,
+    pub user_id: UserId,
     pub encrypted_refresh_token: Vec<u8>,
     pub provider_kind: IntegrationProviderKind,
 }
@@ -215,6 +216,7 @@ impl OAuthCredentialRepository for Repository {
             r#"
                 SELECT
                   oc.integration_connection_id,
+                  ic.user_id,
                   oc.encrypted_refresh_token,
                   ic.provider_kind AS "provider_kind: String"
                 FROM oauth_credential oc
@@ -252,6 +254,7 @@ impl OAuthCredentialRepository for Repository {
                     integration_connection_id: IntegrationConnectionId(
                         row.integration_connection_id,
                     ),
+                    user_id: UserId(row.user_id),
                     encrypted_refresh_token: row.encrypted_refresh_token.ok_or_else(|| {
                         UniversalInboxError::Unexpected(anyhow::anyhow!(
                             "Missing refresh token for credential {}",
