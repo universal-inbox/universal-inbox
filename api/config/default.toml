@@ -95,6 +95,12 @@ dependencies_log_level = "error"
 # website_id = "CRISP_WEBSITE_ID"
 # identity_verification_secret_key = "CRISP_SECRET_KEY"
 
+# Redis-backed MCP session store. Persists each session's `initialize`
+# parameters so a follow-up request landing on a different pod can transparently
+# restore the session. Always enabled; only the TTL is configurable.
+[application.mcp_session_store]
+ttl_seconds = 86400
+
 [database]
 host = "127.0.0.1"
 port = 5432
