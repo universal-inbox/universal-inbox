@@ -101,3 +101,8 @@ inherits = "dev"
 inherits = "dev"
 
 [patch.crates-io]
+# Vendored copy of rmcp-actix-web 0.12.3 patched to wire up rmcp 1.6's
+# `SessionStore` for cross-instance MCP session restore (multi-pod deployments).
+# Upstream's `handle_get`/`handle_post` reject unknown sessions with 401 instead
+# of consulting the configured store. See api/vendor/rmcp-actix-web/.
+rmcp-actix-web = { path = "api/vendor/rmcp-actix-web" }

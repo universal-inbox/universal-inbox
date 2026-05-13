@@ -161,11 +161,15 @@ pub async fn run_server(
     };
 
     let storage_data = web::Data::new(redis_storage.clone());
-    let cache_data = web::Data::new(
-        Cache::new(settings.redis.connection_string())
-            .await
-            .expect("Failed to create cache"),
-    );
+    let cache = Cache::new(settings.redis.connection_string())
+        .await
+        .expect("Failed to create cache");
+    let mcp_session_store: Arc<dyn rmcp::transport::streamable_http_server::session::SessionStore> =
+        Arc::new(mcp::RedisSessionStore::new(
+            cache.connection_manager.clone(),
+            settings.application.mcp_session_store.ttl_seconds,
+        ));
+    let cache_data = web::Data::new(cache);
     let mcp_extra_allowed_origins = settings
         .application
         .security
@@ -181,6 +185,7 @@ pub async fn run_server(
         notification_service.clone(),
         task_service.clone(),
         redis_storage.clone(),
+        mcp_session_store,
     );
     let oauth2_rate_limiter = routes::oauth2::build_rate_limiter();
     let mcp_rate_limiter = mcp::build_rate_limiter();
