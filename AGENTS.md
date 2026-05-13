@@ -296,15 +296,151 @@ SQLX_OFFLINE="true"  # Use cached query metadata
 RUST_MIN_STACK=104857600  # Required for tests (large nested structs)
 ```
 
+## Worktree Development Workflow (worktrunk + direnv + devbox)
+
+The project uses [worktrunk](https://worktrunk.dev) (`wt`) to manage git worktrees for parallel
+agent workflows, [direnv](https://direnv.net) to load per-worktree environment variables, and
+[devbox](https://www.jetpack.io/devbox/) to provision tools and services. Each worktree gets its
+own isolated set of ports (PostgreSQL, Redis, API, web, process-compose) derived from a hash of
+the branch name, so several worktrees can run side-by-side without colliding.
+
+### Creating a worktree
+
+```bash
+# Interactive shell (recommended for humans)
+wt switch --create my-feature
+
+# Non-interactive (agents, scripts): bypass the approval prompt for pre-start hooks.
+# `wt` is normally a shell function — call the binary directly when no TTY is attached.
+$(which -a wt | tail -1) switch --create my-feature --yes
+```
+
+`wt switch --create` runs the pre-start hooks defined in `.config/wt.toml`:
+
+1. `copy` — `wt step copy-ignored` clones gitignored state (e.g. `.devbox/`) into the worktree.
+2. `clean_data` — wipes any stale PostgreSQL/Redis data dirs.
+3. `fix_permissions` — `chmod -R og-rwx .devbox/virtenv/postgresql_17` (required by `initdb`).
+4. `env` — generates `.local_envrc` with branch-hashed ports:
+   - `PGPORT`, `REDIS_PORT`, `DX_SERVE_PORT`, `API_PORT`, `PROCESS_COMPOSE_PORT`
+   - `DATABASE_URL`, `UNIVERSAL_INBOX__APPLICATION__*`, `UNIVERSAL_INBOX__DATABASE__PORT`,
+     `UNIVERSAL_INBOX__REDIS__PORT`
+   - `PGHOST=/tmp` (the default Unix socket path is too long)
+5. `setup` — `direnv allow` so direnv loads the envrc on entry.
+6. `web_install` — `cd web && npm install`.
+
+The first direnv load (`direnv exec . env`, `direnv allow`, or `cd` into the worktree) also runs
+`devbox` to install missing tools (cargo, rustup toolchains, playwright chromium, …) and
+`initdb`s the PostgreSQL data directory.
+
+### Running commands inside a worktree (non-interactive agents)
+
+Agents that don't keep shell state across calls must wrap commands with `direnv exec .` and use
+absolute paths so each invocation re-loads the worktree env. Example:
+
+```bash
+cd /Users/.../universal-inbox.my-feature && direnv exec . just status
+```
+
+Without `direnv exec .` the worktree's port overrides are not in scope and commands hit default
+ports on the main checkout.
+
+### Inspecting / removing worktrees
+
+```bash
+wt list                          # Show all worktrees with their URLs and ports
+wt remove                        # Remove worktree; runs pre-remove hooks (stops process-compose)
+wt switch -                      # Switch back to the previous worktree
+```
+
+`pre-remove.stop_services` invokes `process-compose down -p $PROCESS_COMPOSE_PORT`, so a clean
+removal automatically shuts services down.
+
+### Starting process-compose headless
+
+`just run` defaults to the process-compose TUI, which fails in non-interactive environments with
+`open /dev/tty: device not configured`. Agents should start the orchestrator directly without TUI:
+
+```bash
+cd /Users/.../universal-inbox.my-feature && \
+  nohup direnv exec . process-compose \
+    -f .devbox/virtenv/redis/process-compose.yaml \
+    -f process-compose-pg.yaml \
+    -f process-compose.yaml \
+    -p "$PROCESS_COMPOSE_PORT" -t=false \
+    > /tmp/pc.log 2>&1 &
+```
+
+PostgreSQL and Redis start automatically; the universal-inbox services (`ui-api`, `ui-workers`,
+`ui-web`) are `disabled: true` and must be explicitly started with `just start <service>`.
+
+### End-to-end smoke test in a worktree
+
+```bash
+# 1. Create worktree (gets isolated ports written to .local_envrc)
+$(which -a wt | tail -1) switch --create smoke-test --yes
+
+WT=/Users/.../universal-inbox.smoke-test
+cd "$WT"
+
+# 2. Load env once to trigger devbox + initdb
+direnv exec . true
+
+# 3. Start orchestrator headless (see "Starting process-compose headless")
+nohup direnv exec . process-compose \
+  -f .devbox/virtenv/redis/process-compose.yaml \
+  -f process-compose-pg.yaml -f process-compose.yaml \
+  -p "$(direnv exec . printenv PROCESS_COMPOSE_PORT)" -t=false \
+  > /tmp/pc.log 2>&1 &
+
+# 4. Apply migrations (creates the `universal-inbox` DB if missing)
+direnv exec . just api ensure-db
+
+# 5. Start app services
+direnv exec . just start ui-api
+direnv exec . just start ui-workers
+direnv exec . just start ui-web
+
+# 6. Wait for the API to compile + bind (~90s cold)
+until curl -sf "http://localhost:$(direnv exec . printenv API_PORT)/ping" \
+  | grep -q healthy; do sleep 3; done
+
+# 7. Seed a test user and capture the email from the log
+direnv exec . just api generate-user 2>&1 \
+  | grep -oE 'test\+[a-f0-9-]+@test\.com'
+
+# 8. Verify auth via the API (HTTP 200 + JWT cookie)
+curl -s -c /tmp/ui_cookie.txt -X POST \
+  "http://localhost:$(direnv exec . printenv API_PORT)/api/users/me" \
+  -H 'content-type: application/json' \
+  -d '{"email":"<email>","password":"test123456"}'
+```
+
+The same flow works through the browser at `http://localhost:$DX_SERVE_PORT/login`.
+
+### Useful `just` recipes inside a worktree
+
+```bash
+just status                   # Pretty-prints state of all 5 process-compose services
+just print-env-info           # Prints the URLs for web, API, PostgreSQL, Redis
+just api ensure-db            # Creates the DB if missing + runs sqlx migrations
+just api generate-user        # Seeds a fully-populated test user (prints email/password)
+just start <service>          # ui-api | ui-workers | ui-web | caddy | build-tailwind | bundle-js
+just stop <service>           # Stop a single service
+just logs <service>           # Follow last 100 lines of a service log
+```
+
 ## Playwright Browser Testing
 
 This section documents how to test the Universal Inbox web application using Playwright MCP for browser automation.
 
 ### Prerequisites
 
-1. **Process-compose running**: Start with `just run` (starts PostgreSQL, Redis, and other background services)
-2. **Playwright skill loaded**: Use `/playwright` or load the `playwright` skill
-3. **Environment ports**: Check `$API_PORT` and `$DX_SERVE_PORT` for actual port numbers
+1. **Worktree (recommended)**: Create one with `wt switch --create <name> --yes` so ports are isolated.
+2. **Process-compose running**: Either `just run` (TUI mode for humans) or the headless command in the
+   "Starting process-compose headless" section above.
+3. **Playwright skill loaded**: Use `/playwright` or the `playwright-cli` skill.
+4. **Environment ports**: Always read `$API_PORT`, `$DX_SERVE_PORT`, `$PROCESS_COMPOSE_PORT` from
+   direnv — they vary per worktree. Defaults (`8000`, `8080`, `9999`) only apply on the main checkout.
 
 ### Step 1: Generate Test User
 
