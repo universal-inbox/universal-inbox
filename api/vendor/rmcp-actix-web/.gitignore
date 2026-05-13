@@ -1,0 +1,9 @@
+/target
+rust-sdk/
+node_modules/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+
+# Claude Code superpowers
+docs/plans/*.md

@@ -24,7 +24,7 @@ use rmcp::{
     },
     service::{RequestContext, RoleServer},
     tool, tool_handler, tool_router,
-    transport::streamable_http_server::session::local::LocalSessionManager,
+    transport::streamable_http_server::session::{SessionStore, local::LocalSessionManager},
 };
 use rmcp_actix_web::transport::StreamableHttpService;
 use tokio::sync::RwLock;
@@ -48,7 +48,10 @@ use crate::{
     utils::jwt::Claims,
 };
 
+pub mod session_store;
 pub mod tools;
+
+pub use session_store::RedisSessionStore;
 
 const SERVER_NAME: &str = "universal-inbox";
 const SERVER_TITLE: &str = "Universal Inbox";
@@ -63,10 +66,15 @@ pub type McpRateLimiter = RateLimiter<UserId, DefaultKeyedStateStore<UserId>, De
 /// Build the `StreamableHttpService` once so the `LocalSessionManager` is shared
 /// across all Actix-web worker threads.  Call this **before** `HttpServer::new`
 /// and clone the returned service into each worker via `scope()`.
+///
+/// The `session_store` is the cross-pod shared state: when a request lands on
+/// a pod whose `LocalSessionManager` does not know the session, the patched
+/// `rmcp-actix-web` consults the store and replays the `initialize` handshake.
 pub fn build_http_service(
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
     job_storage: RedisStorage<UniversalInboxJob>,
+    session_store: Arc<dyn SessionStore>,
 ) -> StreamableHttpService<UniversalInboxMcpServer, LocalSessionManager> {
     let services = McpServices {
         notification_service,
@@ -80,6 +88,7 @@ pub fn build_http_service(
         }))
         .session_manager(Arc::new(LocalSessionManager::default()))
         .stateful_mode(true)
+        .session_store(session_store)
         .on_request_fn(|http_req, extensions| {
             if let Some(authenticated) = http_req.extensions().get::<Authenticated<Claims>>() {
                 extensions.insert(authenticated.clone());
@@ -335,6 +344,10 @@ where
 #[derive(Clone)]
 pub struct UniversalInboxMcpServer {
     services: McpServices,
+    // Consumed by `#[tool_handler]`'s macro-generated `call_tool` impl below;
+    // the rmcp 1.6 macro expansion no longer references the field by name,
+    // so static analysis does not see the read.
+    #[allow(dead_code)]
     tool_router: ToolRouter<Self>,
 }
 

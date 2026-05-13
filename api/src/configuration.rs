@@ -53,6 +53,20 @@ pub struct ApplicationSettings {
     pub version: Option<String>,
     pub dry_run: bool,
     pub chat_support: Option<ChatSupportSettings>,
+    pub mcp_session_store: McpSessionStoreSettings,
+}
+
+/// Configuration for the Redis-backed MCP session store.
+///
+/// The store persists each session's `initialize` parameters so that any pod
+/// behind the load balancer can transparently restore a session that was
+/// initialised on a different pod. It is always wired up — only the TTL is
+/// configurable.
+#[derive(Deserialize, Clone, Debug)]
+pub struct McpSessionStoreSettings {
+    /// TTL applied to persisted session state. Should comfortably exceed
+    /// expected client idle time.
+    pub ttl_seconds: u64,
 }
 
 /// Deserialize a list of strings from either a TOML array (`["a", "b"]`)

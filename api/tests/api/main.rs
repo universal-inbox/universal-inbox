@@ -14,6 +14,7 @@ mod test_integration_connections;
 mod test_linear_notifications;
 mod test_linear_tasks;
 mod test_mcp;
+mod test_mcp_session_store;
 mod test_misc;
 mod test_multi_task_manager;
 mod test_notifications;

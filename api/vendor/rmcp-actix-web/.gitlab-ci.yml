@@ -1,0 +1,139 @@
+# GitLab CI configuration for rmcp-actix-web
+
+# Include CI configuration files
+include:
+  - local: '.gitlab/ci/common.gitlab-ci.yml'
+  - local: '.gitlab/ci/devcontainer.gitlab-ci.yml'
+  - local: '.gitlab/ci/images.gitlab-ci.yml'
+  - local: '.gitlab/ci/rust.gitlab-ci.yml'
+
+# Global variables for package versions
+variables:
+  IMAGE_BUILD_FORCE:
+    description: "Build images even when there are no changes."
+    options:
+      - "false"
+      - "all"
+      - "rust-x86_64-unknown-linux-gnu"
+    value: "false"
+  IMAGE_PUSH_FORCE:
+    description: "Push images even when there are no changes."
+    options:
+      - "false"
+      - "all"
+      - "rust-x86_64-unknown-linux-gnu"
+    value: "false"
+  # renovate: datasource=node-version depName=node versioning=node
+  NODE_VERSION: "20.11.1"
+
+# Workflow rules for automatic pipeline cancellation
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+    on_job_failure: none
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Skip branch pipeline for release commits (tag pipeline will run instead)
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_TITLE =~ /^chore\(release\):/
+      when: never
+    # Disable auto-cancel for release pipelines
+    - if: '$RELEASE_ENABLED == "true"'
+      auto_cancel:
+        on_new_commit: none
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# Semantic release job template - common setup for semantic-release jobs
+.semantic-release-template:
+  image: rust:1.94.0@sha256:7e322aa1b876cbb977e0df46812af6c4e8be2efbfb2ce3712c28a93ba2968726
+  variables:
+    # renovate: datasource=npm depName=semantic-release versioning=npm
+    SEMANTIC_RELEASE_VERSION: "21.0.7"
+    # renovate: datasource=npm depName=@semantic-release/changelog versioning=npm
+    SEMANTIC_RELEASE_CHANGELOG_VERSION: "6.0.3"
+    # renovate: datasource=npm depName=@semantic-release/git versioning=npm
+    SEMANTIC_RELEASE_GIT_VERSION: "10.0.1"
+    # renovate: datasource=npm depName=@semantic-release/gitlab versioning=npm
+    SEMANTIC_RELEASE_GITLAB_VERSION: "12.1.1"
+    # renovate: datasource=npm depName=@semantic-release/exec versioning=npm
+    SEMANTIC_RELEASE_EXEC_VERSION: "6.0.3"
+    # renovate: datasource=npm depName=conventional-changelog-conventionalcommits versioning=npm
+    CONVENTIONAL_CHANGELOG_CONVENTIONALCOMMITS_VERSION: "7.0.2"
+    # renovate: datasource=github-releases depName=semantic-release-cargo/semantic-release-cargo extractVersionTemplate="^v(?<version>.*)$"
+    SEMANTIC_RELEASE_CARGO_VERSION: "2.4.44"
+  before_script:
+    # Install Node.js in Rust image
+    - apt-get update -qq && apt-get install -y -qq curl
+    - curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1
+    - node --version
+    - npm --version
+    # Install semantic-release and plugins
+    - npm install -g semantic-release@${SEMANTIC_RELEASE_VERSION} @semantic-release/changelog@${SEMANTIC_RELEASE_CHANGELOG_VERSION} @semantic-release/git@${SEMANTIC_RELEASE_GIT_VERSION} @semantic-release/gitlab@${SEMANTIC_RELEASE_GITLAB_VERSION} @semantic-release/exec@${SEMANTIC_RELEASE_EXEC_VERSION} conventional-changelog-conventionalcommits@${CONVENTIONAL_CHANGELOG_CONVENTIONALCOMMITS_VERSION}
+    # Install semantic-release-cargo static binary
+    - curl -L https://github.com/semantic-release-cargo/semantic-release-cargo/releases/download/v${SEMANTIC_RELEASE_CARGO_VERSION}/semantic-release-cargo-x86_64-unknown-linux-musl -o /usr/local/bin/semantic-release-cargo
+    - chmod +x /usr/local/bin/semantic-release-cargo
+    - semantic-release-cargo --version
+  interruptible: true
+
+# Pipeline stages
+stages:
+  - build
+  - test
+  - lint
+  - docs
+  - examples
+  - integration
+  - release
+
+# Semantic release config lint job - validate semantic-release configuration
+semantic-release-lint:
+  extends: .semantic-release-template
+  stage: lint
+  script:
+    - semantic-release --dry-run --no-ci
+
+# Commit lint job - check commit message format
+commitlint:
+  image: node:24.14.0@sha256:3a09aa6354567619221ef6c45a5051b671f953f0a1924d1f819ffb236e520e6b
+  stage: lint
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_TAG'
+      when: never
+  variables:
+    GIT_FETCH_EXTRA_FLAGS: '+refs/heads/main:refs/remotes/origin/main'
+    # renovate: datasource=npm depName=@commitlint/cli versioning=npm
+    COMMITLINT_CLI_VERSION: "17.6.1"
+    # renovate: datasource=npm depName=@commitlint/config-conventional versioning=npm
+    COMMITLINT_CONFIG_VERSION: "17.6.1"
+  before_script:
+    - npm install -g @commitlint/cli@${COMMITLINT_CLI_VERSION} @commitlint/config-conventional@${COMMITLINT_CONFIG_VERSION}
+  script:
+    - |
+      echo "module.exports = {
+        extends: ['@commitlint/config-conventional'],
+        rules: {
+          'header-max-length': [2, 'always', 150],
+        },
+      }" > ./commitlint.config.js
+      commitlint --from=$(git merge-base origin/main HEAD) --to=$CI_COMMIT_SHA
+  interruptible: true
+
+# Semantic release job - automated versioning and releases
+semantic-release:
+  extends: .semantic-release-template
+  stage: release
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $RELEASE_ENABLED == "true"'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $RELEASE_ENABLED == "true"'
+  variables:
+    GIT_FETCH_EXTRA_FLAGS: '+refs/heads/main:refs/remotes/origin/main'
+  before_script:
+    - !reference [.semantic-release-template, before_script]
+    # Configure git
+    - git config user.name "${GITLAB_USER_NAME}"
+    - git config user.email "${GITLAB_USER_EMAIL}"
+  script:
+    - semantic-release
+  interruptible: false

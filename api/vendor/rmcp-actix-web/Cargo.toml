@@ -1,0 +1,42 @@
+[package]
+edition = "2024"
+name = "rmcp-actix-web"
+version = "0.12.3"
+description = "actix-web transport implementations for RMCP (Rust Model Context Protocol)"
+homepage = "https://gitlab.com/lx-industries/rmcp-actix-web"
+readme = "README.md"
+keywords = [
+    "mcp",
+    "actix",
+    "actix-web",
+    "protocol",
+    "llm",
+]
+categories = [
+    "network-programming",
+    "web-programming",
+]
+license = "MIT"
+repository = "https://gitlab.com/lx-industries/rmcp-actix-web"
+
+[features]
+authorization-token-passthrough = []
+default = ["transport-streamable-http"]
+transport-streamable-http = ["rmcp/transport-streamable-http-server"]
+
+[lib]
+name = "rmcp_actix_web"
+path = "src/lib.rs"
+
+[dependencies]
+actix-web = { version = "4", default-features = false }
+async-stream = "0.3"
+async-trait = "0.1"
+bon = "3.7.1"
+futures = "0.3"
+rmcp = { version = "1.6", features = ["server", "transport-streamable-http-server-session"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+tokio = { version = "1", features = ["sync", "macros", "rt", "time", "process"] }
+tokio-stream = "0.1"
+tracing = "0.1"
