@@ -8,7 +8,19 @@
 
 http://dev.universal-inbox.com {
 	log
-	reverse_proxy :{env.API_PORT}
+
+	handle /api/* {
+		reverse_proxy :{env.API_PORT}
+	}
+
+	@oauth_discovery path /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/api/mcp /.well-known/oauth-authorization-server
+	handle @oauth_discovery {
+		reverse_proxy :{env.API_PORT}
+	}
+
+	handle {
+		reverse_proxy :{env.DX_SERVE_PORT}
+	}
 }
 
 http://oauth-dev.universal-inbox.com {
