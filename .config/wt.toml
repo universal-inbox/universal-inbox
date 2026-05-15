@@ -1,7 +1,13 @@
-[pre-start]
+[[pre-start]]
 copy = "wt step copy-ignored"
-clean_data = "rm -rf .devbox/virtenv/redis .devbox/virtenv/postgresql_17/data"
+
+[[pre-start]]
+clean_data = "rm -rf .devbox/virtenv/redis/dump.rdb .devbox/virtenv/postgresql_17/data"
+
+[[pre-start]]
 fix_permissions = "chmod -R og-rwx .devbox/virtenv/postgresql_17"
+
+[[pre-start]]
 env = """
 cat >> .local_envrc << EOF
 export PGPORT={{ ('db-' ~ branch) | hash_port }}
@@ -20,7 +26,11 @@ export UNIVERSAL_INBOX__APPLICATION__LISTEN_PORT={{ ('api-' ~ branch) | hash_por
 export PGHOST=/tmp
 EOF
 """
+
+[[pre-start]]
 setup = "direnv allow"
+
+[[pre-start]]
 web_install = "cd web && npm install"
 
 [pre-remove]
@@ -31,5 +41,3 @@ check = "just check-commit"
 
 [list]
 url = "http://localhost:{{ ('web-' ~ branch) | hash_port }}"
-api_url = "http://localhost:{{ ('api-' ~ branch) | hash_port }}"
-db_url = "postgres://postgres:password@127.0.0.1:{{ ('db-' ~ branch) | hash_port }}/universal-inbox"
