@@ -2,8 +2,8 @@ use playwright_rs::expect;
 use rstest::*;
 
 use crate::helpers::{
-    BrowserTestedApp, EXPECT_TIMEOUT, browser_tested_app, launch_browser, navigate_and_assert,
-    register,
+    BrowserTestedApp, EXPECT_TIMEOUT, browser_tested_app, fill_and_submit_credentials,
+    launch_browser, navigate_and_assert, register,
 };
 
 /// Test that a new user can register, then login and navigate all pages.
@@ -52,29 +52,7 @@ async fn test_registration_fails_with_invalid_email(
         .await
         .expect("Failed to navigate to signup page");
 
-    let email_input = page.locator("input[name='email']").await;
-    expect(email_input.clone())
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Email input not visible");
-
-    email_input
-        .fill("not-an-email", None)
-        .await
-        .expect("Failed to fill email");
-
-    let password_input = page.locator("input[name='password']").await;
-    password_input
-        .fill("test123456", None)
-        .await
-        .expect("Failed to fill password");
-
-    let submit_button = page.locator("button[type='submit']").await;
-    submit_button
-        .click(None)
-        .await
-        .expect("Failed to click submit");
+    fill_and_submit_credentials(&page, "not-an-email", "test123456", "signup").await;
 
     // An inline validation error should appear for the email field
     let error_message = page.locator("#email-error").await;
@@ -114,30 +92,8 @@ async fn test_registration_fails_with_short_password(
         .await
         .expect("Failed to navigate to signup page");
 
-    let email_input = page.locator("input[name='email']").await;
-    expect(email_input.clone())
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Email input not visible");
-
     let email = format!("browser-test+{}@test.com", uuid::Uuid::new_v4());
-    email_input
-        .fill(&email, None)
-        .await
-        .expect("Failed to fill email");
-
-    let password_input = page.locator("input[name='password']").await;
-    password_input
-        .fill("short", None)
-        .await
-        .expect("Failed to fill password");
-
-    let submit_button = page.locator("button[type='submit']").await;
-    submit_button
-        .click(None)
-        .await
-        .expect("Failed to click submit");
+    fill_and_submit_credentials(&page, &email, "short", "signup").await;
 
     // An inline validation error should appear for the password field
     let error_message = page.locator("#password-error").await;
