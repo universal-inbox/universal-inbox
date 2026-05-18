@@ -32,7 +32,6 @@ pub struct FrontConfig {
     pub support_href: Option<String>,
     pub show_changelog: bool,
     pub chat_support_website_id: Option<String>,
-    pub chat_support_user_email_signature: Option<String>,
     pub version: Option<String>,
 }
 
