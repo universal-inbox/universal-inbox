@@ -94,8 +94,7 @@ impl ThirdPartyItemService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
+            third_party_item_kind = third_party_item_data.kind().to_string(),
             user.id = user_id.to_string()
         ),
         err
@@ -103,11 +102,52 @@ impl ThirdPartyItemService {
     pub async fn create_task_item(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        third_party_item: ThirdPartyItem,
+        third_party_item_data: ThirdPartyItemData,
         user_id: UserId,
     ) -> Result<Option<ThirdPartyItemCreationResult>, UniversalInboxError> {
+        let provider_kind = match &third_party_item_data {
+            ThirdPartyItemData::TodoistItem(_) => IntegrationProviderKind::Todoist,
+            ThirdPartyItemData::TickTickItem(_) => IntegrationProviderKind::TickTick,
+            ThirdPartyItemData::SlackReaction(_) => IntegrationProviderKind::Slack,
+            ThirdPartyItemData::LinearIssue(_) => IntegrationProviderKind::Linear,
+            _ => {
+                return Err(UniversalInboxError::UnsupportedAction(format!(
+                    "Cannot create a task item from a third party item of kind {}",
+                    third_party_item_data.kind()
+                )));
+            }
+        };
+
+        let Some(integration_connection) = self
+            .integration_connection_service
+            .read()
+            .await
+            .get_validated_integration_connection_per_kind(executor, provider_kind, user_id)
+            .await?
+        else {
+            return Err(UniversalInboxError::UnsupportedAction(format!(
+                "No validated {provider_kind} integration connection found for user {user_id}"
+            )));
+        };
+
+        let new_third_party_item = match third_party_item_data {
+            ThirdPartyItemData::TodoistItem(item) => {
+                item.into_third_party_item(user_id, integration_connection.id)
+            }
+            ThirdPartyItemData::TickTickItem(item) => {
+                item.into_third_party_item(user_id, integration_connection.id)
+            }
+            ThirdPartyItemData::SlackReaction(item) => {
+                item.into_third_party_item(user_id, integration_connection.id)
+            }
+            ThirdPartyItemData::LinearIssue(item) => {
+                item.into_third_party_item(user_id, integration_connection.id)
+            }
+            _ => unreachable!("guarded by the provider_kind match above"),
+        };
+
         let upserted_third_party_item = self
-            .create_or_update_third_party_item(executor, Box::new(third_party_item))
+            .create_or_update_third_party_item(executor, Box::new(new_third_party_item))
             .await?;
         let third_party_item = upserted_third_party_item.value();
         let task_creation = match third_party_item.get_third_party_item_source_kind() {
