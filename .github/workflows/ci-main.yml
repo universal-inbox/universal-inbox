@@ -22,7 +22,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install Devbox
-        uses: jetify-com/devbox-install-action@v0.15.0
+        uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
         with:
           enable-cache: "true"
 
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
         with:
           dockerfile: Dockerfile
 
@@ -44,7 +44,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install Devbox
-        uses: jetify-com/devbox-install-action@v0.15.0
+        uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
         with:
           enable-cache: "true"
       - name: Check formatting
@@ -58,7 +58,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install Devbox
-        uses: jetify-com/devbox-install-action@v0.15.0
+        uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
         with:
           enable-cache: "true"
       - name: Check formatting
@@ -72,10 +72,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install Devbox
-        uses: jetify-com/devbox-install-action@v0.15.0
+        uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
         with:
           enable-cache: "true"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: ci
       - name: Clippy check
@@ -89,10 +89,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install Devbox
-        uses: jetify-com/devbox-install-action@v0.15.0
+        uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
         with:
           enable-cache: "true"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: ci
       - name: Collect shared package coverage data
@@ -100,7 +100,7 @@ jobs:
           RUST_MIN_STACK: 104857600
         run: devbox run -- just test-coverage
       - name: Shared test Report
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@d61b558e8df85cb60d09ca3e5b09653b4477cea7 # v1
         if: success() || failure()
         with:
           name: Tests shared
@@ -122,10 +122,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install Devbox
-        uses: jetify-com/devbox-install-action@v0.15.0
+        uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
         with:
           enable-cache: "true"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: ci
       - name: Collect web coverage data
@@ -172,10 +172,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install Devbox
-        uses: jetify-com/devbox-install-action@v0.15.0
+        uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
         with:
           enable-cache: "true"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: ci
       - name: Collect API coverage data
@@ -184,7 +184,7 @@ jobs:
           RUST_BACKTRACE: "full"
         run: devbox run -- just api/test-coverage
       - name: API test Report
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@d61b558e8df85cb60d09ca3e5b09653b4477cea7 # v1
         if: success() || failure()
         with:
           name: Tests API
