@@ -20,6 +20,8 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/.cargo web/.cargo
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" Cargo.toml Cargo.lock ./
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/Cargo.toml api/Cargo.toml
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/Cargo.toml web/Cargo.toml
+# Vendored crate patched in workspace [patch.crates-io]; needed for cargo to resolve the workspace.
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/vendor api/vendor
 RUN devbox run -- cargo chef prepare --recipe-path recipe.json
 
 FROM rust:1.93.0-bookworm as tools
@@ -35,6 +37,8 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/package.json web/package.json
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/package-lock.json web/package-lock.json
 RUN devbox run -- just web install
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" --from=planner /app/recipe.json recipe.json
+# Vendored crate patched in workspace [patch.crates-io]; needed by cargo chef cook.
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/vendor api/vendor
 # Only dependencies will be compiled as cargo chef has modfied main.rs and lib.rs to be empty
 RUN devbox run -- \
   cargo chef cook \
@@ -49,6 +53,8 @@ FROM base as dep-api-builder
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" .common-rust.justfile .common-rust.justfile
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/.justfile api/.justfile
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" --from=planner /app/recipe.json recipe.json
+# Vendored crate patched in workspace [patch.crates-io]; needed by cargo chef cook.
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/vendor api/vendor
 # Only dependencies will be compiled as cargo chef has modfied main.rs and lib.rs to be empty
 RUN devbox run -- \
   cargo chef cook \
