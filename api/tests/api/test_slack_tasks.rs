@@ -43,8 +43,9 @@ use crate::helpers::{
             slack_push_reaction_removed_event, slack_reacted_message,
         },
     },
-    rest::{create_resource_response, get_resource, patch_resource},
+    rest::{get_resource, patch_resource},
     settings,
+    slack::post_signed_slack_event,
     task::{
         list_tasks_until, sync_tasks,
         todoist::{
@@ -194,14 +195,13 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
         mock_todoist_get_item_service(&app.app.todoist_mock_server, Box::new(todoist_item.clone()))
             .await;
 
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
         if expected_new_task_status == TaskStatus::Done {
-            slack_push_reaction_added_event.clone()
+            &*slack_push_reaction_added_event
         } else {
-            slack_push_reaction_removed_event.clone()
+            &*slack_push_reaction_removed_event
         },
     )
     .await;

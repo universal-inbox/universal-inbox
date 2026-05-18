@@ -33,3 +33,6 @@ page_size = 2
 oauth_client_id = "ticktick_test_client_id"
 oauth_client_secret = "ticktick_test_client_secret"
 
+[integrations.slack]
+signing_secret = "test-signing-secret-do-not-use-in-prod"
+

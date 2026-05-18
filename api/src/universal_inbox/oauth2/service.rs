@@ -504,3 +504,90 @@ pub fn is_loopback_redirect_uri(uri: &str) -> bool {
         .map(|parsed| parsed.scheme() == "http" && is_loopback_host(parsed.host_str()))
         .unwrap_or(false)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression tests for `validate_redirect_uri`, pinning the scheme
+    /// allow-list introduced in 88b30871 (security fix for
+    /// universal-inbox-bkj.25). Only `https://...` and `http://` against
+    /// loopback hosts (`localhost`, `127.0.0.1`, `[::1]`) are accepted;
+    /// everything else — including `javascript:`, `data:`, `file:`, custom
+    /// app schemes like `intent:`, and unparseable strings — must be
+    /// rejected with `InvalidInputData`.
+    fn assert_rejected(uri: &str) {
+        let result = validate_redirect_uri(uri);
+        assert!(
+            matches!(result, Err(UniversalInboxError::InvalidInputData { .. })),
+            "expected {uri:?} to be rejected with InvalidInputData, got {result:?}"
+        );
+    }
+
+    fn assert_accepted(uri: &str) {
+        let result = validate_redirect_uri(uri);
+        assert!(
+            result.is_ok(),
+            "expected {uri:?} to be accepted, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn accepts_https_uri() {
+        assert_accepted("https://example.com/cb");
+    }
+
+    #[test]
+    fn accepts_https_uri_with_fragment() {
+        // The current implementation does not reject fragments. This test
+        // pins the existing behavior so a future tightening is an explicit
+        // decision rather than a silent regression. (RFC 6749 §3.1.2 forbids
+        // fragments in redirect_uri, but enforcing that is a separate change.)
+        assert_accepted("https://example.com/cb#fragment");
+    }
+
+    #[test]
+    fn accepts_http_loopback_localhost() {
+        assert_accepted("http://localhost:8080/cb");
+    }
+
+    #[test]
+    fn accepts_http_loopback_ipv4() {
+        assert_accepted("http://127.0.0.1/cb");
+    }
+
+    #[test]
+    fn accepts_http_loopback_ipv6() {
+        assert_accepted("http://[::1]/cb");
+    }
+
+    #[test]
+    fn rejects_http_non_loopback() {
+        assert_rejected("http://example.com/cb");
+    }
+
+    #[test]
+    fn rejects_javascript_scheme() {
+        assert_rejected("javascript:alert(1)");
+    }
+
+    #[test]
+    fn rejects_data_scheme() {
+        assert_rejected("data:text/html,<script>alert(1)</script>");
+    }
+
+    #[test]
+    fn rejects_file_scheme() {
+        assert_rejected("file:///etc/passwd");
+    }
+
+    #[test]
+    fn rejects_intent_scheme() {
+        assert_rejected("intent://scan/#Intent;scheme=https;package=com.evil");
+    }
+
+    #[test]
+    fn rejects_unparseable_uri() {
+        assert_rejected("not a url at all");
+    }
+}
