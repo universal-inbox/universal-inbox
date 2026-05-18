@@ -32,7 +32,7 @@ use actix_web::{
     web,
 };
 use actix_web_lab::web::spa;
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use apalis::{
     layers::tracing::{DefaultOnRequest, DefaultOnResponse, OnFailure, TraceLayer},
     prelude::*,
@@ -82,7 +82,7 @@ use crate::{
     },
 };
 
-use secrecy::SecretBox;
+use secrecy::{ExposeSecret, SecretBox};
 
 pub mod commands;
 pub mod configuration;
@@ -127,6 +127,29 @@ pub async fn run_server(
     let listen_address = listener.local_addr().unwrap();
     let csp_header_value = build_csp_header(&settings);
     let api_version = settings.application.version.clone();
+
+    // Slack webhook signing secret: required when the Slack integration is enabled.
+    // Without it, `POST /api/hooks/slack/events` would accept forged payloads and queue
+    // jobs that later run with victims' OAuth credentials (see universal-inbox-bkj.34).
+    if let Some(slack_settings) = settings.integrations.get("slack")
+        && slack_settings.is_enabled
+        && slack_settings
+            .signing_secret
+            .as_ref()
+            .is_none_or(|s| s.expose_secret().0.is_empty())
+    {
+        return Err(anyhow!(
+            "Slack integration is enabled but `integrations.slack.signing_secret` is empty. \
+             Set UNIVERSAL_INBOX__INTEGRATIONS__SLACK__SIGNING_SECRET (from \
+             https://api.slack.com/apps → Basic Information → Signing Secret) before booting."
+        )
+        .into());
+    }
+    let slack_signing_secret: Option<routes::webhook::SlackSigningSecret> = settings
+        .integrations
+        .get("slack")
+        .and_then(|s| s.signing_secret.clone());
+    let slack_signing_secret_data = web::Data::new(slack_signing_secret);
 
     // Setup HTTP session + JWT auth
     let session_secret_key = Key::from(settings.application.http_session.secret_key.as_bytes());
@@ -234,7 +257,8 @@ pub async fn run_server(
             .app_data(web::Data::new(auth_token_service.clone()))
             .app_data(web::Data::new(third_party_item_service.clone()))
             .app_data(web::Data::new(slack_bridge_service.clone()))
-            .app_data(web::Data::new(oauth2_service.clone()));
+            .app_data(web::Data::new(oauth2_service.clone()))
+            .app_data(slack_signing_secret_data.clone());
 
         let api_path_for_cors = api_path.clone();
         let mcp_extra_origins_for_cors = mcp_extra_allowed_origins.clone();

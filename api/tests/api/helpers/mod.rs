@@ -37,6 +37,7 @@ pub mod integration_connection;
 pub mod mailer;
 pub mod notification;
 pub mod rest;
+pub mod slack;
 pub mod task;
 pub mod third_party;
 pub mod user;

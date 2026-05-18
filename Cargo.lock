@@ -8268,6 +8268,7 @@ dependencies = [
  "slack-blocks-render",
  "slack-morphism",
  "sqlx",
+ "subtle",
  "tabled",
  "thiserror 2.0.18",
  "tokio",
