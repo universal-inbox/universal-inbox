@@ -4,7 +4,6 @@ use chrono::{Timelike, Utc};
 use pretty_assertions::assert_eq;
 use rstest::*;
 use slack_morphism::prelude::*;
-use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
@@ -21,13 +20,14 @@ use universal_inbox::{
             slack::{SlackReaction, SlackReactionItem, SlackReactionState},
             todoist::{TodoistItem, TodoistItemPriority},
         },
-        item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
+        item::ThirdPartyItemData,
     },
 };
 
 use universal_inbox_api::{configuration::Settings, integrations::todoist::TodoistSyncResponse};
 
 use crate::helpers::integration_connection::OAuthCredentialFixture;
+use crate::helpers::third_party::create_task_third_party_item;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
@@ -43,7 +43,7 @@ use crate::helpers::{
             slack_push_reaction_removed_event, slack_reacted_message,
         },
     },
-    rest::{create_resource, create_resource_response, get_resource, patch_resource},
+    rest::{create_resource_response, get_resource, patch_resource},
     settings,
     task::{
         list_tasks_until, sync_tasks,
@@ -338,7 +338,7 @@ async fn test_patch_slack_task_status_as_done(
     todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
-    let integration_connection = create_and_mock_integration_connection(
+    let _integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_tasks()),
@@ -408,7 +408,7 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
             SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent {
                 item:
                     SlackReactionsItem::Message(SlackHistoryMessage {
-                        origin: SlackMessageOrigin { ts: source_id, .. },
+                        origin: SlackMessageOrigin { ts: _source_id, .. },
                         ..
                     }),
                 ..
@@ -418,25 +418,15 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
     else {
         unreachable!("Unexpected event type");
     };
-    let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-        &app.client,
-        &app.app.api_address,
-        "third_party/task/items",
-        Box::new(ThirdPartyItem {
-            id: Uuid::new_v4().into(),
-            source_id: source_id.to_string(),
+    let creation = create_task_third_party_item(
+        &app.app,
+        ThirdPartyItemData::SlackReaction(Box::new(SlackReaction {
+            name: SlackReactionName("eyes".to_string()),
+            state: SlackReactionState::ReactionAdded,
             created_at: Utc::now().with_nanosecond(0).unwrap(),
-            updated_at: Utc::now().with_nanosecond(0).unwrap(),
-            user_id: app.user.id,
-            data: ThirdPartyItemData::SlackReaction(Box::new(SlackReaction {
-                name: SlackReactionName("eyes".to_string()),
-                state: SlackReactionState::ReactionAdded,
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                item: *slack_reacted_message,
-            })),
-            integration_connection_id: integration_connection.id,
-            source_item: None,
-        }),
+            item: *slack_reacted_message,
+        })),
+        app.user.id,
     )
     .await;
 
@@ -499,7 +489,7 @@ async fn test_patch_slack_task_status_as_done_with_completion_reaction(
         },
         ..SlackConfig::enabled_as_tasks()
     };
-    let integration_connection = create_and_mock_integration_connection(
+    let _integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         IntegrationConnectionConfig::Slack(slack_config),
@@ -569,7 +559,7 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
             SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent {
                 item:
                     SlackReactionsItem::Message(SlackHistoryMessage {
-                        origin: SlackMessageOrigin { ts: source_id, .. },
+                        origin: SlackMessageOrigin { ts: _source_id, .. },
                         ..
                     }),
                 ..
@@ -579,25 +569,15 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
     else {
         unreachable!("Unexpected event type");
     };
-    let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-        &app.client,
-        &app.app.api_address,
-        "third_party/task/items",
-        Box::new(ThirdPartyItem {
-            id: Uuid::new_v4().into(),
-            source_id: source_id.to_string(),
+    let creation = create_task_third_party_item(
+        &app.app,
+        ThirdPartyItemData::SlackReaction(Box::new(SlackReaction {
+            name: SlackReactionName("eyes".to_string()),
+            state: SlackReactionState::ReactionAdded,
             created_at: Utc::now().with_nanosecond(0).unwrap(),
-            updated_at: Utc::now().with_nanosecond(0).unwrap(),
-            user_id: app.user.id,
-            data: ThirdPartyItemData::SlackReaction(Box::new(SlackReaction {
-                name: SlackReactionName("eyes".to_string()),
-                state: SlackReactionState::ReactionAdded,
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                item: *slack_reacted_message,
-            })),
-            integration_connection_id: integration_connection.id,
-            source_item: None,
-        }),
+            item: *slack_reacted_message,
+        })),
+        app.user.id,
     )
     .await;
 

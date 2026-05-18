@@ -2,11 +2,10 @@
 
 use std::str::FromStr;
 
-use chrono::{Datelike, Duration, TimeZone, Timelike, Utc};
+use chrono::{Datelike, Duration, TimeZone, Utc};
 use email_address::EmailAddress;
 use pretty_assertions::assert_eq;
 use rstest::*;
-use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
@@ -23,7 +22,7 @@ use universal_inbox::{
     },
     third_party::{
         integrations::{google_drive::GoogleDriveComment, todoist::TodoistItem},
-        item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
+        item::ThirdPartyItemData,
     },
 };
 
@@ -39,6 +38,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::integration_connection::OAuthCredentialFixture;
+use crate::helpers::third_party::create_task_third_party_item;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
@@ -55,7 +55,7 @@ use crate::helpers::{
         },
         sync_notifications, update_notification,
     },
-    rest::{create_resource, get_resource},
+    rest::get_resource,
     settings,
     task::todoist::{
         mock_todoist_sync_resources_service, sync_todoist_projects_response, todoist_item,
@@ -79,7 +79,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let app = authenticated_app.await;
     let user_email_address = EmailAddress::from_str("jane.doe@example.com").unwrap();
 
-    let todoist_integration_connection = create_and_mock_integration_connection(
+    let _todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
@@ -97,24 +97,14 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     )
     .await;
 
-    let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-        &app.client,
-        &app.app.api_address,
-        "third_party/task/items",
-        Box::new(ThirdPartyItem {
-            id: Uuid::new_v4().into(),
-            source_id: todoist_item.id.clone(),
-            created_at: Utc::now().with_nanosecond(0).unwrap(),
-            updated_at: Utc::now().with_nanosecond(0).unwrap(),
-            user_id: app.user.id,
-            data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
-                project_id: "2222".to_string(), // ie. "Project2"
-                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
-                ..*todoist_item.clone()
-            })),
-            integration_connection_id: todoist_integration_connection.id,
-            source_item: None,
-        }),
+    let creation = create_task_third_party_item(
+        &app.app,
+        ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+            project_id: "2222".to_string(), // ie. "Project2"
+            added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+            ..*todoist_item.clone()
+        })),
+        app.user.id,
     )
     .await;
     let existing_todoist_task = creation.task.as_ref().unwrap();
