@@ -84,12 +84,15 @@ test-all: test
 
 run:
     #!/usr/bin/env bash
-
-    process-compose \
+    PC_PORT=${PROCESS_COMPOSE_PORT:-9999}
+    if process-compose -p "$PC_PORT" process list >/dev/null 2>&1; then
+        exec process-compose -p "$PC_PORT" attach
+    fi
+    exec process-compose \
         -f .devbox/virtenv/redis/process-compose.yaml \
         -f process-compose-pg.yaml \
         -f process-compose.yaml \
-        -p ${PROCESS_COMPOSE_PORT:-9999}
+        -p "$PC_PORT"
 
 @start service:
     process-compose -p ${PROCESS_COMPOSE_PORT:-9999} process start {{ service }}
@@ -120,3 +123,6 @@ status:
         fi
         printf "%s %-15s %s\n" "$icon" "$service" "$status"
     done
+
+open:
+    open "http://localhost:${DX_SERVE_PORT:-8000}"

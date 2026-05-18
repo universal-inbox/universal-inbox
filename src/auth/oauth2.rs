@@ -62,3 +62,47 @@ pub struct AuthorizedOAuth2Client {
     pub first_authorized_at: DateTime<Utc>,
     pub last_used_at: DateTime<Utc>,
 }
+
+/// Recorded user consent for an OAuth2 client (granted scope is the union of
+/// scopes the user has approved for that client).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OAuth2UserConsent {
+    pub user_id: UserId,
+    pub client_id: String,
+    pub scope: String,
+    pub granted_at: DateTime<Utc>,
+}
+
+/// Payload returned by `GET /oauth2/authorize/consent` so the frontend can
+/// render the consent screen.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuth2ConsentRequest {
+    pub request_id: String,
+    pub csrf_token: String,
+    pub client_id: String,
+    pub client_name: Option<String>,
+    pub redirect_uri: String,
+    pub scope: Option<String>,
+}
+
+/// Body of `POST /oauth2/authorize/consent`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuth2ConsentSubmission {
+    pub request_id: String,
+    pub csrf_token: String,
+    pub decision: OAuth2ConsentDecision,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum OAuth2ConsentDecision {
+    Allow,
+    Deny,
+}
+
+/// Response from `POST /oauth2/authorize/consent` — the frontend uses
+/// `redirect_url` to navigate the browser back to the third-party client.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuth2ConsentResponse {
+    pub redirect_url: String,
+}

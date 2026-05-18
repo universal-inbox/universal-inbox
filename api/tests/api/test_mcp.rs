@@ -622,6 +622,8 @@ mod scenario {
 }
 
 mod oauth2 {
+    use universal_inbox::user::UserId;
+
     use super::*;
     use crate::helpers::TestedApp;
 
@@ -630,21 +632,46 @@ mod oauth2 {
         BASE64_URL_SAFE_NO_PAD.encode(digest.as_ref())
     }
 
-    async fn register_oauth2_client(client: &reqwest::Client, app: &TestedApp) -> Value {
-        let response = client
-            .post(format!("{}oauth2/register", app.api_address))
-            .json(&json!({
-                "client_name": "test-mcp-client",
-                "redirect_uris": ["http://localhost:12345/callback"]
-            }))
-            .send()
+    /// Register an OAuth2 client via the service layer for test setup.
+    /// The /oauth2/register HTTP endpoint requires an authenticated session,
+    /// but tests for other behaviors don't care about that; they just need a
+    /// client_id. Tests that exercise the HTTP endpoint itself call it
+    /// directly via `app.client`.
+    async fn register_oauth2_client(app: &TestedApp) -> Value {
+        let mut tx = app
+            .oauth2_service
+            .begin()
             .await
-            .expect("Failed to register client");
-        assert_eq!(response.status(), StatusCode::CREATED);
-        response
-            .json()
+            .expect("Failed to begin transaction for client registration");
+        let client = app
+            .oauth2_service
+            .register_client(
+                &mut tx,
+                Some("test-mcp-client".to_string()),
+                vec!["http://localhost:12345/callback".to_string()],
+            )
             .await
-            .expect("Failed to parse register response")
+            .expect("Failed to register OAuth2 client via service");
+        tx.commit()
+            .await
+            .expect("Failed to commit OAuth2 client registration");
+        serde_json::to_value(&client).expect("Failed to serialize OAuth2 client")
+    }
+
+    /// Seed an OAuth2 user-consent row through the service layer so subsequent
+    /// `/authorize` calls take the "already consented" fast path instead of
+    /// redirecting to the consent screen.
+    async fn seed_oauth2_consent(app: &TestedApp, user_id: UserId, client_id: &str, scope: &str) {
+        let mut tx = app
+            .oauth2_service
+            .begin()
+            .await
+            .expect("Failed to begin transaction for consent seeding");
+        app.oauth2_service
+            .record_user_consent(&mut tx, user_id, client_id, scope)
+            .await
+            .expect("Failed to record OAuth2 user consent");
+        tx.commit().await.expect("Failed to commit consent seeding");
     }
 
     /// Discover the MCP resource URL from the well-known endpoint, matching
@@ -670,9 +697,15 @@ mod oauth2 {
     async fn oauth2_authorize(
         auth_client: &reqwest::Client,
         app: &TestedApp,
+        user_id: UserId,
         client_id: &str,
         code_challenge: &str,
     ) -> String {
+        // Pre-seed the consent so the /authorize call takes the
+        // "already consented" path and issues a code directly. The consent
+        // flow itself is exercised by dedicated tests below.
+        seed_oauth2_consent(app, user_id, client_id, "read write").await;
+
         // Get an API key to authenticate the authorize request
         let api_key: AuthenticationToken = auth_client
             .post(format!("{}users/me/authentication-tokens", app.api_address))
@@ -889,7 +922,7 @@ mod oauth2 {
 
         // Step 1: Dynamic client registration (unauthenticated)
         let unauthenticated_client = reqwest::Client::new();
-        let registered = register_oauth2_client(&unauthenticated_client, &app.app).await;
+        let registered = register_oauth2_client(&app.app).await;
         let client_id = registered["client_id"].as_str().unwrap();
         assert!(registered["client_name"].as_str().unwrap() == "test-mcp-client");
 
@@ -897,7 +930,14 @@ mod oauth2 {
         let code_verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         let code_challenge = pkce_challenge(code_verifier);
 
-        let code = oauth2_authorize(&app.client, &app.app, client_id, &code_challenge).await;
+        let code = oauth2_authorize(
+            &app.client,
+            &app.app,
+            app.user.id,
+            client_id,
+            &code_challenge,
+        )
+        .await;
 
         // Step 3: Token exchange with PKCE
         let token_response = oauth2_token_exchange(
@@ -976,13 +1016,20 @@ mod oauth2 {
         let app = authenticated_app.await;
 
         let unauthenticated_client = reqwest::Client::new();
-        let registered = register_oauth2_client(&unauthenticated_client, &app.app).await;
+        let registered = register_oauth2_client(&app.app).await;
         let client_id = registered["client_id"].as_str().unwrap();
 
         let code_verifier = "correct-verifier-value";
         let code_challenge = pkce_challenge(code_verifier);
 
-        let code = oauth2_authorize(&app.client, &app.app, client_id, &code_challenge).await;
+        let code = oauth2_authorize(
+            &app.client,
+            &app.app,
+            app.user.id,
+            client_id,
+            &code_challenge,
+        )
+        .await;
 
         // Exchange with wrong verifier
         let response = unauthenticated_client
@@ -1010,11 +1057,14 @@ mod oauth2 {
         let app = authenticated_app.await;
 
         let unauthenticated_client = reqwest::Client::new();
-        let registered = register_oauth2_client(&unauthenticated_client, &app.app).await;
+        let registered = register_oauth2_client(&app.app).await;
         let client_id = registered["client_id"].as_str().unwrap();
 
         let code_verifier = "audience-test-verifier";
         let code_challenge = pkce_challenge(code_verifier);
+
+        // Pre-seed consent so /authorize issues a code immediately.
+        seed_oauth2_consent(&app.app, app.user.id, client_id, "read write").await;
 
         // Authorize with a different resource than the MCP endpoint
         let api_key = create_api_key(&app).await;
@@ -1101,7 +1151,7 @@ mod oauth2 {
             .build()
             .unwrap();
 
-        let registered = register_oauth2_client(&no_redirect, &app.app).await;
+        let registered = register_oauth2_client(&app.app).await;
         let client_id = registered["client_id"].as_str().unwrap();
 
         // Call authorize without any authentication (no Bearer token, no session cookie)
@@ -1222,5 +1272,504 @@ mod oauth2 {
             StatusCode::FORBIDDEN,
             "MCP must reject requests with invalid Origin header"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Dynamic client registration validation
+    // ------------------------------------------------------------------
+
+    async fn post_register(
+        client: &reqwest::Client,
+        app: &TestedApp,
+        body: Value,
+    ) -> reqwest::Response {
+        client
+            .post(format!("{}oauth2/register", app.api_address))
+            .json(&body)
+            .send()
+            .await
+            .expect("Failed to call /oauth2/register")
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn register_rejects_javascript_scheme(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let response = post_register(
+            &app.client,
+            &app.app,
+            json!({
+                "client_name": "evil",
+                "redirect_uris": ["javascript:alert(1)"]
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn register_rejects_non_loopback_http(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let response = post_register(
+            &app.client,
+            &app.app,
+            json!({
+                "client_name": "evil",
+                "redirect_uris": ["http://evil.example/cb"]
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn register_requires_authentication_for_remote_redirect_uri(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+
+        // Unauthenticated + remote https → 401. The MCP-spec public DCR path
+        // only covers loopback callbacks, so an attacker can't seed a client
+        // that redirects an authorization code to an external host.
+        let response = post_register(
+            &reqwest::Client::new(),
+            &app.app,
+            json!({
+                "client_name": "evil",
+                "redirect_uris": ["https://example.com/cb"],
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // Unauthenticated + loopback → 201. Required for HTTP MCP clients
+        // (Claude Code, MCP Inspector) that perform RFC 7591 DCR against a
+        // localhost callback listener.
+        for redirect_uri in ["http://localhost:1234/cb", "http://127.0.0.1:1234/cb"] {
+            let response = post_register(
+                &reqwest::Client::new(),
+                &app.app,
+                json!({
+                    "client_name": "cli-client",
+                    "redirect_uris": [redirect_uri],
+                }),
+            )
+            .await;
+            assert_eq!(
+                response.status(),
+                StatusCode::CREATED,
+                "Unauthenticated loopback DCR must succeed (redirect_uri={redirect_uri})"
+            );
+        }
+
+        // Unauthenticated + mixed loopback / remote → 401. Mixing one remote
+        // redirect_uri with loopback must not slip past the gate.
+        let response = post_register(
+            &reqwest::Client::new(),
+            &app.app,
+            json!({
+                "client_name": "evil",
+                "redirect_uris": ["http://localhost:1234/cb", "https://example.com/cb"],
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // Authenticated (session cookie) → 201 for remote https.
+        let response = post_register(
+            &app.client,
+            &app.app,
+            json!({
+                "client_name": "remote",
+                "redirect_uris": ["https://example.com/cb"]
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn register_allows_authenticated_loopback(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        for redirect_uri in ["http://localhost:1234/cb", "http://127.0.0.1:1234/cb"] {
+            let response = post_register(
+                &app.client,
+                &app.app,
+                json!({
+                    "client_name": "local",
+                    "redirect_uris": [redirect_uri],
+                }),
+            )
+            .await;
+            assert_eq!(
+                response.status(),
+                StatusCode::CREATED,
+                "Authenticated loopback registration should succeed (redirect_uri={redirect_uri})"
+            );
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Consent flow
+    // ------------------------------------------------------------------
+
+    fn no_redirect_client() -> reqwest::Client {
+        reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap()
+    }
+
+    fn build_authorize_url(api_address: &str, client_id: &str, code_challenge: &str) -> String {
+        format!(
+            "{}oauth2/authorize?response_type=code&client_id={}&redirect_uri={}&code_challenge={}&code_challenge_method=S256&scope=read+write&state=test_state",
+            api_address,
+            client_id,
+            urlencoding::encode("http://localhost:12345/callback"),
+            code_challenge,
+        )
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn authorize_redirects_to_consent_when_not_yet_granted(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let registered = register_oauth2_client(&app.app).await;
+        let client_id = registered["client_id"].as_str().unwrap();
+
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+        let code_challenge = pkce_challenge("verifier-no-consent");
+
+        let response = no_redirect_client()
+            .get(build_authorize_url(
+                &app.app.api_address,
+                client_id,
+                &code_challenge,
+            ))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .expect("Failed to call /authorize");
+
+        assert_eq!(response.status(), StatusCode::FOUND);
+        let location = response
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(
+            location.contains("/oauth2/consent?request_id="),
+            "Expected consent redirect, got: {location}"
+        );
+        // No `code=` should leak to the third-party redirect URI yet.
+        assert!(
+            !location.contains("code="),
+            "/authorize must not issue a code before consent, got: {location}"
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn authorize_issues_code_when_consent_already_granted(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let registered = register_oauth2_client(&app.app).await;
+        let client_id = registered["client_id"].as_str().unwrap();
+        seed_oauth2_consent(&app.app, app.user.id, client_id, "read write").await;
+
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+        let code_challenge = pkce_challenge("verifier-with-consent");
+
+        let response = no_redirect_client()
+            .get(build_authorize_url(
+                &app.app.api_address,
+                client_id,
+                &code_challenge,
+            ))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .expect("Failed to call /authorize");
+
+        assert_eq!(response.status(), StatusCode::FOUND);
+        let location = response
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(
+            location.starts_with("http://localhost:12345/callback?"),
+            "Expected redirect to client callback, got: {location}"
+        );
+        let parsed = url::Url::parse(location).unwrap();
+        assert!(parsed.query_pairs().any(|(k, _)| k == "code"));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn consent_post_allow_creates_code_and_consent_row(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let registered = register_oauth2_client(&app.app).await;
+        let client_id = registered["client_id"].as_str().unwrap();
+
+        let code_verifier = "consent-allow-verifier";
+        let code_challenge = pkce_challenge(code_verifier);
+
+        let (client, bearer, request_id) =
+            start_pending_consent(&app, client_id, &code_challenge).await;
+        let csrf_token = fetch_consent_csrf(&client, &app.app, &bearer, &request_id).await;
+
+        let response: Value = client
+            .post(format!("{}oauth2/authorize/consent", app.app.api_address))
+            .bearer_auth(&bearer)
+            .json(&json!({
+                "request_id": request_id,
+                "csrf_token": csrf_token,
+                "decision": "allow",
+            }))
+            .send()
+            .await
+            .expect("Failed to call POST /authorize/consent")
+            .json()
+            .await
+            .expect("Failed to parse consent POST response");
+
+        let redirect_url = response["redirect_url"].as_str().unwrap();
+        let parsed = url::Url::parse(redirect_url).unwrap();
+        let code = parsed
+            .query_pairs()
+            .find(|(k, _)| k == "code")
+            .expect("Missing code in allow redirect")
+            .1
+            .into_owned();
+
+        // The code is exchangeable, proving it was actually created.
+        let token_response = oauth2_token_exchange(
+            &reqwest::Client::new(),
+            &app.app,
+            client_id,
+            &code,
+            code_verifier,
+        )
+        .await;
+        assert_eq!(token_response["token_type"], "Bearer");
+
+        // Re-authorizing must now skip the consent screen because the consent
+        // row was persisted.
+        let response = no_redirect_client()
+            .get(build_authorize_url(
+                &app.app.api_address,
+                client_id,
+                &pkce_challenge("second-verifier"),
+            ))
+            .bearer_auth(&bearer)
+            .send()
+            .await
+            .expect("Failed to call /authorize");
+        assert_eq!(response.status(), StatusCode::FOUND);
+        let location = response
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(
+            location.starts_with("http://localhost:12345/callback?"),
+            "Second authorize must skip consent, got: {location}"
+        );
+    }
+
+    /// Drive `GET /authorize` to populate the session with a pending consent
+    /// request and return `(no_redirect_client, bearer_token, request_id)`.
+    async fn start_pending_consent(
+        app: &AuthenticatedApp,
+        client_id: &str,
+        code_challenge: &str,
+    ) -> (reqwest::Client, String, String) {
+        let no_redirect = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .cookie_store(true)
+            .build()
+            .unwrap();
+        let api_key = create_api_key(app).await;
+        let bearer = api_key.jwt_token.expose_secret().0.clone();
+        let response = no_redirect
+            .get(build_authorize_url(
+                &app.app.api_address,
+                client_id,
+                code_challenge,
+            ))
+            .bearer_auth(&bearer)
+            .send()
+            .await
+            .expect("Failed to call /authorize");
+        assert_eq!(response.status(), StatusCode::FOUND);
+        let location = response
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        let request_id = url::Url::parse(&location)
+            .unwrap()
+            .query_pairs()
+            .find(|(k, _)| k == "request_id")
+            .expect("Missing request_id in consent redirect")
+            .1
+            .to_string();
+        (no_redirect, bearer, request_id)
+    }
+
+    async fn fetch_consent_csrf(
+        client: &reqwest::Client,
+        app: &TestedApp,
+        bearer: &str,
+        request_id: &str,
+    ) -> String {
+        let response: Value = client
+            .get(format!(
+                "{}oauth2/authorize/consent?request_id={}",
+                app.api_address,
+                urlencoding::encode(request_id),
+            ))
+            .bearer_auth(bearer)
+            .send()
+            .await
+            .expect("Failed to call GET /authorize/consent")
+            .json()
+            .await
+            .expect("Failed to parse consent GET response");
+        response["csrf_token"].as_str().unwrap().to_string()
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn consent_post_deny_returns_access_denied(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let registered = register_oauth2_client(&app.app).await;
+        let client_id = registered["client_id"].as_str().unwrap();
+        let code_challenge = pkce_challenge("verifier-deny");
+
+        let (client, bearer, request_id) =
+            start_pending_consent(&app, client_id, &code_challenge).await;
+        let csrf_token = fetch_consent_csrf(&client, &app.app, &bearer, &request_id).await;
+
+        let response: Value = client
+            .post(format!("{}oauth2/authorize/consent", app.app.api_address))
+            .bearer_auth(&bearer)
+            .json(&json!({
+                "request_id": request_id,
+                "csrf_token": csrf_token,
+                "decision": "deny",
+            }))
+            .send()
+            .await
+            .expect("Failed to call POST /authorize/consent")
+            .json()
+            .await
+            .expect("Failed to parse consent POST response");
+
+        let redirect_url = response["redirect_url"].as_str().unwrap();
+        let parsed = url::Url::parse(redirect_url).unwrap();
+        let error = parsed
+            .query_pairs()
+            .find(|(k, _)| k == "error")
+            .expect("Missing error in deny redirect")
+            .1
+            .into_owned();
+        assert_eq!(error, "access_denied");
+        assert!(!parsed.query_pairs().any(|(k, _)| k == "code"));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn consent_post_rejects_invalid_csrf(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let registered = register_oauth2_client(&app.app).await;
+        let client_id = registered["client_id"].as_str().unwrap();
+        let code_challenge = pkce_challenge("verifier-bad-csrf");
+
+        let (client, bearer, request_id) =
+            start_pending_consent(&app, client_id, &code_challenge).await;
+        // Skip GET so we don't even know the correct csrf_token.
+
+        let response = client
+            .post(format!("{}oauth2/authorize/consent", app.app.api_address))
+            .bearer_auth(&bearer)
+            .json(&json!({
+                "request_id": request_id,
+                "csrf_token": "not-the-real-token",
+                "decision": "allow",
+            }))
+            .send()
+            .await
+            .expect("Failed to call POST /authorize/consent");
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    // ------------------------------------------------------------------
+    // Audience guard on non-MCP routes
+    // ------------------------------------------------------------------
+
+    #[rstest]
+    #[tokio::test]
+    async fn oauth2_token_rejected_on_non_mcp_route(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let unauthenticated = reqwest::Client::new();
+        let registered = register_oauth2_client(&app.app).await;
+        let client_id = registered["client_id"].as_str().unwrap();
+
+        let code_verifier = "audience-guard-verifier";
+        let code_challenge = pkce_challenge(code_verifier);
+        let code = oauth2_authorize(
+            &app.client,
+            &app.app,
+            app.user.id,
+            client_id,
+            &code_challenge,
+        )
+        .await;
+        let token_response =
+            oauth2_token_exchange(&unauthenticated, &app.app, client_id, &code, code_verifier)
+                .await;
+        let access_token = token_response["access_token"].as_str().unwrap();
+
+        // OAuth2 access token (carries aud=MCP) must not be usable on a
+        // session-only endpoint. The audience guard middleware rejects it.
+        let response = reqwest::Client::new()
+            .get(format!("{}users/me", app.app.api_address))
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .expect("Failed to call /users/me");
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "OAuth2 audience-scoped tokens must be rejected on non-MCP routes"
+        );
+
+        // Sanity check: the original session cookie still authenticates the user.
+        let response = app
+            .client
+            .get(format!("{}users/me", app.app.api_address))
+            .send()
+            .await
+            .expect("Failed to call /users/me with session");
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

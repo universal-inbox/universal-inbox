@@ -90,6 +90,7 @@ pub mod integrations;
 pub mod jobs;
 pub mod mailer;
 pub mod mcp;
+pub mod middlewares;
 pub mod observability;
 pub mod repository;
 pub mod routes;
@@ -149,11 +150,10 @@ pub async fn run_server(
                 // audience configured) would reject them before they
                 // reach that middleware.  Session tokens omit `aud`.
                 //
-                // Trade-off: an OAuth2 MCP token could technically be
-                // used on non-MCP API routes.  The MCP middleware's
-                // Bearer-only + audience checks keep MCP routes safe;
-                // a future improvement could add a similar guard on the
-                // API scope to reject tokens that carry an `aud` claim.
+                // The non-MCP `/api` scope is wrapped with
+                // `middlewares::audience_guard::RejectAudiencedTokens`,
+                // which rejects any token that carries an `aud` claim — so
+                // OAuth2 MCP tokens cannot be used on regular API routes.
                 validation.validate_aud = false;
                 validation
             },
@@ -190,6 +190,12 @@ pub async fn run_server(
     let oauth2_rate_limiter = routes::oauth2::build_rate_limiter();
     let mcp_rate_limiter = mcp::build_rate_limiter();
 
+    // OAuth2 access tokens carry `aud` = MCP resource URL. Only the MCP scope
+    // accepts them; every other API endpoint runs behind this guard to ensure
+    // an MCP-audience token cannot be used as a general session token.
+    let mcp_path_prefix = format!("{}mcp", api_path);
+    let audience_guard_exempt_prefixes = vec![mcp_path_prefix];
+
     let server = HttpServer::new(move || {
         info!("Mounting API on {}", api_path);
 
@@ -202,6 +208,10 @@ pub async fn run_server(
         );
 
         let api_scope = web::scope(api_path.trim_end_matches('/'))
+            .wrap(
+                middlewares::audience_guard::RejectAudiencedTokens::new()
+                    .with_exempt_prefixes(audience_guard_exempt_prefixes.clone()),
+            )
             .service(routes::auth::scope())
             .service(routes::integration_connection::scope())
             .service(routes::oauth::authorize_scope())
