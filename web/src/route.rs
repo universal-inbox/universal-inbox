@@ -15,6 +15,7 @@ use crate::{
         email_verification_page::EmailVerificationPage,
         login_page::LoginPage,
         notifications_page::{NotificationPage, NotificationsPage},
+        oauth2_consent_page::OAuth2ConsentPage,
         page_not_found::PageNotFound,
         passkey_login_page::PasskeyLoginPage,
         passkey_signup_page::PasskeySignupPage,
@@ -49,6 +50,8 @@ pub enum Route {
         PasskeyLoginPage {},
         #[route("/passkey-signup")]
         PasskeySignupPage {},
+        #[route("/oauth2/consent?:request_id")]
+        OAuth2ConsentPage { request_id: String },
       #[end_layout]
       #[route("/auth-oidc-callback?:query")]
       AuthPage { query: String },

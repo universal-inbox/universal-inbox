@@ -1,19 +1,33 @@
 use std::{net::IpAddr, num::NonZeroU32, sync::Arc};
 
 use actix_jwt_authc::Authenticated;
+use actix_session::Session;
 use actix_web::{HttpResponse, Scope, web};
-use anyhow::Context;
+use anyhow::{Context, anyhow};
+use chrono::{DateTime, TimeDelta, Utc};
 use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DefaultKeyedStateStore};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-use universal_inbox::user::UserId;
+use universal_inbox::{
+    auth::oauth2::{
+        OAuth2ConsentDecision, OAuth2ConsentRequest, OAuth2ConsentResponse, OAuth2ConsentSubmission,
+    },
+    user::UserId,
+};
 
 use crate::{
-    universal_inbox::{UniversalInboxError, oauth2::service::OAuth2Service},
+    configuration::Settings,
+    universal_inbox::{
+        UniversalInboxError,
+        oauth2::service::{OAuth2Service, is_loopback_redirect_uri, validate_redirect_uri},
+    },
     utils::jwt::Claims,
 };
 
 const OAUTH2_RATE_LIMIT_PER_MINUTE: u32 = 30;
+const OAUTH2_PENDING_CONSENT_SESSION_KEY: &str = "oauth2_pending_consent";
+const PENDING_CONSENT_TTL_SECS: i64 = 300;
 
 type OAuth2RateLimiter = RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, DefaultClock>;
 
@@ -29,6 +43,8 @@ pub fn scope(rate_limiter: Arc<OAuth2RateLimiter>) -> Scope {
         .app_data(web::Data::new(rate_limiter))
         .route("/register", web::post().to(register))
         .route("/authorize", web::get().to(authorize))
+        .route("/authorize/consent", web::get().to(consent_get))
+        .route("/authorize/consent", web::post().to(consent_post))
         .route("/token", web::post().to(token))
 }
 
@@ -60,15 +76,76 @@ pub struct TokenParams {
     pub refresh_token: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ConsentRequestQuery {
+    pub request_id: String,
+}
+
+/// Pending consent state held in the user's session between GET /authorize
+/// and POST /authorize/consent. Carries every parameter required to either
+/// issue an authorization code (on allow) or build an error redirect (on deny).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PendingConsentRequest {
+    request_id: String,
+    csrf_token: String,
+    user_id: UserId,
+    client_id: String,
+    redirect_uri: String,
+    scope: Option<String>,
+    state: Option<String>,
+    code_challenge: String,
+    code_challenge_method: String,
+    resource: Option<String>,
+    expires_at: DateTime<Utc>,
+}
+
+impl PendingConsentRequest {
+    fn is_expired(&self) -> bool {
+        self.expires_at < Utc::now()
+    }
+}
+
 pub async fn register(
     oauth2_service: web::Data<Arc<OAuth2Service>>,
     body: web::Json<RegisterClientRequest>,
     req: actix_web::HttpRequest,
     rate_limiter: web::Data<Arc<OAuth2RateLimiter>>,
+    authenticated: Option<Authenticated<Claims>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Some(response) = check_rate_limit(&req, &rate_limiter) {
         return Ok(response);
     }
+
+    // Validate redirect_uri schemes (https://, or http:// loopback only).
+    // `OAuth2Service::register_client` performs the same validation again,
+    // but doing it here lets the handler return 400 directly.
+    if body.redirect_uris.is_empty() {
+        return Err(UniversalInboxError::InvalidInputData {
+            source: None,
+            user_error: "redirect_uris must contain at least one URI".to_string(),
+        });
+    }
+    for uri in &body.redirect_uris {
+        validate_redirect_uri(uri)?;
+    }
+
+    // Unauthenticated dynamic client registration is permitted only when every
+    // redirect_uri is loopback — this preserves the MCP-spec public DCR path
+    // for desktop/CLI clients (Claude Code, MCP Inspector, …) while still
+    // blocking a remote attacker from seeding clients pointing at
+    // attacker-controlled hosts. The IP rate limiter on /api/oauth2/* caps
+    // abuse volume.
+    if authenticated.is_none()
+        && !body
+            .redirect_uris
+            .iter()
+            .all(|uri| is_loopback_redirect_uri(uri))
+    {
+        return Err(UniversalInboxError::Unauthorized(anyhow!(
+            "Unauthenticated OAuth2 client registration is only allowed for loopback redirect_uris"
+        )));
+    }
+
     let service = oauth2_service.clone();
     let mut transaction = service
         .begin()
@@ -98,7 +175,8 @@ pub async fn authorize(
     authenticated: Option<Authenticated<Claims>>,
     params: web::Query<AuthorizeParams>,
     req: actix_web::HttpRequest,
-    settings: web::Data<crate::configuration::Settings>,
+    settings: web::Data<Settings>,
+    session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if params.response_type != "code" {
         return Err(UniversalInboxError::InvalidInputData {
@@ -135,38 +213,216 @@ pub async fn authorize(
         .await
         .context("Failed to create new transaction while creating authorization code")?;
 
-    let code = service
-        .create_authorization_code(
-            &mut transaction,
-            &params.client_id,
-            user_id,
-            &params.redirect_uri,
-            params.scope.as_deref(),
-            &params.code_challenge,
-            &params.code_challenge_method,
-            params.resource.as_deref(),
-        )
+    // Verify the client exists and the redirect_uri is registered before doing
+    // anything else (mirrors what create_authorization_code would have done).
+    let client = service
+        .get_client(&mut transaction, &params.client_id)
+        .await?
+        .ok_or_else(|| UniversalInboxError::InvalidInputData {
+            source: None,
+            user_error: format!("Unknown client_id: {}", params.client_id),
+        })?;
+    if !client.redirect_uris.contains(&params.redirect_uri) {
+        return Err(UniversalInboxError::InvalidInputData {
+            source: None,
+            user_error: format!("Invalid redirect_uri: {}", params.redirect_uri),
+        });
+    }
+
+    // If the user has already consented to this client with at least the
+    // requested scope, skip the consent screen and issue the code immediately.
+    let existing_consent = service
+        .get_user_consent(&mut transaction, user_id, &params.client_id)
         .await?;
+    let consent_covers = existing_consent.as_ref().is_some_and(|consent| {
+        OAuth2Service::consent_covers_scope(&consent.scope, params.scope.as_deref())
+    });
+
+    if consent_covers {
+        let code = service
+            .create_authorization_code(
+                &mut transaction,
+                &params.client_id,
+                user_id,
+                &params.redirect_uri,
+                params.scope.as_deref(),
+                &params.code_challenge,
+                &params.code_challenge_method,
+                params.resource.as_deref(),
+            )
+            .await?;
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit while creating authorization code")?;
+
+        let redirect_url = build_redirect_with_code(&params.redirect_uri, &code, &params.state)?;
+        return Ok(HttpResponse::Found()
+            .insert_header(("Location", redirect_url))
+            .finish());
+    }
 
     transaction
         .commit()
         .await
-        .context("Failed to commit while creating authorization code")?;
+        .context("Failed to commit while checking OAuth2 consent")?;
 
-    let mut redirect_url = url::Url::parse(&params.redirect_uri).map_err(|_| {
-        UniversalInboxError::InvalidInputData {
+    // No prior consent — store a pending consent request in the session and
+    // redirect to the frontend consent screen.
+    let pending = PendingConsentRequest {
+        request_id: Uuid::new_v4().to_string(),
+        csrf_token: generate_csrf_token(),
+        user_id,
+        client_id: params.client_id.clone(),
+        redirect_uri: params.redirect_uri.clone(),
+        scope: params.scope.clone(),
+        state: params.state.clone(),
+        code_challenge: params.code_challenge.clone(),
+        code_challenge_method: params.code_challenge_method.clone(),
+        resource: params.resource.clone(),
+        expires_at: Utc::now()
+            + TimeDelta::try_seconds(PENDING_CONSENT_TTL_SECS).unwrap_or_else(|| {
+                panic!("Invalid PENDING_CONSENT_TTL_SECS value: {PENDING_CONSENT_TTL_SECS}")
+            }),
+    };
+
+    session
+        .insert(OAUTH2_PENDING_CONSENT_SESSION_KEY, &pending)
+        .context("Failed to insert OAuth2 pending consent into the session")?;
+
+    let consent_url = format!(
+        "{}oauth2/consent?request_id={}",
+        settings.application.front_base_url,
+        urlencoding::encode(&pending.request_id)
+    );
+    Ok(HttpResponse::Found()
+        .insert_header(("Location", consent_url))
+        .finish())
+}
+
+pub async fn consent_get(
+    oauth2_service: web::Data<Arc<OAuth2Service>>,
+    authenticated: Authenticated<Claims>,
+    query: web::Query<ConsentRequestQuery>,
+    session: Session,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+
+    let pending = read_pending_consent(&session, &query.request_id, user_id)?;
+
+    let service = oauth2_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while loading OAuth2 consent request")?;
+
+    let client = service
+        .get_client(&mut transaction, &pending.client_id)
+        .await?
+        .ok_or_else(|| UniversalInboxError::InvalidInputData {
             source: None,
-            user_error: format!("Invalid redirect_uri: {}", params.redirect_uri),
-        }
-    })?;
-    redirect_url.query_pairs_mut().append_pair("code", &code);
-    if let Some(ref state) = params.state {
-        redirect_url.query_pairs_mut().append_pair("state", state);
+            user_error: format!("Unknown client_id: {}", pending.client_id),
+        })?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while loading OAuth2 consent request")?;
+
+    let response = OAuth2ConsentRequest {
+        request_id: pending.request_id.clone(),
+        csrf_token: pending.csrf_token.clone(),
+        client_id: pending.client_id.clone(),
+        client_name: client.client_name,
+        redirect_uri: pending.redirect_uri.clone(),
+        scope: pending.scope.clone(),
+    };
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&response).context("Cannot serialize OAuth2 consent request")?))
+}
+
+pub async fn consent_post(
+    oauth2_service: web::Data<Arc<OAuth2Service>>,
+    authenticated: Authenticated<Claims>,
+    body: web::Json<OAuth2ConsentSubmission>,
+    session: Session,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+
+    let pending = read_pending_consent(&session, &body.request_id, user_id)?;
+
+    if pending.csrf_token != body.csrf_token {
+        // Don't leak whether the request_id existed — same generic error.
+        session.remove(OAUTH2_PENDING_CONSENT_SESSION_KEY);
+        return Err(UniversalInboxError::Forbidden(
+            "Invalid OAuth2 consent request".to_string(),
+        ));
     }
 
-    Ok(HttpResponse::Found()
-        .insert_header(("Location", redirect_url.as_str()))
-        .finish())
+    // Consume the pending entry regardless of the decision.
+    session.remove(OAUTH2_PENDING_CONSENT_SESSION_KEY);
+
+    match body.decision {
+        OAuth2ConsentDecision::Deny => {
+            let redirect_url =
+                build_redirect_with_error(&pending.redirect_uri, "access_denied", &pending.state)?;
+            Ok(HttpResponse::Ok().content_type("application/json").body(
+                serde_json::to_string(&OAuth2ConsentResponse { redirect_url })
+                    .context("Cannot serialize OAuth2 consent response")?,
+            ))
+        }
+        OAuth2ConsentDecision::Allow => {
+            let service = oauth2_service.clone();
+            let mut transaction = service
+                .begin()
+                .await
+                .context("Failed to create new transaction while recording OAuth2 consent")?;
+
+            service
+                .record_user_consent(
+                    &mut transaction,
+                    user_id,
+                    &pending.client_id,
+                    pending.scope.as_deref().unwrap_or(""),
+                )
+                .await?;
+
+            let code = service
+                .create_authorization_code(
+                    &mut transaction,
+                    &pending.client_id,
+                    user_id,
+                    &pending.redirect_uri,
+                    pending.scope.as_deref(),
+                    &pending.code_challenge,
+                    &pending.code_challenge_method,
+                    pending.resource.as_deref(),
+                )
+                .await?;
+
+            transaction
+                .commit()
+                .await
+                .context("Failed to commit while recording OAuth2 consent")?;
+
+            let redirect_url =
+                build_redirect_with_code(&pending.redirect_uri, &code, &pending.state)?;
+            Ok(HttpResponse::Ok().content_type("application/json").body(
+                serde_json::to_string(&OAuth2ConsentResponse { redirect_url })
+                    .context("Cannot serialize OAuth2 consent response")?,
+            ))
+        }
+    }
 }
 
 pub async fn token(
@@ -264,4 +520,77 @@ fn check_rate_limit(
         return Some(HttpResponse::TooManyRequests().finish());
     }
     None
+}
+
+fn read_pending_consent(
+    session: &Session,
+    request_id: &str,
+    user_id: UserId,
+) -> Result<PendingConsentRequest, UniversalInboxError> {
+    let Some(pending) = session
+        .get::<PendingConsentRequest>(OAUTH2_PENDING_CONSENT_SESSION_KEY)
+        .context("Failed to read pending OAuth2 consent from session")?
+    else {
+        return Err(UniversalInboxError::Forbidden(
+            "No pending OAuth2 consent request".to_string(),
+        ));
+    };
+
+    if pending.request_id != request_id || pending.user_id != user_id {
+        session.remove(OAUTH2_PENDING_CONSENT_SESSION_KEY);
+        return Err(UniversalInboxError::Forbidden(
+            "Invalid OAuth2 consent request".to_string(),
+        ));
+    }
+
+    if pending.is_expired() {
+        session.remove(OAUTH2_PENDING_CONSENT_SESSION_KEY);
+        return Err(UniversalInboxError::Forbidden(
+            "OAuth2 consent request has expired".to_string(),
+        ));
+    }
+
+    Ok(pending)
+}
+
+fn build_redirect_with_code(
+    redirect_uri: &str,
+    code: &str,
+    state: &Option<String>,
+) -> Result<String, UniversalInboxError> {
+    let mut url =
+        url::Url::parse(redirect_uri).map_err(|_| UniversalInboxError::InvalidInputData {
+            source: None,
+            user_error: format!("Invalid redirect_uri: {redirect_uri}"),
+        })?;
+    url.query_pairs_mut().append_pair("code", code);
+    if let Some(state) = state {
+        url.query_pairs_mut().append_pair("state", state);
+    }
+    Ok(url.to_string())
+}
+
+fn build_redirect_with_error(
+    redirect_uri: &str,
+    error: &str,
+    state: &Option<String>,
+) -> Result<String, UniversalInboxError> {
+    let mut url =
+        url::Url::parse(redirect_uri).map_err(|_| UniversalInboxError::InvalidInputData {
+            source: None,
+            user_error: format!("Invalid redirect_uri: {redirect_uri}"),
+        })?;
+    url.query_pairs_mut().append_pair("error", error);
+    if let Some(state) = state {
+        url.query_pairs_mut().append_pair("state", state);
+    }
+    Ok(url.to_string())
+}
+
+fn generate_csrf_token() -> String {
+    use base64::prelude::*;
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    BASE64_URL_SAFE_NO_PAD.encode(bytes)
 }

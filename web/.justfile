@@ -50,6 +50,15 @@ test-ci: install build-assets
 ## Run recipes
 run interactive="true": clear-dev-assets build-assets
     #!/usr/bin/env bash
+    set -euo pipefail
+
+    # dx serve has no flag for the proxy backend, so patch Dioxus.toml in place
+    # with the API_PORT from direnv (each worktree gets its own hashed port).
+    API_PORT_VALUE=${API_PORT:-8000}
+    tmp=$(mktemp)
+    sed -E 's#^backend = "http://localhost:[0-9]+/api/"#backend = "http://localhost:'"$API_PORT_VALUE"'/api/"#' \
+        Dioxus.toml > "$tmp"
+    mv "$tmp" Dioxus.toml
 
     dx serve --port ${DX_SERVE_PORT:-8080} --verbose --interactive {{ interactive }}
 
