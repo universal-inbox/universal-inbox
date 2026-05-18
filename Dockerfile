@@ -83,7 +83,7 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" src src
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api api
 RUN devbox run -- just api build-release
 
-FROM debian:testing-slim AS runtime
+FROM debian:bookworm-slim AS runtime
 ARG VERSION
 ENV VERSION=${VERSION}
 WORKDIR /app
@@ -103,5 +103,11 @@ COPY --from=tools /usr/local/cargo/bin/sqlx /usr/local/bin/sqlx
 COPY --from=release-web-builder /app/web/public/ statics
 ENV CONFIG_FILE /app/config/prod.toml
 ENV UNIVERSAL_INBOX__APPLICATION__VERSION=${VERSION}
+# Create non-root user owning /app (writable by the entrypoint, which rewrites
+# /app/config/prod.toml at startup) and /data (intended writable volume mount).
+RUN groupadd -r ui \
+  && useradd -r -g ui -d /app -s /usr/sbin/nologin ui \
+  && chown -R ui:ui /app /data
+USER ui
 ENTRYPOINT ["/app/universal-inbox-entrypoint"]
 CMD ["serve"]
