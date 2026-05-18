@@ -7,7 +7,7 @@ use tokio::sync::{OnceCell, RwLock};
 use tracing::info;
 use wiremock::MockServer;
 
-use playwright_rs::{Browser, BrowserContext, LaunchOptions, Page, Playwright, expect};
+use playwright_rs::{Browser, BrowserContext, LaunchOptions, Locator, Page, Playwright, expect};
 
 /// Timeout for Playwright expect assertions.
 /// Debug WASM binaries (~74 MB) take significant time to download and initialize,
@@ -190,31 +190,7 @@ pub async fn login(page: &Page, app_url: &str, email: &str) {
         .await
         .expect("Failed to navigate to login page");
 
-    // Wait for the WASM app to load using auto-retry expect with extended timeout
-    // for the debug WASM binary to download and initialize.
-    let email_input = page.locator("input[name='email']").await;
-    expect(email_input.clone())
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Email input not visible on login page");
-
-    email_input
-        .fill(email, None)
-        .await
-        .expect("Failed to fill email");
-
-    let password_input = page.locator("input[name='password']").await;
-    password_input
-        .fill(DEFAULT_PASSWORD, None)
-        .await
-        .expect("Failed to fill password");
-
-    let submit_button = page.locator("button[type='submit']").await;
-    submit_button
-        .click(None)
-        .await
-        .expect("Failed to click submit");
+    fill_and_submit_credentials(page, email, DEFAULT_PASSWORD, "login").await;
 
     // Wait for redirect away from login by checking that the notifications page is visible
     let notifications_page = page.locator("#notifications-page").await;
@@ -225,35 +201,123 @@ pub async fn login(page: &Page, app_url: &str, email: &str) {
         .expect("Notifications page not visible after login");
 }
 
+/// Fill the email + password fields and submit the form atomically.
+///
+/// The Dioxus form (`LoginPage` / `SignupPage`) uses controlled inputs
+/// whose `value` attribute is bound to a signal. The submit handler reads
+/// form values via the browser's `FormData` API (which sees the live DOM
+/// value, not the signal), but two Dioxus-side races make the simple
+/// "fill → click submit" pattern flaky:
+///
+/// 1. Between Playwright filling field A and field B, the parent can
+///    re-render (e.g. when the email signal updates). Because the
+///    password input is rendered with `value: "{props.value}"` and the
+///    password signal is still empty, the re-render clobbers the input
+///    back to "" — `fill_and_verify` recovers from this with a retry.
+///
+/// 2. Between the test confirming field B's value and the test's submit
+///    click reaching the browser, another re-render can clobber the
+///    value again — this time the click reads stale empty values from
+///    `FormData`, the credentials parse fails, and the form silently
+///    sets `force_validation = true` without making an API call. The
+///    test then waits the full 60s for a redirect that never comes.
+///
+/// To close race (2), this helper finishes by re-setting both values
+/// and calling `form.requestSubmit()` inside a single `page.evaluate`
+/// — JavaScript runs to completion synchronously, so Dioxus cannot
+/// schedule a re-render between the value writes and the submit event
+/// (the submit handler runs synchronously inside that same JS turn).
+pub async fn fill_and_submit_credentials(page: &Page, email: &str, password: &str, form: &str) {
+    let email_input = page.locator("input[name='email']").await;
+    expect(email_input.clone())
+        .with_timeout(EXPECT_TIMEOUT)
+        .to_be_visible()
+        .await
+        .unwrap_or_else(|_| panic!("Email input not visible on {form} page"));
+
+    fill_and_verify(&email_input, email, "email").await;
+
+    let password_input = page.locator("input[name='password']").await;
+    fill_and_verify(&password_input, password, "password").await;
+
+    submit_form_atomic(page, email, password).await;
+}
+
+/// Re-write the email + password fields and submit the form in a single
+/// JS execution. See `fill_and_submit_credentials` for the race this
+/// protects against.
+///
+/// Uses the native `HTMLInputElement.value` setter rather than direct
+/// property assignment so the change is visible to frameworks that
+/// observe the prototype setter (the standard React/Dioxus controlled
+/// -input integration pattern).
+async fn submit_form_atomic(page: &Page, email: &str, password: &str) {
+    // Escape values for JS string literals using JSON encoding — it
+    // handles quotes, backslashes, and Unicode correctly.
+    let email_js = serde_json::to_string(email).expect("encode email");
+    let password_js = serde_json::to_string(password).expect("encode password");
+    let js = format!(
+        r#"(() => {{
+            const email = document.querySelector('input[name="email"]');
+            const password = document.querySelector('input[name="password"]');
+            const form = email && email.closest('form');
+            if (!email || !password || !form) {{
+                throw new Error('login/signup form not found in DOM');
+            }}
+            const setter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+            ).set;
+            setter.call(email, {email_js});
+            setter.call(password, {password_js});
+            email.dispatchEvent(new InputEvent('input', {{ bubbles: true }}));
+            password.dispatchEvent(new InputEvent('input', {{ bubbles: true }}));
+            form.requestSubmit();
+        }})()"#
+    );
+    page.evaluate_expression(&js)
+        .await
+        .expect("Failed to submit form via JS");
+}
+
+/// Fill a Dioxus-controlled input and wait for the framework to observe
+/// the new value. See `fill_and_submit_credentials` for the race this
+/// guards against (specifically race #1).
+pub async fn fill_and_verify(input: &Locator, value: &str, field: &str) {
+    // Retry up to 3 times in case a re-render clobbers the typed value
+    // before Dioxus's `oninput` handler picks it up. The `to_have_value`
+    // assertion has its own internal polling, but it only resolves if the
+    // value eventually appears; a re-render at the wrong moment can leave
+    // the input permanently empty until we re-issue the fill.
+    let mut last_err = String::new();
+    for attempt in 0..3 {
+        input
+            .fill(value, None)
+            .await
+            .unwrap_or_else(|_| panic!("Failed to fill {field}"));
+        let short_timeout = Duration::from_secs(5);
+        let result = expect(input.clone())
+            .with_timeout(short_timeout)
+            .to_have_value(value)
+            .await;
+        if result.is_ok() {
+            return;
+        }
+        last_err = format!("attempt {} of 3: {:?}", attempt + 1, result.err());
+        let observed = input.input_value(None).await.unwrap_or_default();
+        eprintln!(
+            "fill_and_verify {field}: value mismatch (got {observed:?}, expected {value:?}), retrying"
+        );
+    }
+    panic!("{field} value not synced to controlled input after 3 attempts: {last_err}");
+}
+
 /// Register a new user via the browser by filling the signup form.
 pub async fn register(page: &Page, app_url: &str, email: &str) {
     page.goto(&format!("{app_url}/signup"), None)
         .await
         .expect("Failed to navigate to signup page");
 
-    let email_input = page.locator("input[name='email']").await;
-    expect(email_input.clone())
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Email input not visible on signup page");
-
-    email_input
-        .fill(email, None)
-        .await
-        .expect("Failed to fill email");
-
-    let password_input = page.locator("input[name='password']").await;
-    password_input
-        .fill(DEFAULT_PASSWORD, None)
-        .await
-        .expect("Failed to fill password");
-
-    let submit_button = page.locator("button[type='submit']").await;
-    submit_button
-        .click(None)
-        .await
-        .expect("Failed to click submit");
+    fill_and_submit_credentials(page, email, DEFAULT_PASSWORD, "signup").await;
 
     // Wait for redirect away from signup — the notifications page should appear
     // after auto-login.  We must NOT wait on `input[name='email']` because that
