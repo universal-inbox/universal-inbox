@@ -1,4 +1,4 @@
-use chrono::{TimeZone, Timelike, Utc};
+use chrono::{TimeZone, Utc};
 use http::StatusCode;
 use rstest::*;
 use serde_json::json;
@@ -9,19 +9,17 @@ use universal_inbox::{
         config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
     },
     task::{ProjectSummary, TaskStatus, service::TaskPatch},
-    third_party::{
-        integrations::todoist::TodoistItem,
-        item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
-    },
+    third_party::{integrations::todoist::TodoistItem, item::ThirdPartyItemData},
 };
 
 use universal_inbox_api::{configuration::Settings, integrations::todoist::TodoistSyncResponse};
 
 use crate::helpers::integration_connection::OAuthCredentialFixture;
+use crate::helpers::third_party::create_task_third_party_item;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticate_user, authenticated_app},
     integration_connection::{create_and_mock_integration_connection, todoist_oauth_credential},
-    rest::{create_resource, get_resource_response, patch_resource_response},
+    rest::{get_resource_response, patch_resource_response},
     settings,
     task::{
         list_tasks, search_projects,
@@ -64,7 +62,7 @@ mod get_task {
         todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
-        let integration_connection = create_and_mock_integration_connection(
+        let _integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
@@ -82,24 +80,14 @@ mod get_task {
         )
         .await;
 
-        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: todoist_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
-                    project_id: "1111".to_string(), // ie. "Inbox"
-                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
-                    ..*todoist_item.clone()
-                })),
-                integration_connection_id: integration_connection.id,
-                source_item: None,
-            }),
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(), // ie. "Inbox"
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            })),
+            app.user.id,
         )
         .await;
         let task_id = creation.task.as_ref().unwrap().id;
@@ -145,7 +133,7 @@ mod list_tasks {
         todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
-        let integration_connection = create_and_mock_integration_connection(
+        let _integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
@@ -163,24 +151,14 @@ mod list_tasks {
         )
         .await;
 
-        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: todoist_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
-                    project_id: "1111".to_string(), // ie. "Inbox"
-                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
-                    ..*todoist_item.clone()
-                })),
-                integration_connection_id: integration_connection.id,
-                source_item: None,
-            }),
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(), // ie. "Inbox"
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            })),
+            app.user.id,
         )
         .await;
         let task_active = creation.task.as_ref().unwrap().clone();
@@ -191,24 +169,14 @@ mod list_tasks {
         todoist_item_done.checked = true;
         todoist_item_done.completed_at = Some(Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap());
 
-        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: todoist_item_done.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
-                    project_id: "1111".to_string(), // ie. "Inbox"
-                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
-                    ..*todoist_item_done.clone()
-                })),
-                integration_connection_id: integration_connection.id,
-                source_item: None,
-            }),
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(), // ie. "Inbox"
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item_done.clone()
+            })),
+            app.user.id,
         )
         .await;
         let task_done = creation.task.as_ref().unwrap().clone();
@@ -248,7 +216,7 @@ mod patch_task {
         todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
-        let integration_connection = create_and_mock_integration_connection(
+        let _integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
@@ -266,24 +234,14 @@ mod patch_task {
         )
         .await;
 
-        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: todoist_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
-                    project_id: "1111".to_string(), // ie. "Inbox"
-                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
-                    ..*todoist_item.clone()
-                })),
-                integration_connection_id: integration_connection.id,
-                source_item: None,
-            }),
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(), // ie. "Inbox"
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            })),
+            app.user.id,
         )
         .await;
         let task = creation.task.as_ref().unwrap().clone();
@@ -313,7 +271,7 @@ mod patch_task {
         todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
-        let integration_connection = create_and_mock_integration_connection(
+        let _integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
@@ -331,24 +289,14 @@ mod patch_task {
         )
         .await;
 
-        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: todoist_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
-                    project_id: "1111".to_string(), // ie. "Inbox"
-                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
-                    ..*todoist_item.clone()
-                })),
-                integration_connection_id: integration_connection.id,
-                source_item: None,
-            }),
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(), // ie. "Inbox"
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            })),
+            app.user.id,
         )
         .await;
         let task = creation.task.as_ref().unwrap().clone();
@@ -381,7 +329,7 @@ mod patch_task {
         todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
-        let integration_connection = create_and_mock_integration_connection(
+        let _integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
@@ -399,24 +347,14 @@ mod patch_task {
         )
         .await;
 
-        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: todoist_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
-                    project_id: "1111".to_string(), // ie. "Inbox"
-                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
-                    ..*todoist_item.clone()
-                })),
-                integration_connection_id: integration_connection.id,
-                source_item: None,
-            }),
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(), // ie. "Inbox"
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            })),
+            app.user.id,
         )
         .await;
         let task = creation.task.as_ref().unwrap().clone();
@@ -500,7 +438,7 @@ mod search_tasks {
         todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
-        let integration_connection = create_and_mock_integration_connection(
+        let _integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
@@ -518,24 +456,14 @@ mod search_tasks {
         )
         .await;
 
-        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: todoist_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
-                    project_id: "1111".to_string(), // ie. "Inbox"
-                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
-                    ..*todoist_item.clone()
-                })),
-                integration_connection_id: integration_connection.id,
-                source_item: None,
-            }),
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(), // ie. "Inbox"
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            })),
+            app.user.id,
         )
         .await;
         let task1 = creation.task.as_ref().unwrap().clone();
@@ -549,24 +477,14 @@ mod search_tasks {
         other_todoist_item.content = "Other todo".to_string();
         other_todoist_item.description = "fill the form".to_string();
 
-        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: other_todoist_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
-                    project_id: "1111".to_string(), // ie. "Inbox"
-                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
-                    ..*other_todoist_item.clone()
-                })),
-                integration_connection_id: integration_connection.id,
-                source_item: None,
-            }),
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(), // ie. "Inbox"
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*other_todoist_item.clone()
+            })),
+            app.user.id,
         )
         .await;
         let task2 = creation.task.as_ref().unwrap().clone();
@@ -634,7 +552,7 @@ mod search_tasks {
         let app = authenticated_app.await;
 
         // Todoist connection (via Nango) — task seeded with the fixture title "Release new version..."
-        let todoist_ic = create_and_mock_integration_connection(
+        let _todoist_ic = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
@@ -653,7 +571,7 @@ mod search_tasks {
         .await;
 
         // TickTick connection (internal OAuth helper) — task sharing the word "Universal" in its title
-        let ticktick_ic =
+        let _ticktick_ic =
             crate::helpers::integration_connection::create_ticktick_integration_connection(
                 &app.app,
                 app.user.id,
@@ -668,47 +586,27 @@ mod search_tasks {
         )
         .await;
 
-        let _todoist_created: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: todoist_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
-                    project_id: "1111".to_string(),
-                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
-                    ..*todoist_item.clone()
-                })),
-                integration_connection_id: todoist_ic.id,
-                source_item: None,
-            }),
+        let _todoist_created = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(),
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            })),
+            app.user.id,
         )
         .await;
 
         // TickTick task has a distinct title so we can assert which provider each match came from,
         // even though the word "Universal" appears in both.
-        let _ticktick_created: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: ticktick_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
-                    title: "Universal ticktick task".to_string(),
-                    project_id: "tt_proj_1111".to_string(),
-                    ..*ticktick_item.clone()
-                })),
-                integration_connection_id: ticktick_ic.id,
-                source_item: None,
-            }),
+        let _ticktick_created = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
+                title: "Universal ticktick task".to_string(),
+                project_id: "tt_proj_1111".to_string(),
+                ..*ticktick_item.clone()
+            })),
+            app.user.id,
         )
         .await;
 

@@ -5,10 +5,7 @@ use actix_web::{HttpResponse, Scope, web};
 use anyhow::Context;
 use tokio::sync::RwLock;
 
-use universal_inbox::{
-    third_party::item::{ThirdPartyItem, ThirdPartyItemData},
-    user::UserId,
-};
+use universal_inbox::{third_party::item::ThirdPartyItemData, user::UserId};
 
 use crate::{
     universal_inbox::{UniversalInboxError, third_party::service::ThirdPartyItemService},
@@ -28,7 +25,7 @@ pub fn scope() -> Scope {
 }
 
 pub async fn create_task_third_party_item(
-    third_party_item: web::Json<Box<ThirdPartyItem>>,
+    third_party_item_data: web::Json<Box<ThirdPartyItemData>>,
     third_party_item_service: web::Data<Arc<RwLock<ThirdPartyItemService>>>,
     authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
@@ -44,7 +41,11 @@ pub async fn create_task_third_party_item(
         .context("Failed to create new transaction while creating third party item")?;
 
     let created_third_party_item = service
-        .create_task_item(&mut transaction, *third_party_item.into_inner(), user_id)
+        .create_task_item(
+            &mut transaction,
+            *third_party_item_data.into_inner(),
+            user_id,
+        )
         .await?;
 
     transaction
