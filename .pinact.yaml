@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/suzuki-shunsuke/pinact/refs/heads/main/json-schema/pinact.json
+# pinact - https://github.com/suzuki-shunsuke/pinact
+version: 3
+
+files:
+  - pattern: .github/workflows/ci-main.yml
+
+ignore_actions:
+  # GitHub-owned, lower risk — excluded by bkj.4 text
+  - name: actions/checkout
+    ref: .*
+  # Tracked by bkj.2 / bkj.3 — branch-ref findings, fixed separately
+  - name: jlumbroso/free-disk-space
+    ref: .*
+  - name: coverallsapp/github-action
+    ref: .*
