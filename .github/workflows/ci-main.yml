@@ -109,7 +109,7 @@ jobs:
       - name: Upload to Coveralls
         # upload only if push
         if: ${{ github.event_name == 'push' }}
-        uses: coverallsapp/github-action@master
+        uses: coverallsapp/github-action@648a8eb78e6d50909eff900e4ec85cab4524a45b # v2.3.6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: "./lcov.info"
@@ -193,7 +193,7 @@ jobs:
       - name: Upload to Coveralls
         # upload only if push
         if: ${{ github.event_name == 'push' }}
-        uses: coverallsapp/github-action@master
+        uses: coverallsapp/github-action@648a8eb78e6d50909eff900e4ec85cab4524a45b # v2.3.6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: "./api/lcov.info"
