@@ -1253,6 +1253,54 @@
         }
       }
     },
+    "pinact@latest": {
+      "last_modified": "2026-05-01T13:14:57Z",
+      "resolved": "github:NixOS/nixpkgs/c6d65881c5624c9cae5ea6cedef24699b0c0a4c0#pinact",
+      "source": "devbox-search",
+      "version": "3.9.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/m2b33s3y97dbnkc3mwbj26z537zrj41w-pinact-3.9.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/m2b33s3y97dbnkc3mwbj26z537zrj41w-pinact-3.9.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ybancz64x8bw8119rj7izcimj6ik4bzq-pinact-3.9.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/ybancz64x8bw8119rj7izcimj6ik4bzq-pinact-3.9.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/qmfx2j3ha8jm8mf1ygq0042qiq91bjdj-pinact-3.9.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/qmfx2j3ha8jm8mf1ygq0042qiq91bjdj-pinact-3.9.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/aj43k42bjrakvfqbb4n3x64cc73fcs63-pinact-3.9.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/aj43k42bjrakvfqbb4n3x64cc73fcs63-pinact-3.9.2"
+        }
+      }
+    },
     "pkg-config@latest": {
       "last_modified": "2025-07-28T17:09:23Z",
       "resolved": "github:NixOS/nixpkgs/648f70160c03151bc2121d179291337ad6bc564b#pkg-config",
