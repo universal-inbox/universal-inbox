@@ -23,7 +23,6 @@ pub struct AppConfig {
     pub support_href: Option<String>,
     pub show_changelog: bool,
     pub chat_support_website_id: Option<String>,
-    pub chat_support_user_email_signature: Option<String>,
     pub version: Option<String>,
 }
 
@@ -58,7 +57,6 @@ pub async fn get_app_config() -> Result<AppConfig> {
         support_href: front_config.support_href,
         show_changelog: front_config.show_changelog,
         chat_support_website_id: front_config.chat_support_website_id,
-        chat_support_user_email_signature: front_config.chat_support_user_email_signature,
         version: front_config.version,
     };
     Ok(app_config)
