@@ -1,6 +1,7 @@
 pub mod email_verification_page;
 pub mod login_page;
 pub mod notifications_page;
+pub mod oauth2_consent_page;
 pub mod page_not_found;
 pub mod passkey_login_page;
 pub mod passkey_signup_page;

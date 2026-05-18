@@ -6,6 +6,7 @@ use uuid::Uuid;
 use universal_inbox::{
     auth::oauth2::{
         AuthorizedOAuth2Client, OAuth2AuthorizationCode, OAuth2Client, OAuth2RefreshToken,
+        OAuth2UserConsent,
     },
     user::UserId,
 };
@@ -80,6 +81,28 @@ pub trait OAuth2Repository {
     ) -> Result<Vec<AuthorizedOAuth2Client>, UniversalInboxError>;
 
     async fn revoke_all_refresh_tokens_for_client(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<u64, UniversalInboxError>;
+
+    async fn get_user_consent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<Option<OAuth2UserConsent>, UniversalInboxError>;
+
+    async fn upsert_user_consent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+        scope: &str,
+    ) -> Result<OAuth2UserConsent, UniversalInboxError>;
+
+    async fn delete_user_consent(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
@@ -456,6 +479,147 @@ impl OAuth2Repository for Repository {
             })?;
 
         Ok(result.rows_affected())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(client_id, user.id = user_id.to_string()),
+        err
+    )]
+    async fn get_user_consent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<Option<OAuth2UserConsent>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                SELECT user_id, client_id, scope, granted_at
+                FROM oauth2_user_consent
+                WHERE user_id =
+            "#,
+        );
+        query_builder.push_bind(user_id.0);
+        query_builder.push(" AND client_id = ");
+        query_builder.push_bind(client_id);
+
+        let row = query_builder
+            .build_query_as::<OAuth2UserConsentRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!("Failed to fetch OAuth2 user consent from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        Ok(row.map(|r| r.into()))
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(client_id, user.id = user_id.to_string()),
+        err
+    )]
+    async fn upsert_user_consent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+        scope: &str,
+    ) -> Result<OAuth2UserConsent, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                INSERT INTO oauth2_user_consent (user_id, client_id, scope)
+                VALUES (
+            "#,
+        );
+        let mut separated = query_builder.separated(", ");
+        separated.push_bind(user_id.0);
+        separated.push_bind(client_id);
+        separated.push_bind(scope);
+        query_builder.push(
+            r#"
+                )
+                ON CONFLICT (user_id, client_id) DO UPDATE
+                SET scope = EXCLUDED.scope, granted_at = now()
+                RETURNING user_id, client_id, scope, granted_at
+            "#,
+        );
+
+        let row = query_builder
+            .build_query_as::<OAuth2UserConsentRow>()
+            .fetch_one(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!("Failed to upsert OAuth2 user consent into storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        Ok(row.into())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(client_id, user.id = user_id.to_string()),
+        err
+    )]
+    async fn delete_user_consent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<u64, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                DELETE FROM oauth2_user_consent
+                WHERE user_id =
+            "#,
+        );
+        query_builder.push_bind(user_id.0);
+        query_builder.push(" AND client_id = ");
+        query_builder.push_bind(client_id);
+
+        let result = query_builder
+            .build()
+            .execute(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!("Failed to delete OAuth2 user consent from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        Ok(result.rows_affected())
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct OAuth2UserConsentRow {
+    user_id: Uuid,
+    client_id: String,
+    scope: String,
+    granted_at: DateTime<Utc>,
+}
+
+impl From<OAuth2UserConsentRow> for OAuth2UserConsent {
+    fn from(row: OAuth2UserConsentRow) -> Self {
+        OAuth2UserConsent {
+            user_id: row.user_id.into(),
+            client_id: row.client_id,
+            scope: row.scope,
+            granted_at: row.granted_at,
+        }
     }
 }
 
