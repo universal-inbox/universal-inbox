@@ -10,7 +10,7 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use universal_inbox::{
-    auth::oauth2::{AuthorizedOAuth2Client, OAuth2Client, TokenResponse},
+    auth::oauth2::{AuthorizedOAuth2Client, OAuth2Client, OAuth2UserConsent, TokenResponse},
     user::UserId,
 };
 
@@ -61,6 +61,16 @@ impl OAuth2Service {
         client_name: Option<String>,
         redirect_uris: Vec<String>,
     ) -> Result<OAuth2Client, UniversalInboxError> {
+        if redirect_uris.is_empty() {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: "redirect_uris must contain at least one URI".to_string(),
+            });
+        }
+        for uri in &redirect_uris {
+            validate_redirect_uri(uri)?;
+        }
+
         let client_id = Uuid::new_v4().to_string();
         self.repository
             .create_oauth2_client(
@@ -69,6 +79,17 @@ impl OAuth2Service {
                 client_name.as_deref(),
                 &redirect_uris,
             )
+            .await
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id), err)]
+    pub async fn get_client(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        client_id: &str,
+    ) -> Result<Option<OAuth2Client>, UniversalInboxError> {
+        self.repository
+            .get_oauth2_client_by_client_id(transaction, client_id)
             .await
     }
 
@@ -330,9 +351,60 @@ impl OAuth2Service {
         user_id: UserId,
         client_id: &str,
     ) -> Result<u64, UniversalInboxError> {
+        // Drop the stored consent so the user is re-prompted on the next
+        // authorize request, even before any refresh token has been issued.
+        self.repository
+            .delete_user_consent(transaction, user_id, client_id)
+            .await?;
         self.repository
             .revoke_all_refresh_tokens_for_client(transaction, user_id, client_id)
             .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(client_id, user.id = user_id.to_string()),
+        err
+    )]
+    pub async fn get_user_consent(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<Option<OAuth2UserConsent>, UniversalInboxError> {
+        self.repository
+            .get_user_consent(transaction, user_id, client_id)
+            .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(client_id, user.id = user_id.to_string()),
+        err
+    )]
+    pub async fn record_user_consent(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+        scope: &str,
+    ) -> Result<OAuth2UserConsent, UniversalInboxError> {
+        self.repository
+            .upsert_user_consent(transaction, user_id, client_id, scope)
+            .await
+    }
+
+    /// Returns true when `stored_scope` covers every space-separated token in
+    /// `requested_scope` (treating both as sets). An empty requested scope is
+    /// always considered covered.
+    pub fn consent_covers_scope(stored_scope: &str, requested_scope: Option<&str>) -> bool {
+        let requested = requested_scope.unwrap_or("");
+        let stored_set: std::collections::HashSet<&str> = stored_scope.split_whitespace().collect();
+        requested
+            .split_whitespace()
+            .all(|token| stored_set.contains(token))
     }
 
     fn create_access_token(
@@ -388,4 +460,47 @@ fn verify_pkce(code_verifier: &str, code_challenge: &str) -> Result<(), Universa
         });
     }
     Ok(())
+}
+
+/// Validate that a redirect_uri is safe to register: must be `https://` (any
+/// host) or `http://` restricted to loopback hosts. Schemes like `javascript:`,
+/// `data:`, `file:`, etc. are rejected outright.
+pub fn validate_redirect_uri(uri: &str) -> Result<(), UniversalInboxError> {
+    let parsed = url::Url::parse(uri).map_err(|err| UniversalInboxError::InvalidInputData {
+        source: None,
+        user_error: format!("Invalid redirect_uri {uri}: {err}"),
+    })?;
+    match parsed.scheme() {
+        "https" => Ok(()),
+        "http" => {
+            if is_loopback_host(parsed.host_str()) {
+                Ok(())
+            } else {
+                Err(UniversalInboxError::InvalidInputData {
+                    source: None,
+                    user_error: format!("http redirect_uri must be loopback: {uri}"),
+                })
+            }
+        }
+        other => Err(UniversalInboxError::InvalidInputData {
+            source: None,
+            user_error: format!("Unsupported redirect_uri scheme '{other}': {uri}"),
+        }),
+    }
+}
+
+fn is_loopback_host(host: Option<&str>) -> bool {
+    matches!(
+        host,
+        Some("localhost") | Some("127.0.0.1") | Some("[::1]") | Some("::1")
+    )
+}
+
+/// Returns true when `uri` parses as an `http://` URL with a loopback host
+/// (`localhost`, `127.0.0.1`, `::1`). Used to gate unauthenticated dynamic
+/// client registration to the MCP-spec public DCR path for desktop/CLI clients.
+pub fn is_loopback_redirect_uri(uri: &str) -> bool {
+    url::Url::parse(uri)
+        .map(|parsed| parsed.scheme() == "http" && is_loopback_host(parsed.host_str()))
+        .unwrap_or(false)
 }
