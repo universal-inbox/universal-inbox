@@ -11,6 +11,7 @@ default:
 
 publish tag=tag:
     #!/usr/bin/env bash
+    set -eo pipefail
 
     if [ -z "$DOCKER_BUILDX_BUILDER" ]; then
         echo "ℹ️ Using local Docker buildx builder"
