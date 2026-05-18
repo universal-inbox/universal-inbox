@@ -2,8 +2,8 @@ use playwright_rs::expect;
 use rstest::*;
 
 use crate::helpers::{
-    BrowserTestedApp, EXPECT_TIMEOUT, browser_tested_app, generate_test_user, launch_browser,
-    login, wait_for_notification_rows,
+    BrowserTestedApp, EXPECT_TIMEOUT, browser_tested_app, fill_and_submit_credentials,
+    generate_test_user, launch_browser, login, wait_for_notification_rows,
 };
 
 /// Test that a generated test user can log in, see notifications, interact with them,
@@ -133,29 +133,7 @@ async fn test_login_fails_with_wrong_password(#[future] browser_tested_app: Brow
         .await
         .expect("Failed to navigate to login page");
 
-    let email_input = page.locator("input[name='email']").await;
-    expect(email_input.clone())
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Email input not visible");
-
-    email_input
-        .fill(&email, None)
-        .await
-        .expect("Failed to fill email");
-
-    let password_input = page.locator("input[name='password']").await;
-    password_input
-        .fill("wrong_password", None)
-        .await
-        .expect("Failed to fill password");
-
-    let submit_button = page.locator("button[type='submit']").await;
-    submit_button
-        .click(None)
-        .await
-        .expect("Failed to click submit");
+    fill_and_submit_credentials(&page, &email, "wrong_password", "login").await;
 
     // An error alert should appear on the login page
     let error_alert = page.locator("#auth-error").await;
@@ -193,29 +171,7 @@ async fn test_login_fails_with_nonexistent_user(#[future] browser_tested_app: Br
         .await
         .expect("Failed to navigate to login page");
 
-    let email_input = page.locator("input[name='email']").await;
-    expect(email_input.clone())
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Email input not visible");
-
-    email_input
-        .fill("nonexistent@test.com", None)
-        .await
-        .expect("Failed to fill email");
-
-    let password_input = page.locator("input[name='password']").await;
-    password_input
-        .fill("test123456", None)
-        .await
-        .expect("Failed to fill password");
-
-    let submit_button = page.locator("button[type='submit']").await;
-    submit_button
-        .click(None)
-        .await
-        .expect("Failed to click submit");
+    fill_and_submit_credentials(&page, "nonexistent@test.com", "test123456", "login").await;
 
     // An error alert should appear on the login page
     let error_alert = page.locator("#auth-error").await;
