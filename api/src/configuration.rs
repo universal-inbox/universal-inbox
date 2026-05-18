@@ -247,6 +247,27 @@ pub struct Oauth2Settings {
     pub token_encryption_key: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct WebhookSigningSecret(pub String);
+
+impl Zeroize for WebhookSigningSecret {
+    fn zeroize(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl CloneableSecret for WebhookSigningSecret {}
+
+impl<'de> serde::Deserialize<'de> for WebhookSigningSecret {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(WebhookSigningSecret(s))
+    }
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct IntegrationSettings {
     pub name: String,
@@ -261,6 +282,8 @@ pub struct IntegrationSettings {
     pub api_max_retry_duration_worker_seconds: Option<u64>,
     pub oauth_client_id: String,
     pub oauth_client_secret: ClientSecret,
+    #[serde(default)]
+    pub signing_secret: Option<SecretBox<WebhookSigningSecret>>,
 }
 
 #[derive(Debug, Clone)]

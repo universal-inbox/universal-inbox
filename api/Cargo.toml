@@ -121,6 +121,7 @@ serde_path_to_error = "0.1.20"
 serde_with = { workspace = true }
 slack-blocks-render = { workspace = true }
 slack-morphism = { workspace = true, features = ["hyper"] }
+subtle = "2.6"
 sqlx = { version = "0.8.0", default-features = false, features = [
   "runtime-tokio-native-tls",
   "macros",

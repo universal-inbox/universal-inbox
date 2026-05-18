@@ -44,8 +44,8 @@ use crate::helpers::{
             slack_push_reaction_added_event, slack_push_reaction_removed_event,
         },
     },
-    rest::create_resource_response,
     settings,
+    slack::post_signed_slack_event,
     task::{
         list_synced_tasks, list_tasks_until,
         todoist::{
@@ -64,11 +64,10 @@ async fn test_receive_reaction_event_for_unknown_user(
 ) {
     let mut app = authenticated_app.await;
 
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_added_event,
+        &*slack_push_reaction_added_event,
     )
     .await;
 
@@ -115,11 +114,10 @@ async fn test_receive_reaction_event_for_disabled_config(
     )
     .await;
 
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_added_event,
+        &*slack_push_reaction_added_event,
     )
     .await;
 
@@ -174,11 +172,10 @@ async fn test_receive_reaction_event_for_different_reaction(
     )
     .await;
 
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_added_event,
+        &*slack_push_reaction_added_event,
     )
     .await;
 
@@ -273,11 +270,10 @@ async fn test_receive_reaction_added_event_as_notification(
     )
     .await;
 
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_added_event.clone(),
+        &*slack_push_reaction_added_event,
     )
     .await;
 
@@ -364,11 +360,10 @@ async fn test_receive_reaction_added_event_as_notification(
     );
 
     // A duplicated event should not create a new notification
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_added_event.clone(),
+        &*slack_push_reaction_added_event,
     )
     .await;
     assert_eq!(response.status(), 200);
@@ -451,11 +446,10 @@ async fn test_receive_reaction_removed_event_as_notification(
     )
     .await;
 
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_added_event.clone(),
+        &*slack_push_reaction_added_event,
     )
     .await;
     assert_eq!(response.status(), 200);
@@ -472,11 +466,10 @@ async fn test_receive_reaction_removed_event_as_notification(
     assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
     let reaction_added_notification_id = notifications[0].id;
 
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_removed_event.clone(),
+        &*slack_push_reaction_removed_event,
     )
     .await;
     assert_eq!(response.status(), 200);
@@ -637,11 +630,10 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
     let _todoist_get_item_mock =
         mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone()).await;
 
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_added_event.clone(),
+        &*slack_push_reaction_added_event,
     )
     .await;
 
@@ -671,11 +663,10 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
     assert_eq!(synced_tasks[0].id, tasks[0].id);
 
     // A duplicated event should not create a new task
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_added_event.clone(),
+        &*slack_push_reaction_added_event,
     )
     .await;
     assert_eq!(response.status(), 200);
@@ -807,11 +798,10 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
         mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone()).await;
 
     // First creation of a deleted notification and an active task
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_added_event.clone(),
+        &*slack_push_reaction_added_event,
     )
     .await;
     assert_eq!(response.status(), 200);
@@ -846,11 +836,10 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
             .await;
 
     // Notification should still be marked as deleted and associated task as done
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_removed_event.clone(),
+        &*slack_push_reaction_removed_event,
     )
     .await;
     assert_eq!(response.status(), 200);
@@ -884,11 +873,10 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
             .await;
 
     // Task should be marked as active again
-    let response = create_resource_response(
+    let response = post_signed_slack_event(
         &app.client,
         &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_reaction_added_event.clone(),
+        &*slack_push_reaction_added_event,
     )
     .await;
     assert_eq!(response.status(), 200);

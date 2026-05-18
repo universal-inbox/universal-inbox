@@ -210,6 +210,10 @@ use_as_oauth_user_scopes = true
 # OAuth client credentials from https://api.slack.com/apps
 oauth_client_id = ""
 oauth_client_secret = ""
+# Signing secret used to verify inbound Slack event webhooks.
+# Find it at https://api.slack.com/apps → Basic Information → Signing Secret.
+# In production, set via env: UNIVERSAL_INBOX__INTEGRATIONS__SLACK__SIGNING_SECRET=…
+signing_secret = ""
 
 [integrations.ticktick]
 name = "Tick Tick"

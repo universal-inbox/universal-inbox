@@ -36,8 +36,9 @@ use crate::helpers::{
             slack_push_message_in_thread_event, slack_thread,
         },
     },
-    rest::create_resource_response,
-    settings, tested_app_with_local_auth,
+    settings,
+    slack::post_signed_slack_event,
+    tested_app_with_local_auth,
     user::create_user_and_login,
 };
 
@@ -53,11 +54,10 @@ mod webhook {
     ) {
         let mut app = authenticated_app.await;
 
-        let response = create_resource_response(
+        let response = post_signed_slack_event(
             &app.client,
             &app.app.api_address,
-            "hooks/slack/events",
-            slack_push_message_event.clone(),
+            &*slack_push_message_event,
         )
         .await;
 
@@ -77,11 +77,10 @@ mod webhook {
         };
         add_user_ref_in_message(event, "user1");
 
-        let response = create_resource_response(
+        let response = post_signed_slack_event(
             &app.client,
             &app.app.api_address,
-            "hooks/slack/events",
-            slack_push_message_event.clone(),
+            &*slack_push_message_event,
         )
         .await;
 
@@ -97,11 +96,10 @@ mod webhook {
     ) {
         let mut app = authenticated_app.await;
 
-        let response = create_resource_response(
+        let response = post_signed_slack_event(
             &app.client,
             &app.app.api_address,
-            "hooks/slack/events",
-            slack_push_message_in_thread_event.clone(),
+            &*slack_push_message_in_thread_event,
         )
         .await;
 
@@ -151,11 +149,10 @@ mod webhook {
         )
         .await;
 
-        let response = create_resource_response(
+        let response = post_signed_slack_event(
             &app.client,
             &app.app.api_address,
-            "hooks/slack/events",
-            slack_push_message_in_thread_event.clone(),
+            &*slack_push_message_in_thread_event,
         )
         .await;
 
@@ -212,11 +209,10 @@ mod webhook {
         )
         .await;
 
-        let response = create_resource_response(
+        let response = post_signed_slack_event(
             &client,
             &app.api_address,
-            "hooks/slack/events",
-            slack_push_message_in_thread_event.clone(),
+            &*slack_push_message_in_thread_event,
         )
         .await;
 
