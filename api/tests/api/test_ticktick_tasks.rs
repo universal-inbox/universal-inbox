@@ -1,6 +1,4 @@
-use chrono::{Timelike, Utc};
 use rstest::*;
-use uuid::Uuid;
 
 use universal_inbox::{
     HasHtmlUrl,
@@ -12,13 +10,14 @@ use universal_inbox::{
     task::{Task, TaskCreation, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::ticktick::TickTickItem,
-        item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
+        item::{ThirdPartyItem, ThirdPartyItemData},
     },
 };
 
 use universal_inbox_api::{configuration::Settings, integrations::ticktick::TickTickService};
 
 use crate::helpers::integration_connection::OAuthCredentialFixture;
+use crate::helpers::third_party::create_task_third_party_item;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
@@ -29,7 +28,7 @@ use crate::helpers::{
         create_task_from_notification,
         github::{create_notification_from_github_notification, github_notification},
     },
-    rest::{create_resource, get_resource, patch_resource},
+    rest::{get_resource, patch_resource},
     settings,
     task::ticktick::{
         mock_ticktick_complete_task_service, mock_ticktick_delete_task_service,
@@ -55,7 +54,7 @@ mod patch_task {
         ticktick_projects_response: Vec<TickTickProject>,
     ) {
         let app = authenticated_app.await;
-        let integration_connection = create_ticktick_integration_connection(
+        let _integration_connection = create_ticktick_integration_connection(
             &app.app,
             app.user.id,
             &settings,
@@ -69,23 +68,13 @@ mod patch_task {
         )
         .await;
 
-        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: ticktick_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
-                    project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
-                    ..*ticktick_item.clone()
-                })),
-                integration_connection_id: integration_connection.id,
-                source_item: None,
-            }),
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
+                project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
+                ..*ticktick_item.clone()
+            })),
+            app.user.id,
         )
         .await;
         let existing_task = creation.task.as_ref().unwrap().clone();
@@ -138,7 +127,7 @@ mod patch_task {
         ticktick_projects_response: Vec<TickTickProject>,
     ) {
         let app = authenticated_app.await;
-        let integration_connection = create_ticktick_integration_connection(
+        let _integration_connection = create_ticktick_integration_connection(
             &app.app,
             app.user.id,
             &settings,
@@ -152,23 +141,13 @@ mod patch_task {
         )
         .await;
 
-        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: ticktick_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
-                    project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
-                    ..*ticktick_item.clone()
-                })),
-                integration_connection_id: integration_connection.id,
-                source_item: None,
-            }),
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
+                project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
+                ..*ticktick_item.clone()
+            })),
+            app.user.id,
         )
         .await;
         let existing_task = creation.task.as_ref().unwrap().clone();
@@ -447,7 +426,7 @@ mod patch_task {
             .await;
 
         // TickTick connection + pre-existing task stored with a real projectId.
-        let ticktick_integration_connection = create_ticktick_integration_connection(
+        let _ticktick_integration_connection = create_ticktick_integration_connection(
             &app.app,
             app.user.id,
             &settings,
@@ -466,20 +445,10 @@ mod patch_task {
             content: Some("existing body".to_string()),
             ..*ticktick_item
         });
-        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: ticktick_item.id.clone(),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TickTickItem(ticktick_item.clone()),
-                integration_connection_id: ticktick_integration_connection.id,
-                source_item: None,
-            }),
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TickTickItem(ticktick_item.clone()),
+            app.user.id,
         )
         .await;
         let task = creation.task.as_ref().unwrap();

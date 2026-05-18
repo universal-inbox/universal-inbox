@@ -1,8 +1,6 @@
-use chrono::{TimeZone, Utc};
 use http::StatusCode;
 use pretty_assertions::assert_eq;
 use rstest::*;
-use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
@@ -15,13 +13,14 @@ use universal_inbox::{
     task::{Task, TaskCreationResult, TaskSourceKind},
     third_party::{
         integrations::ticktick::{TickTickItem, TickTickTag},
-        item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
+        item::ThirdPartyItemData,
     },
 };
 use universal_inbox_api::configuration::Settings;
 
 use universal_inbox::task::integrations::ticktick::TickTickProject;
 
+use crate::helpers::third_party::create_task_third_party_item;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
@@ -29,7 +28,7 @@ use crate::helpers::{
         get_integration_connection, get_integration_connection_per_provider,
     },
     notification::list_notifications_with_tasks,
-    rest::{create_resource, get_resource},
+    rest::get_resource,
     settings,
     task::{
         sync_tasks, sync_tasks_response,
@@ -72,30 +71,20 @@ async fn test_sync_ticktick_tasks_should_add_new_task_and_update_existing_one(
     let ticktick_items = ticktick_tasks_response.clone();
     // Create an existing third-party item for the second task (tt_task_1456)
     // so that sync will UPDATE it instead of creating it fresh
-    let existing_ticktick_third_party_item_creation: Box<ThirdPartyItemCreationResult> =
-        create_resource(
-            &app.client,
-            &app.app.api_address,
-            "third_party/task/items",
-            Box::new(ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: ticktick_items[1].id.clone(),
-                created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                user_id: app.user.id,
-                data: ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
-                    title: "old task 1".to_string(),
-                    content: Some("more details".to_string()),
-                    priority: universal_inbox::third_party::integrations::ticktick::TickTickItemPriority::High,
-                    tags: Some(vec![TickTickTag::new("tag1")]),
-                    project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
-                    ..ticktick_items[1].clone()
-                })),
-                integration_connection_id: integration_connection.id,
-                source_item: None,
-            }),
-        )
-        .await;
+    let existing_ticktick_third_party_item_creation = create_task_third_party_item(
+        &app.app,
+        ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
+            title: "old task 1".to_string(),
+            content: Some("more details".to_string()),
+            priority:
+                universal_inbox::third_party::integrations::ticktick::TickTickItemPriority::High,
+            tags: Some(vec![TickTickTag::new("tag1")]),
+            project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
+            ..ticktick_items[1].clone()
+        })),
+        app.user.id,
+    )
+    .await;
     let existing_ticktick_task = existing_ticktick_third_party_item_creation
         .task
         .as_ref()
