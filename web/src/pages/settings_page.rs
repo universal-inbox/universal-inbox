@@ -2,25 +2,70 @@
 
 use dioxus::prelude::*;
 
-use log::debug;
+use log::{debug, warn};
 
 use universal_inbox::integration_connection::{
     IntegrationConnection, config::IntegrationConnectionConfig, provider::IntegrationProviderKind,
 };
 
 use crate::{
-    components::{integrations_panel::IntegrationsPanel, loading::Loading},
+    components::{
+        integrations_panel::IntegrationsPanel,
+        loading::Loading,
+        toast_zone::{Toast, ToastKind},
+    },
     config::APP_CONFIG,
     model::UI_MODEL,
     services::{
         integration_connection_service::{INTEGRATION_CONNECTIONS, IntegrationConnectionCommand},
+        toast_service::ToastCommand,
         user_preferences_service::UserPreferencesCommand,
     },
+    utils::current_location,
 };
+
+/// Map the kebab-case OAuth callback reason codes emitted by the API
+/// (`api/src/routes/oauth.rs::OAuthCallbackErrorCode`) to user-facing
+/// messages. Keep these terse and consistent with existing failure toasts in
+/// `integration_connection_service.rs`. Unknown codes fall back to a generic
+/// message so a future server-side code never renders raw to the user.
+fn oauth_error_message(code: &str) -> &'static str {
+    match code {
+        "invalid-state" => {
+            "The OAuth response was invalid. Please retry the connection from the start."
+        }
+        "expired-state" => "The OAuth request expired. Please retry the connection from the start.",
+        "provider-error" => {
+            "The integration provider rejected the connection. Please retry, and if it keeps happening contact our support."
+        }
+        // "internal-error" plus any future/unknown code.
+        _ => {
+            "An error occurred while completing the OAuth flow. Please retry 🙏 If the issue keeps happening, please contact our support."
+        }
+    }
+}
+
+/// Strip `oauth_error` / `oauth_success` from the current URL after we've
+/// consumed them so that a page reload does not re-trigger the toast.
+fn clear_oauth_query_params() {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Ok(history) = window.history() else {
+        return;
+    };
+    let Ok(pathname) = window.location().pathname() else {
+        return;
+    };
+    // `replaceState(null, "", "/settings")` rewrites the URL bar without
+    // triggering a navigation event, dropping the query string entirely.
+    let _ = history.replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&pathname));
+}
 
 pub fn SettingsPage() -> Element {
     let integration_connection_service = use_coroutine_handle::<IntegrationConnectionCommand>();
     let user_preferences_service = use_coroutine_handle::<UserPreferencesCommand>();
+    let toast_service = use_coroutine_handle::<ToastCommand>();
 
     debug!("Rendering settings page");
 
@@ -30,6 +75,42 @@ pub fn SettingsPage() -> Element {
         async move {
             integration_connection_service.send(IntegrationConnectionCommand::Refresh);
             user_preferences_service.send(UserPreferencesCommand::Refresh);
+        }
+    });
+
+    // Surface a toast when the OAuth callback redirected back here with a
+    // result. `current_location()` reads `window.location.href` and the API
+    // only ever attaches one of `oauth_error` (sanitized code) or
+    // `oauth_success=true`.
+    use_hook(move || {
+        if let Ok(url) = current_location() {
+            let mut error_code: Option<String> = None;
+            let mut success = false;
+            for (k, v) in url.query_pairs() {
+                if k == "oauth_error" {
+                    error_code = Some(v.to_string());
+                } else if k == "oauth_success" && v == "true" {
+                    success = true;
+                }
+            }
+            if let Some(code) = error_code {
+                warn!("Surfacing OAuth callback error: {code}");
+                toast_service.send(ToastCommand::Push(Toast {
+                    kind: ToastKind::Failure,
+                    message: oauth_error_message(&code).to_string(),
+                    timeout: Some(10_000),
+                    ..Default::default()
+                }));
+                clear_oauth_query_params();
+            } else if success {
+                toast_service.send(ToastCommand::Push(Toast {
+                    kind: ToastKind::Success,
+                    message: "Integration connected successfully.".to_string(),
+                    timeout: Some(5_000),
+                    ..Default::default()
+                }));
+                clear_oauth_query_params();
+            }
         }
     });
 

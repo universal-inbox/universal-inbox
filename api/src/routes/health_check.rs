@@ -1,15 +1,15 @@
 use std::{net::IpAddr, num::NonZeroU32, sync::Arc};
 
-use actix_web::{body::BoxBody, web, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, body::BoxBody, web};
 use anyhow::Context;
-use governor::{clock::DefaultClock, state::keyed::DefaultKeyedStateStore, Quota, RateLimiter};
+use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DefaultKeyedStateStore};
 use redis::AsyncCommands;
 use serde_json::json;
 use tokio::sync::RwLock;
 
 use crate::{
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService, UniversalInboxError,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
     },
     utils::cache::Cache,
 };
