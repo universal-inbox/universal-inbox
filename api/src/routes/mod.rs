@@ -30,6 +30,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::InvalidParameters { .. } => StatusCode::BAD_REQUEST,
             UniversalInboxError::ItemNotFound { .. } => StatusCode::BAD_REQUEST,
             UniversalInboxError::AlreadyExists { .. } => StatusCode::CONFLICT,
+            UniversalInboxError::Conflict(_) => StatusCode::CONFLICT,
             UniversalInboxError::Recoverable(_) => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::Unexpected(_) => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
