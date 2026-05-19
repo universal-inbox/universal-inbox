@@ -1,8 +1,8 @@
-use std::{net::IpAddr, num::NonZeroU32, sync::Arc};
+use std::{num::NonZeroU32, sync::Arc};
 
 use actix_web::{HttpRequest, HttpResponse, body::BoxBody, web};
 use anyhow::Context;
-use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DefaultKeyedStateStore};
+use governor::Quota;
 use redis::AsyncCommands;
 use serde_json::json;
 use tokio::sync::RwLock;
@@ -11,7 +11,7 @@ use crate::{
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
     },
-    utils::cache::Cache,
+    utils::{cache::Cache, rate_limit::IpRateLimiter},
 };
 
 /// Per-IP request budget for `/ping`.
@@ -21,7 +21,7 @@ use crate::{
 /// tight enough to defeat the unauthenticated DoS amplifier.
 const PING_RATE_LIMIT_PER_MINUTE: u32 = 60;
 
-pub type PingRateLimiter = RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, DefaultClock>;
+pub type PingRateLimiter = IpRateLimiter;
 
 pub fn build_rate_limiter() -> Arc<PingRateLimiter> {
     let quota = Quota::per_minute(
@@ -48,7 +48,7 @@ pub fn build_rate_limiter() -> Arc<PingRateLimiter> {
 /// - A per-IP governor rate limit (60 req/min) is enforced using the real
 ///   client IP (`ConnectionInfo::realip_remote_addr` — `Forwarded` /
 ///   `X-Forwarded-For`) so that the limiter works correctly behind the
-///   production Caddy proxy and does not bucket every client under
+///   production reverse proxy and does not bucket every client under
 ///   `peer_addr()` (the upstream IP).
 pub async fn ping(
     req: HttpRequest,
@@ -56,7 +56,7 @@ pub async fn ping(
     cache: web::Data<Cache>,
     rate_limiter: web::Data<Arc<PingRateLimiter>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    if let Some(response) = check_rate_limit(&req, &rate_limiter) {
+    if let Err(response) = crate::utils::rate_limit::check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(response);
     }
 
@@ -100,26 +100,4 @@ pub async fn ping(
         })
         .to_string(),
     )))
-}
-
-fn check_rate_limit(req: &HttpRequest, rate_limiter: &PingRateLimiter) -> Option<HttpResponse> {
-    // `realip_remote_addr()` honors the chain of `Forwarded` / `X-Forwarded-For`
-    // headers (the actix-web default extractor) so that we bucket on the real
-    // client IP rather than the upstream reverse-proxy IP. `peer_addr()` would
-    // collapse every request behind Caddy into a single bucket and turn the
-    // limiter into a deny-all.
-    let ip = req
-        .connection_info()
-        .realip_remote_addr()
-        .and_then(|raw| {
-            // `realip_remote_addr` returns `host:port` for direct connections
-            // and a bare IP for forwarded headers — strip an optional port.
-            let trimmed = raw.rsplit_once(':').map(|(addr, _)| addr).unwrap_or(raw);
-            trimmed.parse::<IpAddr>().ok()
-        })
-        .unwrap_or(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
-    if rate_limiter.check_key(&ip).is_err() {
-        return Some(HttpResponse::TooManyRequests().finish());
-    }
-    None
 }

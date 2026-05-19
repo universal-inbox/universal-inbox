@@ -1,12 +1,13 @@
-use std::sync::Arc;
+use std::{num::NonZeroU32, sync::Arc};
 
 use actix_http::body::BoxBody;
 use actix_jwt_authc::Authenticated;
 use actix_session::Session;
-use actix_web::{HttpResponse, Scope, web};
+use actix_web::{HttpRequest, HttpResponse, Scope, web};
 use anyhow::{Context, anyhow};
 use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
+use governor::Quota;
 use redis::AsyncCommands;
 use secrecy::{ExposeSecret, SecretBox};
 use serde_json::json;
@@ -39,14 +40,48 @@ use crate::{
     utils::{
         cache::Cache,
         jwt::{Claims, JWT_SESSION_KEY},
+        rate_limit::{IpRateLimiter, check_ip_rate_limit},
     },
 };
 
 const PASSKEY_REGISTRATION_STATE_SESSION_KEY: &str = "passkey-registration-state";
 const PASSKEY_AUTHENTICATION_STATE_SESSION_KEY: &str = "passkey-authentication-state";
 
-pub fn scope() -> Scope {
+/// Per-IP request budget for authentication-state-changing endpoints
+/// (universal-inbox-bkj.30).
+///
+/// 30 req/min/IP is chosen to:
+/// - Defeat password brute force (a real user typos a handful of times,
+///   never approaches 30/min)
+/// - Cap account-creation spam, email-verification floods, and password-
+///   reset email-bombs at a rate that no humans hit
+/// - Tolerate the worst-case interactive WebAuthn ceremony (start + finish
+///   per attempt) repeated several times in a row
+/// - Stay generous enough that the hermetic test suite, which exercises
+///   register/login/passkey flows in rapid succession against `127.0.0.1`,
+///   does not hit the limit
+///
+/// One shared limiter covers all auth endpoints rather than per-endpoint
+/// limiters: an attacker pivoting from `login` to `password-reset` to
+/// `email-verification` from a single IP should drain a shared bucket, not
+/// reset their budget at each endpoint. Email- and username-based
+/// secondary keying (so a single attacker rotating IPs cannot still
+/// email-bomb one victim) is a follow-up.
+const AUTH_RATE_LIMIT_PER_MINUTE: u32 = 30;
+
+pub type AuthRateLimiter = IpRateLimiter;
+
+pub fn build_auth_rate_limiter() -> Arc<AuthRateLimiter> {
+    let quota = Quota::per_minute(
+        NonZeroU32::new(AUTH_RATE_LIMIT_PER_MINUTE)
+            .expect("AUTH_RATE_LIMIT_PER_MINUTE must be non-zero"),
+    );
+    Arc::new(AuthRateLimiter::keyed(quota))
+}
+
+pub fn scope(auth_rate_limiter: Arc<AuthRateLimiter>) -> Scope {
     web::scope("/users")
+        .app_data(web::Data::new(auth_rate_limiter))
         .service(
             web::resource("")
                 .name("users")
@@ -270,12 +305,17 @@ pub async fn add_local_auth_method(
 
 #[allow(dependency_on_unit_never_type_fallback)]
 pub async fn start_add_passkey_registration(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     authenticated: Authenticated<Claims>,
     session: Session,
     cache: web::Data<Cache>,
     username: web::Json<Username>,
-) -> Result<web::Json<CreationChallengeResponse>, UniversalInboxError> {
+) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let user_id = authenticated
         .claims
         .sub
@@ -323,16 +363,24 @@ pub async fn start_add_passkey_registration(
         .await
         .context("Failed to commit while starting add Passkey registration")?;
 
-    Ok(web::Json(creation_challenge_response))
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&creation_challenge_response)
+            .context("Cannot serialize Passkey creation challenge")?,
+    ))
 }
 
 pub async fn finish_add_passkey_registration(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     authenticated: Authenticated<Claims>,
     session: Session,
     cache: web::Data<Cache>,
     register_credentials: web::Json<RegisterPublicKeyCredential>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let user_id = authenticated
         .claims
         .sub
@@ -428,12 +476,17 @@ pub async fn remove_auth_method(
 }
 
 pub async fn register_user(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     settings: web::Data<Settings>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     register_user_parameters: web::Json<RegisterUserParameters>,
     session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let user_service = user_service.clone();
     let mut transaction = user_service
         .begin()
@@ -511,11 +564,16 @@ pub async fn register_user(
 }
 
 pub async fn login_user(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     credentials: web::Json<Credentials>,
     session: Session,
-) -> Result<web::Json<User>, UniversalInboxError> {
+) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -553,13 +611,20 @@ pub async fn login_user(
         .await
         .context("Failed to commit while logging in user")?;
 
-    Ok(web::Json(user))
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&user).context("Cannot serialize user")?))
 }
 
 pub async fn send_verification_email(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let user_id = authenticated
         .claims
         .sub
@@ -590,9 +655,14 @@ pub async fn send_verification_email(
 }
 
 pub async fn verify_email(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     path_info: web::Path<(UserId, EmailValidationToken)>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let (user_id, email_validation_token) = path_info.into_inner();
     let service = user_service.clone();
     let mut transaction = service
@@ -619,9 +689,14 @@ pub async fn verify_email(
 }
 
 pub async fn send_password_reset_email(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     email_address: web::Json<EmailAddress>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -647,10 +722,15 @@ pub async fn send_password_reset_email(
 }
 
 pub async fn reset_password(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     path_info: web::Path<(UserId, PasswordResetToken)>,
     password: web::Json<SecretBox<Password>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let (user_id, password_reset_token) = path_info.into_inner();
     let service = user_service.clone();
     let mut transaction = service.begin().await.context(format!(
@@ -797,11 +877,16 @@ pub async fn patch_user_preferences(
 
 #[allow(dependency_on_unit_never_type_fallback)]
 pub async fn start_passkey_registration(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     session: Session,
     cache: web::Data<Cache>,
     username: web::Json<Username>,
-) -> Result<web::Json<CreationChallengeResponse>, UniversalInboxError> {
+) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -841,16 +926,24 @@ pub async fn start_passkey_registration(
         .await
         .context("Failed to commit while starting Passkey registration")?;
 
-    Ok(web::Json(creation_challenge_response))
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&creation_challenge_response)
+            .context("Cannot serialize Passkey creation challenge")?,
+    ))
 }
 
 pub async fn finish_passkey_registration(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     session: Session,
     cache: web::Data<Cache>,
     register_credentials: web::Json<RegisterPublicKeyCredential>,
-) -> Result<web::Json<User>, UniversalInboxError> {
+) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -906,16 +999,23 @@ pub async fn finish_passkey_registration(
         .await
         .context("Failed to commit while finishing Passkey registration")?;
 
-    Ok(web::Json(new_user))
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&new_user).context("Cannot serialize user")?))
 }
 
 #[allow(dependency_on_unit_never_type_fallback)]
 pub async fn start_passkey_authentication(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     session: Session,
     cache: web::Data<Cache>,
     username: web::Json<Username>,
-) -> Result<web::Json<RequestChallengeResponse>, UniversalInboxError> {
+) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -952,7 +1052,10 @@ pub async fn start_passkey_authentication(
         .await
         .context("Failed to commit while starting Passkey authentication")?;
 
-    Ok(web::Json(request_challenge_response))
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&request_challenge_response)
+            .context("Cannot serialize Passkey request challenge")?,
+    ))
 }
 
 pub async fn list_oauth2_authorized_clients(
@@ -1018,12 +1121,17 @@ pub async fn revoke_oauth2_authorized_client(
 }
 
 pub async fn finish_passkey_authentication(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     session: Session,
     cache: web::Data<Cache>,
     credentials: web::Json<PublicKeyCredential>,
-) -> Result<web::Json<User>, UniversalInboxError> {
+) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -1078,5 +1186,7 @@ pub async fn finish_passkey_authentication(
         .await
         .context("Failed to commit while finishing Passkey authentication")?;
 
-    Ok(web::Json(user))
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&user).context("Cannot serialize user")?))
 }
