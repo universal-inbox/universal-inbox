@@ -1863,4 +1863,211 @@ mod oauth2 {
             "Unspecified forwarded IP must be rejected, not bucketed under 0.0.0.0"
         );
     }
+
+    /// Count active (non-revoked) refresh tokens in the DB for a given
+    /// `(client_id, user_id)` pair. Used by reuse/race tests to assert that
+    /// the entire family has been killed off.
+    async fn count_active_refresh_tokens(app: &TestedApp, client_id: &str, user_id: UserId) -> i64 {
+        sqlx::query_scalar::<_, i64>(
+            r#"
+                SELECT COUNT(*)
+                FROM oauth2_refresh_token
+                WHERE client_id = $1
+                  AND user_id = $2
+                  AND revoked_at IS NULL
+            "#,
+        )
+        .bind(client_id)
+        .bind(user_id.0)
+        .fetch_one(&*app.repository.pool)
+        .await
+        .expect("Failed to count active refresh tokens")
+    }
+
+    /// Drive an initial OAuth2 flow end-to-end and return the freshly minted
+    /// `(refresh_token, client_id, user_id)`. Used as setup for race / reuse
+    /// regression tests below.
+    async fn mint_initial_refresh_token(app: &AuthenticatedApp) -> (String, String, UserId) {
+        let registered = register_oauth2_client(&app.app).await;
+        let client_id = registered["client_id"].as_str().unwrap().to_string();
+
+        let code_verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        let code_challenge = pkce_challenge(code_verifier);
+        let code = oauth2_authorize(
+            &app.client,
+            &app.app,
+            app.user.id,
+            &client_id,
+            &code_challenge,
+        )
+        .await;
+
+        let unauthenticated_client = reqwest::Client::new();
+        let token_response = oauth2_token_exchange(
+            &unauthenticated_client,
+            &app.app,
+            &client_id,
+            &code,
+            code_verifier,
+        )
+        .await;
+        let refresh_token = token_response["refresh_token"]
+            .as_str()
+            .expect("Missing refresh_token in token response")
+            .to_string();
+
+        (refresh_token, client_id, app.user.id)
+    }
+
+    /// Regression test for universal-inbox-bkj.27: the previous SELECT → check
+    /// → UPDATE pattern allowed two concurrent `/token` requests carrying the
+    /// same refresh token to both pass the SELECT before either revoke fired,
+    /// resulting in two parallel sessions per leaked credential.
+    ///
+    /// We fire two `tokio::join!`-ed HTTP requests at `/token` with the
+    /// same refresh token. After the dust settles:
+    ///   1. Exactly one of them must succeed (200) and the other must fail
+    ///      with 400 (`Invalid refresh token`).
+    ///   2. The entire token family for `(client_id, user_id)` must be
+    ///      revoked — including the new refresh token freshly minted by the
+    ///      winning branch — because the losing call detected reuse and
+    ///      triggered family-wide revocation per RFC 6749 §10.4 /
+    ///      RFC 6819 §5.2.2.3.
+    #[rstest]
+    #[tokio::test]
+    async fn refresh_token_rotation_is_atomic_under_concurrent_reuse(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let (refresh_token, client_id, user_id) = mint_initial_refresh_token(&app).await;
+
+        // Sanity check: one active token in the family before the race.
+        assert_eq!(
+            count_active_refresh_tokens(&app.app, &client_id, user_id).await,
+            1,
+            "Pre-race: exactly one refresh token should be active"
+        );
+
+        let url = format!("{}oauth2/token", app.app.api_address);
+        let client_a = reqwest::Client::new();
+        let client_b = reqwest::Client::new();
+        let form = [
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh_token.as_str()),
+            ("client_id", client_id.as_str()),
+        ];
+
+        // Fire both refresh requests simultaneously. With the atomic
+        // UPDATE … RETURNING fix, exactly one wins; without it, both 200.
+        let (res_a, res_b) = tokio::join!(
+            client_a.post(&url).form(&form).send(),
+            client_b.post(&url).form(&form).send(),
+        );
+        let res_a = res_a.expect("Request A failed");
+        let res_b = res_b.expect("Request B failed");
+
+        let mut statuses = [res_a.status(), res_b.status()];
+        statuses.sort_by_key(|s| s.as_u16());
+        assert_eq!(
+            statuses,
+            [StatusCode::OK, StatusCode::BAD_REQUEST],
+            "Exactly one of the two concurrent refreshes must succeed; got {statuses:?}"
+        );
+
+        // After reuse detection, the entire family must be revoked —
+        // including the new refresh token that the winning branch minted
+        // before the loser's reuse-detection branch wiped the family.
+        assert_eq!(
+            count_active_refresh_tokens(&app.app, &client_id, user_id).await,
+            0,
+            "Post-race: refresh-token reuse must revoke the entire (client_id, user_id) family"
+        );
+    }
+
+    /// Sequential reuse detection: after a refresh succeeds, replaying the
+    /// original (now-revoked) refresh token must (a) fail with
+    /// `invalid_grant`-equivalent 400 AND (b) revoke the new refresh token
+    /// that the legitimate first refresh minted. This pins the
+    /// family-revocation contract demanded by RFC 6819 §5.2.2.3.
+    #[rstest]
+    #[tokio::test]
+    async fn refresh_token_reuse_revokes_entire_family(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let (original_refresh, client_id, user_id) = mint_initial_refresh_token(&app).await;
+
+        let url = format!("{}oauth2/token", app.app.api_address);
+        let http = reqwest::Client::new();
+
+        // Step 1: legitimate first refresh succeeds.
+        let ok = http
+            .post(&url)
+            .form(&[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", original_refresh.as_str()),
+                ("client_id", client_id.as_str()),
+            ])
+            .send()
+            .await
+            .expect("First refresh failed to send");
+        assert_eq!(ok.status(), StatusCode::OK);
+        let new_refresh = ok
+            .json::<Value>()
+            .await
+            .expect("Failed to parse first refresh response")["refresh_token"]
+            .as_str()
+            .expect("Missing refresh_token")
+            .to_string();
+        assert_ne!(new_refresh, original_refresh);
+
+        // Pre-replay: exactly the new refresh token is active.
+        assert_eq!(
+            count_active_refresh_tokens(&app.app, &client_id, user_id).await,
+            1
+        );
+
+        // Step 2: replay the ORIGINAL (now-revoked) refresh token. This is a
+        // reuse attempt — must 400, and must revoke the new refresh token too.
+        let replay = http
+            .post(&url)
+            .form(&[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", original_refresh.as_str()),
+                ("client_id", client_id.as_str()),
+            ])
+            .send()
+            .await
+            .expect("Replay refresh failed to send");
+        assert_eq!(
+            replay.status(),
+            StatusCode::BAD_REQUEST,
+            "Replaying a revoked refresh token must be rejected"
+        );
+
+        // The whole family — including the freshly minted token from step 1 —
+        // must now be revoked. A subsequent legitimate refresh with the new
+        // token will also fail, confirming the family is dead.
+        assert_eq!(
+            count_active_refresh_tokens(&app.app, &client_id, user_id).await,
+            0,
+            "Reuse must revoke the entire (client_id, user_id) family, including the just-minted token"
+        );
+
+        let post_family_revoke = http
+            .post(&url)
+            .form(&[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", new_refresh.as_str()),
+                ("client_id", client_id.as_str()),
+            ])
+            .send()
+            .await
+            .expect("Post-family-revoke refresh failed to send");
+        assert_eq!(
+            post_family_revoke.status(),
+            StatusCode::BAD_REQUEST,
+            "After family revocation, even the previously-valid new refresh token must be rejected"
+        );
+    }
 }

@@ -242,6 +242,26 @@ impl OAuth2Service {
         })
     }
 
+    /// Rotate a refresh token, atomically.
+    ///
+    /// **Security:** the previous implementation did
+    /// `SELECT by hash → expiry check → UPDATE by hash` as three separate
+    /// statements. Two concurrent `/token` requests with the same refresh
+    /// token could both pass the SELECT before either revoke fired, then both
+    /// mint fresh `(access, refresh)` pairs — effectively duplicating a
+    /// session from a single leaked credential until expiry. RFC 6749 §10.4
+    /// and RFC 6819 §5.2.2.3 require treating refresh-token reuse as a
+    /// compromise signal and revoking the entire token family.
+    ///
+    /// The fix collapses claim+revoke into a single
+    /// `UPDATE … WHERE token_hash = $1 AND client_id = $2 AND revoked_at IS
+    /// NULL AND (expires_at IS NULL OR expires_at > now()) RETURNING …`. Only
+    /// one caller can win that race; the loser sees `None` and falls into
+    /// reuse-detection: if a row with that hash exists but is already
+    /// revoked, every refresh token for `(client_id, user_id)` is revoked,
+    /// including any token freshly minted by the legitimate winning branch.
+    /// The expiry check is folded into the same SQL so an expired row is
+    /// never claimed.
     #[tracing::instrument(level = "debug", skip_all, fields(client_id), err)]
     pub async fn refresh_token(
         &self,
@@ -251,37 +271,70 @@ impl OAuth2Service {
     ) -> Result<TokenResponse, UniversalInboxError> {
         let token_hash = hash_token(refresh_token);
 
-        let stored_token = self
+        // Atomically claim-and-revoke. `Some(row)` ⇒ this caller won the
+        // race; `None` ⇒ already-revoked / never-existed / expired / wrong
+        // client. We MUST NOT mint new tokens in the `None` branch.
+        let stored_token = match self
             .repository
-            .get_refresh_token_by_hash(transaction, &token_hash)
+            .revoke_refresh_token_if_active(transaction, &token_hash, client_id)
             .await?
-            .ok_or_else(|| UniversalInboxError::InvalidInputData {
-                source: None,
-                user_error: "Invalid refresh token".to_string(),
-            })?;
-
-        // Verify client_id matches
-        if stored_token.client_id != client_id {
-            return Err(UniversalInboxError::InvalidInputData {
-                source: None,
-                user_error: "client_id mismatch".to_string(),
-            });
-        }
-
-        // Verify token has not expired
-        if let Some(expires_at) = stored_token.expires_at
-            && expires_at < Utc::now()
         {
-            return Err(UniversalInboxError::InvalidInputData {
-                source: None,
-                user_error: "Refresh token has expired".to_string(),
-            });
-        }
-
-        // Revoke the old refresh token (rotation)
-        self.repository
-            .revoke_refresh_token(transaction, &token_hash)
-            .await?;
+            Some(row) => row,
+            None => {
+                // Reuse detection: re-read by hash alone (ignoring
+                // `revoked_at`). If the row exists, the caller presented a
+                // token that DID match a known credential but has already
+                // been consumed (or belongs to a different client_id) — a
+                // strong reuse signal. Revoke the entire family for that
+                // `(client_id, user_id)` per RFC 6819 §5.2.2.3.
+                if let Some(existing) = self
+                    .repository
+                    .get_refresh_token_by_hash_including_revoked(transaction, &token_hash)
+                    .await?
+                {
+                    // The caller's transaction will be rolled back by the
+                    // route handler's `?`-propagation (returning Err from
+                    // this function aborts the surrounding tx). Open a fresh
+                    // transaction and commit it *before* returning the error,
+                    // so the family revocation actually persists even on the
+                    // failure path.
+                    //
+                    // Revoke the family of the original `client_id` recorded
+                    // on the row — not the caller-supplied `client_id`. A
+                    // client-id-mismatch attacker shouldn't be able to direct
+                    // a family revocation at an unrelated client. (We still
+                    // revoke; we just revoke the right family.)
+                    let mut revoke_tx = self.repository.begin().await?;
+                    let revoked_count = self
+                        .repository
+                        .revoke_all_refresh_tokens_for_client(
+                            &mut revoke_tx,
+                            existing.user_id,
+                            &existing.client_id,
+                        )
+                        .await?;
+                    revoke_tx
+                        .commit()
+                        .await
+                        .map_err(|err| UniversalInboxError::DatabaseError {
+                            message: format!(
+                                "Failed to commit refresh-token family revocation: {err}"
+                            ),
+                            source: err,
+                        })?;
+                    tracing::warn!(
+                        user_id = %existing.user_id,
+                        client_id = %existing.client_id,
+                        revoked_count,
+                        "Refresh token reuse detected — revoked entire token family"
+                    );
+                }
+                return Err(UniversalInboxError::InvalidInputData {
+                    source: None,
+                    user_error: "Invalid refresh token".to_string(),
+                });
+            }
+        };
 
         let scope = stored_token.scope.clone().unwrap_or_default();
         let resource = stored_token
