@@ -1772,4 +1772,95 @@ mod oauth2 {
             .expect("Failed to call /users/me with session");
         assert_eq!(response.status(), StatusCode::OK);
     }
+
+    /// `check_rate_limit` previously bucketed by `req.peer_addr()`, which is
+    /// always the reverse-proxy IP behind production Caddy — every external
+    /// client collapsed into a single bucket. After the fix the limiter keys
+    /// on `ConnectionInfo::realip_remote_addr()`, so two different forwarded
+    /// IPs must drain independent buckets. We exhaust the 30 req/min budget
+    /// for `1.2.3.4` and assert that a 31st request from `5.6.7.8` still
+    /// succeeds — proving the limiter no longer collapses every client into
+    /// one bucket keyed on the test client's loopback peer_addr.
+    #[rstest]
+    #[tokio::test]
+    async fn register_rate_limit_keys_on_forwarded_ip(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let url = format!("{}oauth2/register", app.app.api_address);
+        let payload = json!({
+            "client_name": "rate-limit-victim",
+            "redirect_uris": ["https://example.com/cb"],
+        });
+
+        // Drain the per-minute budget (30 req/min) for `1.2.3.4`. Use the
+        // authenticated client so we bypass the unauthenticated 401 and
+        // actually hit the rate-limit decision path.
+        let mut throttled_for_1234 = false;
+        for _ in 0..40 {
+            let response = app
+                .client
+                .post(&url)
+                .header("X-Forwarded-For", "1.2.3.4")
+                .json(&payload)
+                .send()
+                .await
+                .expect("Failed to call /oauth2/register");
+            if response.status() == StatusCode::TOO_MANY_REQUESTS {
+                throttled_for_1234 = true;
+                break;
+            }
+        }
+        assert!(
+            throttled_for_1234,
+            "Expected /oauth2/register to return 429 once the per-IP budget for 1.2.3.4 was exhausted"
+        );
+
+        // A different forwarded IP must not be throttled — that's the whole
+        // point of per-IP keying. Anything other than 429 is a pass; in
+        // practice this returns 201 Created.
+        let response = app
+            .client
+            .post(&url)
+            .header("X-Forwarded-For", "5.6.7.8")
+            .json(&payload)
+            .send()
+            .await
+            .expect("Failed to call /oauth2/register from 5.6.7.8");
+        assert_ne!(
+            response.status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "A different forwarded IP must drain a separate bucket (got {})",
+            response.status()
+        );
+    }
+
+    /// When the forwarded IP is unspecified (`0.0.0.0`), the limiter must
+    /// refuse rather than fall back to bucketing every unidentifiable client
+    /// together. The handler returns 400 Bad Request (per RFC 6585, 429 is
+    /// inappropriate here — we don't know that the client sent too many
+    /// requests, we couldn't even identify them).
+    #[rstest]
+    #[tokio::test]
+    async fn register_rejects_unspecified_forwarded_ip(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let response = app
+            .client
+            .post(format!("{}oauth2/register", app.app.api_address))
+            .header("X-Forwarded-For", "0.0.0.0")
+            .json(&json!({
+                "client_name": "unspecified-ip",
+                "redirect_uris": ["https://example.com/cb"],
+            }))
+            .send()
+            .await
+            .expect("Failed to call /oauth2/register");
+        assert_eq!(
+            response.status(),
+            StatusCode::BAD_REQUEST,
+            "Unspecified forwarded IP must be rejected, not bucketed under 0.0.0.0"
+        );
+    }
 }
