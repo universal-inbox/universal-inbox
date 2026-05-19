@@ -3,18 +3,18 @@ use rstest::*;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::google_mail::GoogleMailConfig,
         integrations::{github::GithubConfig, google_mail::GoogleMailContext},
         provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
+        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionStatus,
     },
     notification::Notification,
     third_party::integrations::google_mail::{GoogleMailLabel, GoogleMailThread},
 };
 
 use crate::helpers::{
-    auth::{AuthenticatedApp, authenticate_user, authenticated_app},
+    auth::{authenticate_user, authenticated_app, AuthenticatedApp},
     integration_connection::{
         create_integration_connection, get_integration_connection, list_integration_connections,
     },
@@ -284,6 +284,10 @@ mod update_integration_connection_config {
         assert!(notifications.is_empty());
     }
 
+    /// A connection owned by another user MUST return the same response as a
+    /// completely unknown UUID — otherwise an authenticated attacker could
+    /// enumerate which IntegrationConnectionId values are valid across
+    /// tenants by comparing 403 (exists, foreign) vs 404 (truly missing).
     #[rstest]
     #[tokio::test]
     async fn test_update_integration_connection_config_of_another_user(
@@ -311,7 +315,8 @@ mod update_integration_connection_config {
         let (client, _user) =
             authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
-        let response = client
+        // Case 1: existing connection owned by another user.
+        let foreign_response = client
             .put(format!(
                 "{}integration-connections/{}/config",
                 app.app.api_address, integration_connection.id
@@ -327,7 +332,56 @@ mod update_integration_connection_config {
             .await
             .expect("Failed to execute request");
 
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let foreign_status = foreign_response.status();
+        let foreign_body = foreign_response
+            .text()
+            .await
+            .expect("Failed to read foreign response body");
+
+        // Case 2: completely unknown UUID — must be indistinguishable from
+        // the foreign-owned case so the endpoint cannot be used to probe for
+        // valid IDs across tenants.
+        let unknown_id = uuid::Uuid::new_v4();
+        let missing_response = client
+            .put(format!(
+                "{}integration-connections/{}/config",
+                app.app.api_address, unknown_id
+            ))
+            .json(&IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+                sync_notifications_enabled: false,
+                synced_label: GoogleMailLabel {
+                    id: "Label_2".to_string(),
+                    name: "Label 2".to_string(),
+                },
+            }))
+            .send()
+            .await
+            .expect("Failed to execute request");
+
+        let missing_status = missing_response.status();
+        let missing_body = missing_response
+            .text()
+            .await
+            .expect("Failed to read missing response body");
+
+        // Both responses must be 404 NotFound with the same shape — only the
+        // ID embedded in the message differs (which the attacker already
+        // controls), so the responses carry no signal about ID validity.
+        assert_eq!(foreign_status, StatusCode::NOT_FOUND);
+        assert_eq!(missing_status, StatusCode::NOT_FOUND);
+        assert_eq!(
+            foreign_body,
+            format!(
+                "{{\"message\":\"Cannot update unknown integration connection {}\"}}",
+                integration_connection.id
+            )
+        );
+        assert_eq!(
+            missing_body,
+            format!(
+                "{{\"message\":\"Cannot update unknown integration connection {unknown_id}\"}}"
+            )
+        );
 
         // Verify that the integration connection was not updated
         let integration_connection: IntegrationConnection =
