@@ -1242,21 +1242,32 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         username: &Username,
     ) -> Result<(UserId, CreationChallengeResponse, PasskeyRegistration), UniversalInboxError> {
-        if let Some((_, user_id)) = self
+        // Security (universal-inbox-bkj.31): Avoid leaking whether the
+        // username is already registered (and the existing user's UserId
+        // UUID) from this unauthenticated endpoint. Regardless of whether
+        // the username exists, generate a fresh ephemeral `UserId` (never
+        // the real one) and mint a real-shaped `CreationChallengeResponse`
+        // bound to it. The caller stores the ephemeral id in the session
+        // and in Redis; if the ceremony is later completed the database
+        // unique constraint on `user_auth.username` will reject the
+        // duplicate at `finish_passkey_registration` time. The repository
+        // maps that rejection to a generic `UniversalInboxError::Conflict`
+        // (see Repository::create_user_auth), so the finish response is a
+        // 409 with a user-facing "username is taken" message that never
+        // exposes the Postgres constraint name, raw sqlx error text, or
+        // the ephemeral UserId UUID. The real `UserId` of the existing
+        // account is never returned to the client and the start response
+        // shape (status, headers, body) is indistinguishable from the
+        // fresh-username path.
+        let _ = self
             .repository
             .get_user_auth_by_username(executor, username)
-            .await?
-        {
-            return Err(UniversalInboxError::AlreadyExists {
-                source: None,
-                id: user_id.0,
-            });
-        }
+            .await?;
         let user_id: UserId = Uuid::new_v4().into();
         let (creation_challenge_response, passkey_registration) = self
             .webauthn
             .start_passkey_registration(user_id.0, username.0.as_str(), username.0.as_str(), None)
-            .with_context(|| format!("Failed to start Passkey registration for {username}"))?;
+            .context("Failed to start Passkey registration")?;
         Ok((user_id, creation_challenge_response, passkey_registration))
     }
 
@@ -1308,27 +1319,38 @@ impl UserService {
         username: &Username,
     ) -> Result<(UserId, RequestChallengeResponse, PasskeyAuthentication), UniversalInboxError>
     {
-        let Some((user_auth, user_id)) = self
+        // Security (universal-inbox-bkj.31): Avoid leaking whether the
+        // username is registered. If we find a matching passkey user we
+        // generate a real authentication challenge bound to their
+        // credential; if not, we mint an indistinguishable challenge
+        // bound to a fresh ephemeral UserId with no allowed credentials.
+        // The HTTP status and body shape are identical in both branches;
+        // the only intentional residual signal is the `allow_credentials`
+        // list (real for known users, empty for unknown users) — this is
+        // the simpler trade-off explicitly accepted by the issue, since
+        // a deterministic synthetic credential is non-trivial to forge.
+        // No username or UserId text is ever echoed back to the client.
+        let lookup = self
             .repository
             .get_user_auth_by_username(executor, username)
-            .await?
-        else {
-            return Err(UniversalInboxError::ItemNotFound(format!(
-                "No user found for username {username}"
-            )));
-        };
-        let UserAuth::Passkey(passkey_user_auth) = user_auth else {
-            return Err(UniversalInboxError::Unexpected(anyhow!(
-                "No passkey found for user with username {username}"
-            )));
+            .await?;
+        let (user_id, allowed) = match lookup {
+            Some((UserAuth::Passkey(passkey_user_auth), user_id)) => {
+                (user_id, vec![passkey_user_auth.passkey])
+            }
+            // Unknown username, or a user_auth row that is not a passkey:
+            // mint a fake challenge under a fresh ephemeral UserId so the
+            // outcome is shape-identical to the success path. The
+            // ceremony cannot be completed (no matching state can be
+            // produced from any real credential) but the *start* endpoint
+            // response is non-enumerable.
+            _ => (UserId::from(Uuid::new_v4()), Vec::new()),
         };
 
         let (request_challenge_response, passkey_authentication) = self
             .webauthn
-            .start_passkey_authentication(&[passkey_user_auth.passkey])
-            .with_context(|| {
-                format!("Failed to start Passkey authentication for user with username {username}")
-            })?;
+            .start_passkey_authentication(&allowed)
+            .context("Failed to start Passkey authentication")?;
 
         Ok((user_id, request_challenge_response, passkey_authentication))
     }

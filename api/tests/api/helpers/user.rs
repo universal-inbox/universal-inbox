@@ -257,3 +257,51 @@ pub async fn link_oidc_pkce_session_response(
         .await
         .unwrap()
 }
+
+pub async fn start_passkey_registration_response(
+    client: &Client,
+    app: &TestedApp,
+    username: &str,
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{}users/passkeys/registration/start",
+            app.api_address
+        ))
+        .json(&Username(username.to_string()))
+        .send()
+        .await
+        .unwrap()
+}
+
+pub async fn start_passkey_authentication_response(
+    client: &Client,
+    app: &TestedApp,
+    username: &str,
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{}users/passkeys/authentication/start",
+            app.api_address
+        ))
+        .json(&Username(username.to_string()))
+        .send()
+        .await
+        .unwrap()
+}
+
+pub async fn finish_passkey_registration_response_unauthenticated(
+    client: &Client,
+    app: &TestedApp,
+    register_credentials: &RegisterPublicKeyCredential,
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{}users/passkeys/registration/finish",
+            app.api_address
+        ))
+        .json(register_credentials)
+        .send()
+        .await
+        .unwrap()
+}
