@@ -124,6 +124,17 @@ impl IntegrationConnectionService {
         self.repository.begin().await
     }
 
+    /// Returns a clone of the underlying database connection pool.
+    ///
+    /// Used by `/ping` so the health check can probe the pool with a
+    /// short-lived `SELECT 1` without acquiring a long-lived
+    /// `Transaction<'_, Postgres>`. Holding a real transaction per `/ping`
+    /// call lets an unauthenticated attacker pin every connection in the
+    /// pool — a DoS amplifier on a public endpoint.
+    pub fn pool(&self) -> Arc<sqlx::PgPool> {
+        self.repository.pool.clone()
+    }
+
     fn get_oauth2_provider(&self, kind: &IntegrationProviderKind) -> Option<&dyn OAuth2Provider> {
         self.oauth2_providers.get(kind).map(|p| p.as_ref())
     }
