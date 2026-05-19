@@ -5,12 +5,16 @@ use actix_jwt_authc::Authenticated;
 use actix_session::Session;
 use actix_web::{HttpRequest, HttpResponse, Scope, web};
 use anyhow::{Context, anyhow};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
 use governor::Quota;
+use rand::RngCore;
 use redis::AsyncCommands;
 use secrecy::{ExposeSecret, SecretBox};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+use subtle::ConstantTimeEq;
 use tokio::sync::RwLock;
 use validator::Validate;
 use webauthn_rs::prelude::*;
@@ -40,12 +44,78 @@ use crate::{
     utils::{
         cache::Cache,
         jwt::{Claims, JWT_SESSION_KEY},
+        origin::check_request_origin,
         rate_limit::{IpRateLimiter, check_ip_rate_limit},
     },
 };
 
 const PASSKEY_REGISTRATION_STATE_SESSION_KEY: &str = "passkey-registration-state";
 const PASSKEY_AUTHENTICATION_STATE_SESSION_KEY: &str = "passkey-authentication-state";
+
+/// Length of the per-ceremony nonce in bytes. 16 random bytes (128 bits)
+/// is well over the WebAuthn challenge entropy (16 bytes is the spec
+/// minimum) and makes a guess by a network attacker infeasible.
+const PASSKEY_NONCE_BYTES: usize = 16;
+
+/// State blob persisted to Redis for a passkey ceremony, paired with a
+/// per-ceremony nonce.
+///
+/// Each in-flight ceremony binds two independent values:
+///
+/// 1. a fresh 16-byte server-generated nonce returned in the start
+///    response body and required (echoed) in the matching finish
+///    request body;
+/// 2. the same nonce embedded in this state blob.
+///
+/// The finish handler requires both to match in constant time. Without
+/// the nonce echo a victim's cookie session by itself is no longer
+/// sufficient to drive a finish call, closing the CSRF +
+/// cross-flow-confusion gap flagged by DeepSec. Cross-flow consumption
+/// is independently prevented by the disjoint Redis key namespaces
+/// `add-passkey-registration-state::{user_id}`,
+/// `passkey-registration-state::{user_id}`, and
+/// `passkey-authentication-state::{user_id}` under which this struct is
+/// stored.
+#[derive(Serialize, Deserialize)]
+struct NonceBound<T> {
+    nonce: String,
+    state: T,
+}
+
+/// Generate a fresh base64url-encoded nonce for one passkey ceremony.
+fn generate_passkey_nonce() -> String {
+    let mut bytes = [0u8; PASSKEY_NONCE_BYTES];
+    rand::rng().fill_bytes(&mut bytes);
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+/// Wrapper request body for the four passkey **finish** handlers. The
+/// client must echo the nonce returned by the matching start response;
+/// the credential payload is flattened so the JSON shape remains
+/// `{"nonce": "...", ...credential fields...}`.
+#[derive(Deserialize)]
+pub struct PasskeyFinishRequest<T> {
+    nonce: String,
+    #[serde(flatten)]
+    credential: T,
+}
+
+/// Verify that `provided_nonce` (echoed by the client in the finish
+/// request body) matches `expected_nonce` (the nonce embedded in the
+/// Redis state blob loaded by the caller). Constant-time comparison.
+///
+/// Returns `Err(Unauthorized)` on mismatch with a generic envelope.
+fn verify_passkey_nonce(
+    expected_nonce: &str,
+    provided_nonce: &str,
+) -> Result<(), UniversalInboxError> {
+    if !bool::from(expected_nonce.as_bytes().ct_eq(provided_nonce.as_bytes())) {
+        return Err(UniversalInboxError::Unauthorized(anyhow!(
+            "Passkey nonce mismatch"
+        )));
+    }
+    Ok(())
+}
 
 /// Per-IP request budget for authentication-state-changing endpoints
 /// (universal-inbox-bkj.30).
@@ -274,10 +344,15 @@ pub async fn list_auth_methods(
 const ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY: &str = "add-passkey-registration-state";
 
 pub async fn add_local_auth_method(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    settings: web::Data<Settings>,
     authenticated: Authenticated<Claims>,
     password: web::Json<SecretBox<Password>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(response);
+    }
     let user_id = authenticated
         .claims
         .sub
@@ -303,16 +378,20 @@ pub async fn add_local_auth_method(
         .body(serde_json::to_string(&auth_method).context("Cannot serialize auth method")?))
 }
 
-#[allow(dependency_on_unit_never_type_fallback)]
+#[allow(clippy::too_many_arguments, dependency_on_unit_never_type_fallback)]
 pub async fn start_add_passkey_registration(
     req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    settings: web::Data<Settings>,
     rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     authenticated: Authenticated<Claims>,
     session: Session,
     cache: web::Data<Cache>,
     username: web::Json<Username>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(response);
+    }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(response);
     }
@@ -334,13 +413,18 @@ pub async fn start_add_passkey_registration(
         .start_add_passkey_auth_method(&mut transaction, user_id, &username)
         .await?;
 
+    let nonce = generate_passkey_nonce();
     session
         .insert(
             ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY,
             (username.0.as_str(), user_id),
         )
         .context("Failed to insert add Passkey registration state into the session")?;
-    let Ok(registration_state_to_store) = serde_json::to_string(&registration_state) else {
+    let bound = NonceBound {
+        nonce: nonce.clone(),
+        state: registration_state,
+    };
+    let Ok(registration_state_to_store) = serde_json::to_string(&bound) else {
         return Err(UniversalInboxError::Unexpected(anyhow!(
             "Failed to serialize add Passkey registration state"
         )));
@@ -363,21 +447,35 @@ pub async fn start_add_passkey_registration(
         .await
         .context("Failed to commit while starting add Passkey registration")?;
 
+    // The challenge response is serialized as a JSON object; splicing the
+    // server-generated `nonce` into that object keeps the response shape
+    // backwards-compatible for any field clients already read while adding
+    // the required echo-back field.
+    let mut response_value = serde_json::to_value(&creation_challenge_response)
+        .context("Cannot serialize Passkey creation challenge")?;
+    if let Some(obj) = response_value.as_object_mut() {
+        obj.insert("nonce".to_string(), serde_json::Value::String(nonce));
+    }
     Ok(HttpResponse::Ok().content_type("application/json").body(
-        serde_json::to_string(&creation_challenge_response)
-            .context("Cannot serialize Passkey creation challenge")?,
+        serde_json::to_string(&response_value)
+            .context("Cannot serialize Passkey creation challenge with nonce")?,
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn finish_add_passkey_registration(
     req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    settings: web::Data<Settings>,
     rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     authenticated: Authenticated<Claims>,
     session: Session,
     cache: web::Data<Cache>,
-    register_credentials: web::Json<RegisterPublicKeyCredential>,
+    body: web::Json<PasskeyFinishRequest<RegisterPublicKeyCredential>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(response);
+    }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(response);
     }
@@ -391,6 +489,11 @@ pub async fn finish_add_passkey_registration(
         .begin()
         .await
         .context("Failed to create new transaction while finishing add Passkey registration")?;
+
+    let PasskeyFinishRequest {
+        nonce: provided_nonce,
+        credential: register_credentials,
+    } = body.into_inner();
 
     let (username, session_user_id): (String, UserId) = session
         .get(ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY)
@@ -413,11 +516,13 @@ pub async fn finish_add_passkey_registration(
         ))
         .await
         .context("Failed to fetch add Passkey registration state from Redis")?;
-    let Ok(registration_state) = serde_json::from_str(&str) else {
+    let Ok(bound) = serde_json::from_str::<NonceBound<PasskeyRegistration>>(&str) else {
         return Err(UniversalInboxError::Unexpected(anyhow!(
             "Failed to parse add Passkey registration state"
         )));
     };
+
+    verify_passkey_nonce(&bound.nonce, &provided_nonce)?;
 
     let username = Username(username);
     let auth_method = service
@@ -425,8 +530,8 @@ pub async fn finish_add_passkey_registration(
             &mut transaction,
             &username,
             user_id,
-            register_credentials.into_inner(),
-            registration_state,
+            register_credentials,
+            bound.state,
         )
         .await?;
 
@@ -441,10 +546,15 @@ pub async fn finish_add_passkey_registration(
 }
 
 pub async fn remove_auth_method(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    settings: web::Data<Settings>,
     authenticated: Authenticated<Claims>,
     path_info: web::Path<UserAuthKind>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(response);
+    }
     let user_id = authenticated
         .claims
         .sub
@@ -879,11 +989,15 @@ pub async fn patch_user_preferences(
 pub async fn start_passkey_registration(
     req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    settings: web::Data<Settings>,
     rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     session: Session,
     cache: web::Data<Cache>,
     username: web::Json<Username>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(response);
+    }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(response);
     }
@@ -900,13 +1014,18 @@ pub async fn start_passkey_registration(
         .start_passkey_registration(&mut transaction, &username)
         .await?;
 
+    let nonce = generate_passkey_nonce();
     session
         .insert(
             PASSKEY_REGISTRATION_STATE_SESSION_KEY,
             (username.0.as_str(), user_id),
         )
         .context("Failed to insert Passkey registration state into the session")?;
-    let Ok(registration_state_to_store) = serde_json::to_string(&registration_state) else {
+    let bound = NonceBound {
+        nonce: nonce.clone(),
+        state: registration_state,
+    };
+    let Ok(registration_state_to_store) = serde_json::to_string(&bound) else {
         return Err(UniversalInboxError::Unexpected(anyhow!(
             "Failed to serialize Passkey registration state"
         )));
@@ -926,21 +1045,31 @@ pub async fn start_passkey_registration(
         .await
         .context("Failed to commit while starting Passkey registration")?;
 
+    let mut response_value = serde_json::to_value(&creation_challenge_response)
+        .context("Cannot serialize Passkey creation challenge")?;
+    if let Some(obj) = response_value.as_object_mut() {
+        obj.insert("nonce".to_string(), serde_json::Value::String(nonce));
+    }
     Ok(HttpResponse::Ok().content_type("application/json").body(
-        serde_json::to_string(&creation_challenge_response)
-            .context("Cannot serialize Passkey creation challenge")?,
+        serde_json::to_string(&response_value)
+            .context("Cannot serialize Passkey creation challenge with nonce")?,
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn finish_passkey_registration(
     req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    settings: web::Data<Settings>,
     rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     session: Session,
     cache: web::Data<Cache>,
-    register_credentials: web::Json<RegisterPublicKeyCredential>,
+    body: web::Json<PasskeyFinishRequest<RegisterPublicKeyCredential>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(response);
+    }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(response);
     }
@@ -949,6 +1078,11 @@ pub async fn finish_passkey_registration(
         .begin()
         .await
         .context("Failed to create new transaction while finishing Passkey registration")?;
+
+    let PasskeyFinishRequest {
+        nonce: provided_nonce,
+        credential: register_credentials,
+    } = body.into_inner();
 
     let (username, user_id) = session
         .get(PASSKEY_REGISTRATION_STATE_SESSION_KEY)
@@ -964,19 +1098,21 @@ pub async fn finish_passkey_registration(
         ))
         .await
         .context("Failed to fetch Passkey registration state from Redis")?;
-    let Ok(registration_state) = serde_json::from_str(&str) else {
+    let Ok(bound) = serde_json::from_str::<NonceBound<PasskeyRegistration>>(&str) else {
         return Err(UniversalInboxError::Unexpected(anyhow!(
             "Failed to parse Passkey registration state"
         )));
     };
+
+    verify_passkey_nonce(&bound.nonce, &provided_nonce)?;
 
     let new_user = service
         .finish_passkey_registration(
             &mut transaction,
             &username,
             user_id,
-            register_credentials.into_inner(),
-            registration_state,
+            register_credentials,
+            bound.state,
         )
         .await?;
 
@@ -1008,11 +1144,15 @@ pub async fn finish_passkey_registration(
 pub async fn start_passkey_authentication(
     req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    settings: web::Data<Settings>,
     rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     session: Session,
     cache: web::Data<Cache>,
     username: web::Json<Username>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(response);
+    }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(response);
     }
@@ -1029,10 +1169,15 @@ pub async fn start_passkey_authentication(
         .start_passkey_authentication(&mut transaction, &username)
         .await?;
 
+    let nonce = generate_passkey_nonce();
     session
         .insert(PASSKEY_AUTHENTICATION_STATE_SESSION_KEY, user_id)
         .context("Failed to insert Passkey authentication state into the session")?;
-    let Ok(authentication_state_to_store) = serde_json::to_string(&authentication_state) else {
+    let bound = NonceBound {
+        nonce: nonce.clone(),
+        state: authentication_state,
+    };
+    let Ok(authentication_state_to_store) = serde_json::to_string(&bound) else {
         return Err(UniversalInboxError::Unexpected(anyhow!(
             "Failed to serialize Passkey authentication state"
         )));
@@ -1052,9 +1197,14 @@ pub async fn start_passkey_authentication(
         .await
         .context("Failed to commit while starting Passkey authentication")?;
 
+    let mut response_value = serde_json::to_value(&request_challenge_response)
+        .context("Cannot serialize Passkey request challenge")?;
+    if let Some(obj) = response_value.as_object_mut() {
+        obj.insert("nonce".to_string(), serde_json::Value::String(nonce));
+    }
     Ok(HttpResponse::Ok().content_type("application/json").body(
-        serde_json::to_string(&request_challenge_response)
-            .context("Cannot serialize Passkey request challenge")?,
+        serde_json::to_string(&response_value)
+            .context("Cannot serialize Passkey request challenge with nonce")?,
     ))
 }
 
@@ -1120,15 +1270,20 @@ pub async fn revoke_oauth2_authorized_client(
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn finish_passkey_authentication(
     req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    settings: web::Data<Settings>,
     rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     session: Session,
     cache: web::Data<Cache>,
-    credentials: web::Json<PublicKeyCredential>,
+    body: web::Json<PasskeyFinishRequest<PublicKeyCredential>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(response);
+    }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(response);
     }
@@ -1137,6 +1292,11 @@ pub async fn finish_passkey_authentication(
         .begin()
         .await
         .context("Failed to create new transaction while finishing Passkey authentication")?;
+
+    let PasskeyFinishRequest {
+        nonce: provided_nonce,
+        credential: credentials,
+    } = body.into_inner();
 
     let user_id = session
         .get(PASSKEY_AUTHENTICATION_STATE_SESSION_KEY)
@@ -1152,19 +1312,16 @@ pub async fn finish_passkey_authentication(
         ))
         .await
         .context("Failed to fetch Passkey authentication state in Redis")?;
-    let Ok(authentication_state) = serde_json::from_str(&str) else {
+    let Ok(bound) = serde_json::from_str::<NonceBound<PasskeyAuthentication>>(&str) else {
         return Err(UniversalInboxError::Unexpected(anyhow!(
             "Failed to load Passkey authentication state"
         )));
     };
 
+    verify_passkey_nonce(&bound.nonce, &provided_nonce)?;
+
     let user = service
-        .finish_passkey_authentication(
-            &mut transaction,
-            user_id,
-            credentials.into_inner(),
-            authentication_state,
-        )
+        .finish_passkey_authentication(&mut transaction, user_id, credentials, bound.state)
         .await?;
 
     let auth_token_service = auth_token_service.read().await;

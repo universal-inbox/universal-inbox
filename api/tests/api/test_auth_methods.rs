@@ -140,7 +140,6 @@ mod add_passkey_auth_method {
     use crate::helpers::auth::get_all_user_auths;
     use pretty_assertions::assert_eq;
     use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
-    use webauthn_rs::prelude::CreationChallengeResponse;
 
     #[rstest]
     #[tokio::test]
@@ -162,7 +161,8 @@ mod add_passkey_auth_method {
         // Start passkey registration
         let response = start_add_passkey_registration_response(&client, &app, "john_passkey").await;
         assert_eq!(response.status(), http::StatusCode::OK);
-        let creation_challenge: CreationChallengeResponse = response.json().await.unwrap();
+        let body = response.text().await.unwrap();
+        let (creation_challenge, nonce) = crate::helpers::user::split_creation_challenge(&body);
 
         // Simulate a software authenticator to complete the challenge
         let origin = app.front_base_url.clone();
@@ -173,7 +173,8 @@ mod add_passkey_auth_method {
 
         // Finish passkey registration
         let response =
-            finish_add_passkey_registration_response(&client, &app, &register_credential).await;
+            finish_add_passkey_registration_response(&client, &app, &register_credential, &nonce)
+                .await;
         assert_eq!(response.status(), http::StatusCode::OK);
 
         let added_method: UserAuthMethod = response.json().await.unwrap();
@@ -217,7 +218,8 @@ mod add_passkey_auth_method {
         // Start passkey registration
         let response = start_add_passkey_registration_response(&client, &app, "john_passkey").await;
         assert_eq!(response.status(), http::StatusCode::OK);
-        let creation_challenge: CreationChallengeResponse = response.json().await.unwrap();
+        let body = response.text().await.unwrap();
+        let (creation_challenge, nonce) = crate::helpers::user::split_creation_challenge(&body);
 
         // Simulate a software authenticator to complete the challenge
         let origin = app.front_base_url.clone();
@@ -228,7 +230,8 @@ mod add_passkey_auth_method {
 
         // Finish passkey registration
         let response =
-            finish_add_passkey_registration_response(&client, &app, &register_credential).await;
+            finish_add_passkey_registration_response(&client, &app, &register_credential, &nonce)
+                .await;
         assert_eq!(response.status(), http::StatusCode::OK);
 
         let added_method: UserAuthMethod = response.json().await.unwrap();

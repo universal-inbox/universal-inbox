@@ -1,7 +1,8 @@
 use email_address::EmailAddress;
 use reqwest::Client;
 use secrecy::SecretBox;
-use webauthn_rs::prelude::RegisterPublicKeyCredential;
+use serde_json::Value;
+use webauthn_rs::prelude::{CreationChallengeResponse, RegisterPublicKeyCredential};
 
 use universal_inbox::{
     auth::SessionAuthValidationParameters,
@@ -17,6 +18,41 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::TestedApp;
+
+/// Helper: return the test app's front-end Origin header value.
+/// All `/passkeys/*` and `/auth-methods/*` endpoints reject requests
+/// whose `Origin` (or `Referer`) does not match the configured
+/// `application.front_base_url` (universal-inbox-bkj.32).
+pub fn front_origin_header(app: &TestedApp) -> String {
+    app.front_base_url.origin().ascii_serialization()
+}
+
+/// Parse a passkey start response into the underlying
+/// `CreationChallengeResponse` plus the server-generated nonce that
+/// must be echoed back on finish. The body shape post-bkj.32 is
+/// `{"publicKey": {...}, "nonce": "..."}`.
+pub fn split_creation_challenge(body: &str) -> (CreationChallengeResponse, String) {
+    let value: Value = serde_json::from_str(body).expect("Start response must be JSON object");
+    let nonce = value
+        .get("nonce")
+        .and_then(|v| v.as_str())
+        .expect("Start response must include a `nonce` field")
+        .to_string();
+    let challenge: CreationChallengeResponse =
+        serde_json::from_str(body).expect("Start response must deserialize as challenge");
+    (challenge, nonce)
+}
+
+/// Build the JSON body for a passkey finish call: serialize the
+/// `RegisterPublicKeyCredential` (or `PublicKeyCredential`) and splice
+/// in the `nonce` field at the top level.
+pub fn finish_body_with_nonce<T: serde::Serialize>(credential: &T, nonce: &str) -> Value {
+    let mut value = serde_json::to_value(credential).expect("Credential serializes to JSON object");
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert("nonce".to_string(), Value::String(nonce.to_string()));
+    }
+    value
+}
 
 pub async fn register_user_response(
     client: &Client,
@@ -148,6 +184,7 @@ pub async fn add_local_auth_response(
 ) -> reqwest::Response {
     client
         .post(format!("{}users/me/auth-methods/local", app.api_address))
+        .header(reqwest::header::ORIGIN, front_origin_header(app))
         .json(&SecretBox::new(Box::new(Password(password.to_string()))))
         .send()
         .await
@@ -161,6 +198,7 @@ pub async fn remove_auth_method_response(
 ) -> reqwest::Response {
     client
         .delete(format!("{}users/me/auth-methods/{kind}", app.api_address))
+        .header(reqwest::header::ORIGIN, front_origin_header(app))
         .send()
         .await
         .unwrap()
@@ -223,6 +261,7 @@ pub async fn start_add_passkey_registration_response(
             "{}users/me/auth-methods/passkey/registration/start",
             app.api_address
         ))
+        .header(reqwest::header::ORIGIN, front_origin_header(app))
         .json(&Username(username.to_string()))
         .send()
         .await
@@ -233,13 +272,15 @@ pub async fn finish_add_passkey_registration_response(
     client: &Client,
     app: &TestedApp,
     register_credentials: &RegisterPublicKeyCredential,
+    nonce: &str,
 ) -> reqwest::Response {
     client
         .post(format!(
             "{}users/me/auth-methods/passkey/registration/finish",
             app.api_address
         ))
-        .json(register_credentials)
+        .header(reqwest::header::ORIGIN, front_origin_header(app))
+        .json(&finish_body_with_nonce(register_credentials, nonce))
         .send()
         .await
         .unwrap()
@@ -268,6 +309,7 @@ pub async fn start_passkey_registration_response(
             "{}users/passkeys/registration/start",
             app.api_address
         ))
+        .header(reqwest::header::ORIGIN, front_origin_header(app))
         .json(&Username(username.to_string()))
         .send()
         .await
@@ -284,6 +326,7 @@ pub async fn start_passkey_authentication_response(
             "{}users/passkeys/authentication/start",
             app.api_address
         ))
+        .header(reqwest::header::ORIGIN, front_origin_header(app))
         .json(&Username(username.to_string()))
         .send()
         .await
@@ -294,13 +337,15 @@ pub async fn finish_passkey_registration_response_unauthenticated(
     client: &Client,
     app: &TestedApp,
     register_credentials: &RegisterPublicKeyCredential,
+    nonce: &str,
 ) -> reqwest::Response {
     client
         .post(format!(
             "{}users/passkeys/registration/finish",
             app.api_address
         ))
-        .json(register_credentials)
+        .header(reqwest::header::ORIGIN, front_origin_header(app))
+        .json(&finish_body_with_nonce(register_credentials, nonce))
         .send()
         .await
         .unwrap()

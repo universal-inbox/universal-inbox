@@ -1152,7 +1152,8 @@ mod passkey_start_non_enumerable {
 
         let start_response = start_passkey_registration_response(&client, app, username).await;
         assert_eq!(start_response.status(), reqwest::StatusCode::OK);
-        let creation_challenge: CreationChallengeResponse = start_response.json().await.unwrap();
+        let body = start_response.text().await.unwrap();
+        let (creation_challenge, nonce) = crate::helpers::user::split_creation_challenge(&body);
 
         let origin = app.front_base_url.clone();
         let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
@@ -1164,6 +1165,7 @@ mod passkey_start_non_enumerable {
             &client,
             app,
             &register_credential,
+            &nonce,
         )
         .await;
         assert_eq!(finish_response.status(), reqwest::StatusCode::OK);
@@ -1350,7 +1352,8 @@ mod passkey_finish_non_leaking {
     use webauthn_rs::prelude::CreationChallengeResponse;
 
     use crate::helpers::user::{
-        finish_passkey_registration_response_unauthenticated, start_passkey_registration_response,
+        finish_passkey_registration_response_unauthenticated, split_creation_challenge,
+        start_passkey_registration_response,
     };
 
     #[rstest]
@@ -1382,7 +1385,8 @@ mod passkey_finish_non_leaking {
             reqwest::StatusCode::OK,
             "start endpoint must remain non-enumerable for taken username"
         );
-        let creation_challenge: CreationChallengeResponse = start_response.json().await.unwrap();
+        let (creation_challenge, nonce) =
+            split_creation_challenge(&start_response.text().await.unwrap());
 
         let origin = app.front_base_url.clone();
         let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
@@ -1396,6 +1400,7 @@ mod passkey_finish_non_leaking {
             &client,
             &app,
             &register_credential,
+            &nonce,
         )
         .await;
         let finish_status = finish_response.status();
@@ -1461,7 +1466,8 @@ mod passkey_finish_non_leaking {
 
         let start_response = start_passkey_registration_response(&client, app, username).await;
         assert_eq!(start_response.status(), reqwest::StatusCode::OK);
-        let creation_challenge: CreationChallengeResponse = start_response.json().await.unwrap();
+        let (creation_challenge, nonce) =
+            split_creation_challenge(&start_response.text().await.unwrap());
 
         let origin = app.front_base_url.clone();
         let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
@@ -1473,8 +1479,278 @@ mod passkey_finish_non_leaking {
             &client,
             app,
             &register_credential,
+            &nonce,
         )
         .await;
         assert_eq!(finish_response.status(), reqwest::StatusCode::OK);
+    }
+}
+
+/// Regression tests for universal-inbox-bkj.32: per-ceremony nonce
+/// binding, Origin/Referer check, and cross-flow Redis-prefix isolation
+/// for the four passkey start/finish handlers.
+///
+/// The pre-fix passkey ceremony handlers relied solely on the cookie
+/// session + a Redis state blob keyed by `user_id`. There was no
+/// per-flow secret the frontend had to echo back, no Origin/Referer
+/// check, and a tampered or cross-flow session could in principle pair
+/// with state from another flow. The handlers now:
+///
+///   - generate a fresh per-ceremony nonce at start, return it to the
+///     client, and require the client to echo it on finish;
+///   - reject any request whose `Origin` (or `Referer`) does not match
+///     the configured `application.front_base_url`;
+///   - keep the ADD-passkey-to-existing-user flow and the
+///     INITIAL-passkey-registration flow in disjoint session/Redis key
+///     namespaces so they can never be cross-consumed.
+mod passkey_ceremony_csrf_hardening {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
+    use webauthn_rs::prelude::CreationChallengeResponse;
+
+    use crate::helpers::user::{
+        finish_add_passkey_registration_response,
+        finish_passkey_registration_response_unauthenticated, front_origin_header, register_user,
+        split_creation_challenge, start_add_passkey_registration_response,
+        start_passkey_registration_response,
+    };
+
+    /// Verify that the start response includes a `nonce` and that a
+    /// finish call with a *mismatched* nonce is rejected, while the
+    /// matching nonce succeeds.
+    #[rstest]
+    #[tokio::test]
+    async fn test_finish_passkey_registration_requires_matching_nonce(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        // Start the unauthenticated passkey registration flow.
+        let start_response =
+            start_passkey_registration_response(&client, &app, "nonce_match_alice").await;
+        assert_eq!(start_response.status(), reqwest::StatusCode::OK);
+        let start_body = start_response.text().await.unwrap();
+        let (creation_challenge, server_nonce) = split_creation_challenge(&start_body);
+
+        // The start response MUST include a non-empty nonce.
+        assert!(
+            !server_nonce.is_empty(),
+            "start response must include a non-empty nonce"
+        );
+
+        // Complete the WebAuthn challenge so we have a valid credential
+        // payload to send to finish.
+        let origin = app.front_base_url.clone();
+        let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+        let register_credential = authenticator
+            .do_registration(origin, creation_challenge)
+            .expect("Failed to complete passkey registration");
+
+        // First attempt: a deliberately mismatched nonce must be
+        // rejected (401 per the existing Unauthorized convention used
+        // for session-bound CSRF rejection).
+        let bogus_nonce = "AAAAAAAAAAAAAAAAAAAAAA";
+        assert_ne!(
+            bogus_nonce, server_nonce,
+            "test pre-condition: the bogus nonce must differ from the server-issued one"
+        );
+        let bad_response = finish_passkey_registration_response_unauthenticated(
+            &client,
+            &app,
+            &register_credential,
+            bogus_nonce,
+        )
+        .await;
+        assert_eq!(
+            bad_response.status(),
+            reqwest::StatusCode::UNAUTHORIZED,
+            "finish with mismatched nonce must be rejected"
+        );
+
+        // Second attempt: even with the wrong nonce above, the start
+        // state was already consumed (the finish handler `get_del`s the
+        // Redis blob on first read), so we cannot re-use the same
+        // ceremony with the correct nonce — drive a fresh ceremony and
+        // verify the happy path with the right nonce.
+        let fresh_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+        let start2 =
+            start_passkey_registration_response(&fresh_client, &app, "nonce_match_alice_v2").await;
+        assert_eq!(start2.status(), reqwest::StatusCode::OK);
+        let (challenge2, good_nonce) = split_creation_challenge(&start2.text().await.unwrap());
+        let mut auth2 = WebauthnAuthenticator::new(SoftPasskey::new(true));
+        let cred2 = auth2
+            .do_registration(app.front_base_url.clone(), challenge2)
+            .expect("Failed to complete passkey registration");
+        let good_response = finish_passkey_registration_response_unauthenticated(
+            &fresh_client,
+            &app,
+            &cred2,
+            &good_nonce,
+        )
+        .await;
+        assert_eq!(
+            good_response.status(),
+            reqwest::StatusCode::OK,
+            "finish with the server-issued nonce must succeed"
+        );
+    }
+
+    /// A finish call carrying an `Origin` header pointing at a
+    /// foreign origin must be rejected; the matching origin still
+    /// succeeds.
+    #[rstest]
+    #[tokio::test]
+    async fn test_finish_passkey_registration_rejects_foreign_origin(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let start_response =
+            start_passkey_registration_response(&client, &app, "origin_check_bob").await;
+        assert_eq!(start_response.status(), reqwest::StatusCode::OK);
+        let (challenge, nonce) = split_creation_challenge(&start_response.text().await.unwrap());
+
+        let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+        let credential = authenticator
+            .do_registration(app.front_base_url.clone(), challenge)
+            .expect("Failed to complete passkey registration");
+
+        // Build a finish call by hand so we can swap the Origin header.
+        let body = crate::helpers::user::finish_body_with_nonce(&credential, &nonce);
+        let evil_response = client
+            .post(format!(
+                "{}users/passkeys/registration/finish",
+                app.api_address
+            ))
+            .header(reqwest::header::ORIGIN, "https://evil.example")
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            evil_response.status(),
+            reqwest::StatusCode::BAD_REQUEST,
+            "finish with foreign Origin must be rejected with 400"
+        );
+
+        // The state is still in place (the foreign-origin call was
+        // rejected before any state consumption). Retry from the same
+        // client with the correct Origin header and the same nonce —
+        // it must succeed.
+        let ok_response = client
+            .post(format!(
+                "{}users/passkeys/registration/finish",
+                app.api_address
+            ))
+            .header(reqwest::header::ORIGIN, front_origin_header(&app))
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            ok_response.status(),
+            reqwest::StatusCode::OK,
+            "finish with the configured front-end Origin must succeed"
+        );
+    }
+
+    /// Cross-flow / cross-prefix isolation: the ADD-passkey-to-existing
+    /// -user flow (authenticated, `/users/me/auth-methods/passkey/...`)
+    /// uses session key `add-passkey-registration-state` and Redis
+    /// prefix `add-passkey-registration-state::{user_id}`. The
+    /// INITIAL-passkey-registration flow (unauthenticated,
+    /// `/users/passkeys/...`) uses key `passkey-registration-state`.
+    /// Starting an ADD flow MUST NOT leave state that the INITIAL
+    /// finish handler can consume, even when both flows would (pre-fix)
+    /// have keyed Redis by the same `user_id`.
+    ///
+    /// The session-key separation alone is sufficient to demonstrate
+    /// the isolation: the INITIAL finish handler reads
+    /// `passkey-registration-state` from the session and finds nothing
+    /// when only the ADD flow's `add-passkey-registration-state` was
+    /// set.
+    #[rstest]
+    #[tokio::test]
+    async fn test_add_passkey_state_cannot_complete_initial_passkey_finish(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        // Register a local user and authenticate the client.
+        let (client, _user) = register_user(
+            &app,
+            "carol@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        // Start the ADD-passkey-to-existing-user flow — this sets up
+        // the ADD-flow session key and Redis blob.
+        let start_response =
+            start_add_passkey_registration_response(&client, &app, "carol_passkey").await;
+        assert_eq!(start_response.status(), reqwest::StatusCode::OK);
+        let (creation_challenge, add_nonce): (CreationChallengeResponse, String) =
+            split_creation_challenge(&start_response.text().await.unwrap());
+
+        let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+        let register_credential = authenticator
+            .do_registration(app.front_base_url.clone(), creation_challenge)
+            .expect("Failed to complete passkey registration");
+
+        // Crossover attempt: try to consume the ADD-flow state via the
+        // INITIAL passkey finish endpoint. The INITIAL endpoint reads
+        // `passkey-registration-state` from the session, which was
+        // never written, so the call must be rejected. (Before the
+        // session-key split + nonce binding, an attacker who could
+        // confuse the routing by user_id might have driven state from
+        // one flow into the other; the current handlers cannot.)
+        let cross_flow_body =
+            crate::helpers::user::finish_body_with_nonce(&register_credential, &add_nonce);
+        let cross_response = client
+            .post(format!(
+                "{}users/passkeys/registration/finish",
+                app.api_address
+            ))
+            .header(reqwest::header::ORIGIN, front_origin_header(&app))
+            .json(&cross_flow_body)
+            .send()
+            .await
+            .unwrap();
+        assert!(
+            !cross_response.status().is_success(),
+            "ADD-flow state must not be consumable via the INITIAL finish endpoint, but \
+             got {}",
+            cross_response.status()
+        );
+
+        // Sanity check: the proper ADD finish endpoint, with the same
+        // credential and the correct nonce, must succeed — proving the
+        // ADD state itself is intact and only the cross-flow attempt
+        // above was blocked by the session-key namespacing.
+        let proper_response = finish_add_passkey_registration_response(
+            &client,
+            &app,
+            &register_credential,
+            &add_nonce,
+        )
+        .await;
+        assert_eq!(
+            proper_response.status(),
+            reqwest::StatusCode::OK,
+            "ADD finish with the correct endpoint + nonce must succeed"
+        );
     }
 }
