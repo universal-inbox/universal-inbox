@@ -126,14 +126,27 @@ pub async fn update_integration_connection_config(
         "Failed to create new transaction while updating integration connection configuration",
     )?;
 
-    let updated_config = service
+    // Collapse Forbidden (connection exists but is owned by another user) into the
+    // same NotFound response as a truly missing ID so an authenticated attacker
+    // cannot enumerate valid IntegrationConnectionId UUIDs across tenants. The
+    // service-layer Forbidden variant is intentionally preserved for audit logs
+    // and other endpoints — we only flatten the response at this boundary.
+    let updated_config = match service
         .update_integration_connection_config(
             &mut transaction,
             integration_connection_id,
             integration_connection_config.into_inner(),
             user_id,
         )
-        .await?;
+        .await
+    {
+        Ok(status) => status,
+        Err(UniversalInboxError::Forbidden(_)) => UpdateStatus {
+            updated: false,
+            result: None,
+        },
+        Err(err) => return Err(err),
+    };
 
     transaction
         .commit()
