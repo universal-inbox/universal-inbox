@@ -1,11 +1,11 @@
-use std::{net::IpAddr, num::NonZeroU32, sync::Arc};
+use std::{num::NonZeroU32, sync::Arc};
 
 use actix_jwt_authc::Authenticated;
 use actix_session::Session;
 use actix_web::{HttpResponse, Scope, web};
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, TimeDelta, Utc};
-use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DefaultKeyedStateStore};
+use governor::Quota;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -22,14 +22,14 @@ use crate::{
         UniversalInboxError,
         oauth2::service::{OAuth2Service, is_loopback_redirect_uri, validate_redirect_uri},
     },
-    utils::jwt::Claims,
+    utils::{jwt::Claims, rate_limit::IpRateLimiter},
 };
 
 const OAUTH2_RATE_LIMIT_PER_MINUTE: u32 = 30;
 const OAUTH2_PENDING_CONSENT_SESSION_KEY: &str = "oauth2_pending_consent";
 const PENDING_CONSENT_TTL_SECS: i64 = 300;
 
-type OAuth2RateLimiter = RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, DefaultClock>;
+type OAuth2RateLimiter = IpRateLimiter;
 
 pub fn build_rate_limiter() -> Arc<OAuth2RateLimiter> {
     let quota = Quota::per_minute(
@@ -112,7 +112,7 @@ pub async fn register(
     rate_limiter: web::Data<Arc<OAuth2RateLimiter>>,
     authenticated: Option<Authenticated<Claims>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    if let Err(response) = check_rate_limit(&req, &rate_limiter) {
+    if let Err(response) = crate::utils::rate_limit::check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(response);
     }
 
@@ -431,7 +431,7 @@ pub async fn token(
     req: actix_web::HttpRequest,
     rate_limiter: web::Data<Arc<OAuth2RateLimiter>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    if let Err(response) = check_rate_limit(&req, &rate_limiter) {
+    if let Err(response) = crate::utils::rate_limit::check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(response);
     }
     let service = oauth2_service.clone();
@@ -506,69 +506,6 @@ pub async fn token(
         .insert_header(("Cache-Control", "no-store"))
         .insert_header(("Pragma", "no-cache"))
         .body(serde_json::to_string(&token_response).context("Cannot serialize token response")?))
-}
-
-/// Resolve the real client IP for rate-limiting and reject (rather than bucket
-/// under an unspecified address) requests we cannot identify.
-///
-/// **Security note (universal-inbox-bkj.26):**
-///
-/// The previous implementation keyed the governor by `req.peer_addr()`. In
-/// production the API sits behind Caddy (see `process-compose.yaml`), so
-/// `peer_addr` is the proxy's loopback IP and every external request collided
-/// in a single bucket — turning the per-IP limiter into either (a) a global
-/// limiter that throttles legitimate traffic when attacker floods exhaust the
-/// shared bucket, or (b) a deny-all when the budget is set conservatively.
-/// The old fallback `unwrap_or(0.0.0.0)` was worse: requests with no peer
-/// addr (Unix socket, certain proxy configs) all shared the `0.0.0.0` bucket.
-///
-/// Mirror the `/ping` limiter (see `health_check.rs`, universal-inbox-bkj.18):
-/// use `ConnectionInfo::realip_remote_addr()` so that `Forwarded` /
-/// `X-Forwarded-For` is honored when present (consistent with the rest of the
-/// stack). Unlike `/ping`, OAuth2 returns `400 Bad Request` when the client
-/// IP cannot be determined — under DCR/`/token` we'd rather refuse the
-/// unidentifiable request outright than bucket it with every other anonymous
-/// caller.
-///
-/// Trusted-proxy allowlist is not enforced here: production runs Caddy on
-/// the same pod and is the only upstream that reaches the API. If the
-/// deployment topology ever exposes the API directly to the public internet,
-/// this function must grow a trusted-proxy filter to avoid header spoofing.
-fn check_rate_limit(
-    req: &actix_web::HttpRequest,
-    rate_limiter: &OAuth2RateLimiter,
-) -> Result<(), HttpResponse> {
-    let Some(ip) = resolve_client_ip(req) else {
-        // 400 Bad Request: per RFC 6585, 429 is for "the client has sent too
-        // many requests in a given amount of time" — that's not what's
-        // happening here. We refuse because we can't even identify the
-        // caller. Using the same JSON error envelope as
-        // `UniversalInboxError::InvalidInputData` would for consistency.
-        return Err(HttpResponse::BadRequest()
-            .content_type("application/json")
-            .body(r#"{"message":"Unable to determine client IP for rate limiting"}"#));
-    };
-    if rate_limiter.check_key(&ip).is_err() {
-        return Err(HttpResponse::TooManyRequests().finish());
-    }
-    Ok(())
-}
-
-/// Returns the real client IP from `ConnectionInfo::realip_remote_addr()` if
-/// it can be parsed AND is a specified address (not `0.0.0.0` / `::`). Returns
-/// `None` for absent, unparseable, or wildcard addresses so the caller can
-/// refuse the request rather than collapse every unidentifiable client into
-/// the unspecified bucket.
-fn resolve_client_ip(req: &actix_web::HttpRequest) -> Option<IpAddr> {
-    req.connection_info()
-        .realip_remote_addr()
-        .and_then(|raw| {
-            // `realip_remote_addr` returns `host:port` for direct connections
-            // and a bare IP for forwarded headers — strip an optional port.
-            let trimmed = raw.rsplit_once(':').map(|(addr, _)| addr).unwrap_or(raw);
-            trimmed.parse::<IpAddr>().ok()
-        })
-        .filter(|ip| !ip.is_unspecified())
 }
 
 fn read_pending_consent(
