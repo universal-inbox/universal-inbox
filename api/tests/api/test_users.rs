@@ -1023,3 +1023,89 @@ mod patch_user {
         );
     }
 }
+
+/// The auth-state-changing user endpoints (login, register, email/password-reset,
+/// passkey ceremonies) had no rate limit, allowing password brute force,
+/// account-creation spam, email-bombing, and WebAuthn flood from a single IP.
+/// The fix installs a shared per-IP governor limiter (30 req/min, mirroring
+/// the OAuth2 limiter at `api/src/routes/oauth2.rs`) keyed on the real client
+/// IP from `ConnectionInfo::realip_remote_addr()`.
+///
+/// One end-to-end test proves the wiring: a flood of `POST /users/me`
+/// (login_user) from a single forwarded IP eventually returns `429 Too Many
+/// Requests`, while a different forwarded IP still gets through. Per-endpoint
+/// coverage is unnecessary because every affected handler shares the same
+/// `check_ip_rate_limit` call.
+mod auth_rate_limit {
+    use super::*;
+    use serde_json::json;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_auth_endpoints_are_ip_rate_limited(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        // Bucket: 30 req/min (burst 30, refill 1 token / 2 s). Fire 35 from
+        // a single forwarded IP **concurrently** so all of them hit the
+        // limiter inside a window much smaller than the refill interval —
+        // sequential dispatch under a contended runtime (full API suite
+        // running ~num-cpus tests in parallel) can stretch past 10 s, during
+        // which 5+ tokens refill and the burst is never exhausted.
+        // `check_ip_rate_limit` is an atomic CAS, so concurrent dispatch is
+        // safe and deterministic.
+        let url = format!("{}users/me", app.api_address);
+        let body = json!({
+            "email": "nobody@example.com",
+            "password": "wrong-password",
+        });
+
+        let requests = (0..35).map(|_| {
+            client
+                .post(&url)
+                .header("X-Forwarded-For", "203.0.113.42")
+                .json(&body)
+                .send()
+        });
+        let statuses: Vec<reqwest::StatusCode> = futures::future::join_all(requests)
+            .await
+            .into_iter()
+            .map(|r| r.expect("Failed to execute login request").status())
+            .collect();
+
+        assert!(
+            statuses
+                .iter()
+                .contains(&reqwest::StatusCode::TOO_MANY_REQUESTS),
+            "Expected POST /users/me to return 429 once the per-IP budget \
+             was exhausted; observed statuses were {:?}",
+            statuses
+        );
+
+        // A fresh forwarded IP must still be served — proving the limiter
+        // is keyed per-IP and is not a global throttle. We assert only that
+        // the response is NOT 429 (the actual status is 401 Unauthorized for
+        // unknown credentials).
+        let other_ip_status = client
+            .post(&url)
+            .header("X-Forwarded-For", "198.51.100.7")
+            .json(&body)
+            .send()
+            .await
+            .expect("Failed to execute login request from second IP")
+            .status();
+
+        assert_ne!(
+            other_ip_status,
+            reqwest::StatusCode::TOO_MANY_REQUESTS,
+            "Expected a different X-Forwarded-For to bypass the exhausted \
+             bucket of 203.0.113.42, but got 429"
+        );
+    }
+}
