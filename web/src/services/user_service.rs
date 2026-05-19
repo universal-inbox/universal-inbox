@@ -6,6 +6,7 @@ use futures_util::StreamExt;
 use log::error;
 use reqwest::Method;
 use secrecy::SecretBox;
+use serde::{Deserialize, Serialize};
 use url::Url;
 use webauthn_rs_proto::*;
 
@@ -45,6 +46,28 @@ pub enum UserCommand {
 
 pub static CONNECTED_USER: GlobalSignal<Option<User>> = Signal::global(|| None);
 pub static AUTH_METHODS: GlobalSignal<Option<Vec<UserAuthMethod>>> = Signal::global(|| None);
+
+/// Per-ceremony nonce hardening for passkey.
+/// The API returns a fresh server-generated
+/// nonce alongside the WebAuthn challenge on every passkey
+/// start endpoint; we must echo it back on the matching finish call.
+/// `#[serde(flatten)]` keeps the wire shape identical to the underlying
+/// challenge type plus one `nonce` string field.
+#[derive(Deserialize)]
+struct NoncedChallenge<T> {
+    nonce: String,
+    #[serde(flatten)]
+    challenge: T,
+}
+
+/// Mirror wrapper for the finish request body: serializes as the
+/// credential fields plus a top-level `nonce`.
+#[derive(Serialize)]
+struct NoncedFinish<'a, T: Serialize> {
+    nonce: &'a str,
+    #[serde(flatten)]
+    credential: &'a T,
+}
 
 pub async fn user_service(
     mut rx: UnboundedReceiver<UserCommand>,
@@ -348,7 +371,7 @@ async fn start_passkey_registration(
     connected_user: Signal<Option<User>>,
     ui_model: Signal<UniversalInboxUIModel>,
 ) {
-    let result: Result<CreationChallengeResponse> = call_api(
+    let result: Result<NoncedChallenge<CreationChallengeResponse>> = call_api(
         Method::POST,
         api_base_url,
         "users/passkeys/registration/start",
@@ -357,8 +380,8 @@ async fn start_passkey_registration(
     )
     .await;
 
-    let c_options: web_sys::CredentialCreationOptions = match result {
-        Ok(ccr) => ccr.into(),
+    let (nonce, c_options): (String, web_sys::CredentialCreationOptions) = match result {
+        Ok(NoncedChallenge { nonce, challenge }) => (nonce, challenge.into()),
         Err(err) => {
             error!("Failed to start Passkey registration: {err}");
             return;
@@ -372,20 +395,25 @@ async fn start_passkey_registration(
             return;
         }
     };
-    finish_passkey_registration(rpkc, api_base_url, connected_user, ui_model).await;
+    finish_passkey_registration(rpkc, nonce, api_base_url, connected_user, ui_model).await;
 }
 
 async fn finish_passkey_registration(
     register_credentials: RegisterPublicKeyCredential,
+    nonce: String,
     api_base_url: &Url,
     mut connected_user: Signal<Option<User>>,
     mut ui_model: Signal<UniversalInboxUIModel>,
 ) {
+    let body = NoncedFinish {
+        nonce: nonce.as_str(),
+        credential: &register_credentials,
+    };
     let result: Result<User> = call_api(
         Method::POST,
         api_base_url,
         "users/passkeys/registration/finish",
-        Some(register_credentials),
+        Some(body),
         Some(ui_model),
     )
     .await;
@@ -406,7 +434,7 @@ async fn start_passkey_authentication(
     connected_user: Signal<Option<User>>,
     ui_model: Signal<UniversalInboxUIModel>,
 ) {
-    let result: Result<RequestChallengeResponse> = call_api(
+    let result: Result<NoncedChallenge<RequestChallengeResponse>> = call_api(
         Method::POST,
         api_base_url,
         "users/passkeys/authentication/start",
@@ -415,8 +443,8 @@ async fn start_passkey_authentication(
     )
     .await;
 
-    let c_options: web_sys::CredentialRequestOptions = match result {
-        Ok(rcr) => rcr.into(),
+    let (nonce, c_options): (String, web_sys::CredentialRequestOptions) = match result {
+        Ok(NoncedChallenge { nonce, challenge }) => (nonce, challenge.into()),
         Err(err) => {
             error!("Failed to start Passkey authentication: {err}");
             return;
@@ -430,20 +458,25 @@ async fn start_passkey_authentication(
             return;
         }
     };
-    finish_passkey_authentication(pkc, api_base_url, connected_user, ui_model).await;
+    finish_passkey_authentication(pkc, nonce, api_base_url, connected_user, ui_model).await;
 }
 
 async fn finish_passkey_authentication(
     credentials: PublicKeyCredential,
+    nonce: String,
     api_base_url: &Url,
     mut connected_user: Signal<Option<User>>,
     mut ui_model: Signal<UniversalInboxUIModel>,
 ) {
+    let body = NoncedFinish {
+        nonce: nonce.as_str(),
+        credential: &credentials,
+    };
     let result: Result<User> = call_api(
         Method::POST,
         api_base_url,
         "users/passkeys/authentication/finish",
-        Some(credentials),
+        Some(body),
         Some(ui_model),
     )
     .await;
@@ -488,7 +521,7 @@ async fn start_add_passkey_auth_method(
     auth_methods: Signal<Option<Vec<UserAuthMethod>>>,
     ui_model: Signal<UniversalInboxUIModel>,
 ) {
-    let result: Result<CreationChallengeResponse> = call_api(
+    let result: Result<NoncedChallenge<CreationChallengeResponse>> = call_api(
         Method::POST,
         api_base_url,
         "users/me/auth-methods/passkey/registration/start",
@@ -497,8 +530,8 @@ async fn start_add_passkey_auth_method(
     )
     .await;
 
-    let c_options: web_sys::CredentialCreationOptions = match result {
-        Ok(ccr) => ccr.into(),
+    let (nonce, c_options): (String, web_sys::CredentialCreationOptions) = match result {
+        Ok(NoncedChallenge { nonce, challenge }) => (nonce, challenge.into()),
         Err(err) => {
             error!("Failed to start passkey registration: {err}");
             return;
@@ -512,20 +545,25 @@ async fn start_add_passkey_auth_method(
             return;
         }
     };
-    finish_add_passkey_auth_method(rpkc, api_base_url, auth_methods, ui_model).await;
+    finish_add_passkey_auth_method(rpkc, nonce, api_base_url, auth_methods, ui_model).await;
 }
 
 async fn finish_add_passkey_auth_method(
     register_credentials: RegisterPublicKeyCredential,
+    nonce: String,
     api_base_url: &Url,
     auth_methods: Signal<Option<Vec<UserAuthMethod>>>,
     mut ui_model: Signal<UniversalInboxUIModel>,
 ) {
+    let body = NoncedFinish {
+        nonce: nonce.as_str(),
+        credential: &register_credentials,
+    };
     let result: Result<UserAuthMethod> = call_api(
         Method::POST,
         api_base_url,
         "users/me/auth-methods/passkey/registration/finish",
-        Some(register_credentials),
+        Some(body),
         Some(ui_model),
     )
     .await;
