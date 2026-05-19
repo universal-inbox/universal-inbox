@@ -1002,7 +1002,7 @@ mod patch_user {
     ) {
         let app = tested_app_with_domain_blacklist.await;
 
-        let (client, _user) = register_user(
+        let (client, user) = register_user(
             &app,
             "john@allowed.com".parse().unwrap(),
             "Very-harD-pasSword-5",
@@ -1021,6 +1021,24 @@ mod patch_user {
         assert_eq!(
             body.get("message").unwrap(),
             "Forbidden access: Registration is not allowed from this domain"
+        );
+
+        // Regression guard: a rejected email change
+        // must NOT mutate any user state. The blacklist check happens before
+        // the UPDATE, so the original email, validation-sent-at timestamp, and
+        // email_validated_at field must all match the post-registration values.
+        let user_after = get_current_user(&client, &app).await;
+        assert_eq!(
+            user_after.email, user.email,
+            "Blacklisted patch must not change the stored email"
+        );
+        assert_eq!(
+            user_after.email_validated_at, user.email_validated_at,
+            "Blacklisted patch must not touch email_validated_at"
+        );
+        assert_eq!(
+            user_after.email_validation_sent_at, user.email_validation_sent_at,
+            "Blacklisted patch must not re-send verification email"
         );
     }
 }
@@ -1349,7 +1367,6 @@ mod passkey_finish_non_leaking {
     use pretty_assertions::assert_eq;
     use regex::Regex;
     use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
-    use webauthn_rs::prelude::CreationChallengeResponse;
 
     use crate::helpers::user::{
         finish_passkey_registration_response_unauthenticated, split_creation_challenge,
