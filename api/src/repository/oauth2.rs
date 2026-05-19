@@ -68,11 +68,41 @@ pub trait OAuth2Repository {
         token_hash: &str,
     ) -> Result<Option<OAuth2RefreshToken>, UniversalInboxError>;
 
+    /// Look up a refresh token by hash, including revoked ones.
+    ///
+    /// Used by reuse-detection: when an atomic rotation fails to claim a token
+    /// we need to know whether the row exists at all (and, if it does, what
+    /// `(client_id, user_id)` family it belongs to so we can revoke the whole
+    /// family per RFC 6749 §10.4 / RFC 6819 §5.2.2.3).
+    async fn get_refresh_token_by_hash_including_revoked(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        token_hash: &str,
+    ) -> Result<Option<OAuth2RefreshToken>, UniversalInboxError>;
+
     async fn revoke_refresh_token(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         token_hash: &str,
     ) -> Result<(), UniversalInboxError>;
+
+    /// Atomically claim and revoke a refresh token in a single SQL statement.
+    ///
+    /// Returns `Some(row)` only if exactly one row matched
+    /// `token_hash = $1 AND client_id = $2 AND revoked_at IS NULL AND not
+    /// expired` — i.e. this caller won the race against any other concurrent
+    /// rotation attempt for the same token. Returns `None` if the token was
+    /// already revoked, never existed, expired, or belongs to a different
+    /// client. The caller MUST treat `None` as a refresh-token-reuse signal
+    /// (per RFC 6749 §10.4 / RFC 6819 §5.2.2.3) and revoke the entire token
+    /// family for `(client_id, user_id)` when the row exists but was already
+    /// consumed.
+    async fn revoke_refresh_token_if_active(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        token_hash: &str,
+        client_id: &str,
+    ) -> Result<Option<OAuth2RefreshToken>, UniversalInboxError>;
 
     async fn list_authorized_clients(
         &self,
@@ -352,6 +382,94 @@ impl OAuth2Repository for Repository {
             .await
             .map_err(|err| {
                 let message = format!("Failed to fetch OAuth2 refresh token from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        Ok(row.map(|r| r.into()))
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, err)]
+    async fn get_refresh_token_by_hash_including_revoked(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        token_hash: &str,
+    ) -> Result<Option<OAuth2RefreshToken>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                SELECT
+                  id, token_hash, client_id, user_id, scope,
+                  resource, expires_at, created_at, revoked_at
+                FROM oauth2_refresh_token
+                WHERE token_hash =
+            "#,
+        );
+        query_builder.push_bind(token_hash);
+
+        let row = query_builder
+            .build_query_as::<OAuth2RefreshTokenRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to fetch OAuth2 refresh token (including revoked) from storage: {err}"
+                );
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        Ok(row.map(|r| r.into()))
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id), err)]
+    async fn revoke_refresh_token_if_active(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        token_hash: &str,
+        client_id: &str,
+    ) -> Result<Option<OAuth2RefreshToken>, UniversalInboxError> {
+        // Single atomic statement: only the caller whose UPDATE actually flips
+        // `revoked_at` from NULL gets the row back. Concurrent rotations for
+        // the same token will see RETURNING produce zero rows (Postgres' row
+        // lock on the matching tuple serializes the writers — losers re-read
+        // a row that no longer satisfies `revoked_at IS NULL`).
+        //
+        // The expiry check is folded into the WHERE clause so we never
+        // "claim" (and therefore never mint new tokens from) an expired row;
+        // an expired row is indistinguishable from an already-revoked or
+        // never-existed row at this layer — the service treats all three as
+        // `invalid_grant`.
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                UPDATE oauth2_refresh_token
+                SET revoked_at = now()
+                WHERE token_hash =
+            "#,
+        );
+        query_builder.push_bind(token_hash);
+        query_builder.push(" AND client_id = ");
+        query_builder.push_bind(client_id);
+        query_builder.push(
+            r#"
+                AND revoked_at IS NULL
+                AND (expires_at IS NULL OR expires_at > now())
+                RETURNING
+                  id, token_hash, client_id, user_id, scope,
+                  resource, expires_at, created_at, revoked_at
+            "#,
+        );
+
+        let row = query_builder
+            .build_query_as::<OAuth2RefreshTokenRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message =
+                    format!("Failed to atomically revoke OAuth2 refresh token in storage: {err}");
                 UniversalInboxError::DatabaseError {
                     source: err,
                     message,
