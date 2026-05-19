@@ -60,6 +60,8 @@ pub enum UniversalInboxError {
         source: Option<sqlx::Error>,
         id: Uuid,
     },
+    #[error("{0}")]
+    Conflict(String),
     #[error("Unsupported action: {0}")]
     UnsupportedAction(String),
     #[error("Item not found: {0}")]

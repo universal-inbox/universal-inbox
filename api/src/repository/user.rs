@@ -546,10 +546,33 @@ impl UserRepository for Repository {
         .execute(&mut **executor)
         .await
         .map_err(|err| {
-            let message = format!("Failed to create user auth for user {user_id}: {err}");
-            UniversalInboxError::DatabaseError {
-                source: err,
-                message,
+            // Security: a unique violation on
+            // `user_auth_username_key` means the chosen passkey username is
+            // already registered. The start endpoint is deliberately non-
+            // enumerable (see UserService::start_passkey_registration), so
+            // the duplicate first surfaces here. Map it to a generic
+            // Conflict so the response body never contains the Postgres
+            // constraint name, the raw sqlx error text, or the ephemeral
+            // UserId UUID. The constraint name below is the implicit name
+            // Postgres assigned to `username TEXT UNIQUE` in migration
+            // 20250128223547_add_authentication_with_a_passkey.up.sql; if
+            // that migration is ever rewritten with an explicit
+            // `CONSTRAINT name`, update this string in lockstep.
+            let unique_violation_constraint = err
+                .as_database_error()
+                .filter(|db_err| db_err.code().as_deref() == Some("23505"))
+                .and_then(|db_err| db_err.constraint().map(str::to_owned));
+
+            if unique_violation_constraint.as_deref() == Some("user_auth_username_key") {
+                UniversalInboxError::Conflict(
+                    "This username is already taken. Please choose a different one.".to_string(),
+                )
+            } else {
+                let message = format!("Failed to create user auth for user {user_id}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
             }
         })?;
 
