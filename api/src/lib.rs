@@ -130,7 +130,7 @@ pub async fn run_server(
 
     // Slack webhook signing secret: required when the Slack integration is enabled.
     // Without it, `POST /api/hooks/slack/events` would accept forged payloads and queue
-    // jobs that later run with victims' OAuth credentials (see universal-inbox-bkj.34).
+    // jobs that later run with victims' OAuth credentials.
     if let Some(slack_settings) = settings.integrations.get("slack")
         && slack_settings.is_enabled
         && slack_settings
@@ -262,24 +262,41 @@ pub async fn run_server(
 
         let api_path_for_cors = api_path.clone();
         let mcp_extra_origins_for_cors = mcp_extra_allowed_origins.clone();
+        // Single CORS layer with the wildcard-origin + credentials combo
+        // removed:
+        //
+        // - `front_base_url` is the only origin granted credentialed CORS for
+        //   cookie-authenticated routes. In production the front-end is
+        //   same-origin and CORS does not apply; in development the dev
+        //   server proxies API requests, so cross-origin XHR with cookies is
+        //   not part of the normal flow.
+        // - Configured `mcp_extra_allowed_origins` (e.g. the MCP inspector)
+        //   are accepted only on the MCP, OAuth2 and `.well-known/oauth-`
+        //   paths via the path-restricted `allowed_origin_fn` below. The
+        //   previous implementation evaluated this allowlist *before* the
+        //   path filter, granting configured origins credentialed CORS to
+        //   every API endpoint — a configuration footgun.
+        // - `supports_credentials()` is intentionally NOT called: MCP and
+        //   OAuth2 endpoints are Bearer-only by design, and the path filter
+        //   below only ever reflects bearer-auth origins. Browsers will not
+        //   carry cookies on these cross-origin requests, which is exactly
+        //   what we want.
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
             .allowed_origin_fn(move |origin, req_head| {
-                // Allow configured MCP extra origins (e.g. MCP inspector)
+                // Configured MCP/OAuth2 extra origins (e.g. the MCP inspector)
+                // are honored ONLY on MCP, OAuth2 and the OAuth2 well-known
+                // discovery paths. They no longer leak credentialed CORS to
+                // the rest of the API surface.
                 let origin_str = origin.to_str().unwrap_or("");
-                if mcp_extra_origins_for_cors.iter().any(|o| o == origin_str) {
-                    return true;
+                if !mcp_extra_origins_for_cors.iter().any(|o| o == origin_str) {
+                    return false;
                 }
-                // Allow any origin for MCP and OAuth2 endpoints:
-                // these use Bearer token auth (no CSRF risk via cookies).
                 let path = req_head.uri.path();
-                let mcp_prefix = format!("{}/mcp", api_path_for_cors.trim_end_matches('/'));
-                path.starts_with(&mcp_prefix)
+                let api_root = api_path_for_cors.trim_end_matches('/');
+                path.starts_with(&format!("{api_root}/mcp"))
+                    || path.starts_with(&format!("{api_root}/oauth2"))
                     || path.starts_with("/.well-known/oauth-")
-                    || path.starts_with(&format!(
-                        "{}/oauth2",
-                        api_path_for_cors.trim_end_matches('/')
-                    ))
             })
             .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE", "PUT"])
             .allowed_headers(vec![
@@ -294,7 +311,6 @@ pub async fn run_server(
                 http::header::HeaderName::from_static("x-app-version"),
                 http::header::HeaderName::from_static("mcp-session-id"),
             ])
-            .supports_credentials()
             .max_age(3600);
 
         let csp_header_value = csp_header_value.clone();
@@ -353,6 +369,15 @@ pub async fn run_server(
                             header::HeaderValue::from_str(&csp_header_value).unwrap(),
                         );
                     }
+                    // Clickjacking defense:
+                    // `X-Frame-Options: DENY` is injected on every response —
+                    // not just `text/html` ones — so that any response a
+                    // misconfigured proxy or CDN might serve as HTML is still
+                    // un-embeddable in third-party iframes.
+                    res.headers_mut().insert(
+                        header::HeaderName::from_static("x-frame-options"),
+                        header::HeaderValue::from_static("DENY"),
+                    );
                     if let Some(ref version) = api_version {
                         res.headers_mut().insert(
                             header::HeaderName::from_static("x-app-version"),
@@ -863,6 +888,12 @@ fn build_csp_header(settings: &Settings) -> String {
         .push(Directive::FrameSrc(
             Sources::new_with(Source::Self_).push(Source::Host("https://headway-widget.net")),
         ))
+        // Clickjacking defense: only the application
+        // itself may embed its own pages. Modern browsers honor
+        // `frame-ancestors`; the legacy `X-Frame-Options: DENY` header
+        // (injected on every response by the middleware in `run_server`)
+        // covers older user agents.
+        .push(Directive::FrameAncestors(Sources::new_with(Source::Self_)))
         .to_string()
 }
 
