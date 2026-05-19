@@ -4,7 +4,7 @@ use openidconnect::AccessToken;
 use rstest::*;
 
 use universal_inbox::{
-    auth::{CloseSessionResponse, SessionAuthValidationParameters},
+    auth::{AuthorizeSessionResponse, CloseSessionResponse, SessionAuthValidationParameters},
     user::{User, UserAuthKind},
 };
 
@@ -169,6 +169,83 @@ mod close_session {
                 ])
                 .unwrap()
             )
+        );
+    }
+}
+
+mod authorize_session {
+    use super::*;
+
+    /// Regression test for universal-inbox-bkj.15:
+    /// `authorize_session` must clear the cached OIDC authorization URL so
+    /// each login flow gets a fresh CSRF state. Otherwise, a user who started
+    /// a link-OIDC flow then triggered `authorize_session` in another tab
+    /// would have the OIDC callback reuse the cached CSRF state and silently
+    /// fall through to the normal authentication branch — creating a new
+    /// user instead of linking.
+    #[rstest]
+    #[tokio::test]
+    async fn test_authorize_session_clears_cached_authorization_url(
+        #[future] tested_app: TestedApp,
+    ) {
+        let app = tested_app.await;
+
+        mock_oidc_openid_configuration(&app).await;
+        mock_oidc_keys(&app).await;
+
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        // First call: builds and caches a fresh OIDC authorization URL.
+        let response1 = client
+            .get(format!("{}auth/session/authorize", app.api_address))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response1.status(), 200);
+        let body1: AuthorizeSessionResponse = response1.json().await.unwrap();
+
+        // Second call with the same session: must NOT return the cached URL.
+        // Before the fix, `authorize_session` left the cached URL in place
+        // and `build_oidc_authorization_response` returned it verbatim
+        // (same CSRF state).
+        let response2 = client
+            .get(format!("{}auth/session/authorize", app.api_address))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response2.status(), 200);
+        let body2: AuthorizeSessionResponse = response2.json().await.unwrap();
+
+        // The two URLs must differ: each call regenerates CsrfToken/Nonce.
+        assert_ne!(
+            body1.authorization_url, body2.authorization_url,
+            "authorize_session returned the cached authorization URL; the \
+             cached entry was not cleared and a stale CSRF state would be \
+             reused by the OIDC callback (universal-inbox-bkj.15)"
+        );
+
+        // Sanity check: the CSRF `state` query param must differ between the
+        // two URLs (this is the value that authenticated_session compares
+        // against the IdP-provided state).
+        let state1 = body1
+            .authorization_url
+            .query_pairs()
+            .find(|(k, _)| k == "state")
+            .map(|(_, v)| v.into_owned());
+        let state2 = body2
+            .authorization_url
+            .query_pairs()
+            .find(|(k, _)| k == "state")
+            .map(|(_, v)| v.into_owned());
+        assert!(state1.is_some(), "first authorization URL has no `state`");
+        assert!(state2.is_some(), "second authorization URL has no `state`");
+        assert_ne!(
+            state1, state2,
+            "authorize_session returned an authorization URL with the same \
+             CSRF state across two calls — the cached URL was not cleared"
         );
     }
 }
