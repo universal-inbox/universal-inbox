@@ -200,6 +200,12 @@ pub async fn authorize_session(
     // Clear any stale linking user ID from a previously abandoned link flow,
     // so a normal login cannot be accidentally treated as a linking flow.
     let _ = session.remove(LINKING_USER_ID_SESSION_KEY);
+    // Also clear any cached OIDC authorization URL so a fresh one (with a fresh
+    // CSRF state and nonce) is generated for this login flow. Reusing a URL
+    // cached by a prior link-OIDC flow would let the OIDC callback pass the
+    // CSRF check and silently fall through to the normal authentication
+    // branch — creating a new user instead of linking.
+    let _ = session.remove(OIDC_AUTHORIZATION_URL_SESSION_KEY);
     build_oidc_authorization_response(&user_service, &session, &settings).await
 }
 
