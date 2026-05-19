@@ -1774,7 +1774,7 @@ mod oauth2 {
     }
 
     /// `check_rate_limit` previously bucketed by `req.peer_addr()`, which is
-    /// always the reverse-proxy IP behind production Caddy — every external
+    /// always the reverse-proxy IP behind production reverse proxy — every external
     /// client collapsed into a single bucket. After the fix the limiter keys
     /// on `ConnectionInfo::realip_remote_addr()`, so two different forwarded
     /// IPs must drain independent buckets. We exhaust the 30 req/min budget

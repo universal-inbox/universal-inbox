@@ -4,6 +4,21 @@
 	https_port 443
 	local_certs
 	grace_period 2s
+
+	# Caddy 2.7+ ignores incoming `X-Forwarded-*` headers unless the peer is
+	# explicitly trusted. Without this block, a TLS-terminator (e.g. nginx)
+	# that sets `X-Forwarded-For: <client-ip>` upstream of Caddy has its
+	# header silently stripped, and Caddy substitutes its own peer's IP —
+	# usually `::1` because loopback talks IPv6 on most hosts. That breaks
+	# per-IP rate limiting at the API (every caller buckets under `::1`).
+	#
+	# `private_ranges` covers loopback + RFC1918 + ULA + link-local, which
+	# is the set of plausible peers for a same-host TLS terminator. Adjust
+	# if a public-IP load balancer ever fronts this Caddy.
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers X-Forwarded-For
+	}
 }
 
 http://dev.universal-inbox.com {

@@ -217,6 +217,11 @@ pub async fn run_server(
     // closure so all worker threads share the same governor state and a
     // client can't bypass the limit by hopping between workers.
     let ping_rate_limiter = routes::health_check::build_rate_limiter();
+    // Per-IP rate limiter for authentication-state-changing endpoints
+    // (login, register, email/password-reset, passkey ceremonies).
+    // Same Arc-sharing reasoning as `ping_rate_limiter`
+    // so workers can't be hopped to reset the budget.
+    let auth_rate_limiter = routes::user::build_auth_rate_limiter();
 
     // OAuth2 access tokens carry `aud` = MCP resource URL. Only the MCP scope
     // accepts them; every other API endpoint runs behind this guard to ensure
@@ -246,7 +251,7 @@ pub async fn run_server(
             .service(routes::oauth2::scope(oauth2_rate_limiter.clone()))
             .service(routes::notification::scope())
             .service(routes::task::scope())
-            .service(routes::user::scope())
+            .service(routes::user::scope(auth_rate_limiter.clone()))
             .service(routes::webhook::scope())
             .service(routes::third_party::scope())
             .service(routes::slack_bridge::scope())
