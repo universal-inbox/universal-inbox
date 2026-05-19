@@ -3,5 +3,6 @@ pub mod cache;
 pub mod crypto;
 pub mod graphql;
 pub mod jwt;
+pub mod origin;
 pub mod passkey;
 pub mod rate_limit;
