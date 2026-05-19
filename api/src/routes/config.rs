@@ -99,7 +99,11 @@ pub async fn front_config(
     Ok(HttpResponse::Ok()
         .content_type("application/json")
         .insert_header(CacheControl(vec![
-            CacheDirective::Public,
+            // Keep this response out of shared caches (CDN/proxies): the
+            // payload may contain per-deployment values (OIDC issuer URLs,
+            // client_ids, chat_support metadata) that must not surface across
+            // tenants if a shared cache is misconfigured.
+            CacheDirective::Private,
             // Cache only for a few second so that the preload of this config is effective
             CacheDirective::MaxAge(5u32),
         ]))
