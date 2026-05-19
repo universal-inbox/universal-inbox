@@ -212,6 +212,11 @@ pub async fn run_server(
     );
     let oauth2_rate_limiter = routes::oauth2::build_rate_limiter();
     let mcp_rate_limiter = mcp::build_rate_limiter();
+    // Per-IP rate limiter for the unauthenticated `/ping` endpoint
+    // Built once outside the `HttpServer::new`
+    // closure so all worker threads share the same governor state and a
+    // client can't bypass the limit by hopping between workers.
+    let ping_rate_limiter = routes::health_check::build_rate_limiter();
 
     // OAuth2 access tokens carry `aud` = MCP resource URL. Only the MCP scope
     // accepts them; every other API endpoint runs behind this guard to ensure
@@ -414,7 +419,8 @@ pub async fn run_server(
             .app_data(settings_web_data.clone())
             .app_data(storage_data.clone())
             .app_data(cache_data.clone())
-            .app_data(web::Data::new(integration_connection_service.clone()));
+            .app_data(web::Data::new(integration_connection_service.clone()))
+            .app_data(web::Data::new(ping_rate_limiter.clone()));
 
         if let Some(path) = &static_path {
             info!(
