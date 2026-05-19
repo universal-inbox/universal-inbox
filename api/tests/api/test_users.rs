@@ -1,6 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use email_address::EmailAddress;
+use itertools::Itertools;
 use rstest::*;
 use uuid::Uuid;
 
@@ -1107,5 +1108,373 @@ mod auth_rate_limit {
             "Expected a different X-Forwarded-For to bypass the exhausted \
              bucket of 203.0.113.42, but got 429"
         );
+    }
+}
+
+/// The unauthenticated passkey start endpoints had two enumeration oracles:
+///
+///   * `POST /users/passkeys/registration/start` returned
+///     `AlreadyExists { id: user_id.0 }` when the supplied username was
+///     already registered, leaking the existing account's `UserId` (UUID)
+///     to any unauthenticated caller in the `409 Conflict` body.
+///
+///   * `POST /users/passkeys/authentication/start` returned a `400 Bad
+///     Request` with `ItemNotFound: No user found for username <X>` for
+///     unknown usernames, while known usernames received a `200 OK` with
+///     a `RequestChallengeResponse`, allowing username/email enumeration
+///     by status-code probing.
+///
+/// The fix synthesizes shape-identical responses regardless of whether
+/// the username exists: registration always returns a fresh ephemeral
+/// `UserId`-bound challenge, and authentication mints a discoverable-
+/// style challenge with an empty `allow_credentials` list for unknown
+/// usernames. The HTTP status and body envelope are identical, and no
+/// `user_id` or username text reaches the client on the "exists" or
+/// "missing" paths.
+mod passkey_start_non_enumerable {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
+    use webauthn_rs::prelude::{CreationChallengeResponse, RequestChallengeResponse};
+
+    use crate::helpers::user::{
+        finish_passkey_registration_response_unauthenticated,
+        start_passkey_authentication_response, start_passkey_registration_response,
+    };
+
+    /// Drive the full unauthenticated passkey registration ceremony so a
+    /// known passkey user exists in the database. Returns the username.
+    async fn register_passkey_user(app: &TestedApp, username: &str) {
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let start_response = start_passkey_registration_response(&client, app, username).await;
+        assert_eq!(start_response.status(), reqwest::StatusCode::OK);
+        let creation_challenge: CreationChallengeResponse = start_response.json().await.unwrap();
+
+        let origin = app.front_base_url.clone();
+        let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+        let register_credential = authenticator
+            .do_registration(origin, creation_challenge)
+            .expect("Failed to complete passkey registration with software authenticator");
+
+        let finish_response = finish_passkey_registration_response_unauthenticated(
+            &client,
+            app,
+            &register_credential,
+        )
+        .await;
+        assert_eq!(finish_response.status(), reqwest::StatusCode::OK);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_start_passkey_registration_is_non_enumerable(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        let registered_username = "alice_existing_passkey";
+        register_passkey_user(&app, registered_username).await;
+
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        // Probe with a fresh username — the baseline success path.
+        let fresh_response =
+            start_passkey_registration_response(&client, &app, "bob_fresh_passkey").await;
+        let fresh_status = fresh_response.status();
+        assert_eq!(
+            fresh_status,
+            reqwest::StatusCode::OK,
+            "fresh username must succeed"
+        );
+        let fresh_body = fresh_response.text().await.unwrap();
+        let fresh_challenge: CreationChallengeResponse = serde_json::from_str(&fresh_body)
+            .expect("fresh response must be a CreationChallengeResponse");
+
+        // Probe with the same username we just registered. The fix MUST
+        // return a CreationChallengeResponse with HTTP 200, not a 409
+        // Conflict with a leaked UserId UUID.
+        let exists_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+        let exists_response =
+            start_passkey_registration_response(&exists_client, &app, registered_username).await;
+        let exists_status = exists_response.status();
+
+        assert_eq!(
+            exists_status, fresh_status,
+            "existing-username response status must match fresh-username status",
+        );
+        let exists_body = exists_response.text().await.unwrap();
+        let exists_challenge: CreationChallengeResponse = serde_json::from_str(&exists_body)
+            .expect(
+                "existing-username response must also be a CreationChallengeResponse, not an \
+                 AlreadyExists error envelope",
+            );
+
+        // The two responses must be structurally identical: same RP id,
+        // same user.name, same user.displayName. Only the challenge bytes
+        // and the synthetic user.id are allowed to differ (the user.id
+        // for the registered case MUST be a fresh ephemeral UUID and
+        // never the real account's UserId).
+        assert_eq!(
+            fresh_challenge.public_key.rp.id, exists_challenge.public_key.rp.id,
+            "RP id must be identical"
+        );
+        assert_eq!(
+            fresh_challenge.public_key.user.name, "bob_fresh_passkey",
+            "fresh response user.name should echo the supplied username"
+        );
+        assert_eq!(
+            exists_challenge.public_key.user.name, registered_username,
+            "existing-username response should also echo the supplied username (parity)"
+        );
+
+        // No UUID may appear in the existing-username body except the
+        // synthetic ephemeral user.id inside the CreationChallengeResponse.
+        // In particular, no `AlreadyExists` message form ("The entity X
+        // already exists") may be present.
+        assert!(
+            !exists_body.contains("already exists"),
+            "existing-username response leaks an AlreadyExists error envelope: {exists_body}",
+        );
+        assert!(
+            !exists_body.contains("AlreadyExists"),
+            "existing-username response leaks an AlreadyExists variant name: {exists_body}",
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_start_passkey_authentication_is_non_enumerable(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        let registered_username = "carol_registered_passkey";
+        register_passkey_user(&app, registered_username).await;
+
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        // Known username — baseline success path.
+        let known_response =
+            start_passkey_authentication_response(&client, &app, registered_username).await;
+        let known_status = known_response.status();
+        assert_eq!(
+            known_status,
+            reqwest::StatusCode::OK,
+            "known username must succeed with 200 OK"
+        );
+        let known_body = known_response.text().await.unwrap();
+        let known_challenge: RequestChallengeResponse = serde_json::from_str(&known_body)
+            .expect("known-username response must be a RequestChallengeResponse");
+
+        // Unknown username — pre-fix this returned 400 ItemNotFound with
+        // the username echoed. The fix MUST produce a 200 OK
+        // RequestChallengeResponse instead.
+        let unknown_username = "ghost_not_registered_passkey";
+        let unknown_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+        let unknown_response =
+            start_passkey_authentication_response(&unknown_client, &app, unknown_username).await;
+        let unknown_status = unknown_response.status();
+
+        assert_eq!(
+            unknown_status, known_status,
+            "unknown-username status must match known-username status",
+        );
+        let unknown_body = unknown_response.text().await.unwrap();
+        let unknown_challenge: RequestChallengeResponse = serde_json::from_str(&unknown_body)
+            .expect(
+                "unknown-username response must be a RequestChallengeResponse, not an \
+                 ItemNotFound error envelope",
+            );
+
+        // The unknown-username body MUST NOT echo the supplied username,
+        // and MUST NOT carry an ItemNotFound message form.
+        assert!(
+            !unknown_body.contains(unknown_username),
+            "unknown-username response leaks the supplied username: {unknown_body}",
+        );
+        assert!(
+            !unknown_body.contains("Item not found"),
+            "unknown-username response leaks an ItemNotFound envelope: {unknown_body}",
+        );
+        assert!(
+            !unknown_body.contains("ItemNotFound"),
+            "unknown-username response leaks an ItemNotFound variant name: {unknown_body}",
+        );
+
+        // RP id parity — the field that matters most for shape parity.
+        assert_eq!(
+            known_challenge.public_key.rp_id, unknown_challenge.public_key.rp_id,
+            "RP id must be identical across known/unknown branches",
+        );
+    }
+}
+
+/// `POST /users/passkeys/registration/finish` previously surfaced the
+/// `user_auth_username_key` unique-constraint violation as a raw
+/// `DatabaseError`. The HTTP body was:
+///
+/// ```json
+/// {"message":"Database error: Failed to create user auth for user <UUID>: \
+///   error returned from database: duplicate key value violates unique \
+///   constraint \"user_auth_username_key\""}
+/// ```
+///
+/// That body leaked the Postgres constraint name (a direct username-
+/// collision signal), the raw sqlx error text, and the ephemeral
+/// `UserId` UUID minted during the start ceremony. The fix maps the
+/// `23505` on `user_auth_username_key` in `Repository::create_user_auth`
+/// to a `UniversalInboxError::Conflict` with a generic user-facing
+/// message, producing a `409 Conflict` body that carries no internal
+/// implementation details.
+mod passkey_finish_non_leaking {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use regex::Regex;
+    use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
+    use webauthn_rs::prelude::CreationChallengeResponse;
+
+    use crate::helpers::user::{
+        finish_passkey_registration_response_unauthenticated, start_passkey_registration_response,
+    };
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_finish_passkey_registration_with_taken_username_does_not_leak(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        // 1. Register a passkey user so the username is taken.
+        let registered_username = "alice_taken_username";
+        register_passkey_user(&app, registered_username).await;
+
+        // 2. Drive a second start ceremony for the same username with a
+        //    fresh client (no shared session/cookie state) and a fresh
+        //    SoftPasskey. The start endpoint is already non-enumerable
+        //    (covered by `passkey_start_non_enumerable`); it returns 200
+        //    with a CreationChallengeResponse bound to an ephemeral
+        //    UserId. We need that challenge to drive the authenticator.
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let start_response =
+            start_passkey_registration_response(&client, &app, registered_username).await;
+        assert_eq!(
+            start_response.status(),
+            reqwest::StatusCode::OK,
+            "start endpoint must remain non-enumerable for taken username"
+        );
+        let creation_challenge: CreationChallengeResponse = start_response.json().await.unwrap();
+
+        let origin = app.front_base_url.clone();
+        let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+        let register_credential = authenticator
+            .do_registration(origin, creation_challenge)
+            .expect("Failed to complete passkey registration with software authenticator");
+
+        // 3. Call finish; the unique-constraint violation must surface as
+        //    a clean 409 Conflict, not a raw DatabaseError.
+        let finish_response = finish_passkey_registration_response_unauthenticated(
+            &client,
+            &app,
+            &register_credential,
+        )
+        .await;
+        let finish_status = finish_response.status();
+        let finish_body = finish_response.text().await.unwrap();
+
+        assert_eq!(
+            finish_status,
+            reqwest::StatusCode::CONFLICT,
+            "duplicate-username finish must be 409 Conflict, body was: {finish_body}",
+        );
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&finish_body).expect("finish response body must parse as JSON");
+        let message = parsed
+            .get("message")
+            .and_then(|v| v.as_str())
+            .expect("finish response body must have a string `message` field");
+        assert_eq!(
+            message, "This username is already taken. Please choose a different one.",
+            "finish response message must match the generic user-facing copy verbatim",
+        );
+
+        // 4. The body must not leak any internal implementation details.
+        let forbidden_substrings = [
+            "user_auth_username_key",
+            "duplicate key",
+            "Database error",
+            "DatabaseError",
+            "unique constraint",
+            "AlreadyExists",
+            "sqlx",
+            registered_username,
+        ];
+        for needle in &forbidden_substrings {
+            assert!(
+                !finish_body.contains(needle),
+                "finish response leaks {needle:?}: {finish_body}",
+            );
+        }
+
+        // No UUID may appear in the response body. The ephemeral UserId
+        // minted at start time is the most sensitive value to suppress
+        // here, but a stricter check that no UUID-shaped substring appears
+        // also catches the unlikely case that some other id leaks.
+        let uuid_regex = Regex::new(
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        )
+        .unwrap();
+        assert!(
+            !uuid_regex.is_match(&finish_body),
+            "finish response leaks a UUID: {finish_body}",
+        );
+    }
+
+    /// Drive the full unauthenticated passkey registration ceremony so a
+    /// known passkey user exists in the database. Duplicated from
+    /// `passkey_start_non_enumerable` to keep the modules independent.
+    async fn register_passkey_user(app: &TestedApp, username: &str) {
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let start_response = start_passkey_registration_response(&client, app, username).await;
+        assert_eq!(start_response.status(), reqwest::StatusCode::OK);
+        let creation_challenge: CreationChallengeResponse = start_response.json().await.unwrap();
+
+        let origin = app.front_base_url.clone();
+        let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+        let register_credential = authenticator
+            .do_registration(origin, creation_challenge)
+            .expect("Failed to complete passkey registration with software authenticator");
+
+        let finish_response = finish_passkey_registration_response_unauthenticated(
+            &client,
+            app,
+            &register_credential,
+        )
+        .await;
+        assert_eq!(finish_response.status(), reqwest::StatusCode::OK);
     }
 }
