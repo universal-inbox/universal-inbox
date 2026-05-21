@@ -40,6 +40,11 @@ pub enum EmailTemplate {
         first_name: Option<String>,
         password_reset_url: Url,
     },
+    RegistrationAttemptOnExistingAccount {
+        first_name: Option<String>,
+        login_url: Url,
+        password_reset_url: Url,
+    },
 }
 
 impl EmailTemplate {
@@ -47,6 +52,9 @@ impl EmailTemplate {
         match self {
             EmailTemplate::EmailVerification { .. } => "Verify your email".to_string(),
             EmailTemplate::PasswordReset { .. } => "Reset your password".to_string(),
+            EmailTemplate::RegistrationAttemptOnExistingAccount { .. } => {
+                "Someone tried to create an account with your email".to_string()
+            }
         }
     }
 
@@ -87,6 +95,27 @@ impl EmailTemplate {
                     .action(Action {
                         text: "Reset your password",
                         link: password_reset_url.as_str(),
+                        color: Some(("#388FEF", "white")),
+                        ..Default::default()
+                    })
+                    .signature("Best")
+                    .build()
+            }
+            EmailTemplate::RegistrationAttemptOnExistingAccount {
+                first_name,
+                login_url,
+                ..
+            } => {
+                let mut builder = EmailBuilder::new();
+                if let Some(first_name) = first_name {
+                    builder = builder.greeting(Greeting::Name(first_name));
+                }
+
+                builder
+                    .intro("Someone tried to create a Universal Inbox account using your email address. If this was you, you can log in below. If you need to reset your password, use the \"Forgot password\" link on the login page. If this wasn't you, you can safely ignore this email — your account is secure.")
+                    .action(Action {
+                        text: "Log in",
+                        link: login_url.as_str(),
                         color: Some(("#388FEF", "white")),
                         ..Default::default()
                     })
