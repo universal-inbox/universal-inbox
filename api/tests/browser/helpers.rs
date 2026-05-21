@@ -319,15 +319,15 @@ pub async fn register(page: &Page, app_url: &str, email: &str) {
 
     fill_and_submit_credentials(page, email, DEFAULT_PASSWORD, "signup").await;
 
-    // Wait for redirect away from signup — the notifications page should appear
-    // after auto-login.  We must NOT wait on `input[name='email']` because that
-    // element already exists on the signup page and would match immediately.
-    let notifications_page = page.locator("#notifications-page").await;
-    expect(notifications_page)
+    // Registration no longer auto-logs-in (email-enumeration hardening): the
+    // signup page shows a generic confirmation message instead of redirecting.
+    // Callers must explicitly `login` afterwards to reach the app.
+    let confirmation = page.locator("#auth-confirmation").await;
+    expect(confirmation)
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
         .await
-        .expect("Notifications page not visible after signup (expected redirect)");
+        .expect("Confirmation message not visible after signup");
 }
 
 /// Wait until at least one notification row is visible in the DOM.

@@ -3,7 +3,7 @@ use rstest::*;
 
 use crate::helpers::{
     BrowserTestedApp, EXPECT_TIMEOUT, browser_tested_app, fill_and_submit_credentials,
-    launch_browser, navigate_and_assert, register,
+    launch_browser, login, navigate_and_assert, register,
 };
 
 /// Test that a new user can register, then login and navigate all pages.
@@ -13,24 +13,16 @@ async fn test_user_can_register(#[future] browser_tested_app: BrowserTestedApp) 
     let app = browser_tested_app.await;
     let (_context, page) = launch_browser().await;
 
-    // Register a new user
+    // Register a new user. Registration no longer auto-logs-in (email-enumeration
+    // hardening): the signup page shows a generic confirmation message instead of
+    // redirecting. The `register` helper asserts that confirmation is visible.
     let email = format!("browser-test+{}@test.com", uuid::Uuid::new_v4());
     register(&page, &app.app_url, &email).await;
 
-    // Verify redirect away from /signup (user is auto-logged-in after registration)
-    let url = page.url();
-    assert!(
-        !url.contains("/signup"),
-        "Expected to be redirected away from /signup after registration, but URL is: {url}"
-    );
-
-    // Verify the user is authenticated — the notifications page should be visible
-    let notifications_page = page.locator("#notifications-page").await;
-    expect(notifications_page)
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Notifications page not visible after registration");
+    // The user is NOT authenticated yet — they must explicitly log in with the
+    // credentials they just registered. The `login` helper navigates to /login,
+    // submits the form, and asserts the notifications page becomes visible.
+    login(&page, &app.app_url, &email).await;
 
     // Verify tasks page loads via SPA navigation
     navigate_and_assert(&page, "/synced-tasks", "#tasks-page").await;
