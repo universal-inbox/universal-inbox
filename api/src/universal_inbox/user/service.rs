@@ -1165,6 +1165,46 @@ impl UserService {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip_all, fields(email_address = %email), err)]
+    pub async fn send_registration_attempt_email(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        email: &EmailAddress,
+        dry_run: bool,
+    ) -> Result<(), UniversalInboxError> {
+        let user = self.repository.get_user_by_email(executor, email).await?;
+
+        let Some(user) = user else {
+            return Ok(());
+        };
+        if user.is_testing {
+            debug!("Skipping registration attempt email for test account {email}");
+            return Ok(());
+        }
+
+        let login_url = format!("{}login", self.application_settings.front_base_url)
+            .parse()
+            .context("Failed to build login URL")?;
+
+        let template = EmailTemplate::RegistrationAttemptOnExistingAccount {
+            first_name: user.first_name.clone(),
+            login_url,
+            password_reset_url: format!(
+                "{}password-reset",
+                self.application_settings.front_base_url
+            )
+            .parse()
+            .context("Failed to build password reset URL")?,
+        };
+        self.mailer
+            .read()
+            .await
+            .send_email(user, template, dry_run)
+            .await?;
+
+        Ok(())
+    }
+
     #[tracing::instrument(
         level = "debug",
         skip_all,

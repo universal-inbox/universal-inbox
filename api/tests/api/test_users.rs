@@ -6,6 +6,7 @@ use rstest::*;
 use uuid::Uuid;
 
 use universal_inbox::{
+    SuccessResponse,
     auth::auth_token::AuthenticationToken,
     user::{
         EmailValidationToken, Password, PasswordResetToken, User, UserAuthKind, UserId, UserPatch,
@@ -79,7 +80,10 @@ mod register_user {
 
     #[rstest]
     #[tokio::test]
-    async fn test_register_existing_user(#[future] tested_app_with_local_auth: TestedApp) {
+    async fn test_register_existing_user_does_not_leak_email(
+        settings: Settings,
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
         let app = tested_app_with_local_auth.await;
 
         let (client, _user) = register_user(
@@ -97,12 +101,75 @@ mod register_user {
         )
         .await;
 
-        assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
-        let body: HashMap<String, String> = response.json().await.unwrap();
+        assert_eq!(response.status(), http::StatusCode::OK);
+        let body: SuccessResponse = response.json().await.unwrap();
         assert_eq!(
-            body.get("message").unwrap(),
-            "Unauthorized access: A user with this email address already exists"
+            body.message,
+            "If this email is not already registered, you will receive a verification email shortly."
         );
+
+        let emails_sent = (*app.mailer_stub.read().await.emails_sent.read().await).clone();
+        let registration_attempt_email = emails_sent
+            .iter()
+            .find(|(_, template)| {
+                matches!(
+                    template,
+                    EmailTemplate::RegistrationAttemptOnExistingAccount { .. }
+                )
+            })
+            .expect("Registration attempt email should have been sent");
+        assert_eq!(
+            registration_attempt_email.1,
+            EmailTemplate::RegistrationAttemptOnExistingAccount {
+                first_name: None,
+                login_url: format!("{}login", settings.application.front_base_url)
+                    .parse()
+                    .unwrap(),
+                password_reset_url: format!(
+                    "{}password-reset",
+                    settings.application.front_base_url
+                )
+                .parse()
+                .unwrap(),
+            }
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_register_new_and_existing_user_return_same_response(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let new_user_response = register_user_response(
+            &client,
+            &app,
+            "new@user.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        assert_eq!(new_user_response.status(), http::StatusCode::OK);
+        let new_user_body: SuccessResponse = new_user_response.json().await.unwrap();
+
+        let existing_user_response = register_user_response(
+            &client,
+            &app,
+            "new@user.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        assert_eq!(existing_user_response.status(), http::StatusCode::OK);
+        let existing_user_body: SuccessResponse = existing_user_response.json().await.unwrap();
+
+        assert_eq!(new_user_body.message, existing_user_body.message);
     }
 }
 
