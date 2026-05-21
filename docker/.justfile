@@ -15,7 +15,7 @@ publish tag=tag:
 
     if [ -z "$DOCKER_BUILDX_BUILDER" ]; then
         echo "ℹ️ Using local Docker buildx builder"
-        docker buildx ls | grep -q ^universal-inbox || docker buildx create --use --driver docker-container --name universal-inbox
+        docker buildx inspect universal-inbox >/dev/null 2>&1 || docker buildx create --use --driver docker-container --name universal-inbox
         DOCKER_BUILDX_BUILDER=universal-inbox
     else
         echo "ℹ️ Using Docker buildx builder $DOCKER_BUILDX_BUILDER"
