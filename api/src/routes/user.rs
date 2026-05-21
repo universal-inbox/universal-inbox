@@ -588,11 +588,9 @@ pub async fn remove_auth_method(
 pub async fn register_user(
     req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
-    auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     settings: web::Data<Settings>,
     rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     register_user_parameters: web::Json<RegisterUserParameters>,
-    session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(response);
@@ -622,7 +620,9 @@ pub async fn register_user(
         return Err(UniversalInboxError::Forbidden(rejection_message.clone()));
     }
 
-    let user = user_service
+    let registration_email = register_user_parameters.credentials.email.clone();
+
+    let result = user_service
         .register_user(
             &mut transaction,
             User::new(
@@ -637,40 +637,43 @@ pub async fn register_user(
                 password_reset_sent_at: None,
             })),
         )
-        .await
-        .map_err(|err| {
-            if let UniversalInboxError::AlreadyExists { .. } = err {
-                UniversalInboxError::Unauthorized(anyhow!(
-                    "A user with this email address already exists"
-                ))
-            } else {
-                err
-            }
-        })?;
+        .await;
 
-    let auth_token_service = auth_token_service.read().await;
+    match result {
+        Ok(_) => {
+            transaction
+                .commit()
+                .await
+                .context("Failed to commit while registering user")?;
+        }
+        Err(UniversalInboxError::AlreadyExists { .. }) => {
+            transaction
+                .rollback()
+                .await
+                .context("Failed to rollback aborted transaction")?;
 
-    let auth_token = auth_token_service
-        .create_auth_token(&mut transaction, true, user.id, None, false)
-        .await?;
-    session
-        .insert(
-            JWT_SESSION_KEY,
-            auth_token.jwt_token.expose_secret().0.clone(),
-        )
-        .context("Failed to insert JWT token into the session")?;
-    session
-        .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Local)
-        .context("Failed to insert authentication type into the session")?;
+            let mut transaction = user_service
+                .begin()
+                .await
+                .context("Failed to create new transaction for registration attempt email")?;
+            user_service
+                .send_registration_attempt_email(&mut transaction, &registration_email, false)
+                .await?;
+            transaction
+                .commit()
+                .await
+                .context("Failed to commit while sending registration attempt email")?;
+        }
+        Err(err) => return Err(err),
+    }
 
-    transaction
-        .commit()
-        .await
-        .context("Failed to commit while registering user")?;
-
+    let response = SuccessResponse {
+        success: true,
+        message: "If this email is not already registered, you will receive a verification email shortly.".to_string(),
+    };
     Ok(HttpResponse::Ok()
         .content_type("application/json")
-        .body(serde_json::to_string(&user).context("Cannot serialize user")?))
+        .body(serde_json::to_string(&response).context("Cannot serialize registration response")?))
 }
 
 pub async fn login_user(

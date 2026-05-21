@@ -114,6 +114,7 @@ pub fn FullpageLayout() -> Element {
 
                         if let Some(confirmation_message) = &UI_MODEL.read().confirmation_message {
                             div {
+                                id: "auth-confirmation",
                                 class: "flex flex-col items-center text-center py-3",
 
                                 div { class: "w-14 h-14 rounded-full bg-ui-success-subtle text-ui-success flex items-center justify-center text-3xl mb-3.5",

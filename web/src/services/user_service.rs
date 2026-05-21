@@ -84,18 +84,12 @@ pub async fn user_service(
             }
 
             Some(UserCommand::RegisterUser(parameters)) => {
-                let result: Result<User> = call_api(
-                    Method::POST,
-                    &api_base_url,
-                    "users",
-                    Some(parameters),
-                    Some(ui_model),
-                )
-                .await;
+                let result: Result<SuccessResponse> =
+                    call_api(Method::POST, &api_base_url, "users", Some(parameters), None).await;
 
                 match result {
-                    Ok(user) => {
-                        connected_user.write().replace(user);
+                    Ok(SuccessResponse { message, .. }) => {
+                        ui_model.write().confirmation_message = Some(message);
                     }
                     Err(err) => {
                         ui_model.write().error_message = Some(err.to_string());
