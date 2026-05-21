@@ -94,6 +94,26 @@ run:
         -f process-compose.yaml \
         -p "$PC_PORT"
 
+# Start the stack detached + headless (no TUI) — for agents / CI / non-interactive shells.
+# Brings up postgresql + redis; app services (ui-*) stay disabled, start them with `just start`.
+# Idempotent: a no-op if the stack is already running on this port. Tear down with `just down`.
+run-detached:
+    #!/usr/bin/env bash
+    PC_PORT=${PROCESS_COMPOSE_PORT:-9999}
+    if process-compose -p "$PC_PORT" process list >/dev/null 2>&1; then
+        echo "process-compose already running on port $PC_PORT"
+        exit 0
+    fi
+    process-compose \
+        -f .devbox/virtenv/redis/process-compose.yaml \
+        -f process-compose-pg.yaml \
+        -f process-compose.yaml \
+        -p "$PC_PORT" up -D -t=false
+
+# Stop the detached stack started by `run-detached`.
+@down:
+    process-compose -p ${PROCESS_COMPOSE_PORT:-9999} down
+
 @start service:
     process-compose -p ${PROCESS_COMPOSE_PORT:-9999} process start {{ service }}
 

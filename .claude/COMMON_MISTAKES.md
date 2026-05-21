@@ -15,12 +15,12 @@
 ## 3. `just run` hangs/errors in a non-interactive shell
 - **Symptom:** `open /dev/tty: device not configured` — process-compose TUI can't attach.
 - **Check:** Are you an agent / no TTY? Then never use bare `just run`.
-- **Fix:** Start process-compose headless (`-t=false`, see AGENTS.md "Starting process-compose headless"), then `just start ui-api|ui-workers|ui-web`.
+- **Fix:** `direnv exec . just run-detached` (headless pg+redis), then `just start ui-api|ui-workers|ui-web` as needed; tear down with `just down`. See QUICK_START.md "Dev Servers".
 
 ## 4. Commands in a worktree hit the wrong DB/ports
 - **Symptom:** Connection refused, or you mutate the main checkout's DB from a worktree.
-- **Check:** Did you prefix with `direnv exec .`? Per-branch ports live in `.local_envrc`.
-- **Fix:** `cd /abs/path/to/worktree && direnv exec . just <cmd>`. Shell state doesn't persist across agent calls.
+- **Check:** Did you prefix with `direnv exec .`? Per-branch ports live in `.local_envrc` (PGPORT/REDIS_PORT/…, NOT 5432/6379). Bare `devbox run` skips `.local_envrc` → wrong ports.
+- **Fix:** `cd /abs/path/to/worktree && direnv exec . just <cmd>`. Shell state doesn't persist across agent calls. See QUICK_START.md "Worktree".
 
 ## 5. Frontend styling drift (hardcoded values / stray CSS)
 - **Symptom:** `bg-[#388fef]`, inline px radii, or a new `.foo-bar` class in `universal-inbox.css`.
@@ -33,4 +33,4 @@
 
 For the longer list, see [common pitfalls](docs/learnings/common-pitfalls.md).
 
-_Last updated: 2026-05-30_
+_Last updated: 2026-05-31_
