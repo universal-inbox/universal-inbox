@@ -43,6 +43,7 @@ use crate::{
         integration_connection::{
             IntegrationConnectionRepository, IntegrationConnectionSyncStatusUpdate,
             IntegrationConnectionSyncedBeforeFilter, OAUTH_INVALID_GRANT_ERROR_MESSAGE,
+            OAUTH_MISSING_REFRESH_TOKEN_ERROR_MESSAGE,
         },
         notification::NotificationRepository,
         oauth_credential::OAuthCredentialRepository,
@@ -788,6 +789,24 @@ impl IntegrationConnectionService {
         if let Some(expires_at) = credential.access_token_expires_at
             && expires_at < Utc::now()
         {
+            if credential.encrypted_refresh_token.is_none() {
+                self.repository
+                    .update_integration_connection_status(
+                        executor,
+                        integration_connection.id,
+                        IntegrationConnectionStatus::Failing,
+                        Some(OAUTH_MISSING_REFRESH_TOKEN_ERROR_MESSAGE.to_string()),
+                        None,
+                        integration_connection.user_id,
+                    )
+                    .await?;
+
+                return Err(UniversalInboxError::Recoverable(anyhow!(
+                    "Access token expired for integration connection {} and no refresh token is stored. Marked connection as Failing; user must reconnect.",
+                    integration_connection.id
+                )));
+            }
+
             return Err(UniversalInboxError::Recoverable(anyhow!(
                 "Access token expired for integration connection {}. Token refresh should happen via the refresh-oauth-tokens command.",
                 integration_connection.id

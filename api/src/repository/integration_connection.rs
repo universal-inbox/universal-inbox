@@ -142,6 +142,9 @@ pub const TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE: &str = "♻️ Synchronization h
 pub const OAUTH_INVALID_GRANT_ERROR_MESSAGE: &str =
     "🔌 Authorization has expired or been revoked. Please reconnect this integration.";
 
+pub const OAUTH_MISSING_REFRESH_TOKEN_ERROR_MESSAGE: &str =
+    "🔌 Authorization is missing a refresh token. Please reconnect this integration.";
+
 #[async_trait]
 impl IntegrationConnectionRepository for Repository {
     #[tracing::instrument(
