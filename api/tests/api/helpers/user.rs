@@ -79,15 +79,13 @@ pub async fn register_user(app: &TestedApp, email: EmailAddress, password: &str)
         .build()
         .unwrap();
 
-    let response = register_user_response(&client, app, email, password).await;
-
+    let response = register_user_response(&client, app, email.clone(), password).await;
     assert_eq!(response.status(), 200);
 
-    let user: User = get_current_user_response(&client, app)
-        .await
-        .json()
-        .await
-        .unwrap();
+    let login_response = login_user_response(&client, app, email, password).await;
+    assert_eq!(login_response.status(), 200);
+
+    let user: User = get_current_user(&client, app).await;
 
     (client, user)
 }
