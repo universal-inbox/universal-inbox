@@ -5,6 +5,7 @@ use universal_inbox::{
     integration_connection::{
         IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
+        integrations::google_calendar::GoogleCalendarConfig,
         integrations::google_mail::GoogleMailConfig,
         integrations::{github::GithubConfig, google_mail::GoogleMailContext},
         provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
@@ -144,6 +145,171 @@ mod disconnect_integration_connections {
             IntegrationConnectionStatus::Created
         );
         assert_eq!(disconnected_connection.failure_message, None);
+    }
+}
+
+mod find_access_token {
+    use chrono::{DateTime, TimeDelta, Utc};
+    use pretty_assertions::assert_eq;
+    use universal_inbox::user::UserId;
+    use universal_inbox_api::{
+        configuration::Settings,
+        repository::{
+            integration_connection::{
+                IntegrationConnectionRepository, OAUTH_MISSING_REFRESH_TOKEN_ERROR_MESSAGE,
+            },
+            oauth_credential::OAuthCredentialRepository,
+        },
+        universal_inbox::UniversalInboxError,
+        utils::crypto::{TokenEncryptionKey, encrypt_token},
+    };
+
+    use crate::helpers::{TestedApp, settings};
+
+    use super::*;
+
+    async fn seed_google_calendar_credential(
+        app: &TestedApp,
+        settings: &Settings,
+        user_id: UserId,
+        refresh_token: Option<&str>,
+        expires_at: Option<DateTime<Utc>>,
+    ) -> Box<IntegrationConnection> {
+        let connection = create_integration_connection(
+            app,
+            user_id,
+            IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
+            IntegrationConnectionStatus::Validated,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await;
+
+        let token_encryption_key =
+            TokenEncryptionKey::from_hex(&settings.oauth2.token_encryption_key).unwrap();
+        let aad_context = connection.id.0.as_bytes();
+        let encrypted_access_token =
+            encrypt_token("expired_access_token", aad_context, &token_encryption_key).unwrap();
+        let encrypted_refresh_token =
+            refresh_token.map(|rt| encrypt_token(rt, aad_context, &token_encryption_key).unwrap());
+
+        let mut transaction = app.repository.begin().await.unwrap();
+        app.repository
+            .store_oauth_credential(
+                &mut transaction,
+                connection.id,
+                encrypted_access_token,
+                encrypted_refresh_token,
+                expires_at,
+                serde_json::json!({}),
+            )
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+
+        connection
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_find_access_token_marks_connection_failing_when_refresh_token_missing(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+
+        let connection = seed_google_calendar_credential(
+            &app.app,
+            &settings,
+            app.user.id,
+            None,
+            Some(Utc::now() - TimeDelta::hours(1)),
+        )
+        .await;
+
+        let service = app.app.integration_connection_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+        let result = service
+            .find_access_token(
+                &mut transaction,
+                IntegrationProviderKind::GoogleCalendar,
+                app.user.id,
+            )
+            .await;
+        transaction.commit().await.unwrap();
+        drop(service);
+
+        assert!(
+            matches!(result, Err(UniversalInboxError::Recoverable(_))),
+            "expected Recoverable error, got {result:?}"
+        );
+
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        let refetched = app
+            .app
+            .repository
+            .get_integration_connection(&mut transaction, connection.id)
+            .await
+            .unwrap()
+            .expect("integration connection should still exist");
+        transaction.commit().await.unwrap();
+
+        assert_eq!(refetched.status, IntegrationConnectionStatus::Failing);
+        assert_eq!(
+            refetched.failure_message,
+            Some(OAUTH_MISSING_REFRESH_TOKEN_ERROR_MESSAGE.to_string())
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_find_access_token_keeps_validated_when_refresh_token_present(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+
+        let connection = seed_google_calendar_credential(
+            &app.app,
+            &settings,
+            app.user.id,
+            Some("refresh_token_present"),
+            Some(Utc::now() - TimeDelta::hours(1)),
+        )
+        .await;
+
+        let service = app.app.integration_connection_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+        let result = service
+            .find_access_token(
+                &mut transaction,
+                IntegrationProviderKind::GoogleCalendar,
+                app.user.id,
+            )
+            .await;
+        transaction.commit().await.unwrap();
+        drop(service);
+
+        assert!(
+            matches!(result, Err(UniversalInboxError::Recoverable(_))),
+            "expected Recoverable error, got {result:?}"
+        );
+
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        let refetched = app
+            .app
+            .repository
+            .get_integration_connection(&mut transaction, connection.id)
+            .await
+            .unwrap()
+            .expect("integration connection should still exist");
+        transaction.commit().await.unwrap();
+
+        assert_eq!(refetched.status, IntegrationConnectionStatus::Validated);
+        assert_eq!(refetched.failure_message, None);
     }
 }
 
