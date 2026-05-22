@@ -86,6 +86,12 @@
 @import "../node_modules/notyf/notyf.min.css";
 @import "../node_modules/flyonui/src/vendor/notyf.css";
 
+/* Toast loading icon — keep the spinner fully inside the 26px white circle
+   instead of overflowing it (FlyonUI's loading-lg is 28px). */
+.notyf__icon .loading {
+    width: calc(var(--size-selector, 0.25rem) * 6); /* 24px = loading-md size */
+}
+
 @source inline("slack-emoji");
 @utility slack-emoji {
     @apply my-0! mx-0.5!;
