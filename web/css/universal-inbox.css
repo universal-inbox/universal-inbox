@@ -696,144 +696,12 @@
 }
 
 /* ─── Detail panel ─── */
-.detail-panel {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background: var(--ui-base-200);
-    overflow: hidden;
-    min-width: 0;
-}
-.detail-header {
-    padding: 6px 20px;
-    background: var(--ui-surface);
-    border-bottom: 1px solid var(--ui-border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    flex-shrink: 0;
-}
-/* Mobile back button always sits leftmost; the actions group is pushed right
-   so the (back + tabs) cluster stays flushed left. */
-.detail-header .detail-actions {
-    margin-left: auto;
-}
-/* Back button is mobile-only and only shown when the list is hidden (i.e.
-   .app-layout.show-detail is set). On desktop both panes are always visible
-   so the button has no purpose. */
-.detail-back-btn {
-    display: none;
-}
-/* Sticky breadcrumb container: notification pill + link badge + task pill.
-   The link badge is rendered only when the preview can switch between two
-   panes; flanking 1px lines on the badge bridge it to the adjacent pills. */
-.detail-tabs {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
-.detail-tabs-link {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--ui-surface);
-    border: 1px solid var(--ui-border);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--ui-base-muted);
-    flex-shrink: 0;
-    position: relative;
-}
-.detail-tabs-link::before,
-.detail-tabs-link::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    width: 4px;
-    height: 1px;
-    background: var(--ui-border);
-}
-.detail-tabs-link::before {
-    left: -4px;
-}
-.detail-tabs-link::after {
-    right: -4px;
-}
-.detail-tabs-link > * {
-    width: 11px;
-    height: 11px;
-    font-size: 11px;
-}
-.ui-detail-source {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 10px 3px 4px;
-    border-radius: var(--ui-radius-pill);
-    background: var(--ui-surface);
-    border: 1px solid var(--ui-border);
-    color: var(--ui-base-muted);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition:
-        border-color 0.12s var(--ui-ease),
-        background 0.12s var(--ui-ease),
-        color 0.12s var(--ui-ease);
-    font-family: var(--font-ui);
-}
-.ui-detail-source:hover {
-    border-color: var(--ui-primary);
-    color: var(--ui-base-content);
-}
-.ui-detail-source.active {
-    border-color: var(--ui-primary);
-    background: var(--ui-surface);
-    color: var(--ui-base-content);
-    box-shadow: var(--ui-shadow-sm);
-    cursor: default;
-}
-.ui-detail-source .ui-detail-source-tile {
-    width: 20px;
-    height: 20px;
-    border-radius: var(--ui-radius-sm);
-    background: var(--ui-surface);
-    border: 1px solid var(--ui-border);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-.ui-detail-source .ui-detail-source-tile > * {
-    width: 12px;
-    height: 12px;
-    font-size: 12px;
-}
-.ui-detail-source .sub {
-    font-weight: 500;
-    color: var(--ui-base-muted);
-    margin-left: 2px;
-}
-.detail-actions {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-}
-.detail-body {
-    flex: 1;
-    overflow: hidden;
-    padding: 12px 20px;
-    animation: detail-fade 0.2s var(--ui-ease-out);
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-}
-.detail-body > * {
-    flex: 1 1 0;
-    min-height: 0;
-}
+/* Layout, colors, and component class hooks were inlined as Tailwind v4
+   utilities at each call site (notifications_page.rs, synced_tasks_page.rs,
+   notification_preview.rs, task_preview.rs). The remaining bits below are
+   the carved-out "last resort" pieces: the @keyframes definition consumed
+   via `animate-[detail-fade_…]`, and the scrollbar internals on the
+   #notification-preview-details / #task-preview-details scroll containers. */
 @keyframes detail-fade {
     from {
         opacity: 0;
@@ -861,25 +729,6 @@
 #task-preview-details {
     scrollbar-width: thin;
     scrollbar-color: var(--ui-border) transparent;
-}
-.detail-dock {
-    padding: 6px 20px;
-    background: var(--ui-surface);
-    border-top: 1px solid var(--ui-border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-}
-.detail-kbd {
-    font-size: 9px;
-    font-family: var(--font-mono);
-    padding: 1px 4px;
-    border-radius: 3px;
-    background: var(--ui-base-200);
-    border: 1px solid var(--ui-border);
-    color: var(--ui-base-muted);
-    line-height: 1;
 }
 
 @layer components {

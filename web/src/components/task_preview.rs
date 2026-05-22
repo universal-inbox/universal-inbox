@@ -15,6 +15,10 @@ use crate::{
             slack::preview::slack_reaction::SlackReactionTaskPreview,
             ticktick::preview::TickTickTaskPreview, todoist::preview::TodoistTaskPreview,
         },
+        notification_preview::{
+            DETAIL_BODY_INNER, DETAIL_KBD, SOURCE_PILL_ACTIVE, SOURCE_PILL_BASE, SOURCE_PILL_SUB,
+            SOURCE_PILL_TILE,
+        },
         tasks_list::TaskListContext,
         ui::{ActionButton, Button, ButtonVariant},
     },
@@ -58,22 +62,20 @@ pub fn TaskPreview(
         }
     });
 
+    let task_pill_class = format!("{SOURCE_PILL_BASE} {SOURCE_PILL_ACTIVE}");
+
     rsx! {
         // Detail header: back button (mobile) + tab on the left, actions on the right
         div {
-            class: "detail-header",
+            class: "py-1.5 px-5 bg-ui-surface border-b border-ui-border flex items-center justify-between gap-2 shrink-0",
 
-            // Back button for mobile — first on the left, only visible
-            // on mobile in detail view (md:hidden hides it on desktop;
-            // on mobile the host detail panel only renders when the list
-            // is hidden, so the button only appears in that state).
+            // Back button for mobile — baseline `hidden`,
+            // `max-md:[.app-layout.show-detail_&]:inline-flex!` reveals it on
+            // the mobile detail pane. The trailing `!` (`!important`) wins
+            // against `hidden`.
             Button {
                 variant: ButtonVariant::Ghost,
-                // Mirrors `notification_preview.rs` — `.detail-back-btn` stays
-                // `display: none` baseline; `max-md:[.app-layout.show-detail_&]:`
-                // reveals it on the mobile detail pane. `!important` (via the
-                // trailing `!`) is needed to win against the cascade.
-                class: "detail-back-btn max-md:[.app-layout.show-detail_&]:inline-flex!".to_string(),
+                class: "hidden max-md:[.app-layout.show-detail_&]:inline-flex!".to_string(),
                 aria_label: "Back to list".to_string(),
                 title: "Back to list".to_string(),
                 onclick: move |_| ui_model.write().selected_task_index = None,
@@ -81,24 +83,24 @@ pub fn TaskPreview(
             }
 
             div {
-                class: "detail-tabs",
+                class: "inline-flex items-center gap-1",
                 button {
-                    class: "ui-detail-source active",
+                    class: "{task_pill_class}",
                     role: "tab",
                     "aria-pressed": "true",
-                    span { class: "ui-detail-source-tile",
+                    span { class: SOURCE_PILL_TILE,
                         TaskIcon { class: "h-3 w-3".to_string(), kind: task().kind }
                     }
                     span { "{task_source_display_name(task().kind)}" }
-                    span { class: "sub", "· {task_type}" }
+                    span { class: SOURCE_PILL_SUB, "· {task_type}" }
                 }
             }
 
             div {
-                class: "detail-actions",
+                class: "flex items-center gap-1.5 ml-auto",
 
                 if shortcut_visibility_style == "visible" {
-                    span { class: "detail-kbd", "e" }
+                    span { class: DETAIL_KBD, "e" }
                 }
 
                 // Open in source button — common to every task kind
@@ -114,13 +116,16 @@ pub fn TaskPreview(
         }
 
         div {
-            class: "detail-body",
-            TaskDetailsPreview { task, expand_details }
+            class: "flex-1 overflow-hidden py-3 px-5 min-h-0 flex flex-col animate-[detail-fade_0.2s_var(--ui-ease-out)]",
+            div {
+                class: DETAIL_BODY_INNER,
+                TaskDetailsPreview { task, expand_details }
+            }
         }
 
         // Detail dock: bottom action bar
         div {
-            class: "detail-dock",
+            class: "py-1.5 px-5 bg-ui-surface border-t border-ui-border flex items-center justify-between shrink-0",
 
             div {
                 class: "inline-flex items-center gap-1 text-ui-base-muted",
