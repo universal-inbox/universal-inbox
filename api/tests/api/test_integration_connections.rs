@@ -408,7 +408,9 @@ mod update_integration_connection_config {
             }))
         );
 
-        // Verify the configuration has been updated and context has been cleared
+        // Verify the configuration has been updated and the existing provider
+        // context is preserved (config updates must not drop provider-specific
+        // state like Slack's team_id, GoogleMail's user_email_address, etc.).
         let updated_integration_connection: Option<IntegrationConnection> =
             get_integration_connection(&app, integration_connection1.id).await;
 
@@ -423,7 +425,10 @@ mod update_integration_connection_config {
                             name: "Label 2".to_string(),
                         }
                     },
-                    context: None
+                    context: Some(GoogleMailContext {
+                        user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
+                        labels: vec![],
+                    }),
                 },
                 ..*integration_connection1
             })
