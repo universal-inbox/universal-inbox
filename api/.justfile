@@ -72,6 +72,12 @@ generate-user:
 generate-empty-user:
     cargo run -- test generate-empty-user
 
+list-users:
+    cargo run -- user list
+
+reset-user-password user-email:
+    cargo run -- user reset-password {{user-email}}
+
 connect-integration user-id provider:
     cargo run -- test connect-integration --user-id {{user-id}} --provider {{provider}}
 
