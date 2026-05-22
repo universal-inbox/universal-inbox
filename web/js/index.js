@@ -75,8 +75,7 @@ function buildEmailIframe(host) {
 
     const resize = () => {
         try {
-            const doc = iframe.contentDocument;
-            const root = doc?.documentElement;
+            const root = iframe.contentDocument?.documentElement;
             if (root) {
                 iframe.style.height = root.scrollHeight + "px";
             }
@@ -84,11 +83,16 @@ function buildEmailIframe(host) {
             // Cross-origin frames or detached iframes — ignore.
         }
     };
+    // Do NOT call `resize` synchronously after `appendChild`: at that point
+    // the iframe still hosts an empty `about:blank` document (which already
+    // reports `readyState === "complete"`), so measuring its `scrollHeight`
+    // would set the iframe to the empty-iframe default (~150px in Chromium,
+    // ~8px in Firefox) and the user sees a collapsed frame until the real
+    // `srcdoc` finishes parsing. The `load` event below fires once the
+    // `srcdoc` content has actually loaded; the listener is attached before
+    // `appendChild`, so it cannot have already fired.
     iframe.addEventListener("load", resize);
-
     host.appendChild(iframe);
-    // Initial measurement in case the load event already fired.
-    resize();
 }
 
 if (typeof window !== "undefined" && typeof MutationObserver !== "undefined") {
