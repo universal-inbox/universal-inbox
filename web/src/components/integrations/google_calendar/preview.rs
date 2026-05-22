@@ -282,7 +282,7 @@ pub fn GoogleCalendarEventPreview(
 
                             if total > 0 {
                                 div {
-                                    class: "preview-card-section",
+                                    class: "border-t border-ui-border-light mt-2.5 -mx-3 px-3",
 
                                     StatusSection {
                                         dot: rsx! { StatusDot { variant: dot_variant } },
@@ -299,7 +299,7 @@ pub fn GoogleCalendarEventPreview(
 
                             if !is_cancelled() {
                                 div {
-                                    class: "preview-rsvp-inline",
+                                    class: "grid grid-flow-col auto-cols-fr mt-2.5 -mx-3 -mb-3 border-t border-ui-border-light overflow-hidden rounded-b-[calc(var(--ui-radius-lg)-1px)]",
                                     button {
                                         r#type: "button",
                                         class: "{dock_yes_class}",

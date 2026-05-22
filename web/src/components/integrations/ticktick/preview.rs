@@ -101,7 +101,7 @@ pub fn TickTickTaskPreview(
                 class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto p-3",
 
                 div {
-                    class: "preview-card",
+                    class: "bg-ui-surface border border-ui-border rounded-ui-lg p-3 mb-2.5",
 
                     FieldGrid {
                         if let Some((color_var, date_label, suffix, time_label)) = due_row {
@@ -160,7 +160,7 @@ pub fn TickTickTaskPreview(
 
                 if has_body {
                     div {
-                        class: "preview-card",
+                        class: "bg-ui-surface border border-ui-border rounded-ui-lg p-3 mb-2.5",
 
                         div {
                             class: if expanded() { "" } else { "line-clamp-2" },

@@ -142,8 +142,7 @@ pub fn GithubDiscussionPreview(
 
                 if let (Some(answer), Some(actor)) = (&discussion.answer, &discussion.answer_chosen_by) {
                     div {
-                        class: "preview-card",
-                        style: "background: var(--ui-success-subtle);",
+                        class: "bg-ui-success-subtle border border-ui-border rounded-ui-lg p-3 mb-2.5",
 
                         div {
                             class: "flex items-center gap-2 text-xs mb-2",

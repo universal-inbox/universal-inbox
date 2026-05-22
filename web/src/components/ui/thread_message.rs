@@ -113,7 +113,7 @@ pub fn ThreadedMessage(
 
                 // `.ui-thread-msg-body` is a kept class hook — see module doc.
                 div {
-                    class: "ui-thread-msg-body text-[12.5px] leading-[1.45] text-ui-base-content",
+                    class: "ui-thread-msg-body leading-[1.45] text-ui-base-content",
                     {body}
                 }
 

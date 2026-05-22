@@ -95,7 +95,7 @@ pub fn GoogleDriveCommentPreview(
                 }
 
                 div {
-                    class: "preview-card",
+                    class: "bg-ui-surface border border-ui-border rounded-ui-lg p-3 mb-2.5",
 
                     Thread {
                         // Parent comment.

@@ -94,7 +94,7 @@ pub fn GoogleMailThreadPreview(
                 class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto p-3",
 
                 div {
-                    class: "preview-card",
+                    class: "bg-ui-surface border border-ui-border rounded-ui-lg p-3 mb-2.5",
 
                     Thread {
                         if let Some(invisible_read_message) = invisible_read_message {
