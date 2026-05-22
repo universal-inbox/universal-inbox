@@ -24,9 +24,9 @@ pub fn NavBarLayout() -> Element {
     );
     // `.app-layout` class hook is kept so child elements can target it from
     // their own Tailwind variants (e.g. `max-md:[.app-layout.show-detail_&]:`
-    // on `.list-panel` / `.detail-panel` / `.detail-back-btn`). The mobile
-    // column stack (`flex-direction: column`) is expressed inline via
-    // `max-md:flex-col`.
+    // on the list panel, the detail panel root, and the mobile back button).
+    // The mobile column stack (`flex-direction: column`) is expressed inline
+    // via `max-md:flex-col`.
     let layout_class = if show_detail {
         "app-layout show-detail flex flex-1 min-h-0 overflow-hidden max-md:flex-col"
     } else {
