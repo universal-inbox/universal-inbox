@@ -467,23 +467,28 @@ async fn patch_invitation(
     ui_model: Signal<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
 ) {
-    let mut page = notifications_page.write();
-    if page.content.iter().any(|notif| {
+    let has_invitation = notifications_page.read().content.iter().any(|notif| {
         notif.id == notification_id && notif.kind == NotificationSourceKind::GoogleCalendar
-    }) {
-        page.remove_element(|notif| notif.id != notification_id);
-        let _result: Result<Option<Notification>> = call_api_and_notify(
-            Method::PATCH,
-            api_base_url,
-            &format!("notifications/{notification_id}/invitation"),
-            Some(InvitationPatch { response_status }),
-            Some(ui_model),
-            &toast_service,
-            "Accepting invitation...",
-            "Invitation successfully accepted",
-        )
-        .await;
+    });
+    if !has_invitation {
+        return;
     }
+
+    notifications_page
+        .write()
+        .remove_element(|notif| notif.id != notification_id);
+
+    let _result: Result<Option<Notification>> = call_api_and_notify(
+        Method::PATCH,
+        api_base_url,
+        &format!("notifications/{notification_id}/invitation"),
+        Some(InvitationPatch { response_status }),
+        Some(ui_model),
+        &toast_service,
+        "Accepting invitation...",
+        "Invitation successfully accepted",
+    )
+    .await;
 }
 
 #[derive(Clone, PartialEq, Debug)]
