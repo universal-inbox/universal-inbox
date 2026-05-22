@@ -138,16 +138,14 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
                 if let Some(index) = UI_MODEL.read().selected_notification_index {
                     if let Some(notification) = NOTIFICATIONS_PAGE().content.get(index) {
                         div {
-                            // `.detail-panel` class hook preserved for the
-                            // shell CSS (flex: 1, bg, overflow). Mobile
-                            // visibility is now driven by `max-md:hidden!`
-                            // (default off) + `max-md:[.app-layout.show-detail_&]:flex!`
-                            // (revealed when the parent layout enters
-                            // show-detail at ≤768px). Desktop renders both
-                            // panes side-by-side regardless. `!important`
-                            // (`!` suffix) is required to win against the
-                            // `.detail-panel { display: flex }` cascade.
-                            class: "detail-panel max-md:hidden! max-md:[.app-layout.show-detail_&]:flex! max-md:[.app-layout.show-detail_&]:flex-1!",
+                            // Shell utilities (flex-1, bg, overflow) live inline. Mobile
+                            // visibility is driven by `max-md:hidden!` (default off) +
+                            // `max-md:[.app-layout.show-detail_&]:flex!` (revealed when
+                            // the parent layout enters show-detail at ≤768px). Desktop
+                            // renders both panes side-by-side regardless. `!important`
+                            // (`!` suffix) wins against the baseline `flex` so the
+                            // responsive `hidden!`/`flex!` toggle is decisive.
+                            class: "flex-1 flex flex-col bg-ui-base-200 overflow-hidden min-w-0 max-md:hidden! max-md:[.app-layout.show-detail_&]:flex! max-md:[.app-layout.show-detail_&]:flex-1!",
                             NotificationPreview {
                                 notification: notification.clone(),
                                 notifications_count: notifications().content.len(),

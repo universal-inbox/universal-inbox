@@ -37,6 +37,34 @@ use crate::{
     utils::reset_scroll_top,
 };
 
+// Shared style strings for the source-pill tab button rendered in the detail
+// header (used here for Notification/Task tabs, and in `task_preview.rs` for
+// the lone Task tab on the synced-tasks page). Composing `SOURCE_PILL_BASE`
+// with one of the state strings produces the full class string.
+pub(crate) const SOURCE_PILL_BASE: &str = "inline-flex items-center gap-1.5 pl-1 pr-2.5 py-[3px] rounded-ui-pill bg-ui-surface border text-xs font-semibold font-ui transition-colors duration-[120ms] ease-[var(--ui-ease)]";
+pub(crate) const SOURCE_PILL_ACTIVE: &str =
+    "border-ui-primary text-ui-base-content shadow-ui-sm cursor-default";
+pub(crate) const SOURCE_PILL_INACTIVE: &str = "border-ui-border text-ui-base-muted cursor-pointer hover:border-ui-primary hover:text-ui-base-content";
+
+// Wrapper inside `.detail-body`. `flex-1 min-h-0` replaces the former
+// `.detail-body > *` rule (lets the scroll container grow + shrink); the
+// `mx-auto w-full max-w-3xl` half caps content at 768px and centers it on
+// wide panes.
+pub(crate) const DETAIL_BODY_INNER: &str = "flex-1 min-h-0 mx-auto w-full max-w-3xl";
+
+// 20px tile that frames an integration brand icon inside a source pill. The
+// `[&>*]:size-3!` / `[&>*]:text-[12px]!` arbitrary variants replace the former
+// `.ui-detail-source-tile > *` CSS rule that forced icons (which otherwise
+// render at h-5/w-5) down to 12px inside this small frame.
+pub(crate) const SOURCE_PILL_TILE: &str = "inline-flex size-5 items-center justify-center rounded-ui-sm bg-ui-surface border border-ui-border shrink-0 [&>*]:size-3! [&>*]:text-[12px]!";
+
+// Sub-label inside a source pill (e.g. "· Pull request"). Was `.sub` in CSS.
+pub(crate) const SOURCE_PILL_SUB: &str = "font-medium text-ui-base-muted ml-0.5";
+
+// Small monospace badge for keyboard shortcut hints (e.g. "e", "tab") in the
+// detail header / dock action clusters. Was `.detail-kbd` in CSS.
+pub(crate) const DETAIL_KBD: &str = "text-[9px] font-mono px-1 py-px rounded-ui-xs bg-ui-base-200 border border-ui-border text-ui-base-muted leading-none";
+
 #[component]
 pub fn NotificationPreview(
     ui_model: Signal<UniversalInboxUIModel>,
@@ -97,32 +125,37 @@ pub fn NotificationPreview(
         ""
     };
 
-    let (notification_tab_style, task_tab_style) =
-        if ui_model.read().selected_preview_pane == PreviewPane::Notification {
-            ("active", "")
+    let is_notification_active = ui_model.read().selected_preview_pane == PreviewPane::Notification;
+    let notification_pill_class = format!(
+        "{SOURCE_PILL_BASE} {}",
+        if is_notification_active {
+            SOURCE_PILL_ACTIVE
         } else {
-            ("", "active")
-        };
+            SOURCE_PILL_INACTIVE
+        }
+    );
+    let task_pill_class = format!(
+        "{SOURCE_PILL_BASE} {}",
+        if is_notification_active {
+            SOURCE_PILL_INACTIVE
+        } else {
+            SOURCE_PILL_ACTIVE
+        }
+    );
 
     rsx! {
         // Detail header: back button (mobile) + tabs on the left, actions on the right
         div {
-            class: "detail-header",
+            class: "py-1.5 px-5 bg-ui-surface border-b border-ui-border flex items-center justify-between gap-2 shrink-0",
 
                 // Back button for mobile — first on the left, only visible
-                // on mobile in detail view (md:hidden hides it on desktop;
-                // on mobile the host detail panel only renders when the list
-                // is hidden, so the button only appears in that state).
+                // on mobile in detail view. Baseline `hidden` keeps it off;
+                // `max-md:[.app-layout.show-detail_&]:inline-flex!` reveals
+                // it when the parent layout enters show-detail at ≤768px.
+                // The `!` (`!important` in Tailwind v4) wins against `hidden`.
                 Button {
                     variant: ButtonVariant::Ghost,
-                    // `.detail-back-btn` keeps `display: none` in CSS so the
-                    // button stays hidden everywhere except mobile detail
-                    // view. The `max-md:[.app-layout.show-detail_&]:inline-flex!`
-                    // variant reveals it when the parent layout enters
-                    // show-detail at ≤768px. The `!` (`!important` in
-                    // Tailwind v4) is required to win against the cascade-
-                    // ordered `.detail-back-btn { display: none }` rule.
-                    class: "detail-back-btn max-md:[.app-layout.show-detail_&]:inline-flex!".to_string(),
+                    class: "hidden max-md:[.app-layout.show-detail_&]:inline-flex!".to_string(),
                     aria_label: "Back to list".to_string(),
                     title: "Back to list".to_string(),
                     onclick: move |_| ui_model.write().selected_notification_index = None,
@@ -130,62 +163,67 @@ pub fn NotificationPreview(
                 }
 
                 div {
-                    class: "detail-tabs",
+                    class: "inline-flex items-center gap-1",
 
                     if has_notification_details_preview {
                         button {
-                            class: "ui-detail-source {notification_tab_style}",
+                            class: "{notification_pill_class}",
                             role: "tab",
                             "aria-label": "Show notification preview",
-                            "aria-pressed": "{notification_tab_style == \"active\"}",
+                            "aria-pressed": "{is_notification_active}",
                             onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Notification },
-                            span { class: "ui-detail-source-tile",
+                            span { class: SOURCE_PILL_TILE,
                                 NotificationIcon { kind: notification().kind }
                             }
                             span { "{source_display_name(notification().kind)}" }
                             if let Some(sub) = notification_sub_type(&notification().source_item.data) {
-                                span { class: "sub", "· {sub}" }
+                                span { class: SOURCE_PILL_SUB, "· {sub}" }
                             }
                         }
                     }
                     if has_notification_details_preview && has_task_details_preview {
+                        // Circular "link" badge between the two tab pills. The two
+                        // before:/after: pseudo-elements draw the 4px connector
+                        // lines that bridge it to the adjacent pills (these
+                        // replace the former `.detail-tabs-link::before/::after`
+                        // CSS rules).
                         span {
-                            class: "detail-tabs-link",
+                            class: "relative inline-flex size-5 items-center justify-center rounded-full border border-ui-border bg-ui-surface text-ui-base-muted shrink-0 before:content-[''] before:absolute before:top-1/2 before:left-[-4px] before:w-1 before:h-px before:bg-ui-border after:content-[''] after:absolute after:top-1/2 after:right-[-4px] after:w-1 after:h-px after:bg-ui-border",
                             "aria-hidden": "true",
                             title: "Linked task",
-                            span { class: "icon-[lucide--link-2]" }
+                            span { class: "icon-[lucide--link-2] size-[11px] text-[11px]" }
                         }
                     }
                     if has_task_details_preview {
                         if let Some(task) = notification().task {
                             button {
-                                class: "ui-detail-source {task_tab_style}",
+                                class: "{task_pill_class}",
                                 role: "tab",
                                 "aria-label": "Show linked task preview",
-                                "aria-pressed": "{task_tab_style == \"active\"}",
+                                "aria-pressed": "{!is_notification_active}",
                                 onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Task },
-                                span { class: "ui-detail-source-tile",
+                                span { class: SOURCE_PILL_TILE,
                                     TaskIcon { class: "h-3 w-3".to_string(), kind: task.kind }
                                 }
                                 span { "{task_source_display_name(task.kind)}" }
-                                span { class: "sub", "· {task_sub_type(&task)}" }
+                                span { class: SOURCE_PILL_SUB, "· {task_sub_type(&task)}" }
                             }
                         }
                     }
                 }
 
                 div {
-                    class: "detail-actions",
+                    class: "flex items-center gap-1.5 ml-auto",
 
                     if shortcut_visibility_style == "visible" {
                         if has_task_details_preview {
                             span {
-                                class: "detail-kbd",
+                                class: DETAIL_KBD,
                                 "tab"
                             }
                         }
                         span {
-                            class: "detail-kbd",
+                            class: DETAIL_KBD,
                             "e"
                         }
                     }
@@ -203,12 +241,13 @@ pub fn NotificationPreview(
             }
 
             div {
-                class: "detail-body",
+                class: "flex-1 overflow-hidden py-3 px-5 min-h-0 flex flex-col animate-[detail-fade_0.2s_var(--ui-ease-out)]",
 
                 match ui_model.read().selected_preview_pane {
                     PreviewPane::Notification => rsx! {
                         div {
                             id: "notification-tab",
+                            class: DETAIL_BODY_INNER,
                             NotificationDetailsPreview {
                                 notification,
                                 expand_details: ui_model.read().preview_cards_expanded
@@ -219,6 +258,7 @@ pub fn NotificationPreview(
                         if let Some(task) = notification().task {
                             div {
                                 id: "task-tab",
+                                class: DETAIL_BODY_INNER,
                                 TaskDetailsPreview {
                                     task,
                                     expand_details: ui_model.read().preview_cards_expanded
@@ -231,7 +271,7 @@ pub fn NotificationPreview(
 
             // Detail dock: bottom action bar
             div {
-                class: "detail-dock",
+                class: "py-1.5 px-5 bg-ui-surface border-t border-ui-border flex items-center justify-between shrink-0",
 
                 div {
                     class: "inline-flex items-center gap-1 text-ui-base-muted",

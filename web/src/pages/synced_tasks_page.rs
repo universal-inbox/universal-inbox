@@ -146,11 +146,11 @@ fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
                 if let Some(index) = UI_MODEL.read().selected_task_index {
                     if let Some((_, task)) = SORTED_SYNCED_TASKS().get(index) {
                         div {
-                            // Mirrors `notifications_page.rs`: shell stays in
-                            // CSS, mobile show/hide is driven by Tailwind
-                            // `max-md:` + `[.app-layout.show-detail_&]:` variants
-                            // with `!important` (`!` suffix) to win the cascade.
-                            class: "detail-panel max-md:hidden! max-md:[.app-layout.show-detail_&]:flex! max-md:[.app-layout.show-detail_&]:flex-1!",
+                            // Mirrors `notifications_page.rs`: shell utilities are
+                            // inline; mobile show/hide is driven by Tailwind `max-md:`
+                            // + `[.app-layout.show-detail_&]:` variants with `!important`
+                            // (`!` suffix) to win the cascade.
+                            class: "flex-1 flex flex-col bg-ui-base-200 overflow-hidden min-w-0 max-md:hidden! max-md:[.app-layout.show-detail_&]:flex! max-md:[.app-layout.show-detail_&]:flex-1!",
                             TaskPreview {
                                 task: task.task.clone(),
                                 expand_details: UI_MODEL.read().preview_cards_expanded,

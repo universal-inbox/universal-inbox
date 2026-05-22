@@ -273,7 +273,7 @@ fn GithubPullRequestDetails(
                 Card {
                     variant: CardVariant::Default,
                     p {
-                        class: "w-full prose prose-sm dark:prose-invert",
+                        class: "w-full max-w-full prose prose-sm dark:prose-invert",
                         dangerous_inner_html: "{github_pull_request().body}"
                     }
                 }

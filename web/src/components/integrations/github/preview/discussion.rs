@@ -135,7 +135,7 @@ pub fn GithubDiscussionPreview(
                 Card {
                     variant: CardVariant::Default,
                     div {
-                        class: "w-full prose prose-sm dark:prose-invert",
+                        class: "w-full max-w-full prose prose-sm dark:prose-invert",
                         dangerous_inner_html: "{discussion.body}"
                     }
                 }
@@ -158,7 +158,7 @@ pub fn GithubDiscussionPreview(
                             GithubActorDisplay { actor: actor.clone(), display_name: true }
                         }
                         div {
-                            class: "w-full prose prose-sm dark:prose-invert",
+                            class: "w-full max-w-full prose prose-sm dark:prose-invert",
                             dangerous_inner_html: "{answer.body}"
                         }
                     }
