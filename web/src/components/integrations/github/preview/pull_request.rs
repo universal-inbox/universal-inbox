@@ -300,7 +300,7 @@ fn ChecksSection(
 
     rsx! {
         div {
-            class: "preview-card-section",
+            class: "border-t border-ui-border-light mt-2.5 -mx-3 px-3",
 
             StatusSection {
                 dot: rsx! { StatusDot { variant: dot_variant } },
@@ -517,7 +517,7 @@ fn ReviewsSection(
 
     rsx! {
         div {
-            class: "preview-card-section",
+            class: "border-t border-ui-border-light mt-2.5 -mx-3 px-3",
 
             StatusSection {
                 dot: rsx! { StatusDot { variant: dot_variant } },

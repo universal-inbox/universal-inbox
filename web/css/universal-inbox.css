@@ -222,8 +222,9 @@
     /* Inbox-zero hero entrance — consumed via `animate-inbox-zero-pop` (on the
        outer SVG) and `animate-inbox-zero-draw` (on the inner check path).
        @keyframes blocks live further down in this file. */
-    --animate-inbox-zero-pop:  inbox-zero-pop  0.45s var(--ui-ease-out) both;
-    --animate-inbox-zero-draw: inbox-zero-draw 0.55s var(--ui-ease-out) 0.25s forwards;
+    --animate-inbox-zero-pop: inbox-zero-pop 0.45s var(--ui-ease-out) both;
+    --animate-inbox-zero-draw: inbox-zero-draw 0.55s var(--ui-ease-out) 0.25s
+        forwards;
 
     /* Detail/profile pane fade-up on mount — consumed via `animate-detail-fade`. */
     --animate-detail-fade: detail-fade 0.25s var(--ui-ease-out);
@@ -751,7 +752,6 @@
     /* Lazy load fade-in effect */
 }
 
-
 /* ─── Settings page ─── */
 .integration-card {
     background: var(--ui-surface);
@@ -923,19 +923,29 @@ ol > li::marker {
     left: 28px !important;
 }
 
-
 /* Inbox-zero hero — keyframes only. All visual styling is Tailwind v4
    utilities at the call sites (`web/src/components/welcome_hero.rs` and
    the `animated_check` branch of `web/src/components/ui/empty_state.rs`).
    Reduced-motion is handled via Tailwind's `motion-reduce:` variant there,
    so no extra `@media` block is needed here. */
 @keyframes inbox-zero-pop {
-    0%   { transform: scale(0.5); opacity: 0; }
-    70%  { transform: scale(1.05); opacity: 1; }
-    100% { transform: scale(1); opacity: 1; }
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+    70% {
+        transform: scale(1.05);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 @keyframes inbox-zero-draw {
-    to { stroke-dashoffset: 0; }
+    to {
+        stroke-dashoffset: 0;
+    }
 }
 
 /* ─── Accessibility ─── */
@@ -1506,20 +1516,6 @@ select:focus-visible:not(.outline-none) {
 }
 /* ─── Task items ─── */
 
-
-/* ─── Preview enhancements ─── */
-.preview-card {
-    background: var(--ui-surface);
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius-lg);
-    padding: 12px;
-    margin-bottom: 10px;
-}
-.preview-card-section {
-    border-top: 1px solid var(--ui-border-light);
-    margin: 10px -12px 0;
-    padding: 0 12px;
-}
 /* Unified preview-pane header: brand-icon tile + title + reason-in-subline.
    Renders the source brand logo (Iconify `logos:*`) on a neutral white tile so
    per-source colors stay authentic while the layout is consistent. */
@@ -1624,19 +1620,6 @@ select:focus-visible:not(.outline-none) {
     color: var(--ui-base-muted);
 }
 
-/* RSVP button row mounted inside .preview-card — flush with the card's bottom edge,
-   separated from the guests section above by a hairline divider. */
-.preview-card .preview-rsvp-inline {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
-    margin: 10px -12px -12px;
-    border-top: 1px solid var(--ui-border-light);
-    overflow: hidden;
-    border-bottom-left-radius: calc(var(--ui-radius-lg) - 1px);
-    border-bottom-right-radius: calc(var(--ui-radius-lg) - 1px);
-}
-
 /* Action dock — three-button RSVP / triage row.
    Active button fills with semantic color (success/error/warning). */
 .preview-dock-btn {
@@ -1679,24 +1662,6 @@ select:focus-visible:not(.outline-none) {
 /* Mergeability + review checks list. */
 
 /* @mention pill. */
-
-.preview-card p {
-    font-size: 12.5px;
-    color: var(--ui-base-muted);
-    line-height: 1.6;
-    margin-bottom: 8px;
-}
-.preview-card p:last-child {
-    margin-bottom: 0;
-}
-.preview-card code {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    background: var(--ui-base-200);
-    padding: 1px 4px;
-    border-radius: 3px;
-    color: var(--ui-purple);
-}
 
 /* ─── Generic threaded comment list (used by Linear / GitHub / Drive / Gmail previews) ─── */
 .ui-thread {
@@ -1786,9 +1751,6 @@ select:focus-visible:not(.outline-none) {
 .ui-thread-msg-body :where(p, ul, ol, pre) {
     margin: 0;
 }
-.ui-thread-msg-body .prose {
-    font-size: var(--ui-text-base);
-}
 .ui-thread-msg-body .ui-email-frame-host {
     display: block;
     width: 100%;
@@ -1821,9 +1783,6 @@ select:focus-visible:not(.outline-none) {
 .ui-thread-msg-followup:hover .ui-thread-msg-followup-time {
     opacity: 1;
 }
-
-
-
 
 /* ─── Modal system ─── */
 
@@ -1861,7 +1820,6 @@ select:focus-visible:not(.outline-none) {
 }
 
 /* ─── Controls ─── */
-
 
 .sidebar-collapse-btn {
     display: flex;

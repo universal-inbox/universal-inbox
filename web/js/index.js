@@ -39,7 +39,7 @@ function buildEmailFrameHead(dark) {
         "html{color-scheme:" + colorScheme + ";}" +
         "html,body{margin:0;padding:0;background:transparent;color:" + textColor + ";" +
         "font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',Roboto," +
-        "'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.55;" +
+        "'Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:1.55;" +
         "-webkit-font-smoothing:antialiased;}" +
         "body{overflow:hidden;}img{max-width:100%;height:auto;}" +
         "</style>" +

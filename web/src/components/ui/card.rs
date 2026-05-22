@@ -5,7 +5,8 @@
 //!
 //! Three card surfaces map to three outer class hooks:
 //!
-//! - [`CardVariant::Default`]     → `.preview-card` (generic preview surface)
+//! - [`CardVariant::Default`]     → inline Tailwind utility composition
+//!   (surface + border + radius + padding + margin-bottom)
 //! - [`CardVariant::ApiKeys`]     → inline Tailwind utility composition
 //! - [`CardVariant::Integration`] → `.integration-card` (collapsible row)
 //!
@@ -54,7 +55,9 @@ use dioxus::prelude::*;
 /// states, animations) bind correctly.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CardVariant {
-    /// Generic preview surface — emits `.preview-card`.
+    /// Generic preview surface — emits inline Tailwind utility composition
+    /// (surface background, border, large radius, 12px padding, 10px
+    /// margin-bottom). No legacy class hook is needed.
     #[default]
     Default,
     /// Settings "API keys" / authentication card — emits inline Tailwind
@@ -69,7 +72,9 @@ pub enum CardVariant {
 impl CardVariant {
     fn base_class(self) -> &'static str {
         match self {
-            CardVariant::Default => "preview-card",
+            CardVariant::Default => {
+                "bg-ui-surface border border-ui-border rounded-ui-lg p-3 mb-2.5"
+            }
             CardVariant::ApiKeys => {
                 "bg-ui-surface border border-ui-border \
                                     rounded-ui-lg overflow-hidden \
