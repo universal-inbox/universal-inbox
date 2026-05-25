@@ -11,9 +11,18 @@ use universal_inbox::{
     user::UserId,
 };
 
-use crate::universal_inbox::UniversalInboxError;
+use crate::universal_inbox::{UniversalInboxError, oauth2::cimd::ClientMetadataDocument};
 
 use super::Repository;
+
+/// Cached CIMD metadata document persisted by the AS to amortize fetches.
+/// The `client_id` here is the document's URL.
+#[derive(Debug, Clone)]
+pub struct CachedClientMetadata {
+    pub client_id: String,
+    pub document: ClientMetadataDocument,
+    pub expires_at: DateTime<Utc>,
+}
 
 #[allow(clippy::too_many_arguments)]
 #[async_trait]
@@ -22,6 +31,23 @@ pub trait OAuth2Repository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         client_id: &str,
+        client_name: Option<&str>,
+        redirect_uris: &[String],
+    ) -> Result<OAuth2Client, UniversalInboxError>;
+
+    /// Upsert an `oauth2_client` row for a CIMD-discovered client. Distinct
+    /// from [`create_oauth2_client`] because:
+    /// (1) the `client_id` is a stable URL chosen by the client itself, not
+    ///     a server-minted UUID;
+    /// (2) the redirect_uris / client_name may legitimately change between
+    ///     CIMD fetches and the row must mirror the current document.
+    /// The row exists primarily so existing FK constraints on
+    /// `oauth2_authorization_code` / `oauth2_refresh_token` /
+    /// `oauth2_user_consent` continue to point at a real row.
+    async fn upsert_cimd_oauth2_client(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        client_id_url: &str,
         client_name: Option<&str>,
         redirect_uris: &[String],
     ) -> Result<OAuth2Client, UniversalInboxError>;
@@ -138,6 +164,25 @@ pub trait OAuth2Repository {
         user_id: UserId,
         client_id: &str,
     ) -> Result<u64, UniversalInboxError>;
+
+    /// Look up a cached CIMD metadata document by URL.
+    /// Returns `None` if the row is missing — callers must also check
+    /// `expires_at` and refetch when the cache entry has expired.
+    async fn get_cimd_metadata_cache(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        client_id_url: &str,
+    ) -> Result<Option<CachedClientMetadata>, UniversalInboxError>;
+
+    /// Upsert a freshly-fetched CIMD metadata document.
+    async fn upsert_cimd_metadata_cache(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        client_id_url: &str,
+        document: &ClientMetadataDocument,
+        body_sha256: &[u8],
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), UniversalInboxError>;
 }
 
 #[async_trait]
@@ -177,6 +222,54 @@ impl OAuth2Repository for Repository {
             .await
             .map_err(|err| {
                 let message = format!("Failed to insert new OAuth2 client into storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        Ok(row.into())
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id_url), err)]
+    async fn upsert_cimd_oauth2_client(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        client_id_url: &str,
+        client_name: Option<&str>,
+        redirect_uris: &[String],
+    ) -> Result<OAuth2Client, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                INSERT INTO oauth2_client
+                  (client_id, client_name, redirect_uris)
+                VALUES (
+            "#,
+        );
+        let mut separated = query_builder.separated(", ");
+        separated.push_bind(client_id_url);
+        separated.push_bind(client_name);
+        separated.push_bind(redirect_uris);
+        query_builder.push(
+            r#"
+                )
+                ON CONFLICT (client_id) DO UPDATE
+                SET client_name    = EXCLUDED.client_name,
+                    redirect_uris  = EXCLUDED.redirect_uris,
+                    updated_at     = now()
+                RETURNING
+                  id, client_id, client_name, redirect_uris,
+                  grant_types, response_types, token_endpoint_auth_method,
+                  created_at, updated_at
+            "#,
+        );
+
+        let row = query_builder
+            .build_query_as::<OAuth2ClientRow>()
+            .fetch_one(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!("Failed to upsert CIMD OAuth2 client into storage: {err}");
                 UniversalInboxError::DatabaseError {
                     source: err,
                     message,
@@ -719,6 +812,117 @@ impl OAuth2Repository for Repository {
             })?;
 
         Ok(result.rows_affected())
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id_url), err)]
+    async fn get_cimd_metadata_cache(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        client_id_url: &str,
+    ) -> Result<Option<CachedClientMetadata>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                SELECT client_id, document, expires_at
+                FROM oauth2_client_metadata_cache
+                WHERE client_id =
+            "#,
+        );
+        query_builder.push_bind(client_id_url);
+
+        let row = query_builder
+            .build_query_as::<OAuth2ClientMetadataCacheRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message =
+                    format!("Failed to fetch CIMD metadata cache row from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        row.map(CachedClientMetadata::try_from).transpose()
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id_url), err)]
+    async fn upsert_cimd_metadata_cache(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        client_id_url: &str,
+        document: &ClientMetadataDocument,
+        body_sha256: &[u8],
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), UniversalInboxError> {
+        let document_value = serde_json::to_value(document).map_err(|err| {
+            UniversalInboxError::Unexpected(anyhow::anyhow!(
+                "Failed to serialize CIMD document for storage: {err}"
+            ))
+        })?;
+
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                INSERT INTO oauth2_client_metadata_cache
+                  (client_id, document, body_sha256, expires_at)
+                VALUES (
+            "#,
+        );
+        let mut separated = query_builder.separated(", ");
+        separated.push_bind(client_id_url);
+        separated.push_bind(document_value);
+        separated.push_bind(body_sha256);
+        separated.push_bind(expires_at);
+        query_builder.push(
+            r#"
+                )
+                ON CONFLICT (client_id) DO UPDATE
+                SET document    = EXCLUDED.document,
+                    body_sha256 = EXCLUDED.body_sha256,
+                    fetched_at  = now(),
+                    expires_at  = EXCLUDED.expires_at
+            "#,
+        );
+
+        query_builder
+            .build()
+            .execute(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message =
+                    format!("Failed to upsert CIMD metadata cache row into storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        Ok(())
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct OAuth2ClientMetadataCacheRow {
+    client_id: String,
+    document: serde_json::Value,
+    expires_at: DateTime<Utc>,
+}
+
+impl TryFrom<OAuth2ClientMetadataCacheRow> for CachedClientMetadata {
+    type Error = UniversalInboxError;
+
+    fn try_from(row: OAuth2ClientMetadataCacheRow) -> Result<Self, Self::Error> {
+        let document: ClientMetadataDocument =
+            serde_json::from_value(row.document).map_err(|err| {
+                UniversalInboxError::Unexpected(anyhow::anyhow!(
+                    "Stored CIMD document for {} is no longer parseable as ClientMetadataDocument: {err}",
+                    row.client_id
+                ))
+            })?;
+        Ok(CachedClientMetadata {
+            client_id: row.client_id,
+            document,
+            expires_at: row.expires_at,
+        })
     }
 }
 

@@ -15,8 +15,12 @@ use universal_inbox::{
 };
 
 use crate::{
+    configuration::CimdSettings,
     repository::{Repository, oauth2::OAuth2Repository},
-    universal_inbox::UniversalInboxError,
+    universal_inbox::{
+        UniversalInboxError,
+        oauth2::cimd::{self, is_cimd_client_id},
+    },
     utils::jwt::{Claims, JWT_SIGNING_ALGO, JWTBase64EncodedSigningKeys, JWTSigningKeys},
 };
 
@@ -28,6 +32,7 @@ pub struct OAuth2Service {
     repository: Arc<Repository>,
     jwt_encoding_key: EncodingKey,
     resource_url: String,
+    cimd_settings: CimdSettings,
 }
 
 impl OAuth2Service {
@@ -36,6 +41,7 @@ impl OAuth2Service {
         jwt_secret_key: String,
         jwt_public_key: String,
         resource_url: String,
+        cimd_settings: CimdSettings,
     ) -> Self {
         let jwt_signing_keys =
             JWTSigningKeys::load_from_base64_encoded_keys(JWTBase64EncodedSigningKeys {
@@ -47,6 +53,7 @@ impl OAuth2Service {
             repository,
             jwt_encoding_key: jwt_signing_keys.encoding_key.clone(),
             resource_url,
+            cimd_settings,
         }
     }
 
@@ -93,6 +100,83 @@ impl OAuth2Service {
             .await
     }
 
+    /// Resolve a `client_id` to an [`OAuth2Client`], regardless of whether it
+    /// was created via RFC 7591 dynamic client registration (opaque UUID-shaped
+    /// `client_id`) or Client ID Metadata Discovery (`https://...` URL
+    /// `client_id`).
+    ///
+    /// For CIMD clients, the metadata document is fetched lazily and cached
+    /// in `oauth2_client_metadata_cache`. Subsequent calls within the cache
+    /// TTL avoid the network round-trip entirely. The resulting `OAuth2Client`
+    /// is synthesised from the document — there is no row in `oauth2_client`
+    /// for CIMD clients.
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id), err)]
+    pub async fn resolve_client(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        client_id: &str,
+    ) -> Result<Option<OAuth2Client>, UniversalInboxError> {
+        if is_cimd_client_id(client_id) {
+            self.resolve_cimd_client(transaction, client_id)
+                .await
+                .map(Some)
+        } else {
+            self.get_client(transaction, client_id).await
+        }
+    }
+
+    /// Internal: load (or refetch) a CIMD client by metadata URL and project
+    /// the validated document into the shared [`OAuth2Client`] shape.
+    ///
+    /// On every resolve we also UPSERT into `oauth2_client` so that the
+    /// existing FK constraints on `oauth2_authorization_code` /
+    /// `oauth2_refresh_token` / `oauth2_user_consent` continue to point at a
+    /// real row — the CIMD doc is the source of truth for `redirect_uris`
+    /// and `client_name`, so we mirror it on every refresh.
+    async fn resolve_cimd_client(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        client_id_url: &str,
+    ) -> Result<OAuth2Client, UniversalInboxError> {
+        let cached = self
+            .repository
+            .get_cimd_metadata_cache(transaction, client_id_url)
+            .await?;
+        let now = Utc::now();
+        let document = if let Some(row) = cached
+            && row.expires_at > now
+        {
+            row.document
+        } else {
+            let fetched = cimd::fetch_and_validate(client_id_url, &self.cimd_settings).await?;
+            let new_expires_at =
+                now + TimeDelta::from_std(fetched.ttl).unwrap_or_else(|_| TimeDelta::seconds(3600));
+            self.repository
+                .upsert_cimd_metadata_cache(
+                    transaction,
+                    client_id_url,
+                    &fetched.document,
+                    &fetched.body_sha256,
+                    new_expires_at,
+                )
+                .await?;
+            fetched.document
+        };
+
+        // FK shadow row — see [`OAuth2Repository::upsert_cimd_oauth2_client`].
+        let client = self
+            .repository
+            .upsert_cimd_oauth2_client(
+                transaction,
+                client_id_url,
+                document.client_name.as_deref(),
+                &document.redirect_uris,
+            )
+            .await?;
+
+        Ok(client)
+    }
+
     #[tracing::instrument(
         level = "debug",
         skip_all,
@@ -118,17 +202,16 @@ impl OAuth2Service {
             });
         }
 
-        // Verify the client exists
+        // Verify the client exists (DCR row OR CIMD metadata document) and
+        // the redirect_uri is registered.
         let client = self
-            .repository
-            .get_oauth2_client_by_client_id(transaction, client_id)
+            .resolve_client(transaction, client_id)
             .await?
             .ok_or_else(|| UniversalInboxError::InvalidInputData {
                 source: None,
                 user_error: format!("Unknown client_id: {client_id}"),
             })?;
 
-        // Verify the redirect_uri is registered
         if !client.redirect_uris.contains(&redirect_uri.to_string()) {
             return Err(UniversalInboxError::InvalidInputData {
                 source: None,
@@ -556,6 +639,33 @@ pub fn is_loopback_redirect_uri(uri: &str) -> bool {
     url::Url::parse(uri)
         .map(|parsed| parsed.scheme() == "http" && is_loopback_host(parsed.host_str()))
         .unwrap_or(false)
+}
+
+/// Returns true when `redirect_uri`'s origin (scheme + host + port,
+/// normalized per RFC 6454) appears in the configured allow-list. Each entry
+/// of `allowed_origins` is expected to be a full origin string (e.g.
+/// `https://claude.ai`); we parse both sides as URLs and compare
+/// [`url::Url::origin`] rather than naive string match so that
+/// `https://claude.ai/api/mcp/auth_callback` matches `https://claude.ai`
+/// even though the strings differ.
+///
+/// Plain `http://` redirect_uris are never accepted by this check — only the
+/// existing [`is_loopback_redirect_uri`] check accepts those. This keeps the
+/// host allow-list a strict superset of the loopback path while never
+/// trusting plain HTTP to a third-party host.
+pub fn is_origin_in_allowlist(redirect_uri: &str, allowed_origins: &[String]) -> bool {
+    let Ok(parsed) = url::Url::parse(redirect_uri) else {
+        return false;
+    };
+    if parsed.scheme() != "https" {
+        return false;
+    }
+    let uri_origin = parsed.origin();
+    allowed_origins.iter().any(|origin_str| {
+        url::Url::parse(origin_str)
+            .map(|origin_url| origin_url.origin() == uri_origin)
+            .unwrap_or(false)
+    })
 }
 
 #[cfg(test)]

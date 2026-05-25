@@ -245,6 +245,60 @@ pub struct RedisSettings {
 pub struct Oauth2Settings {
     /// Hex-encoded 32-byte AES-256 key for encrypting OAuth tokens at rest.
     pub token_encryption_key: String,
+    /// Tunables for the Client ID Metadata Discovery (CIMD) document fetcher.
+    /// Defaults match draft-ietf-oauth-client-id-metadata-document recommendations.
+    #[serde(default)]
+    pub cimd: CimdSettings,
+}
+
+/// Knobs for the CIMD HTTP fetcher (timeout / body cap / cache TTL bounds).
+/// Every field has a `serde(default)` so the section can be omitted entirely
+/// from config files and the defaults will apply.
+#[derive(Deserialize, Clone, Debug)]
+pub struct CimdSettings {
+    /// Total request timeout (request + body) in seconds.
+    #[serde(default = "default_cimd_timeout_secs")]
+    pub timeout_secs: u64,
+    /// Maximum CIMD response body size; larger payloads are rejected.
+    #[serde(default = "default_cimd_max_body_bytes")]
+    pub max_body_bytes: usize,
+    /// Lower bound on cache TTL (clamps small `max-age` directives).
+    #[serde(default = "default_cimd_min_ttl_secs")]
+    pub min_ttl_secs: u64,
+    /// Upper bound on cache TTL.
+    #[serde(default = "default_cimd_max_ttl_secs")]
+    pub max_ttl_secs: u64,
+    /// TTL used when the response carries no `Cache-Control: max-age`.
+    #[serde(default = "default_cimd_default_ttl_secs")]
+    pub default_ttl_secs: u64,
+}
+
+impl Default for CimdSettings {
+    fn default() -> Self {
+        Self {
+            timeout_secs: default_cimd_timeout_secs(),
+            max_body_bytes: default_cimd_max_body_bytes(),
+            min_ttl_secs: default_cimd_min_ttl_secs(),
+            max_ttl_secs: default_cimd_max_ttl_secs(),
+            default_ttl_secs: default_cimd_default_ttl_secs(),
+        }
+    }
+}
+
+fn default_cimd_timeout_secs() -> u64 {
+    5
+}
+fn default_cimd_max_body_bytes() -> usize {
+    5 * 1024
+}
+fn default_cimd_min_ttl_secs() -> u64 {
+    60
+}
+fn default_cimd_max_ttl_secs() -> u64 {
+    86_400
+}
+fn default_cimd_default_ttl_secs() -> u64 {
+    3_600
 }
 
 #[derive(Debug, Clone)]
