@@ -20,7 +20,9 @@ use crate::{
     configuration::Settings,
     universal_inbox::{
         UniversalInboxError,
-        oauth2::service::{OAuth2Service, is_loopback_redirect_uri, validate_redirect_uri},
+        oauth2::service::{
+            OAuth2Service, is_loopback_redirect_uri, is_origin_in_allowlist, validate_redirect_uri,
+        },
     },
     utils::{jwt::Claims, rate_limit::IpRateLimiter},
 };
@@ -110,6 +112,7 @@ pub async fn register(
     body: web::Json<RegisterClientRequest>,
     req: actix_web::HttpRequest,
     rate_limiter: web::Data<Arc<OAuth2RateLimiter>>,
+    settings: web::Data<Settings>,
     authenticated: Option<Authenticated<Claims>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = crate::utils::rate_limit::check_ip_rate_limit(&req, &rate_limiter) {
@@ -129,20 +132,24 @@ pub async fn register(
         validate_redirect_uri(uri)?;
     }
 
-    // Unauthenticated dynamic client registration is permitted only when every
-    // redirect_uri is loopback — this preserves the MCP-spec public DCR path
-    // for desktop/CLI clients (Claude Code, MCP Inspector, …) while still
-    // blocking a remote attacker from seeding clients pointing at
-    // attacker-controlled hosts. The IP rate limiter on /api/oauth2/* caps
-    // abuse volume.
+    // Unauthenticated dynamic client registration is permitted when every
+    // redirect_uri is either loopback (the MCP-spec public DCR path for
+    // desktop/CLI clients — Claude Code, MCP Inspector, …) OR has an
+    // https origin present in `mcp_extra_allowed_origins` (the hosted MCP
+    // clients we already trust enough to grant CORS + MCP-Origin acceptance).
+    // The IP rate limiter on /api/oauth2/* and the explicit consent screen
+    // remain in place; the gate just keeps a remote attacker from seeding
+    // clients pointing at arbitrary attacker-controlled hosts.
+    let allowed_origins = &settings.application.security.mcp_extra_allowed_origins;
     if authenticated.is_none()
-        && !body
-            .redirect_uris
-            .iter()
-            .all(|uri| is_loopback_redirect_uri(uri))
+        && !body.redirect_uris.iter().all(|uri| {
+            is_loopback_redirect_uri(uri) || is_origin_in_allowlist(uri, allowed_origins)
+        })
     {
         return Err(UniversalInboxError::Unauthorized(anyhow!(
-            "Unauthenticated OAuth2 client registration is only allowed for loopback redirect_uris"
+            "Unauthenticated OAuth2 client registration requires a loopback or \
+             trusted-origin redirect_uri: {:?}",
+            body.redirect_uris
         )));
     }
 
@@ -213,10 +220,11 @@ pub async fn authorize(
         .await
         .context("Failed to create new transaction while creating authorization code")?;
 
-    // Verify the client exists and the redirect_uri is registered before doing
-    // anything else (mirrors what create_authorization_code would have done).
+    // Verify the client exists (DCR row OR CIMD metadata document) and the
+    // redirect_uri is registered before doing anything else (mirrors what
+    // create_authorization_code would have done).
     let client = service
-        .get_client(&mut transaction, &params.client_id)
+        .resolve_client(&mut transaction, &params.client_id)
         .await?
         .ok_or_else(|| UniversalInboxError::InvalidInputData {
             source: None,
@@ -322,7 +330,7 @@ pub async fn consent_get(
         .context("Failed to create new transaction while loading OAuth2 consent request")?;
 
     let client = service
-        .get_client(&mut transaction, &pending.client_id)
+        .resolve_client(&mut transaction, &pending.client_id)
         .await?
         .ok_or_else(|| UniversalInboxError::InvalidInputData {
             source: None,

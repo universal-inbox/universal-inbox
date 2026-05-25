@@ -101,7 +101,7 @@ redis = { version = "0.32.7", features = [
   "connection-manager",
 ] }
 regex = { workspace = true }
-reqwest = { workspace = true, features = ["rustls-tls", "gzip"] }
+reqwest = { workspace = true, features = ["rustls-tls", "gzip", "stream"] }
 reqwest_v013 = { package = "reqwest", version = "0.13", default-features = false, features = ["rustls", "json", "cookies", "gzip"] }
 reqwest-middleware = { version = "0.5.0", features = ["json", "form"] }
 reqwest-tracing = { version = "0.7.0", features = ["opentelemetry_0_31"] }

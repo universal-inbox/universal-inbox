@@ -831,6 +831,7 @@ pub async fn build_services(
         settings.application.http_session.jwt_secret_key.clone(),
         settings.application.http_session.jwt_public_key.clone(),
         resource_url,
+        settings.oauth2.cimd.clone(),
     ));
 
     (
