@@ -855,6 +855,9 @@ mod oauth2 {
             json!(["none"])
         );
         assert_eq!(body["resource_indicators_supported"], true);
+        // CIMD discovery flag — clients use this to know they can pass
+        // `client_id=https://example.com/client.json` instead of doing DCR.
+        assert_eq!(body["client_id_metadata_document_supported"], true);
     }
 
     #[rstest]
@@ -1410,6 +1413,74 @@ mod oauth2 {
                 "Authenticated loopback registration should succeed (redirect_uri={redirect_uri})"
             );
         }
+    }
+
+    /// Unauthenticated DCR succeeds when the redirect_uri's origin is in
+    /// `mcp_extra_allowed_origins`. The default test config inherits the
+    /// allow-list from `default.toml` (claude.ai / chatgpt.com / …), so a
+    /// hosted MCP client whose redirect_uri matches one of those origins
+    /// gets the same access as the loopback path used to be gated to.
+    #[rstest]
+    #[tokio::test]
+    async fn register_accepts_origin_in_mcp_allowlist(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let response = post_register(
+            &reqwest::Client::new(),
+            &app.app,
+            json!({
+                "client_name": "Claude Desktop",
+                "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+            }),
+        )
+        .await;
+        assert_eq!(
+            response.status(),
+            StatusCode::CREATED,
+            "Unauthenticated DCR with an allow-listed origin must succeed",
+        );
+    }
+
+    /// Hosts that aren't on the allow-list stay blocked. This is the case
+    /// motivating the original loopback gate (commit 996c814e) and the
+    /// guard must still apply for arbitrary third-party hosts.
+    #[rstest]
+    #[tokio::test]
+    async fn register_rejects_unrelated_https_host(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let response = post_register(
+            &reqwest::Client::new(),
+            &app.app,
+            json!({
+                "client_name": "evil",
+                "redirect_uris": ["https://evil.example/cb"],
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// The allow-list applies to `https://` only — even if `claude.ai` is
+    /// allow-listed, a plain `http://claude.ai/...` redirect_uri is still
+    /// rejected by the scheme-only `validate_redirect_uri` guard before the
+    /// origin check ever runs.
+    #[rstest]
+    #[tokio::test]
+    async fn register_rejects_http_against_allowlisted_origin(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let response = post_register(
+            &reqwest::Client::new(),
+            &app.app,
+            json!({
+                "client_name": "downgrade",
+                "redirect_uris": ["http://claude.ai/cb"],
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     // ------------------------------------------------------------------

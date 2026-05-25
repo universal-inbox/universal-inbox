@@ -29,6 +29,25 @@ reply_to_header = "support <support@example.com>"
 
 [application.security]
 csp_extra_connect_src = []
+# Origins trusted as MCP clients. This single allow-list is checked in three
+# places:
+#   1. path-restricted CORS for `/api/mcp`, `/api/oauth2`, `/.well-known/oauth-*`
+#   2. the MCP server's `Origin` header guard (RFC 6454)
+#   3. unauthenticated OAuth2 dynamic client registration: a redirect_uri
+#      whose origin is in this list is accepted even though it's not loopback
+# Defaults cover the major hosted MCP clients (Anthropic, OpenAI, Google,
+# Mistral); operators tighten via local.toml / env if they want a narrower
+# trust scope.
+mcp_extra_allowed_origins = [
+    "https://claude.ai",
+    "https://claude.com",
+    "https://chatgpt.com",
+    "https://chat.openai.com",
+    "https://platform.openai.com",
+    "https://gemini.google.com",
+    "https://chat.mistral.ai",
+    "https://callback.mistral.ai",
+]
 # Optional: block registration/authentication from specific email domains with custom messages
 # email_domain_blacklist = { "blocked-domain.com" = "Registration is not allowed from this domain", "example.org" = "Please use your company email address" }
 

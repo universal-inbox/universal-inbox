@@ -43,6 +43,11 @@ pub async fn authorization_server_metadata(settings: web::Data<Settings>) -> Htt
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["none"],
         "scopes_supported": ["read", "write"],
-        "resource_indicators_supported": true
+        "resource_indicators_supported": true,
+        // draft-ietf-oauth-client-id-metadata-document / MCP 2025-11-25
+        // §"Discovery". Signals that this AS accepts `client_id` values of
+        // the form `https://example.com/client.json` and will fetch that
+        // URL to discover the client's metadata.
+        "client_id_metadata_document_supported": true
     }))
 }
