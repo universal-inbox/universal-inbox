@@ -30,10 +30,20 @@ use crate::{
 };
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, schemars::JsonSchema)]
 pub struct ThirdPartyItem {
     pub id: ThirdPartyItemId,
     pub source_id: String,
+    // The 11-variant provider-specific union (TodoistItem, LinearIssue,
+    // GithubNotification, GoogleMailThread, …) is intentionally opaque in the
+    // MCP output schema — clients dispatch on `id` / `source_id` /
+    // `source_item` and read provider-specific fields on demand. Deriving full
+    // JsonSchema for every variant would pull every provider type into the
+    // schema and bloat the wire payload.
+    #[schemars(
+        with = "serde_json::Value",
+        description = "Provider-specific item payload. Schema is intentionally left open — the variant shape depends on the integration and may change without notice."
+    )]
     pub data: ThirdPartyItemData,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

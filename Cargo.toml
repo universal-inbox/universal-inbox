@@ -31,6 +31,7 @@ num_enum = "0.7.5"
 openidconnect = { workspace = true }
 regex = { workspace = true }
 rrule = { workspace = true }
+schemars = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["preserve_order"] }
@@ -67,6 +68,7 @@ regex = { version = "1.10.0" }
 reqwest = { version = "0.12", features = ["json", "cookies"] }
 rrule = { version = "0.14.0", features = ["serde"] }
 rstest = { version = "0.26.0" }
+schemars = { version = "1.0", features = ["chrono04", "uuid1", "url2"] }
 secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
