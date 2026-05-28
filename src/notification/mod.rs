@@ -3,6 +3,7 @@ use std::{fmt, str::FromStr};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use strum::{Display, EnumIter, EnumString};
@@ -20,7 +21,7 @@ use crate::{
 pub mod service;
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub struct Notification {
     pub id: NotificationId,
     pub title: String,
@@ -54,7 +55,7 @@ impl HasHtmlUrl for Notification {
 }
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub struct NotificationWithTask {
     pub id: NotificationId,
     pub title: String,
@@ -95,7 +96,7 @@ impl HasHtmlUrl for NotificationWithTask {
 }
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct NotificationWithTaskSummary {
     pub id: NotificationId,
     pub title: String,
@@ -190,7 +191,7 @@ impl NotificationWithTask {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash, JsonSchema)]
 #[serde(transparent)]
 pub struct NotificationId(pub Uuid);
 
@@ -221,7 +222,7 @@ impl FromStr for NotificationId {
 }
 
 macro_attr! {
-    #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!)]
+    #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!, JsonSchema)]
     pub enum NotificationStatus {
         Unread,
         Read,
@@ -233,7 +234,7 @@ macro_attr! {
 macro_attr! {
     // tag: New notification integration
     // Synchronization sources for notifications
-    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
+    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!, JsonSchema)]
     pub enum NotificationSyncSourceKind {
         Github,
         Linear,
@@ -248,7 +249,7 @@ macro_attr! {
 macro_attr! {
     // tag: New notification integration
     // notification sources, either direct or from tasks
-    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!, EnumIter)]
+    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!, EnumIter, JsonSchema)]
     pub enum NotificationSourceKind {
         Github,
         Todoist,
@@ -374,7 +375,7 @@ pub trait NotificationSource: IntegrationProviderSource {
     fn is_supporting_snoozed_notifications(&self) -> bool;
 }
 
-#[derive(Copy, Clone, PartialEq, Default, Debug, Display, EnumString, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Default, Debug, Display, EnumString, Serialize, Deserialize, JsonSchema)]
 pub enum NotificationListOrder {
     #[default]
     UpdatedAtAsc,

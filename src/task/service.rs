@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -11,7 +12,7 @@ pub struct SyncTasksParameters {
     pub asynchronous: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq, JsonSchema)]
 pub struct TaskPatch {
     pub status: Option<TaskStatus>,
     pub project_name: Option<String>,

@@ -38,11 +38,11 @@ use crate::{
         ActOnNotificationArgs, BulkActNotificationsArgs, CreateTaskFromNotificationArgs,
         GetNotificationArgs, GetTaskArgs, ListNotificationsArgs, ListTasksArgs, McpServices,
         SearchTasksArgs, SyncNotificationsArgs, SyncTasksArgs, ToolCallError, UpdateTaskArgs,
-        act_on_notification_input_schema, bulk_act_notifications_input_schema,
-        create_task_from_notification_input_schema, execute_tool, get_notification_input_schema,
-        get_task_input_schema, list_notifications_input_schema, list_tasks_input_schema,
-        search_tasks_input_schema, sync_notifications_input_schema, sync_tasks_input_schema,
-        update_task_input_schema,
+        act_on_notification_output_schema, bulk_act_notifications_output_schema,
+        create_task_from_notification_output_schema, execute_tool, get_notification_output_schema,
+        get_task_output_schema, list_notifications_output_schema, list_tasks_output_schema,
+        search_tasks_output_schema, sync_notifications_output_schema, sync_tasks_output_schema,
+        update_task_output_schema,
     },
     universal_inbox::{notification::service::NotificationService, task::service::TaskService},
     utils::jwt::Claims,
@@ -408,7 +408,7 @@ impl UniversalInboxMcpServer {
         name = "list_notifications",
         title = "List notifications",
         description = "List Universal Inbox notifications (summaries without third-party details). Use get_notification for full details. Does not trigger synchronization unless trigger_sync is true.",
-        input_schema = list_notifications_input_schema(),
+        output_schema = list_notifications_output_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
     async fn list_notifications(
@@ -424,7 +424,7 @@ impl UniversalInboxMcpServer {
         name = "get_notification",
         title = "Get notification",
         description = "Fetch a single Universal Inbox notification.",
-        input_schema = get_notification_input_schema(),
+        output_schema = get_notification_output_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
     async fn get_notification(
@@ -440,7 +440,7 @@ impl UniversalInboxMcpServer {
         name = "act_on_notification",
         title = "Act on notification",
         description = "Apply a single notification action. Write operations execute immediately.",
-        input_schema = act_on_notification_input_schema(),
+        output_schema = act_on_notification_output_schema(),
         annotations(destructive_hint = true)
     )]
     async fn act_on_notification(
@@ -456,7 +456,7 @@ impl UniversalInboxMcpServer {
         name = "bulk_act_notifications",
         title = "Bulk act on notifications",
         description = "Apply the same action to all matching notifications. Empty status/source filters match all notifications.",
-        input_schema = bulk_act_notifications_input_schema(),
+        output_schema = bulk_act_notifications_output_schema(),
         annotations(destructive_hint = true)
     )]
     async fn bulk_act_notifications(
@@ -472,7 +472,7 @@ impl UniversalInboxMcpServer {
         name = "create_task_from_notification",
         title = "Create task from notification",
         description = "Create a task from a notification and link the two together.",
-        input_schema = create_task_from_notification_input_schema(),
+        output_schema = create_task_from_notification_output_schema(),
         annotations(destructive_hint = true)
     )]
     async fn create_task_from_notification(
@@ -488,7 +488,7 @@ impl UniversalInboxMcpServer {
         name = "sync_notifications",
         title = "Synchronize notifications",
         description = "Synchronize notification sources immediately and return the resulting notifications.",
-        input_schema = sync_notifications_input_schema(),
+        output_schema = sync_notifications_output_schema(),
         annotations(destructive_hint = true)
     )]
     async fn sync_notifications(
@@ -504,7 +504,7 @@ impl UniversalInboxMcpServer {
         name = "list_tasks",
         title = "List tasks",
         description = "List tasks synchronized through Universal Inbox (summaries without third-party details). Use get_task for full details. Does not trigger synchronization unless trigger_sync is true.",
-        input_schema = list_tasks_input_schema(),
+        output_schema = list_tasks_output_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
     async fn list_tasks(
@@ -519,7 +519,7 @@ impl UniversalInboxMcpServer {
         name = "get_task",
         title = "Get task",
         description = "Fetch a single task synchronized through Universal Inbox.",
-        input_schema = get_task_input_schema(),
+        output_schema = get_task_output_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
     async fn get_task(
@@ -534,7 +534,7 @@ impl UniversalInboxMcpServer {
         name = "search_tasks",
         title = "Search tasks",
         description = "Search tasks synchronized through Universal Inbox by text.",
-        input_schema = search_tasks_input_schema(),
+        output_schema = search_tasks_output_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
     async fn search_tasks(
@@ -550,7 +550,7 @@ impl UniversalInboxMcpServer {
         name = "update_task",
         title = "Update task",
         description = "Patch an existing task synchronized through Universal Inbox. Write operations execute immediately.",
-        input_schema = update_task_input_schema(),
+        output_schema = update_task_output_schema(),
         annotations(destructive_hint = true)
     )]
     async fn update_task(
@@ -566,7 +566,7 @@ impl UniversalInboxMcpServer {
         name = "sync_tasks",
         title = "Synchronize tasks",
         description = "Synchronize task sources immediately and return the resulting tasks. Only synchronizes tasks tracked by Universal Inbox, not all tasks from the provider.",
-        input_schema = sync_tasks_input_schema(),
+        output_schema = sync_tasks_output_schema(),
         annotations(destructive_hint = true)
     )]
     async fn sync_tasks(
@@ -589,5 +589,91 @@ impl ServerHandler for UniversalInboxMcpServer {
                     .with_description(SERVER_INSTRUCTIONS.to_string()),
             )
             .with_instructions(SERVER_INSTRUCTIONS)
+    }
+}
+
+#[cfg(test)]
+mod registration_tests {
+    use super::*;
+
+    #[test]
+    fn every_tool_advertises_an_output_schema() {
+        let tools = UniversalInboxMcpServer::tool_router().list_all();
+        assert_eq!(tools.len(), 11, "expected all 11 MCP tools to be registered");
+        for tool in &tools {
+            assert!(
+                tool.output_schema.is_some(),
+                "tool `{}` is missing an outputSchema",
+                tool.name
+            );
+            let schema = tool.output_schema.as_ref().unwrap();
+            assert_eq!(
+                schema.get("type").and_then(|v| v.as_str()),
+                Some("object"),
+                "tool `{}` outputSchema must be a JSON object schema",
+                tool.name
+            );
+        }
+    }
+
+    /// v3 mirror: the `#[tool]` macro now auto-derives every input schema from
+    /// `Parameters<*Args>`. This test guards against accidentally regressing the
+    /// `inputSchema` field (which the spec marks as required) and confirms the
+    /// tools that previously had required keys still have them.
+    #[test]
+    #[ignore = "manual visual inspection only"]
+    fn dump_list_notifications_input_schema() {
+        let tools = UniversalInboxMcpServer::tool_router().list_all();
+        let tool = tools
+            .iter()
+            .find(|t| t.name.as_ref() == "list_notifications")
+            .unwrap();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&*tool.input_schema).unwrap()
+        );
+    }
+
+    #[test]
+    fn every_tool_advertises_an_input_schema() {
+        let tools = UniversalInboxMcpServer::tool_router().list_all();
+        assert_eq!(tools.len(), 11, "expected all 11 MCP tools to be registered");
+
+        let expected_required: std::collections::HashMap<&str, &[&str]> = [
+            ("get_notification", &["notification_id"][..]),
+            ("act_on_notification", &["notification_id", "action"][..]),
+            ("bulk_act_notifications", &["action"][..]),
+            ("create_task_from_notification", &["notification_id"][..]),
+            ("get_task", &["task_id"][..]),
+            ("search_tasks", &["matches"][..]),
+            ("update_task", &["task_id", "patch"][..]),
+        ]
+        .into_iter()
+        .collect();
+
+        for tool in &tools {
+            let schema = &tool.input_schema;
+            assert_eq!(
+                schema.get("type").and_then(|v| v.as_str()),
+                Some("object"),
+                "tool `{}` inputSchema must be a JSON object schema",
+                tool.name
+            );
+
+            if let Some(required_keys) = expected_required.get(tool.name.as_ref()) {
+                let actual: Vec<&str> = schema
+                    .get("required")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+                    .unwrap_or_default();
+                for key in *required_keys {
+                    assert!(
+                        actual.contains(key),
+                        "tool `{}`: expected `{key}` in inputSchema.required, got {actual:?}",
+                        tool.name
+                    );
+                }
+            }
+        }
     }
 }

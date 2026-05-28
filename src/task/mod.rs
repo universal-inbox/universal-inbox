@@ -7,6 +7,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, ParseError, TimeDelta, Utc};
 use clap::ValueEnum;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
@@ -30,7 +31,7 @@ pub mod integrations;
 pub mod service;
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub struct Task {
     pub id: TaskId,
     pub title: String,
@@ -71,7 +72,7 @@ impl PartialEq for Task {
 }
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, JsonSchema)]
 pub struct TaskSummary {
     pub id: TaskId,
     pub source_id: String,
@@ -90,7 +91,7 @@ impl fmt::Display for TaskSummary {
 }
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, JsonSchema)]
 pub struct TaskSummaryWithStatus {
     pub id: TaskId,
     pub title: String,
@@ -132,7 +133,7 @@ impl From<Task> for TaskSummaryWithStatus {
 }
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, JsonSchema)]
 pub struct ProjectSummary {
     pub source_id: ProjectId,
     pub name: String,
@@ -144,7 +145,7 @@ impl fmt::Display for ProjectSummary {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, JsonSchema)]
 #[serde(transparent)]
 pub struct ProjectId(pub String);
 
@@ -216,7 +217,7 @@ impl HasHtmlUrl for Task {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash, JsonSchema)]
 #[serde(transparent)]
 pub struct TaskId(pub Uuid);
 
@@ -246,7 +247,7 @@ impl FromStr for TaskId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, JsonSchema)]
 #[serde(tag = "type", content = "content")]
 pub enum DueDate {
     Date(NaiveDate),
@@ -349,7 +350,7 @@ impl From<NaiveDate> for DueDate {
 }
 
 macro_attr! {
-    #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!)]
+    #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!, JsonSchema)]
     pub enum TaskStatus {
         Active,
         Done,
@@ -357,7 +358,7 @@ macro_attr! {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, JsonSchema)]
 pub struct TaskCreation {
     pub title: String,
     pub body: Option<String>,
@@ -451,6 +452,27 @@ pub enum TaskPriority {
     P4 = 4,
 }
 
+// `Serialize_repr` makes `TaskPriority` serialize as a 1-4 integer. The
+// matching JSON Schema is hand-written because schemars otherwise emits a
+// string-tagged enum based on the variant names.
+impl JsonSchema for TaskPriority {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("TaskPriority")
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "integer",
+            "enum": [1, 2, 3, 4],
+            "description": "Task priority: 1 = highest, 4 = lowest."
+        })
+    }
+
+    fn inline_schema() -> bool {
+        true
+    }
+}
+
 impl FromStr for TaskPriority {
     type Err = String;
 
@@ -473,7 +495,7 @@ impl Display for TaskPriority {
 
 macro_attr! {
     // Synchronization sources for tasks
-    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
+    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!, JsonSchema)]
     pub enum TaskSyncSourceKind {
         Todoist,
         TickTick,
@@ -482,7 +504,7 @@ macro_attr! {
 }
 
 macro_attr! {
-    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
+    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!, JsonSchema)]
     pub enum TaskSourceKind {
         Todoist,
         TickTick,

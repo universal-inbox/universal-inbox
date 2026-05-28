@@ -230,7 +230,7 @@ macro_attr! {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash, schemars::JsonSchema)]
 #[serde(transparent)]
 pub struct IntegrationConnectionId(pub Uuid);
 

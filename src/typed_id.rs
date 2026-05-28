@@ -1,5 +1,6 @@
-use std::{fmt, marker::PhantomData, ops::Deref};
+use std::{borrow::Cow, fmt, marker::PhantomData, ops::Deref};
 
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// A generic type-checked wrapper around a generic identifier type.
@@ -97,5 +98,23 @@ impl<I: Serialize, T> Serialize for TypedId<I, T> {
         S: Serializer,
     {
         self.0.serialize(serializer)
+    }
+}
+
+impl<I: JsonSchema, T> JsonSchema for TypedId<I, T> {
+    fn schema_name() -> Cow<'static, str> {
+        I::schema_name()
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        I::schema_id()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        I::json_schema(generator)
+    }
+
+    fn inline_schema() -> bool {
+        I::inline_schema()
     }
 }

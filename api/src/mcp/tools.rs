@@ -3,7 +3,8 @@ use std::sync::Arc;
 use anyhow::{Context, anyhow};
 use apalis_redis::RedisStorage;
 use chrono::{DateTime, Utc};
-use rmcp::model::{JsonObject, object};
+use rmcp::{handler::server::tool::schema_for_output, model::JsonObject};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
@@ -55,7 +56,11 @@ impl ToolCallError {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum NotificationAction {
     MarkRead,
@@ -64,32 +69,36 @@ pub(crate) enum NotificationAction {
     SnoozeUntil,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct ListNotificationsArgs {
     #[serde(default)]
     status: Vec<NotificationStatus>,
     #[serde(default)]
     sources: Vec<NotificationSourceKind>,
-    include_snoozed_notifications: Option<bool>,
+    #[serde(default)]
+    include_snoozed_notifications: bool,
     order_by: Option<NotificationListOrder>,
+    #[schemars(description = "Opaque pagination cursor — pass the previous_page_token or next_page_token returned by a prior list_notifications response.")]
     page_token: Option<PageToken>,
     task_id: Option<TaskId>,
-    trigger_sync: Option<bool>,
+    #[serde(default)]
+    trigger_sync: bool,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct GetNotificationArgs {
     notification_id: NotificationId,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct ActOnNotificationArgs {
     notification_id: NotificationId,
     action: NotificationAction,
+    #[schemars(description = "Required when `action` is `snooze_until`; ignored otherwise.")]
     snoozed_until: Option<DateTime<Utc>>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct BulkActNotificationsArgs {
     #[serde(default)]
     statuses: Vec<NotificationStatus>,
@@ -98,7 +107,7 @@ pub(crate) struct BulkActNotificationsArgs {
     action: BulkNotificationAction,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum BulkNotificationAction {
     MarkRead,
@@ -106,240 +115,46 @@ pub(crate) enum BulkNotificationAction {
     Unsubscribe,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct CreateTaskFromNotificationArgs {
     notification_id: NotificationId,
     task_creation: Option<TaskCreation>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct SyncNotificationsArgs {
     source: Option<NotificationSyncSourceKind>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct ListTasksArgs {
     status: Option<TaskStatus>,
-    only_synced_tasks: Option<bool>,
-    trigger_sync: Option<bool>,
+    #[serde(default = "default_true")]
+    only_synced_tasks: bool,
+    #[serde(default)]
+    trigger_sync: bool,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct GetTaskArgs {
     task_id: TaskId,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct SearchTasksArgs {
+    #[schemars(length(min = 1))]
     matches: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct UpdateTaskArgs {
     task_id: TaskId,
     patch: TaskPatch,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct SyncTasksArgs {
     source: Option<TaskSyncSourceKind>,
-}
-
-pub fn tool_definitions() -> Vec<Value> {
-    vec![
-        json!({
-            "name": "list_notifications",
-            "title": "List notifications",
-            "description": "List Universal Inbox notifications (summaries without third-party details). Use get_notification for full details. Does not trigger synchronization unless trigger_sync is true.",
-            "annotations": {
-                "readOnlyHint": true,
-                "idempotentHint": true
-            },
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "status": notification_status_array_schema(),
-                    "sources": notification_source_array_schema(),
-                    "include_snoozed_notifications": { "type": "boolean", "default": false },
-                    "order_by": notification_order_schema(),
-                    "page_token": page_token_schema(),
-                    "task_id": { "type": "string", "format": "uuid" },
-                    "trigger_sync": { "type": "boolean", "default": false }
-                }
-            }
-        }),
-        json!({
-            "name": "get_notification",
-            "title": "Get notification",
-            "description": "Fetch a single Universal Inbox notification.",
-            "annotations": {
-                "readOnlyHint": true,
-                "idempotentHint": true
-            },
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "notification_id": { "type": "string", "format": "uuid" }
-                },
-                "required": ["notification_id"]
-            }
-        }),
-        json!({
-            "name": "act_on_notification",
-            "title": "Act on notification",
-            "description": "Apply a single notification action. Write operations execute immediately.",
-            "annotations": {
-                "destructiveHint": true,
-                "idempotentHint": false
-            },
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "notification_id": { "type": "string", "format": "uuid" },
-                    "action": {
-                        "type": "string",
-                        "enum": ["mark_read", "delete", "unsubscribe", "snooze_until"]
-                    },
-                    "snoozed_until": { "type": "string", "format": "date-time" }
-                },
-                "required": ["notification_id", "action"]
-            }
-        }),
-        json!({
-            "name": "bulk_act_notifications",
-            "title": "Bulk act on notifications",
-            "description": "Apply the same action to all matching notifications. Empty status/source filters match all notifications.",
-            "annotations": {
-                "destructiveHint": true,
-                "idempotentHint": false
-            },
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "statuses": notification_status_array_schema(),
-                    "sources": notification_source_array_schema(),
-                    "action": {
-                        "type": "string",
-                        "enum": ["mark_read", "delete", "unsubscribe"]
-                    }
-                },
-                "required": ["action"]
-            }
-        }),
-        json!({
-            "name": "create_task_from_notification",
-            "title": "Create task from notification",
-            "description": "Create a task from a notification and link the two together.",
-            "annotations": {
-                "destructiveHint": true,
-                "idempotentHint": false
-            },
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "notification_id": { "type": "string", "format": "uuid" },
-                    "task_creation": task_creation_schema()
-                },
-                "required": ["notification_id"]
-            }
-        }),
-        json!({
-            "name": "sync_notifications",
-            "title": "Synchronize notifications",
-            "description": "Synchronize notification sources immediately and return the resulting notifications.",
-            "annotations": {
-                "destructiveHint": true,
-                "idempotentHint": false
-            },
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "source": notification_sync_source_schema()
-                }
-            }
-        }),
-        json!({
-            "name": "list_tasks",
-            "title": "List tasks",
-            "description": "List tasks synchronized through Universal Inbox (summaries without third-party details). Use get_task for full details. Does not trigger synchronization unless trigger_sync is true.",
-            "annotations": {
-                "readOnlyHint": true,
-                "idempotentHint": true
-            },
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "status": task_status_schema(),
-                    "only_synced_tasks": { "type": "boolean", "default": true },
-                    "trigger_sync": { "type": "boolean", "default": false }
-                }
-            }
-        }),
-        json!({
-            "name": "get_task",
-            "title": "Get task",
-            "description": "Fetch a single task synchronized through Universal Inbox.",
-            "annotations": {
-                "readOnlyHint": true,
-                "idempotentHint": true
-            },
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "task_id": { "type": "string", "format": "uuid" }
-                },
-                "required": ["task_id"]
-            }
-        }),
-        json!({
-            "name": "search_tasks",
-            "title": "Search tasks",
-            "description": "Search tasks synchronized through Universal Inbox by text.",
-            "annotations": {
-                "readOnlyHint": true,
-                "idempotentHint": true
-            },
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "matches": { "type": "string", "minLength": 1 }
-                },
-                "required": ["matches"]
-            }
-        }),
-        json!({
-            "name": "update_task",
-            "title": "Update task",
-            "description": "Patch an existing task synchronized through Universal Inbox. Write operations execute immediately.",
-            "annotations": {
-                "destructiveHint": true,
-                "idempotentHint": false
-            },
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "task_id": { "type": "string", "format": "uuid" },
-                    "patch": task_patch_schema()
-                },
-                "required": ["task_id", "patch"]
-            }
-        }),
-        json!({
-            "name": "sync_tasks",
-            "title": "Synchronize tasks",
-            "description": "Synchronize task sources immediately and return the resulting tasks. Only synchronizes tasks tracked by Universal Inbox, not all tasks from the provider.",
-            "annotations": {
-                "destructiveHint": true,
-                "idempotentHint": false
-            },
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "source": task_sync_source_schema()
-                }
-            }
-        }),
-    ]
 }
 
 pub async fn execute_tool(
@@ -357,16 +172,14 @@ pub async fn execute_tool(
                 .list_notifications(
                     &mut transaction,
                     args.status,
-                    args.include_snoozed_notifications.unwrap_or(false),
+                    args.include_snoozed_notifications,
                     args.task_id,
                     args.order_by
                         .unwrap_or(NotificationListOrder::UpdatedAtDesc),
                     args.sources,
                     args.page_token,
                     user_id,
-                    args.trigger_sync
-                        .unwrap_or(false)
-                        .then(|| services.job_storage.clone()),
+                    args.trigger_sync.then(|| services.job_storage.clone()),
                 )
                 .await
                 .map_err(ToolCallError::execution)?;
@@ -450,14 +263,14 @@ pub async fn execute_tool(
                 .commit()
                 .await
                 .map_err(ToolCallError::execution)?;
-            let summaries: Vec<NotificationWithTaskSummary> = notifications
+            let notifications: Vec<NotificationWithTaskSummary> = notifications
                 .into_iter()
                 .map(NotificationWithTaskSummary::from)
                 .collect();
-            Ok(json!({
-                "count": summaries.len(),
-                "notifications": summaries
-            }))
+            serialize_result(BulkActResult {
+                count: notifications.len(),
+                notifications,
+            })
         }
         "create_task_from_notification" => {
             let args: CreateTaskFromNotificationArgs = parse_args(arguments)?;
@@ -479,7 +292,7 @@ pub async fn execute_tool(
                 .commit()
                 .await
                 .map_err(ToolCallError::execution)?;
-            Ok(json!({ "notification": notification }))
+            serialize_result(CreateTaskFromNotificationResult { notification })
         }
         "sync_notifications" => {
             let args: SyncNotificationsArgs = parse_args(arguments)?;
@@ -495,14 +308,14 @@ pub async fn execute_tool(
                     .await
                     .map_err(ToolCallError::execution)?
             };
-            let summaries: Vec<NotificationWithTaskSummary> = notifications
+            let notifications: Vec<NotificationWithTaskSummary> = notifications
                 .into_iter()
                 .map(NotificationWithTaskSummary::from)
                 .collect();
-            Ok(json!({
-                "count": summaries.len(),
-                "notifications": summaries
-            }))
+            serialize_result(SyncNotificationsResult {
+                count: notifications.len(),
+                notifications,
+            })
         }
         "list_tasks" => {
             let args: ListTasksArgs = parse_args(arguments)?;
@@ -512,11 +325,9 @@ pub async fn execute_tool(
                 .list_tasks(
                     &mut transaction,
                     args.status.unwrap_or(TaskStatus::Active),
-                    args.only_synced_tasks.unwrap_or(true),
+                    args.only_synced_tasks,
                     user_id,
-                    args.trigger_sync
-                        .unwrap_or(false)
-                        .then(|| services.job_storage.clone()),
+                    args.trigger_sync.then(|| services.job_storage.clone()),
                 )
                 .await
                 .map_err(ToolCallError::execution)?;
@@ -559,7 +370,7 @@ pub async fn execute_tool(
                 .commit()
                 .await
                 .map_err(ToolCallError::execution)?;
-            Ok(json!({ "tasks": tasks }))
+            serialize_result(SearchTasksResult { tasks })
         }
         "update_task" => {
             let args: UpdateTaskArgs = parse_args(arguments)?;
@@ -589,14 +400,14 @@ pub async fn execute_tool(
                     .await
                     .map_err(ToolCallError::execution)?
             };
-            let summaries: Vec<TaskSummaryWithStatus> = results
+            let tasks: Vec<TaskSummaryWithStatus> = results
                 .into_iter()
                 .map(|r| TaskSummaryWithStatus::from(r.task))
                 .collect();
-            Ok(json!({
-                "count": summaries.len(),
-                "tasks": summaries
-            }))
+            serialize_result(SyncTasksResult {
+                count: tasks.len(),
+                tasks,
+            })
         }
         _ => Err(ToolCallError::UnknownTool(name.to_string())),
     }
@@ -720,218 +531,217 @@ fn all_notification_sources() -> Vec<NotificationSourceKind> {
     ]
 }
 
-fn enum_string_schema(values: &[&str]) -> Value {
-    json!({
-        "type": "string",
-        "enum": values
+/// Result wrappers for tools whose response is a small object with named
+/// fields. They are typed so each tool has a single `T` to point
+/// `schema_for_output::<T>()` at, and so the executor constructs them
+/// statically instead of building ad-hoc `json!` literals.
+#[derive(Serialize, JsonSchema)]
+pub struct BulkActResult {
+    pub count: usize,
+    pub notifications: Vec<NotificationWithTaskSummary>,
+}
+
+#[derive(Serialize, JsonSchema)]
+pub struct CreateTaskFromNotificationResult {
+    pub notification: NotificationWithTask,
+}
+
+#[derive(Serialize, JsonSchema)]
+pub struct SyncNotificationsResult {
+    pub count: usize,
+    pub notifications: Vec<NotificationWithTaskSummary>,
+}
+
+#[derive(Serialize, JsonSchema)]
+pub struct SearchTasksResult {
+    pub tasks: Vec<TaskSummary>,
+}
+
+#[derive(Serialize, JsonSchema)]
+pub struct SyncTasksResult {
+    pub count: usize,
+    pub tasks: Vec<TaskSummaryWithStatus>,
+}
+
+fn serialize_result<T: Serialize>(value: T) -> Result<Value, ToolCallError> {
+    serde_json::to_value(value)
+        .context("Failed to serialize tool result")
+        .map_err(ToolCallError::execution)
+}
+
+fn output_schema_for<T: JsonSchema + 'static>(tool: &'static str) -> Arc<JsonObject> {
+    schema_for_output::<T>().unwrap_or_else(|err| {
+        panic!("`{tool}` outputSchema does not have an object root: {err}")
     })
 }
 
-pub(crate) fn notification_status_array_schema() -> Value {
-    json!({
-        "type": "array",
-        "items": enum_string_schema(&["Unread", "Read", "Deleted", "Unsubscribed"])
-    })
+pub(crate) fn list_notifications_output_schema() -> Arc<JsonObject> {
+    output_schema_for::<Page<NotificationWithTaskSummary>>("list_notifications")
 }
 
-pub(crate) fn notification_source_array_schema() -> Value {
-    json!({
-        "type": "array",
-        "items": enum_string_schema(&[
-            "Github",
-            "Todoist",
-            "Linear",
-            "GoogleMail",
-            "GoogleCalendar",
-            "GoogleDrive",
-            "Slack",
-            "API"
-        ])
-    })
+pub(crate) fn get_notification_output_schema() -> Arc<JsonObject> {
+    output_schema_for::<Notification>("get_notification")
 }
 
-pub(crate) fn notification_order_schema() -> Value {
-    enum_string_schema(&["UpdatedAtAsc", "UpdatedAtDesc"])
+pub(crate) fn act_on_notification_output_schema() -> Arc<JsonObject> {
+    output_schema_for::<Notification>("act_on_notification")
 }
 
-pub(crate) fn notification_sync_source_schema() -> Value {
-    enum_string_schema(&["Github", "Linear", "GoogleMail", "GoogleDrive"])
+pub(crate) fn bulk_act_notifications_output_schema() -> Arc<JsonObject> {
+    output_schema_for::<BulkActResult>("bulk_act_notifications")
 }
 
-pub(crate) fn task_status_schema() -> Value {
-    enum_string_schema(&["Active", "Done", "Deleted"])
+pub(crate) fn create_task_from_notification_output_schema() -> Arc<JsonObject> {
+    output_schema_for::<CreateTaskFromNotificationResult>("create_task_from_notification")
 }
 
-pub(crate) fn task_sync_source_schema() -> Value {
-    enum_string_schema(&["Todoist", "Linear"])
+pub(crate) fn sync_notifications_output_schema() -> Arc<JsonObject> {
+    output_schema_for::<SyncNotificationsResult>("sync_notifications")
 }
 
-fn task_priority_schema() -> Value {
-    json!({
-        "type": "integer",
-        "enum": [1, 2, 3, 4]
-    })
+pub(crate) fn list_tasks_output_schema() -> Arc<JsonObject> {
+    output_schema_for::<Page<TaskSummaryWithStatus>>("list_tasks")
 }
 
-pub(crate) fn page_token_schema() -> Value {
-    json!({
-        "type": "object",
-        "description": "Use the previous_page_token or next_page_token returned by list_notifications.",
-        "additionalProperties": true
-    })
+pub(crate) fn get_task_output_schema() -> Arc<JsonObject> {
+    output_schema_for::<Task>("get_task")
 }
 
-pub(crate) fn task_creation_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "title": { "type": "string" },
-            "body": { "type": ["string", "null"] },
-            "project_name": { "type": ["string", "null"] },
-            "due_at": { "type": ["object", "string", "null"] },
-            "priority": task_priority_schema()
-        },
-        "required": ["title", "priority"]
-    })
+pub(crate) fn search_tasks_output_schema() -> Arc<JsonObject> {
+    output_schema_for::<SearchTasksResult>("search_tasks")
 }
 
-pub(crate) fn task_patch_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "status": task_status_schema(),
-            "project_name": { "type": ["string", "null"] },
-            "due_at": { "type": ["object", "string", "null"] },
-            "priority": task_priority_schema(),
-            "body": { "type": ["string", "null"] },
-            "title": { "type": ["string", "null"] },
-            "sink_item_id": { "type": ["string", "null"], "format": "uuid" }
+pub(crate) fn update_task_output_schema() -> Arc<JsonObject> {
+    output_schema_for::<Task>("update_task")
+}
+
+pub(crate) fn sync_tasks_output_schema() -> Arc<JsonObject> {
+    output_schema_for::<SyncTasksResult>("sync_tasks")
+}
+
+#[cfg(test)]
+mod output_schema_tests {
+    use super::*;
+
+    fn assert_object_with_keys(schema: &JsonObject, required: &[&str]) {
+        assert_eq!(
+            schema.get("type").and_then(|v| v.as_str()),
+            Some("object"),
+            "schema must declare type=object"
+        );
+        let actual_required: Vec<&str> = schema
+            .get("required")
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+        for key in required {
+            assert!(
+                actual_required.contains(key),
+                "expected required key `{key}` in schema, got {actual_required:?}"
+            );
         }
-    })
-}
+    }
 
-pub(crate) fn list_notifications_input_schema() -> JsonObject {
-    object(json!({
-        "type": "object",
-        "properties": {
-            "status": notification_status_array_schema(),
-            "sources": notification_source_array_schema(),
-            "include_snoozed_notifications": { "type": "boolean", "default": false },
-            "order_by": notification_order_schema(),
-            "page_token": page_token_schema(),
-            "task_id": { "type": "string", "format": "uuid" },
-            "trigger_sync": { "type": "boolean", "default": false }
+    #[test]
+    fn list_notifications_output_schema_shape() {
+        let schema = list_notifications_output_schema();
+        assert_object_with_keys(&schema, &["per_page", "pages_count", "total", "content"]);
+    }
+
+    #[test]
+    fn get_notification_output_schema_shape() {
+        let schema = get_notification_output_schema();
+        assert_object_with_keys(&schema, &["id", "title", "status", "kind", "source_item"]);
+    }
+
+    #[test]
+    fn act_on_notification_output_schema_shape() {
+        let schema = act_on_notification_output_schema();
+        assert_object_with_keys(&schema, &["id", "status", "source_item"]);
+    }
+
+    #[test]
+    fn bulk_act_notifications_output_schema_shape() {
+        let schema = bulk_act_notifications_output_schema();
+        assert_object_with_keys(&schema, &["count", "notifications"]);
+    }
+
+    #[test]
+    fn create_task_from_notification_output_schema_shape() {
+        let schema = create_task_from_notification_output_schema();
+        assert_object_with_keys(&schema, &["notification"]);
+    }
+
+    #[test]
+    fn sync_notifications_output_schema_shape() {
+        let schema = sync_notifications_output_schema();
+        assert_object_with_keys(&schema, &["count", "notifications"]);
+    }
+
+    #[test]
+    fn list_tasks_output_schema_shape() {
+        let schema = list_tasks_output_schema();
+        assert_object_with_keys(&schema, &["per_page", "pages_count", "total", "content"]);
+    }
+
+    #[test]
+    fn get_task_output_schema_shape() {
+        let schema = get_task_output_schema();
+        assert_object_with_keys(&schema, &["id", "title", "status", "kind", "source_item"]);
+    }
+
+    #[test]
+    fn search_tasks_output_schema_shape() {
+        let schema = search_tasks_output_schema();
+        assert_object_with_keys(&schema, &["tasks"]);
+    }
+
+    #[test]
+    fn update_task_output_schema_shape() {
+        let schema = update_task_output_schema();
+        assert_object_with_keys(&schema, &["id", "title", "status", "source_item"]);
+    }
+
+    #[test]
+    fn sync_tasks_output_schema_shape() {
+        let schema = sync_tasks_output_schema();
+        assert_object_with_keys(&schema, &["count", "tasks"]);
+    }
+
+    #[test]
+    #[ignore = "manual visual inspection only"]
+    fn dump_notification_schema() {
+        let schema = get_notification_output_schema();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&*schema).expect("serialize")
+        );
+    }
+
+    /// Sanity: the opaque-data annotation on `ThirdPartyItem` must keep the
+    /// 11-variant provider union out of `Notification`'s schema.
+    #[test]
+    fn third_party_item_data_is_opaque() {
+        let schema = get_notification_output_schema();
+        let serialized =
+            serde_json::to_string(&schema).expect("schema must serialize to JSON");
+        for variant in [
+            "TodoistItem",
+            "TickTickItem",
+            "SlackReaction",
+            "SlackThread",
+            "LinearIssue",
+            "LinearNotification",
+            "GithubNotification",
+            "GoogleMailThread",
+            "GoogleCalendarEvent",
+            "GoogleDriveComment",
+            "WebPage",
+        ] {
+            assert!(
+                !serialized.contains(variant),
+                "`{variant}` leaked into the Notification outputSchema — the opaque-`data` annotation regressed"
+            );
         }
-    }))
-}
-
-pub(crate) fn get_notification_input_schema() -> JsonObject {
-    object(json!({
-        "type": "object",
-        "properties": {
-            "notification_id": { "type": "string", "format": "uuid" }
-        },
-        "required": ["notification_id"]
-    }))
-}
-
-pub(crate) fn act_on_notification_input_schema() -> JsonObject {
-    object(json!({
-        "type": "object",
-        "properties": {
-            "notification_id": { "type": "string", "format": "uuid" },
-            "action": {
-                "type": "string",
-                "enum": ["mark_read", "delete", "unsubscribe", "snooze_until"]
-            },
-            "snoozed_until": { "type": "string", "format": "date-time" }
-        },
-        "required": ["notification_id", "action"]
-    }))
-}
-
-pub(crate) fn bulk_act_notifications_input_schema() -> JsonObject {
-    object(json!({
-        "type": "object",
-        "properties": {
-            "statuses": notification_status_array_schema(),
-            "sources": notification_source_array_schema(),
-            "action": {
-                "type": "string",
-                "enum": ["mark_read", "delete", "unsubscribe"]
-            }
-        },
-        "required": ["action"]
-    }))
-}
-
-pub(crate) fn create_task_from_notification_input_schema() -> JsonObject {
-    object(json!({
-        "type": "object",
-        "properties": {
-            "notification_id": { "type": "string", "format": "uuid" },
-            "task_creation": task_creation_schema()
-        },
-        "required": ["notification_id"]
-    }))
-}
-
-pub(crate) fn sync_notifications_input_schema() -> JsonObject {
-    object(json!({
-        "type": "object",
-        "properties": {
-            "source": notification_sync_source_schema()
-        }
-    }))
-}
-
-pub(crate) fn list_tasks_input_schema() -> JsonObject {
-    object(json!({
-        "type": "object",
-        "properties": {
-            "status": task_status_schema(),
-            "only_synced_tasks": { "type": "boolean", "default": true },
-            "trigger_sync": { "type": "boolean", "default": false }
-        }
-    }))
-}
-
-pub(crate) fn get_task_input_schema() -> JsonObject {
-    object(json!({
-        "type": "object",
-        "properties": {
-            "task_id": { "type": "string", "format": "uuid" }
-        },
-        "required": ["task_id"]
-    }))
-}
-
-pub(crate) fn search_tasks_input_schema() -> JsonObject {
-    object(json!({
-        "type": "object",
-        "properties": {
-            "matches": { "type": "string", "minLength": 1 }
-        },
-        "required": ["matches"]
-    }))
-}
-
-pub(crate) fn update_task_input_schema() -> JsonObject {
-    object(json!({
-        "type": "object",
-        "properties": {
-            "task_id": { "type": "string", "format": "uuid" },
-            "patch": task_patch_schema()
-        },
-        "required": ["task_id", "patch"]
-    }))
-}
-
-pub(crate) fn sync_tasks_input_schema() -> JsonObject {
-    object(json!({
-        "type": "object",
-        "properties": {
-            "source": task_sync_source_schema()
-        }
-    }))
+    }
 }

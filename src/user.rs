@@ -158,7 +158,7 @@ impl From<Username> for String {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash, schemars::JsonSchema)]
 #[serde(transparent)]
 pub struct UserId(pub Uuid);
 

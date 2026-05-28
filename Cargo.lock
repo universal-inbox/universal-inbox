@@ -6386,6 +6386,8 @@ dependencies = [
  "schemars_derive",
  "serde",
  "serde_json",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -8179,6 +8181,7 @@ dependencies = [
  "regex",
  "rrule",
  "rstest",
+ "schemars 1.2.1",
  "secrecy",
  "serde",
  "serde_json",
@@ -8259,6 +8262,7 @@ dependencies = [
  "rrule",
  "rstest",
  "rustls",
+ "schemars 1.2.1",
  "secrecy",
  "serde",
  "serde_json",
