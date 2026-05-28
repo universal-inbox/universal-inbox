@@ -78,8 +78,9 @@ pub struct SuccessResponse {
 
 pub const DEFAULT_PAGE_SIZE: usize = 25;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, schemars::JsonSchema)]
 #[serde(bound = "T: Serialize + for<'d> Deserialize<'d>")]
+#[schemars(bound = "T: schemars::JsonSchema")]
 pub struct Page<T> {
     pub per_page: usize,
     pub pages_count: usize,
@@ -136,7 +137,7 @@ where
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Display)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Display, schemars::JsonSchema)]
 pub enum PageToken {
     Before(DateTime<Utc>),
     After(DateTime<Utc>),
