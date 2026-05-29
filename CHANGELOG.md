@@ -12,19 +12,30 @@
 - Hide quoted content in Gmail email previews
 - Internalize OAuth for GitHub, Slack, Todoist, Google Mail, Google Calendar, and Google Drive (replace Nango).
 - Add TickTick integration with internalized OAuth2 (PKCE), task sync, plan/link flows, and emoji-aware task completion
+- Support hosted MCP clients (Claude, ChatGPT, Gemini, Mistral) via Client ID Metadata Document (CIMD) discovery and an allow-listed Dynamic Client Registration flow (MCP 2025-11-25 auth spec)
 
 ### Changed
 
+- Full redesign of the user interface
 - Switch Slack preview rendering to direct HTML via `slack-blocks-render` v0.5.0, replacing the Markdown→comrak→regex pipeline
 
 ### Security
 
+- Verify Slack webhook signatures and require explicit user consent in the OAuth2 authorization code flow
+- Close IDOR / cross-tenant access paths: uniform 404 on integration-connection probes and blocked cross-tenant writes through the task third-party-item endpoint
+- Harden authentication — IP-based rate limiting on auth/OAuth2 endpoints, atomic refresh-token rotation with reuse detection, and nonce/origin-bound, non-enumerable passkey ceremonies
+- Stop leaking the Crisp HMAC signing key via `/api/front_config` (now `Cache-Control: private`), tighten CORS, and add `frame-ancestors` / `X-Frame-Options` clickjacking protection
+- Run the Docker runtime stage as non-root on a pinned base image and pin third-party CI/CD actions to commit SHAs
 - Update `quinn-proto` to 0.11.14 to fix RUSTSEC-2026-0037 (DoS via invalid QUIC transport parameters)
 - Replace `typed_id` + `paste` crates with inline implementation to resolve RUSTSEC-2024-0436 (unmaintained `paste` crate)
 - Downgrade `zip` from yanked 7.4.0 to 7.2.0 (resolves GH#133)
 
 ### Fixed
 
+- Persist MCP sessions to Redis so they survive multi-pod restarts
+- Mark an integration connection as Failing when its OAuth refresh token is missing or rejected (`invalid_grant`)
+- Preserve integration-connection context when updating its configuration
+- Preserve precision of numeric-looking environment variables in the config loader
 - Scope the `slack:list_emojis` Redis cache entry by workspace team id so custom emojis from one workspace are no longer served to users of other workspaces
 
 ## 2026-03-17
