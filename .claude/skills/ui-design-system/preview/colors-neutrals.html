@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Colors — Neutrals & Surfaces</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; font-family: var(--font-ui); color: var(--ui-base-content); }
+  .wrap { padding: 20px 22px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sw { display: flex; flex-direction: column; gap: 6px; }
+  .chip { width: 84px; height: 56px; border-radius: var(--ui-radius-md); border: 1px solid var(--ui-border-light); }
+  .name { font-size: 10.5px; font-weight: 600; color: var(--ui-base-content); }
+  .hex { font-family: var(--font-mono); font-size: 10px; color: var(--ui-base-muted); }
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ui-base-muted); margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="label">Base / Surface — Slate scale</div>
+  <div class="row" style="margin-bottom: 18px;">
+    <div class="sw"><div class="chip" style="background:#FEFEFE"></div><div class="name">base-100</div><div class="hex">#FEFEFE</div></div>
+    <div class="sw"><div class="chip" style="background:#F7F9FC"></div><div class="name">base-200</div><div class="hex">#F7F9FC</div></div>
+    <div class="sw"><div class="chip" style="background:#E1E6EE"></div><div class="name">base-300</div><div class="hex">#E1E6EE</div></div>
+    <div class="sw"><div class="chip" style="background:#E2E8F0"></div><div class="name">border</div><div class="hex">#E2E8F0</div></div>
+    <div class="sw"><div class="chip" style="background:#F1F5F9"></div><div class="name">border-light</div><div class="hex">#F1F5F9</div></div>
+  </div>
+  <div class="label">Text — Foreground</div>
+  <div class="row" style="margin-bottom: 18px;">
+    <div class="sw"><div class="chip" style="background:#0F172A"></div><div class="name">base-content</div><div class="hex">#0F172A</div></div>
+    <div class="sw"><div class="chip" style="background:#475569"></div><div class="name">secondary</div><div class="hex">#475569</div></div>
+    <div class="sw"><div class="chip" style="background:#64748B"></div><div class="name">base-muted</div><div class="hex">#64748B</div></div>
+  </div>
+  <div class="label">Sidebar (always dark)</div>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:#0C1525"></div><div class="name">sidebar-bg</div><div class="hex">#0C1525</div></div>
+    <div class="sw"><div class="chip" style="background:#CBD5E1"></div><div class="name">sidebar-text</div><div class="hex">#CBD5E1</div></div>
+    <div class="sw"><div class="chip" style="background:#F1F5F9"></div><div class="name">sidebar-bright</div><div class="hex">#F1F5F9</div></div>
+  </div>
+</div>
+</body>
+</html>

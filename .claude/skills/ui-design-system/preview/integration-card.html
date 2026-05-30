@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Integration card</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #F7F9FC; font-family: var(--font-ui); color: #0F172A; font-size: 12.5px; }
+  .wrap { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .card { background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; }
+  .card.expanded { border-color: #388FEF; box-shadow: 0 2px 12px rgba(56,143,239,0.08); }
+  .card.error { border-color: rgba(232,137,154,0.4); background: #FDF0F2; }
+  .hd { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
+  .logo.brand-icon { width: 40px; height: 40px; border-radius: 9px; align-self: center; }
+  .logo.brand-icon iconify-icon { font-size: 23px; }
+  .logo.brand-icon iconify-icon[icon="logos:google-gmail"]    { font-size: 16px; }
+  .logo.brand-icon iconify-icon[icon="logos:google-calendar"] { font-size: 21px; }
+  .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+  .name { font-size: 13.5px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
+  .desc { font-size: 11px; color: #64748B; line-height: 1.3; margin-top: 1px; }
+  .leaf { display: flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 500; padding: 3px 8px; border-radius: 12px; }
+  .leaf.ok { color: #6BC5A0; background: #EDF9F3; }
+  .leaf.er { color: #E8899A; background: #FDF0F2; }
+  .ld { width: 6px; height: 6px; border-radius: 50%; }
+  .chev { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; color: #64748B; }
+  .right { display: flex; align-items: center; gap: 8px; }
+  .body { padding: 10px 14px; border-top: 1px solid #F1F5F9; }
+  .pod { background: #F7F9FC; border: 1px solid #F1F5F9; border-radius: 8px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
+  .pod-icon { width: 28px; height: 28px; border-radius: 6px; background: #fff; border: 1px solid #F1F5F9; display: flex; align-items: center; justify-content: center; }
+  .pod-info { flex: 1; }
+  .pod-name { font-size: 12.5px; font-weight: 600; }
+  .pod-detail { font-size: 11px; color: #64748B; margin-top: 1px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card expanded">
+    <div class="hd">
+      <div class="logo brand-icon"><iconify-icon icon="logos:github-icon"></iconify-icon></div>
+      <div class="meta"><div class="name">GitHub</div><div class="desc">Pull requests, issues, reviews</div></div>
+      <div class="right">
+        <div class="leaf ok"><span class="ld" style="background:#6BC5A0"></span>Connected</div>
+        <div class="chev"><iconify-icon icon="lucide:chevron-down" style="transform:rotate(180deg)"></iconify-icon></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="pod">
+        <div class="pod-icon">🐙</div>
+        <div class="pod-info"><div class="pod-name">david.rousselie</div><div class="pod-detail">github.com · Last synced 3 min ago</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card error">
+    <div class="hd">
+      <div class="logo brand-icon"><iconify-icon icon="logos:google-gmail"></iconify-icon></div>
+      <div class="meta"><div class="name">Google Mail</div><div class="desc">Auth token expired — Reconnect</div></div>
+      <div class="right">
+        <div class="leaf er"><span class="ld" style="background:#E8899A"></span>Error</div>
+        <div class="chev"><iconify-icon icon="lucide:chevron-down"></iconify-icon></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

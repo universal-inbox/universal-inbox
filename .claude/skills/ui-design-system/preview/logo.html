@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Logo</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; font-family: var(--font-ui); color: #0F172A; }
+  .wrap { padding: 22px; display: grid; grid-template-columns: repeat(4, auto); gap: 22px 28px; align-items: end; }
+  .block { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .lock { display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: #0C1525; border-radius: 12px; }
+  .lock .mark { width: 22px; height: 27px; }
+  .lock .name {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background-image: linear-gradient(to bottom, #12B1FA, #4481eb);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .on-light { background: #F7F9FC; border: 1px solid #E2E8F0; padding: 22px; border-radius: 12px; }
+  .on-dark  { background: #0C1525; padding: 22px; border-radius: 12px; }
+  .note { font-size: 10.5px; color: #64748B; letter-spacing: 0.02em; }
+  svg.mark { display: block; }
+  .mono-light { filter: grayscale(1) brightness(0); opacity: 0.9; }
+  .mono-dark  { filter: grayscale(1) brightness(100); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="block">
+    <div class="on-light"><img class="mark" src="../assets/logo.svg" style="width:56px;height:68px" alt="logo"></div>
+    <div class="note">Primary — on light</div>
+  </div>
+  <div class="block">
+    <div class="on-dark"><img class="mark" src="../assets/logo.svg" style="width:56px;height:68px" alt="logo"></div>
+    <div class="note">Primary — on dark</div>
+  </div>
+  <div class="block">
+    <div class="on-light"><img class="mark mono-light" src="../assets/logo.svg" style="width:56px;height:68px" alt="logo"></div>
+    <div class="note">Mono — on light</div>
+  </div>
+  <div class="block">
+    <div class="on-dark"><img class="mark mono-dark" src="../assets/logo.svg" style="width:56px;height:68px" alt="logo"></div>
+    <div class="note">Mono — on dark</div>
+  </div>
+
+  <div class="block" style="grid-column: span 2;">
+    <div class="lock">
+      <img class="mark" src="../assets/logo.svg" alt="logo">
+      <span class="name">Universal Inbox</span>
+    </div>
+    <div class="note">Horizontal lockup (sidebar header)</div>
+  </div>
+
+  <div class="block" style="grid-column: span 2;">
+    <div class="on-light" style="display:flex;align-items:center;gap:14px;">
+      <img class="mark" src="../assets/logo.svg" style="width:16px;height:20px" alt="logo">
+      <img class="mark" src="../assets/logo.svg" style="width:24px;height:29px" alt="logo">
+      <img class="mark" src="../assets/logo.svg" style="width:40px;height:49px" alt="logo">
+      <img class="mark" src="../assets/logo.svg" style="width:64px;height:78px" alt="logo">
+    </div>
+    <div class="note">Minimum size 16px → hero sizes</div>
+  </div>
+</div>
+</body>
+</html>

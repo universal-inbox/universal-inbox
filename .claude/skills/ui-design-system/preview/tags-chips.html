@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tags & Chips</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; font-family: var(--font-ui); color: var(--ui-base-content); font-size: 12.5px; }
+  .wrap { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ui-base-muted); min-width: 88px; }
+  .tag { font-size: 10px; font-weight: 500; padding: 1px 7px; border-radius: 10px; display: inline-flex; align-items: center; gap: 3px; }
+  .tag.bold { font-weight: 600; }
+  .dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; font-size: 11px; font-weight: 500; border-radius: 14px; border: 1px solid #E2E8F0; background: #fff; color: #64748B; }
+  .chip.active { border-color: #388FEF; background: #388FEF; color: #fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row"><span class="label">Action-required</span>
+    <span class="tag bold" style="background:#FFFBEB;color:#92400E"><span class="dot" style="background:#92400E"></span>review</span>
+    <span class="tag bold" style="background:#FDF0F2;color:#E8899A"><span class="dot" style="background:#E8899A"></span>urgent</span>
+    <span class="tag bold" style="background:#EDF6FB;color:#6BB8D9"><span class="dot" style="background:#6BB8D9"></span>mention</span>
+  </div>
+  <div class="row"><span class="label">Status</span>
+    <span class="tag" style="background:#EDF9F3;color:#6BC5A0">open</span>
+    <span class="tag" style="background:#F5F3FF;color:#8B5CF6">merged</span>
+    <span class="tag" style="background:#FDF0F2;color:#E8899A;opacity:.8">closed</span>
+    <span class="tag" style="background:#EFF6FF;color:#388FEF">in progress</span>
+  </div>
+  <div class="row"><span class="label">Priority</span>
+    <span class="tag" style="background:#FDF0F2;color:#E8899A">P1 task</span>
+    <span class="tag" style="background:#FFFBEB;color:#92400E">P2 task</span>
+    <span class="tag" style="background:#FDF8EC;color:#E8C46A">P3 task</span>
+    <span class="tag" style="background:#F1F5F9;color:#475569">P4 task</span>
+  </div>
+  <div class="row"><span class="label">Filter chips</span>
+    <button class="chip active">All <span style="opacity:.7">24</span></button>
+    <button class="chip">Unread <span style="opacity:.7">7</span></button>
+    <button class="chip">Mentions <span style="opacity:.7">3</span></button>
+  </div>
+</div>
+</body>
+</html>
