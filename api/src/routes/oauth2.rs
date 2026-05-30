@@ -21,7 +21,8 @@ use crate::{
     universal_inbox::{
         UniversalInboxError,
         oauth2::service::{
-            OAuth2Service, is_loopback_redirect_uri, is_origin_in_allowlist, validate_redirect_uri,
+            OAuth2Service, is_loopback_redirect_uri, is_origin_in_allowlist,
+            redirect_uri_matches_registered, validate_redirect_uri,
         },
     },
     utils::{jwt::Claims, rate_limit::IpRateLimiter},
@@ -230,7 +231,7 @@ pub async fn authorize(
             source: None,
             user_error: format!("Unknown client_id: {}", params.client_id),
         })?;
-    if !client.redirect_uris.contains(&params.redirect_uri) {
+    if !redirect_uri_matches_registered(&client.redirect_uris, &params.redirect_uri) {
         return Err(UniversalInboxError::InvalidInputData {
             source: None,
             user_error: format!("Invalid redirect_uri: {}", params.redirect_uri),

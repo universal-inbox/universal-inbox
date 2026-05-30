@@ -78,7 +78,9 @@ pub(crate) struct ListNotificationsArgs {
     #[serde(default)]
     include_snoozed_notifications: bool,
     order_by: Option<NotificationListOrder>,
-    #[schemars(description = "Opaque pagination cursor — pass the previous_page_token or next_page_token returned by a prior list_notifications response.")]
+    #[schemars(
+        description = "Opaque pagination cursor — pass the previous_page_token or next_page_token returned by a prior list_notifications response."
+    )]
     page_token: Option<PageToken>,
     task_id: Option<TaskId>,
     #[serde(default)]
@@ -570,9 +572,8 @@ fn serialize_result<T: Serialize>(value: T) -> Result<Value, ToolCallError> {
 }
 
 fn output_schema_for<T: JsonSchema + 'static>(tool: &'static str) -> Arc<JsonObject> {
-    schema_for_output::<T>().unwrap_or_else(|err| {
-        panic!("`{tool}` outputSchema does not have an object root: {err}")
-    })
+    schema_for_output::<T>()
+        .unwrap_or_else(|err| panic!("`{tool}` outputSchema does not have an object root: {err}"))
 }
 
 pub(crate) fn list_notifications_output_schema() -> Arc<JsonObject> {
@@ -723,8 +724,7 @@ mod output_schema_tests {
     #[test]
     fn third_party_item_data_is_opaque() {
         let schema = get_notification_output_schema();
-        let serialized =
-            serde_json::to_string(&schema).expect("schema must serialize to JSON");
+        let serialized = serde_json::to_string(&schema).expect("schema must serialize to JSON");
         for variant in [
             "TodoistItem",
             "TickTickItem",
