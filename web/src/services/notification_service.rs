@@ -567,8 +567,7 @@ impl Default for NotificationFilters {
                     kind,
                 })
                 .collect();
-        notification_source_kind_filters
-            .sort_by(|a, b| a.kind.to_string().cmp(&b.kind.to_string()));
+        notification_source_kind_filters.sort_by_key(|a| a.kind.to_string());
 
         Self {
             notification_source_kind_filters,

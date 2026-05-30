@@ -1139,8 +1139,8 @@ impl TaskService {
             .await?;
         Ok(sync_result_from_todoist
             .into_iter()
-            .chain(sync_result_from_linear.into_iter())
-            .chain(sync_result_from_ticktick.into_iter())
+            .chain(sync_result_from_linear)
+            .chain(sync_result_from_ticktick)
             .collect())
     }
 
@@ -1231,6 +1231,9 @@ impl TaskService {
                 .await?;
         }
 
+        // The nested `if` cannot be collapsed into a match guard because its
+        // condition is an async, fallible (`?`) repository call.
+        #[allow(clippy::collapsible_match)]
         match updated_task {
             UpdateStatus {
                 updated: true,
