@@ -448,51 +448,51 @@
         }
       }
     },
-    "dioxus-cli@0.7.7": {
-      "last_modified": "2026-05-03T08:31:49Z",
-      "resolved": "github:NixOS/nixpkgs/90c100cb48d61a0316b9479bb03f1be36d34b92a#dioxus-cli",
+    "dioxus-cli@0.7.9": {
+      "last_modified": "2026-05-21T08:15:18Z",
+      "resolved": "github:NixOS/nixpkgs/4a29d733e8a7d5b824c3d8c958a946a9867b3eb2#dioxus-cli",
       "source": "devbox-search",
-      "version": "0.7.7",
+      "version": "0.7.9",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/gmnxch4338mckyhpjs79q58cixb0z2x1-dioxus-cli-0.7.7",
+              "path": "/nix/store/1784qckh8qxx3hv1gyx19a475k008ys4-dioxus-cli-0.7.9",
               "default": true
             }
           ],
-          "store_path": "/nix/store/gmnxch4338mckyhpjs79q58cixb0z2x1-dioxus-cli-0.7.7"
+          "store_path": "/nix/store/1784qckh8qxx3hv1gyx19a475k008ys4-dioxus-cli-0.7.9"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/0f2yn80wrrfphb18kcjcyfxkyxvvw5pi-dioxus-cli-0.7.7",
+              "path": "/nix/store/f09jspaikn5sc04kw5qmvqr05lyig458-dioxus-cli-0.7.9",
               "default": true
             }
           ],
-          "store_path": "/nix/store/0f2yn80wrrfphb18kcjcyfxkyxvvw5pi-dioxus-cli-0.7.7"
+          "store_path": "/nix/store/f09jspaikn5sc04kw5qmvqr05lyig458-dioxus-cli-0.7.9"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/x7cr1mrp5bw84a157byf43b7b9wzr5cc-dioxus-cli-0.7.7",
+              "path": "/nix/store/w9sjbq2y8sc7frwk82yfd8w0y58aw5m6-dioxus-cli-0.7.9",
               "default": true
             }
           ],
-          "store_path": "/nix/store/x7cr1mrp5bw84a157byf43b7b9wzr5cc-dioxus-cli-0.7.7"
+          "store_path": "/nix/store/w9sjbq2y8sc7frwk82yfd8w0y58aw5m6-dioxus-cli-0.7.9"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/si9l1m0kpz2ay1d3x9ispsyfjfn6pjc6-dioxus-cli-0.7.7",
+              "path": "/nix/store/dzkc8iqd4k1mb694v5072rc5qsy7ggzh-dioxus-cli-0.7.9",
               "default": true
             }
           ],
-          "store_path": "/nix/store/si9l1m0kpz2ay1d3x9ispsyfjfn6pjc6-dioxus-cli-0.7.7"
+          "store_path": "/nix/store/dzkc8iqd4k1mb694v5072rc5qsy7ggzh-dioxus-cli-0.7.9"
         }
       }
     },
@@ -1944,51 +1944,51 @@
         }
       }
     },
-    "wasm-bindgen-cli_0_2_108@0.2.108": {
-      "last_modified": "2026-01-23T17:20:52Z",
-      "resolved": "github:NixOS/nixpkgs/a1bab9e494f5f4939442a57a58d0449a109593fe#wasm-bindgen-cli_0_2_108",
+    "wasm-bindgen-cli_0_2_118@0.2.118": {
+      "last_modified": "2026-05-21T08:15:18Z",
+      "resolved": "github:NixOS/nixpkgs/4a29d733e8a7d5b824c3d8c958a946a9867b3eb2#wasm-bindgen-cli_0_2_118",
       "source": "devbox-search",
-      "version": "0.2.108",
+      "version": "0.2.118",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/p30bfysy1rcqc5d1w27jmwnrfr6fv00d-wasm-bindgen-cli-0.2.108",
+              "path": "/nix/store/wz319x7ba5kwdnfzqscxlc47gy9i9y95-wasm-bindgen-cli-0.2.118",
               "default": true
             }
           ],
-          "store_path": "/nix/store/p30bfysy1rcqc5d1w27jmwnrfr6fv00d-wasm-bindgen-cli-0.2.108"
+          "store_path": "/nix/store/wz319x7ba5kwdnfzqscxlc47gy9i9y95-wasm-bindgen-cli-0.2.118"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/wx20zqs8m6gvdnj8srvg2r6zbvp0n1v5-wasm-bindgen-cli-0.2.108",
+              "path": "/nix/store/yynxk1s7arnzfidf1jn6xhbnvpbwg2j5-wasm-bindgen-cli-0.2.118",
               "default": true
             }
           ],
-          "store_path": "/nix/store/wx20zqs8m6gvdnj8srvg2r6zbvp0n1v5-wasm-bindgen-cli-0.2.108"
+          "store_path": "/nix/store/yynxk1s7arnzfidf1jn6xhbnvpbwg2j5-wasm-bindgen-cli-0.2.118"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/lq89jpzk7zxz0ihbwvs1ihqvfr8z4f5x-wasm-bindgen-cli-0.2.108",
+              "path": "/nix/store/1f8xxp310032y9s1wj9b7xqaaijrdpnc-wasm-bindgen-cli-0.2.118",
               "default": true
             }
           ],
-          "store_path": "/nix/store/lq89jpzk7zxz0ihbwvs1ihqvfr8z4f5x-wasm-bindgen-cli-0.2.108"
+          "store_path": "/nix/store/1f8xxp310032y9s1wj9b7xqaaijrdpnc-wasm-bindgen-cli-0.2.118"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/ma72bx5861l005dr6cn92d2dsy0rqshi-wasm-bindgen-cli-0.2.108",
+              "path": "/nix/store/b164s70qaj9rggi4w4ah7viq8ykschw4-wasm-bindgen-cli-0.2.118",
               "default": true
             }
           ],
-          "store_path": "/nix/store/ma72bx5861l005dr6cn92d2dsy0rqshi-wasm-bindgen-cli-0.2.108"
+          "store_path": "/nix/store/b164s70qaj9rggi4w4ah7viq8ykschw4-wasm-bindgen-cli-0.2.118"
         }
       }
     },
