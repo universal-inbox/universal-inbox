@@ -1317,7 +1317,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aac0b255932a9cd52fbfd664b67957f9f2e095ae4711cb0e41b4e291edef94c2"
 dependencies = [
  "caseless",
- "emojis 0.8.2",
+ "emojis",
  "entities",
  "finl_unicode",
  "jetscii",
@@ -2758,15 +2758,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e079f19b08ca6239f47f8ba8509c11cf3ea30095831f7fed61441475edd8c449"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "emojis"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f52f3d011046a013bdefbc63a5523b06ad0c0f1e227941baf98475496229d634"
-dependencies = [
- "phf 0.12.1",
 ]
 
 [[package]]
@@ -7083,12 +7074,12 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slack-blocks-render"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "264b83f5f9bba1e039ed333a2b492fa0f0526dfc2fa1b499c26058ede7a65893"
+checksum = "528e9662d25e7a5b0ece311feae3ee0f0863dd691d697bfdcdb2d6f8570a1270"
 dependencies = [
  "despatma",
- "emojis 0.7.2",
+ "emojis",
  "html-escape",
  "serde",
  "serde_json",
@@ -7098,9 +7089,9 @@ dependencies = [
 
 [[package]]
 name = "slack-morphism"
-version = "2.21.0"
+version = "2.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85d874d160ed875642dae85625056ace33937d5ca2e9221a9a04e908f2bbc663"
+checksum = "9f38066ac7c15d2546c47b787c8f1f6070c5182f738202fb5a7c843f138f3a82"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -8390,7 +8381,7 @@ dependencies = [
  "chrono",
  "clap",
  "email_address",
- "emojis 0.8.2",
+ "emojis",
  "enum_derive",
  "git-url-parse",
  "html-escape",
@@ -8528,7 +8519,7 @@ dependencies = [
  "console_log",
  "dioxus",
  "email_address",
- "emojis 0.8.2",
+ "emojis",
  "futures-util",
  "getrandom 0.3.4",
  "getrandom 0.4.2",
