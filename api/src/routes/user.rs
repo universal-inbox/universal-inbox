@@ -9,7 +9,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
 use governor::Quota;
-use rand::RngCore;
+use rand::RngExt;
 use redis::AsyncCommands;
 use secrecy::{ExposeSecret, SecretBox};
 use serde::{Deserialize, Serialize};
@@ -85,7 +85,7 @@ struct NonceBound<T> {
 /// Generate a fresh base64url-encoded nonce for one passkey ceremony.
 fn generate_passkey_nonce() -> String {
     let mut bytes = [0u8; PASSKEY_NONCE_BYTES];
-    rand::rng().fill_bytes(&mut bytes);
+    rand::rng().fill(&mut bytes);
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
