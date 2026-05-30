@@ -762,12 +762,12 @@ impl NotificationService {
 
         Ok(notifications_from_github
             .into_iter()
-            .chain(notifications_from_linear.into_iter())
-            .chain(notifications_from_google_drive.into_iter())
-            .chain(notifications_from_google_mail.into_iter())
-            .chain(notifications_from_slack.into_iter())
-            .chain(notifications_from_todoist.into_iter())
-            .chain(notifications_from_ticktick.into_iter())
+            .chain(notifications_from_linear)
+            .chain(notifications_from_google_drive)
+            .chain(notifications_from_google_mail)
+            .chain(notifications_from_slack)
+            .chain(notifications_from_todoist)
+            .chain(notifications_from_ticktick)
             .collect())
     }
 
@@ -846,6 +846,9 @@ impl NotificationService {
             return Ok(updated_notification);
         }
 
+        // The nested `if` cannot be collapsed into a match guard because its
+        // condition is an async, fallible (`?`) repository call.
+        #[allow(clippy::collapsible_match)]
         match updated_notification {
             UpdateStatus {
                 updated: true,
