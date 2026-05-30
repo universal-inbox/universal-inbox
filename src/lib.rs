@@ -137,7 +137,9 @@ where
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Display, schemars::JsonSchema)]
+#[derive(
+    Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Display, schemars::JsonSchema,
+)]
 pub enum PageToken {
     Before(DateTime<Utc>),
     After(DateTime<Utc>),

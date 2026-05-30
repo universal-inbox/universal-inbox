@@ -599,7 +599,11 @@ mod registration_tests {
     #[test]
     fn every_tool_advertises_an_output_schema() {
         let tools = UniversalInboxMcpServer::tool_router().list_all();
-        assert_eq!(tools.len(), 11, "expected all 11 MCP tools to be registered");
+        assert_eq!(
+            tools.len(),
+            11,
+            "expected all 11 MCP tools to be registered"
+        );
         for tool in &tools {
             assert!(
                 tool.output_schema.is_some(),
@@ -637,7 +641,11 @@ mod registration_tests {
     #[test]
     fn every_tool_advertises_an_input_schema() {
         let tools = UniversalInboxMcpServer::tool_router().list_all();
-        assert_eq!(tools.len(), 11, "expected all 11 MCP tools to be registered");
+        assert_eq!(
+            tools.len(),
+            11,
+            "expected all 11 MCP tools to be registered"
+        );
 
         let expected_required: std::collections::HashMap<&str, &[&str]> = [
             ("get_notification", &["notification_id"][..]),

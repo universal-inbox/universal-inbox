@@ -212,7 +212,7 @@ impl OAuth2Service {
                 user_error: format!("Unknown client_id: {client_id}"),
             })?;
 
-        if !client.redirect_uris.contains(&redirect_uri.to_string()) {
+        if !redirect_uri_matches_registered(&client.redirect_uris, redirect_uri) {
             return Err(UniversalInboxError::InvalidInputData {
                 source: None,
                 user_error: format!("Invalid redirect_uri: {redirect_uri}"),
@@ -668,6 +668,45 @@ pub fn is_origin_in_allowlist(redirect_uri: &str, allowed_origins: &[String]) ->
     })
 }
 
+/// Returns true when `requested` should be accepted as the redirect_uri for a
+/// client whose registered redirect_uris are `registered`.
+///
+/// Non-loopback URIs require an exact string match. Loopback URIs
+/// (`http://localhost`, `http://127.0.0.1`, `http://[::1]`) match any
+/// registered loopback URI that agrees on scheme, host, path, and query while
+/// **ignoring the port** — as required by RFC 8252 §7.3, which mandates that
+/// the authorization server "allow any port to be specified at the time of the
+/// request for loopback IP redirect URIs", so native/CLI apps (e.g. the MCP
+/// SDK in Claude Code) can bind an OS-assigned ephemeral port per request while
+/// reusing a persisted dynamically-registered client.
+///
+/// The relaxation is scoped strictly to loopback hosts: the requested host must
+/// itself be loopback, and only registered entries with the *same* loopback
+/// host are considered (so `localhost` never matches `127.0.0.1`). Everything
+/// else still falls through to exact matching.
+pub fn redirect_uri_matches_registered(registered: &[String], requested: &str) -> bool {
+    if registered.iter().any(|uri| uri == requested) {
+        return true;
+    }
+
+    let Ok(requested_url) = url::Url::parse(requested) else {
+        return false;
+    };
+    if requested_url.scheme() != "http" || !is_loopback_host(requested_url.host_str()) {
+        return false;
+    }
+
+    registered.iter().any(|candidate| {
+        let Ok(candidate_url) = url::Url::parse(candidate) else {
+            return false;
+        };
+        candidate_url.scheme() == "http"
+            && candidate_url.host_str() == requested_url.host_str()
+            && candidate_url.path() == requested_url.path()
+            && candidate_url.query() == requested_url.query()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -752,5 +791,92 @@ mod tests {
     #[test]
     fn rejects_unparseable_uri() {
         assert_rejected("not a url at all");
+    }
+
+    /// Tests for `redirect_uri_matches_registered`, pinning the RFC 8252 §7.3
+    /// loopback port-agnostic relaxation (universal-inbox-2q1). The AS must
+    /// accept any port on a loopback redirect so the MCP SDK can bind an
+    /// ephemeral OS port per request while reusing a persisted DCR client;
+    /// non-loopback URIs must still match exactly.
+    fn reg(uris: &[&str]) -> Vec<String> {
+        uris.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn exact_match_still_accepted() {
+        assert!(redirect_uri_matches_registered(
+            &reg(&["http://localhost:8080/callback"]),
+            "http://localhost:8080/callback"
+        ));
+        assert!(redirect_uri_matches_registered(
+            &reg(&["https://claude.ai/api/mcp/auth_callback"]),
+            "https://claude.ai/api/mcp/auth_callback"
+        ));
+    }
+
+    #[test]
+    fn loopback_localhost_matches_any_port() {
+        // Registered with one port, requested with another (the bug scenario).
+        assert!(redirect_uri_matches_registered(
+            &reg(&["http://localhost:8080/callback"]),
+            "http://localhost:56010/callback"
+        ));
+    }
+
+    #[test]
+    fn loopback_ipv4_and_ipv6_match_any_port() {
+        assert!(redirect_uri_matches_registered(
+            &reg(&["http://127.0.0.1:8080/callback"]),
+            "http://127.0.0.1:49152/callback"
+        ));
+        assert!(redirect_uri_matches_registered(
+            &reg(&["http://[::1]:8080/callback"]),
+            "http://[::1]:49152/callback"
+        ));
+    }
+
+    #[test]
+    fn loopback_different_path_rejected() {
+        assert!(!redirect_uri_matches_registered(
+            &reg(&["http://localhost:8080/callback"]),
+            "http://localhost:56010/evil"
+        ));
+    }
+
+    #[test]
+    fn loopback_different_query_rejected() {
+        assert!(!redirect_uri_matches_registered(
+            &reg(&["http://localhost:8080/callback?a=1"]),
+            "http://localhost:56010/callback?a=2"
+        ));
+    }
+
+    #[test]
+    fn loopback_host_must_match_localhost_not_ip() {
+        // localhost and 127.0.0.1 are distinct hosts; the relaxation only
+        // ignores the port, never the host.
+        assert!(!redirect_uri_matches_registered(
+            &reg(&["http://127.0.0.1:8080/callback"]),
+            "http://localhost:56010/callback"
+        ));
+    }
+
+    #[test]
+    fn non_loopback_port_difference_rejected() {
+        // https hosts must match exactly — no port relaxation.
+        assert!(!redirect_uri_matches_registered(
+            &reg(&["https://example.com:8080/cb"]),
+            "https://example.com:9090/cb"
+        ));
+    }
+
+    #[test]
+    fn requested_non_loopback_never_relaxed() {
+        // A non-loopback requested URI that isn't an exact match is rejected
+        // even if a loopback entry is registered.
+        assert!(!redirect_uri_matches_registered(
+            &reg(&["http://localhost:8080/callback"]),
+            "https://evil.com/callback"
+        ));
     }
 }
