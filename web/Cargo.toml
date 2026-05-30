@@ -26,8 +26,8 @@ dioxus = { version = "=0.7.9", features = ["document", "web", "router"] }
 email_address = { workspace = true }
 emojis = { workspace = true }
 futures-util = "0.3"
-gloo-timers = { version = "0.3.0", features = ["futures"] }
-gloo-utils = "0.2.0"
+gloo-timers = { version = "0.4.0", features = ["futures"] }
+gloo-utils = "0.3.0"
 gravatar-rs = "0.2.0"
 itertools = { workspace = true }
 js-sys = "0.3"
