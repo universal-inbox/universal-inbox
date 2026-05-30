@@ -1,6 +1,54 @@
 {
   "lockfile_version": "1",
   "packages": {
+    "beads@latest": {
+      "last_modified": "2026-05-21T08:15:18Z",
+      "resolved": "github:NixOS/nixpkgs/4a29d733e8a7d5b824c3d8c958a946a9867b3eb2#beads",
+      "source": "devbox-search",
+      "version": "1.0.3",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xcjsrq72dkz8bpbv6k90yph87kiirbs9-beads-1.0.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/xcjsrq72dkz8bpbv6k90yph87kiirbs9-beads-1.0.3"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/zgllshrq6mvsck3j8wkkcap47j4x0fxx-beads-1.0.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/zgllshrq6mvsck3j8wkkcap47j4x0fxx-beads-1.0.3"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/6ml29v1pgnx71a0r65mxrn7l1vjl71qg-beads-1.0.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/6ml29v1pgnx71a0r65mxrn7l1vjl71qg-beads-1.0.3"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/2xk1gw514c9lcynzk8ksnq1b4kyb1psa-beads-1.0.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/2xk1gw514c9lcynzk8ksnq1b4kyb1psa-beads-1.0.3"
+        }
+      }
+    },
     "binaryen@latest": {
       "last_modified": "2025-07-28T17:09:23Z",
       "resolved": "github:NixOS/nixpkgs/648f70160c03151bc2121d179291337ad6bc564b#binaryen",

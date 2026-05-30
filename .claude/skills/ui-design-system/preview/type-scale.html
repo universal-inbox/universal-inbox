@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Typography — Scale</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; font-family: var(--font-ui); color: var(--ui-base-content); }
+  .wrap { padding: 18px 22px; }
+  .row { display: grid; grid-template-columns: 110px 1fr 80px; align-items: baseline; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--ui-border-light); }
+  .row:last-child { border-bottom: none; }
+  .tok { font-family: var(--font-mono); font-size: 10.5px; color: var(--ui-base-muted); }
+  .size { font-family: var(--font-mono); font-size: 10.5px; color: var(--ui-base-muted); text-align: right; }
+  .sample { color: var(--ui-base-content); letter-spacing: -0.01em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row"><span class="tok">4xl / h1</span><span class="sample" style="font-size:36px;font-weight:700;letter-spacing:-0.02em">All caught up</span><span class="size">36px · 700</span></div>
+  <div class="row"><span class="tok">3xl</span><span class="sample" style="font-size:28px;font-weight:700;letter-spacing:-0.02em">Notifications</span><span class="size">28px · 700</span></div>
+  <div class="row"><span class="tok">2xl / h2</span><span class="sample" style="font-size:22px;font-weight:700;letter-spacing:-0.02em">Select a notification</span><span class="size">22px · 700</span></div>
+  <div class="row"><span class="tok">xl</span><span class="sample" style="font-size:18px;font-weight:600">Integration connected</span><span class="size">18px · 600</span></div>
+  <div class="row"><span class="tok">lg / h3</span><span class="sample" style="font-size:15px;font-weight:700">Notifications · 24</span><span class="size">15px · 700</span></div>
+  <div class="row"><span class="tok">md / h4</span><span class="sample" style="font-size:13.5px;font-weight:700">GitHub</span><span class="size">13.5px · 700</span></div>
+  <div class="row"><span class="tok">base / body</span><span class="sample" style="font-size:12.5px;font-weight:400">feat: Add OAuth2 PKCE flow for Linear integration</span><span class="size">12.5px · 400</span></div>
+  <div class="row"><span class="tok">sm / caption</span><span class="sample" style="font-size:11px;color:var(--ui-base-muted)">Connected · Synced 2m ago</span><span class="size">11px · 400</span></div>
+  <div class="row"><span class="tok">xs</span><span class="sample" style="font-size:10px;color:var(--ui-base-muted)">github.com / api</span><span class="size">10px · 400</span></div>
+</div>
+</body>
+</html>

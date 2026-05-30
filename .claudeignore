@@ -1,0 +1,33 @@
+# Task completion documents (load only when explicitly requested)
+.claude/completions/**
+
+# Session files (load only when explicitly requested)
+.claude/sessions/**
+
+# Archived documentation (load only when explicitly requested)
+.claude/docs/archive/**
+
+# Dependencies & build artifacts
+node_modules/**
+dist/**
+build/**
+target/**
+
+# Git
+.git/**
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/**
+
+# IDE
+.vscode/**
+.idea/**
+
+# OS
+.DS_Store

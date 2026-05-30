@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Colors — Primary & Brand</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; font-family: var(--font-ui); color: var(--ui-base-content); }
+  .wrap { padding: 20px 22px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sw { display: flex; flex-direction: column; gap: 6px; }
+  .chip { width: 84px; height: 56px; border-radius: var(--ui-radius-md); border: 1px solid var(--ui-border-light); }
+  .name { font-size: 10.5px; font-weight: 600; color: var(--ui-base-content); }
+  .hex { font-family: var(--font-mono); font-size: 10px; color: var(--ui-base-muted); }
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ui-base-muted); margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="label">Primary — Azure</div>
+  <div class="row" style="margin-bottom: 18px;">
+    <div class="sw"><div class="chip" style="background:#388FEF"></div><div class="name">primary</div><div class="hex">#388FEF</div></div>
+    <div class="sw"><div class="chip" style="background:#2B7BD6"></div><div class="name">primary-hover</div><div class="hex">#2B7BD6</div></div>
+    <div class="sw"><div class="chip" style="background:#60A5FA"></div><div class="name">primary-light</div><div class="hex">#60A5FA</div></div>
+    <div class="sw"><div class="chip" style="background:#EFF6FF"></div><div class="name">primary-subtle</div><div class="hex">#EFF6FF</div></div>
+  </div>
+  <div class="label">Integration brands</div>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:#1B1F23"></div><div class="name">github</div><div class="hex">#1B1F23</div></div>
+    <div class="sw"><div class="chip" style="background:#5E6AD2"></div><div class="name">linear</div><div class="hex">#5E6AD2</div></div>
+    <div class="sw"><div class="chip" style="background:#4A154B"></div><div class="name">slack</div><div class="hex">#4A154B</div></div>
+    <div class="sw"><div class="chip" style="background:#EA4335"></div><div class="name">google</div><div class="hex">#EA4335</div></div>
+    <div class="sw"><div class="chip" style="background:#4285F4"></div><div class="name">gcal</div><div class="hex">#4285F4</div></div>
+    <div class="sw"><div class="chip" style="background:#E44332"></div><div class="name">todoist</div><div class="hex">#E44332</div></div>
+    <div class="sw"><div class="chip" style="background:#191919"></div><div class="name">notion</div><div class="hex">#191919</div></div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Radii & Shadows</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<style>
+  html, body { margin: 0; padding: 0; background: #F7F9FC; font-family: var(--font-ui); color: var(--ui-base-content); }
+  .wrap { padding: 22px 22px; }
+  .grid { display: flex; gap: 14px; flex-wrap: wrap; }
+  .box { width: 100px; background: #fff; border: 1px solid var(--ui-border); display: flex; align-items: center; justify-content: center; height: 68px; flex-direction: column; gap: 4px; }
+  .name { font-size: 10.5px; font-weight: 600; color: var(--ui-base-content); }
+  .hex { font-family: var(--font-mono); font-size: 9.5px; color: var(--ui-base-muted); }
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ui-base-muted); margin-bottom: 10px; }
+  .sh-box { width: 120px; height: 60px; background: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 600; color: var(--ui-base-content); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="label">Radii</div>
+  <div class="grid" style="margin-bottom: 20px">
+    <div class="box" style="border-radius:3px"><span class="name">xs</span><span class="hex">3px</span></div>
+    <div class="box" style="border-radius:6px"><span class="name">sm</span><span class="hex">6px</span></div>
+    <div class="box" style="border-radius:8px"><span class="name">md</span><span class="hex">8px</span></div>
+    <div class="box" style="border-radius:12px"><span class="name">lg</span><span class="hex">12px</span></div>
+    <div class="box" style="border-radius:9999px"><span class="name">pill</span><span class="hex">9999px</span></div>
+  </div>
+  <div class="label">Shadows</div>
+  <div class="grid">
+    <div class="sh-box" style="box-shadow: 0 1px 2px 0 rgba(15,23,42,0.05)">sm</div>
+    <div class="sh-box" style="box-shadow: 0 4px 6px -1px rgba(15,23,42,0.07), 0 2px 4px -2px rgba(15,23,42,0.05)">md</div>
+    <div class="sh-box" style="box-shadow: 0 20px 40px rgba(15,23,42,0.15)">lg</div>
+    <div class="sh-box" style="box-shadow: 0 0 0 2px rgba(56,143,239,0.4); border: 1px solid #388FEF">focus ring</div>
+  </div>
+</div>
+</body>
+</html>

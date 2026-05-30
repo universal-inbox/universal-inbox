@@ -1,0 +1,338 @@
+/* ==========================================================================
+   Universal Inbox — Colors & Type
+   Core design tokens + semantic type classes used across the product.
+   Source of truth. Import this anywhere you need the brand.
+   ========================================================================== */
+
+/* ---------- Fonts ---------- */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url('fonts/DMSans-Regular.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url('fonts/DMSans-Regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  /* ---------- Typography ---------- */
+  --font-ui: 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Dense UI scale (desktop-first product) */
+  --ui-text-2xs: 9px;
+  --ui-text-xs:  10px;
+  --ui-text-sm:  11px;
+  --ui-text-base: 12.5px;
+  --ui-text-md:  13.5px;
+  --ui-text-lg:  15px;
+  --ui-text-xl:  18px;
+  --ui-text-2xl: 22px;
+  --ui-text-3xl: 28px;
+  --ui-text-4xl: 36px;
+
+  --ui-leading-tight: 1.2;
+  --ui-leading-snug:  1.35;
+  --ui-leading-normal: 1.45;
+  --ui-leading-relaxed: 1.6;
+
+  --ui-tracking-tight: -0.02em;
+  --ui-tracking-normal: 0;
+  --ui-tracking-wide: 0.06em;
+  --ui-tracking-wider: 0.08em;
+
+  /* ---------- Primary (Azure blue) ---------- */
+  --ui-primary:          #388FEF;
+  --ui-primary-hover:    #2B7BD6;
+  --ui-primary-light:    #60A5FA;
+  --ui-primary-subtle:   #EFF6FF;
+  --ui-primary-content:  #FFFFFF;
+
+  /* ---------- Secondary (Slate) ---------- */
+  --ui-secondary:         #475569;
+  --ui-secondary-subtle:  #F1F5F9;
+
+  /* ---------- Accent (Amber) ---------- */
+  --ui-accent:          #F59E0B;
+  --ui-accent-subtle:   #FFFBEB;
+  --ui-accent-content:  #92400E;
+
+  /* ---------- Base (Surface / text) ---------- */
+  --ui-base-100: #FEFEFE;
+  --ui-base-200: #F7F9FC;
+  --ui-base-300: #E1E6EE;
+  --ui-base-content: #0F172A;
+  --ui-base-muted:   #64748B;
+
+  /* ---------- Semantic ---------- */
+  --ui-success:         #6BC5A0;
+  --ui-success-subtle:  #EDF9F3;
+  --ui-warning:         #E8C46A;
+  --ui-warning-subtle:  #FDF8EC;
+  --ui-error:           #E8899A;
+  --ui-error-hover:     #DC6B7E;
+  --ui-error-subtle:    #FDF0F2;
+  --ui-info:            #6BB8D9;
+  --ui-info-subtle:     #EDF6FB;
+  --ui-purple:          #8B5CF6;
+  --ui-purple-subtle:   #F5F3FF;
+  --ui-on-brand:        #FFFFFF;
+
+  /* ---------- Surface / Border ---------- */
+  --ui-surface:       #FFFFFF;
+  --ui-surface-hover: #F8FAFC;
+  --ui-surface-alt:   #F1F5F9;
+  --ui-border:        #E2E8F0;
+  --ui-border-light:  #F1F5F9;
+  --ui-divider:       #E2E8F0;
+
+  /* ---------- Integration brands ---------- */
+  --brand-github:  #1B1F23;
+  --brand-linear:  #5E6AD2;
+  --brand-slack:   #4A154B;
+  --brand-google:  #EA4335;
+  --brand-gcal:    #4285F4;
+  --brand-todoist: #E44332;
+  --brand-notion:  #191919;
+
+  /* ---------- Sidebar (dark, always) ---------- */
+  --ui-sidebar-bg: #0C1525;
+  --ui-sidebar-text: #CBD5E1;
+  --ui-sidebar-text-bright: #F1F5F9;
+  --ui-sidebar-text-muted: #64748B;
+  --ui-sidebar-active-bg: rgba(56, 143, 239, 0.15);
+  --ui-sidebar-active-text: #60A5FA;
+  --ui-sidebar-hover-bg: rgba(255, 255, 255, 0.05);
+  --ui-sidebar-border: rgba(255, 255, 255, 0.08);
+
+  /* ---------- Radii ---------- */
+  --ui-radius-xs: 3px;
+  --ui-radius-sm: 6px;
+  --ui-radius-md: 8px;
+  --ui-radius-lg: 12px;
+  --ui-radius-pill: 9999px;
+
+  /* ---------- Shadows ---------- */
+  --ui-shadow-sm:  0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --ui-shadow-md:  0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --ui-shadow-lg:  0 20px 40px rgba(15, 23, 42, 0.15);
+  --ui-focus-ring: 0 0 0 2px rgba(56, 143, 239, 0.15);
+
+  /* ---------- Motion ---------- */
+  --ui-ease:      cubic-bezier(0.25, 0.1, 0.25, 1);   /* standard */
+  --ui-ease-out:  cubic-bezier(0.16, 1, 0.3, 1);      /* expressive */
+  --ui-dur-fast:  0.12s;
+  --ui-dur-base:  0.2s;
+  --ui-dur-slow:  0.3s;
+
+  /* ---------- Spacing scale (4px base) ---------- */
+  --ui-space-0: 0;
+  --ui-space-1: 2px;
+  --ui-space-2: 4px;
+  --ui-space-3: 6px;
+  --ui-space-4: 8px;
+  --ui-space-5: 10px;
+  --ui-space-6: 12px;
+  --ui-space-7: 14px;
+  --ui-space-8: 16px;
+  --ui-space-10: 20px;
+  --ui-space-12: 24px;
+  --ui-space-16: 32px;
+  --ui-space-20: 40px;
+}
+
+[data-theme="dark"] {
+  --ui-primary:          #60A5FA;
+  --ui-primary-hover:    #93C5FD;
+  --ui-primary-light:    #388FEF;
+  --ui-primary-subtle:   rgba(56, 143, 239, 0.12);
+  --ui-primary-content:  #0C2D5A;
+  --ui-secondary:         #94A3B8;
+  --ui-secondary-subtle:  rgba(148, 163, 184, 0.1);
+  --ui-accent:          #FBBF24;
+  --ui-accent-subtle:   rgba(251, 191, 36, 0.1);
+  --ui-accent-content:  #1C1917;
+  --ui-base-100: #0B1120;
+  --ui-base-200: #111827;
+  --ui-base-300: #1E293B;
+  --ui-base-content: #F1F5F9;
+  --ui-base-muted:   #94A3B8;
+  --ui-success:         #6ECF97;
+  --ui-success-subtle:  rgba(110, 207, 151, 0.1);
+  --ui-warning:         #E0BD6A;
+  --ui-warning-subtle:  rgba(224, 189, 106, 0.1);
+  --ui-error:           #E08888;
+  --ui-error-hover:     #C96B6B;
+  --ui-error-subtle:    rgba(224, 136, 136, 0.1);
+  --ui-info:            #6DC4D4;
+  --ui-info-subtle:     rgba(109, 196, 212, 0.1);
+  --ui-purple:          #A78BFA;
+  --ui-purple-subtle:   rgba(167, 139, 250, 0.1);
+  --ui-surface:       #111827;
+  --ui-surface-hover: #1E293B;
+  --ui-surface-alt:   #0F172A;
+  --ui-border:        #1E293B;
+  --ui-border-light:  rgba(255, 255, 255, 0.06);
+  --ui-divider:       #1E293B;
+  --ui-shadow-sm:  0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --ui-shadow-md:  0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --ui-shadow-lg:  0 20px 40px rgba(0, 0, 0, 0.35);
+  --ui-focus-ring: 0 0 0 2px rgba(96, 165, 250, 0.2);
+  --brand-github:  #30363D;
+  --brand-linear:  #7B83EB;
+  --brand-slack:   #6B2D6E;
+  --brand-google:  #D9453C;
+  --brand-gcal:    #5A9BF6;
+  --brand-todoist: #D94A3C;
+  --brand-notion:  #2F2F2F;
+  --ui-sidebar-bg: #131B2E;
+}
+
+/* ==========================================================================
+   Semantic type styles — use these class names in product markup
+   ========================================================================== */
+
+.ui-h1 {
+  font-family: var(--font-ui);
+  font-size: var(--ui-text-3xl);
+  font-weight: 700;
+  letter-spacing: var(--ui-tracking-tight);
+  line-height: var(--ui-leading-tight);
+  color: var(--ui-base-content);
+}
+.ui-h2 {
+  font-family: var(--font-ui);
+  font-size: var(--ui-text-2xl);
+  font-weight: 700;
+  letter-spacing: var(--ui-tracking-tight);
+  line-height: var(--ui-leading-tight);
+  color: var(--ui-base-content);
+}
+.ui-h3 {
+  font-family: var(--font-ui);
+  font-size: var(--ui-text-lg);
+  font-weight: 700;
+  letter-spacing: var(--ui-tracking-tight);
+  line-height: var(--ui-leading-snug);
+  color: var(--ui-base-content);
+}
+.ui-h4 {
+  /* Panel / list-header title */
+  font-family: var(--font-ui);
+  font-size: var(--ui-text-md);
+  font-weight: 700;
+  letter-spacing: var(--ui-tracking-tight);
+  line-height: var(--ui-leading-snug);
+  color: var(--ui-base-content);
+}
+.ui-p, .ui-body {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: var(--ui-leading-normal);
+  color: var(--ui-base-content);
+}
+.ui-body-sm {
+  font-family: var(--font-ui);
+  font-size: var(--ui-text-base);
+  line-height: var(--ui-leading-snug);
+  color: var(--ui-base-content);
+}
+.ui-caption {
+  font-family: var(--font-ui);
+  font-size: var(--ui-text-sm);
+  line-height: var(--ui-leading-snug);
+  color: var(--ui-base-muted);
+}
+.ui-overline, .ui-eyebrow {
+  /* Section labels — UPPERCASE with tracking, muted */
+  font-family: var(--font-ui);
+  font-size: var(--ui-text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ui-tracking-wider);
+  color: var(--ui-base-muted);
+}
+.ui-kbd, kbd.ui-kbd {
+  font-family: var(--font-mono);
+  font-size: var(--ui-text-xs);
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: var(--ui-radius-xs);
+  background: var(--ui-base-200);
+  border: 1px solid var(--ui-border);
+  color: var(--ui-base-content);
+  min-width: 16px;
+  display: inline-flex;
+  justify-content: center;
+}
+.ui-code, code.ui-code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  padding: 1px 5px;
+  border-radius: var(--ui-radius-xs);
+  background: var(--ui-surface-alt);
+  color: var(--ui-purple);
+}
+
+/* Reset helpers */
+.ui-unstyled-btn {
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+  font: inherit; color: inherit;
+}
+
+
+/* ==========================================================================
+   Brand icons — integration logos (Iconify "logos:*" set)
+   The logos:* icons ship with inconsistent internal padding/viewBoxes, so a
+   uniform font-size renders glyphs at visibly different sizes. Apply
+   .brand-icon to a fixed-size tile (e.g. 28×28) containing a single
+   <iconify-icon>; per-glyph overrides below normalize each logo to ~15×15
+   optical size inside the tile.
+   ========================================================================== */
+.brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid var(--ui-border, #E2E8F0);
+  border-radius: var(--ui-radius-sm, 6px);
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+.brand-icon iconify-icon {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+/* Per-glyph tuning — measured against rendered viewBox. */
+.brand-icon iconify-icon[icon="logos:google-gmail"]    { font-size: 11px; } /* 256×193 — wide */
+.brand-icon iconify-icon[icon="logos:google-calendar"] { font-size: 15px; }
+.brand-icon iconify-icon[icon="logos:github-icon"]     { font-size: 16px; }
+.brand-icon iconify-icon[icon="logos:linear-icon"]     { font-size: 16px; }
+.brand-icon iconify-icon[icon="logos:slack-icon"]      { font-size: 16px; }
+.brand-icon iconify-icon[icon="logos:todoist-icon"]    { font-size: 16px; }
+.brand-icon iconify-icon[icon="logos:notion-icon"]     { font-size: 16px; }
+.brand-icon iconify-icon[icon="logos:google-drive"]    { font-size: 14px; } /* squarish but tight */
+
+/* Size variants */
+.brand-icon.sm { width: 22px; height: 22px; }
+.brand-icon.sm iconify-icon { font-size: 13px; }
+.brand-icon.sm iconify-icon[icon="logos:google-gmail"]    { font-size: 9px; }
+.brand-icon.sm iconify-icon[icon="logos:google-calendar"] { font-size: 12px; }
+.brand-icon.lg { width: 34px; height: 34px; }
+.brand-icon.lg iconify-icon { font-size: 19px; }
+.brand-icon.lg iconify-icon[icon="logos:google-gmail"]    { font-size: 13px; }
+.brand-icon.lg iconify-icon[icon="logos:google-calendar"] { font-size: 18px; }

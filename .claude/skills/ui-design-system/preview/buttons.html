@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Buttons</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; font-family: var(--font-ui); color: var(--ui-base-content); font-size: 12.5px; }
+  .wrap { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ui-base-muted); min-width: 80px; }
+  .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; font-size: 12px; font-weight: 500; font-family: var(--font-ui); border-radius: 6px; border: 1px solid #E2E8F0; background: #fff; color: #0F172A; cursor: pointer; }
+  .btn.primary { background: #388FEF; border-color: #388FEF; color: #fff; }
+  .btn.primary:hover { background: #2B7BD6; border-color: #2B7BD6; }
+  .btn.danger { border-color: #E2E8F0; color: #E8899A; }
+  .btn.ghost { border-color: transparent; background: transparent; color: #64748B; }
+  .btn:hover { border-color: #388FEF; color: #388FEF; }
+  .btn.primary:hover { color: #fff; }
+  .icon-btn { width: 28px; height: 28px; padding: 0; justify-content: center; }
+  iconify-icon { font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row"><span class="label">Default</span><button class="btn">Keep notifications</button><button class="btn">Cancel</button></div>
+  <div class="row"><span class="label">Primary</span><button class="btn primary">Create task</button><button class="btn primary"><iconify-icon icon="lucide:check"></iconify-icon> Complete</button></div>
+  <div class="row"><span class="label">Danger</span><button class="btn danger">Delete all</button></div>
+  <div class="row"><span class="label">Ghost</span><button class="btn ghost">Skip for now</button></div>
+  <div class="row"><span class="label">Icon</span>
+    <button class="btn icon-btn"><iconify-icon icon="lucide:trash-2"></iconify-icon></button>
+    <button class="btn icon-btn"><iconify-icon icon="lucide:clock"></iconify-icon></button>
+    <button class="btn icon-btn"><iconify-icon icon="lucide:more-horizontal"></iconify-icon></button>
+  </div>
+</div>
+</body>
+</html>
