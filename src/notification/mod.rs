@@ -375,7 +375,9 @@ pub trait NotificationSource: IntegrationProviderSource {
     fn is_supporting_snoozed_notifications(&self) -> bool;
 }
 
-#[derive(Copy, Clone, PartialEq, Default, Debug, Display, EnumString, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Copy, Clone, PartialEq, Default, Debug, Display, EnumString, Serialize, Deserialize, JsonSchema,
+)]
 pub enum NotificationListOrder {
     #[default]
     UpdatedAtAsc,
