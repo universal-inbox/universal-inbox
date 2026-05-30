@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Form controls</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; font-family: var(--font-ui); color: var(--ui-base-content); font-size: 12.5px; }
+  .wrap { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ui-base-muted); min-width: 88px; }
+  .input { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; border: 1px solid #E2E8F0; background: #F7F9FC; min-width: 240px; }
+  .input input { border: none; background: none; outline: none; font-family: var(--font-ui); font-size: 12px; color: #0F172A; flex: 1; }
+  .input iconify-icon { font-size: 14px; color: #64748B; }
+  .select { padding: 4px 24px 4px 8px; font-size: 11px; border: 1px solid #E2E8F0; border-radius: 6px; background: #fff; }
+  .toggle { position: relative; width: 34px; height: 18px; cursor: pointer; }
+  .track { position: absolute; inset: 0; border-radius: 9px; background: #6BC5A0; }
+  .track.off { background: #E1E6EE; }
+  .thumb { position: absolute; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+  .thumb.on { left: 18px; }
+  .thumb.off { left: 2px; }
+  .cb { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid #E2E8F0; background: #fff; display: inline-block; }
+  .cb.on { background: #388FEF; border-color: #388FEF; }
+  .radio { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #E2E8F0; display: inline-block; }
+  .radio.on { border-color: #388FEF; background: #388FEF; box-shadow: inset 0 0 0 2.5px #fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row"><span class="label">Search</span>
+    <div class="input"><iconify-icon icon="lucide:search"></iconify-icon><input placeholder="Search notifications..."></div>
+  </div>
+  <div class="row"><span class="label">Select</span>
+    <select class="select"><option>Inbox</option></select>
+    <select class="select"><option>Last 30 days</option></select>
+  </div>
+  <div class="row"><span class="label">Toggle</span>
+    <span class="toggle"><span class="track"></span><span class="thumb on"></span></span>
+    <span class="toggle"><span class="track off"></span><span class="thumb off"></span></span>
+  </div>
+  <div class="row"><span class="label">Checkbox</span>
+    <span class="cb on"></span><span class="cb"></span>
+    <span style="margin-left:16px" class="label">Radio</span>
+    <span class="radio on"></span><span class="radio"></span>
+  </div>
+</div>
+</body>
+</html>

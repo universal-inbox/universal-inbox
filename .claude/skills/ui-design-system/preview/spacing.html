@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Spacing</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; font-family: var(--font-ui); color: var(--ui-base-content); }
+  .wrap { padding: 20px 22px; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 4px 0; }
+  .tok { font-family: var(--font-mono); font-size: 10.5px; color: var(--ui-base-muted); min-width: 64px; }
+  .bar { height: 10px; background: #388FEF; border-radius: 2px; }
+  .px { font-family: var(--font-mono); font-size: 10px; color: var(--ui-base-muted); margin-left: 6px; }
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ui-base-muted); margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="label">Spacing scale (4px base)</div>
+  <div class="row"><span class="tok">space-1</span><div class="bar" style="width:2px"></div><span class="px">2px</span></div>
+  <div class="row"><span class="tok">space-2</span><div class="bar" style="width:4px"></div><span class="px">4px</span></div>
+  <div class="row"><span class="tok">space-3</span><div class="bar" style="width:6px"></div><span class="px">6px</span></div>
+  <div class="row"><span class="tok">space-4</span><div class="bar" style="width:8px"></div><span class="px">8px</span></div>
+  <div class="row"><span class="tok">space-5</span><div class="bar" style="width:10px"></div><span class="px">10px</span></div>
+  <div class="row"><span class="tok">space-6</span><div class="bar" style="width:12px"></div><span class="px">12px</span></div>
+  <div class="row"><span class="tok">space-7</span><div class="bar" style="width:14px"></div><span class="px">14px · panel padding</span></div>
+  <div class="row"><span class="tok">space-8</span><div class="bar" style="width:16px"></div><span class="px">16px</span></div>
+  <div class="row"><span class="tok">space-10</span><div class="bar" style="width:20px"></div><span class="px">20px</span></div>
+  <div class="row"><span class="tok">space-12</span><div class="bar" style="width:24px"></div><span class="px">24px</span></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Typography — Semantic</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; font-family: var(--font-ui); color: var(--ui-base-content); }
+  .wrap { padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .spec { display: flex; align-items: baseline; gap: 14px; }
+  .tok { font-family: var(--font-mono); font-size: 10.5px; color: var(--ui-base-muted); min-width: 110px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="spec"><span class="tok">.ui-h2</span><h2 class="ui-h2">Select a notification</h2></div>
+  <div class="spec"><span class="tok">.ui-h4</span><h4 class="ui-h4">GitHub · universal-inbox/api</h4></div>
+  <div class="spec"><span class="tok">.ui-body</span><p class="ui-body">Pick one from the list to preview and triage it here.</p></div>
+  <div class="spec"><span class="tok">.ui-caption</span><span class="ui-caption">Connected · Synced 2m ago</span></div>
+  <div class="spec"><span class="tok">.ui-overline</span><span class="ui-overline">Today</span></div>
+  <div class="spec" style="gap: 6px"><span class="tok">.ui-kbd</span>
+    <kbd class="ui-kbd">↑</kbd><kbd class="ui-kbd">↓</kbd>
+    <kbd class="ui-kbd">d</kbd>
+    <kbd class="ui-kbd">⌘</kbd><kbd class="ui-kbd">D</kbd>
+  </div>
+  <div class="spec"><span class="tok">.ui-code</span><code class="ui-code">PkceChallenge</code></div>
+</div>
+</body>
+</html>
