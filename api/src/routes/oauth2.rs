@@ -584,8 +584,8 @@ fn build_redirect_with_error(
 
 fn generate_csrf_token() -> String {
     use base64::prelude::*;
-    use rand::RngCore;
+    use rand::RngExt;
     let mut bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
+    rand::rng().fill(&mut bytes);
     BASE64_URL_SAFE_NO_PAD.encode(bytes)
 }
