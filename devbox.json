@@ -1,57 +1,57 @@
 {
-  "packages": {
-    "sqlx-cli":       "0.8.6",
-    "trunk":          "latest",
-    "rustup":         "latest",
-    "cargo-audit":    "latest",
-    "cargo-nextest":  "latest",
-    "cargo-outdated": "latest",
-    "just":           "latest",
-    "watchexec":      "latest",
-    "postgresql_17":  "latest",
-    "redis":          "latest",
-    "iconv":          "latest",
-    "nodejs_22":      "latest",
-    "pkg-config":     "latest",
-    "taplo":          "latest",
-    "darwin.apple_sdk.frameworks.Foundation": {
-      "platforms": ["x86_64-darwin", "aarch64-darwin"]
+    "packages": {
+        "sqlx-cli": "0.8.6",
+        "trunk": "latest",
+        "rustup": "latest",
+        "cargo-audit": "latest",
+        "cargo-nextest": "latest",
+        "cargo-outdated": "latest",
+        "just": "latest",
+        "watchexec": "latest",
+        "postgresql_17": "latest",
+        "redis": "latest",
+        "iconv": "latest",
+        "nodejs_22": "latest",
+        "pkg-config": "latest",
+        "taplo": "latest",
+        "darwin.apple_sdk.frameworks.Foundation": {
+            "platforms": ["x86_64-darwin", "aarch64-darwin"]
+        },
+        "lld": {
+            "version": "latest",
+            "platforms": ["x86_64-darwin", "aarch64-darwin"]
+        },
+        "fzf": "latest",
+        "process-compose": "latest",
+        "binaryen": "latest",
+        "cargo-chef": "0.1.72",
+        "cargo-binstall": "latest",
+        "openssl.dev": "",
+        "cargo-machete": "latest",
+        "docker-compose": "latest",
+        "wasm-bindgen-cli_0_2_118": "0.2.118",
+        "caddy": "latest",
+        "hadolint": "latest",
+        "pinact": "latest",
+        "dioxus-cli": "0.7.9",
+        "mdbook": "latest",
+        "mdbook-admonish": "latest",
+        "mdbook-linkcheck": "latest",
+        "jq": "latest",
+        "prek": "latest",
+        "sccache": "latest",
+        "zellij": "latest",
+        "beads": "latest"
     },
-    "lld": {
-      "version":   "latest",
-      "platforms": ["x86_64-darwin", "aarch64-darwin"]
+    "shell": {
+        "init_hook": [
+            "just init-db",
+            "just install-rust-toolchain",
+            "just install-tools"
+        ]
     },
-    "fzf":                      "latest",
-    "process-compose":          "latest",
-    "binaryen":                 "latest",
-    "cargo-chef":               "0.1.72",
-    "cargo-binstall":           "latest",
-    "openssl.dev":              "",
-    "cargo-machete":            "latest",
-    "docker-compose":           "latest",
-    "wasm-bindgen-cli_0_2_108": "0.2.108",
-    "caddy":                    "latest",
-    "hadolint":                 "latest",
-    "pinact":                   "latest",
-    "dioxus-cli":               "0.7.7",
-    "mdbook":                   "latest",
-    "mdbook-admonish":          "latest",
-    "mdbook-linkcheck":         "latest",
-    "jq":                       "latest",
-    "prek":                     "latest",
-    "sccache":                  "latest",
-    "zellij":                   "latest",
-    "beads":                    "latest"
-  },
-  "shell": {
-    "init_hook": [
-      "just init-db",
-      "just install-rust-toolchain",
-      "just install-tools"
-    ]
-  },
-  "env": {
-    "TARGET_CC":              "cc",
-    "RUST_TOOLCHAIN_VERSION": "1.96"
-  }
+    "env": {
+        "TARGET_CC": "cc",
+        "RUST_TOOLCHAIN_VERSION": "1.96"
+    }
 }
