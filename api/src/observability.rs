@@ -190,7 +190,7 @@ fn build_span_exporter(
 
         builder
             .with_http()
-            .with_http_client(reqwest::Client::new())
+            .with_http_client(reqwest_v013::Client::new())
             .with_endpoint(otlp_exporter_endpoint)
             .with_timeout(Duration::from_secs(3))
             .with_headers(headers.clone())
@@ -242,7 +242,7 @@ where
 
         builder
             .with_http()
-            .with_http_client(reqwest::Client::new())
+            .with_http_client(reqwest_v013::Client::new())
             .with_endpoint(otlp_exporter_endpoint)
             .with_timeout(Duration::from_secs(3))
             .with_headers(headers.clone())
