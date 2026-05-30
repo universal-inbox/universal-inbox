@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sidebar nav</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #0C1525; font-family: var(--font-ui); color: #CBD5E1; }
+  .wrap { padding: 10px 6px; }
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #64748B; padding: 0 10px 4px; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 8px; color: #CBD5E1; font-size: 12.5px; cursor: pointer; margin-bottom: 1px; }
+  .item:hover { background: rgba(255,255,255,0.04); color: #F1F5F9; }
+  .item.active { background: #EFF6FF; color: #1E3A5F; font-weight: 600; }
+  .item iconify-icon { font-size: 16px; opacity: 0.6; color: #94A3B8; }
+  .item.active iconify-icon { opacity: 1; color: #388FEF; }
+  .badge { margin-left: auto; font-size: 11px; font-weight: 600; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+  .badge.p { background: #388FEF; color: #fff; }
+  .badge.m { background: rgba(255,255,255,0.12); color: #CBD5E1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="label">Inbox</div>
+  <div class="item active"><iconify-icon icon="lucide:inbox"></iconify-icon>All Notifications<span class="badge p">24</span></div>
+  <div class="item"><iconify-icon icon="lucide:clock"></iconify-icon>Snoozed<span class="badge m">3</span></div>
+  <div class="item"><iconify-icon icon="lucide:check"></iconify-icon>Done</div>
+  <div style="height:10px"></div>
+  <div class="label">Tasks</div>
+  <div class="item"><iconify-icon icon="lucide:square-check"></iconify-icon>Synced Tasks</div>
+  <div style="height:10px"></div>
+  <div class="label">Manage</div>
+  <div class="item"><iconify-icon icon="lucide:settings"></iconify-icon>Settings</div>
+  <div class="item"><iconify-icon icon="lucide:user"></iconify-icon>Profile</div>
+</div>
+</body>
+</html>

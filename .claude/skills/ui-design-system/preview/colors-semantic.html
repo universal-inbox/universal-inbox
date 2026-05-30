@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Colors — Semantic</title>
+<link rel="stylesheet" href="../colors_and_type.css?v=20260423">
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; font-family: var(--font-ui); color: var(--ui-base-content); }
+  .wrap { padding: 20px 22px; }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .pair { display: flex; flex-direction: column; gap: 4px; }
+  .swatch { height: 44px; border-radius: var(--ui-radius-md); border: 1px solid var(--ui-border-light); display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 600; }
+  .name { font-size: 11px; font-weight: 600; color: var(--ui-base-content); margin-top: 6px; }
+  .hex { font-family: var(--font-mono); font-size: 9.5px; color: var(--ui-base-muted); }
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ui-base-muted); margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="label">Semantic — strong / subtle pairs</div>
+  <div class="grid">
+    <div class="pair">
+      <div class="swatch" style="background:#6BC5A0;color:#fff">success</div>
+      <div class="swatch" style="background:#EDF9F3;color:#6BC5A0">subtle</div>
+      <div class="name">success</div><div class="hex">#6BC5A0 · #EDF9F3</div>
+    </div>
+    <div class="pair">
+      <div class="swatch" style="background:#E8C46A;color:#fff">warning</div>
+      <div class="swatch" style="background:#FDF8EC;color:#92400E">subtle</div>
+      <div class="name">warning</div><div class="hex">#E8C46A · #FDF8EC</div>
+    </div>
+    <div class="pair">
+      <div class="swatch" style="background:#E8899A;color:#fff">error</div>
+      <div class="swatch" style="background:#FDF0F2;color:#E8899A">subtle</div>
+      <div class="name">error</div><div class="hex">#E8899A · #FDF0F2</div>
+    </div>
+    <div class="pair">
+      <div class="swatch" style="background:#6BB8D9;color:#fff">info</div>
+      <div class="swatch" style="background:#EDF6FB;color:#6BB8D9">subtle</div>
+      <div class="name">info</div><div class="hex">#6BB8D9 · #EDF6FB</div>
+    </div>
+    <div class="pair">
+      <div class="swatch" style="background:#8B5CF6;color:#fff">purple</div>
+      <div class="swatch" style="background:#F5F3FF;color:#8B5CF6">subtle</div>
+      <div class="name">purple</div><div class="hex">#8B5CF6 · #F5F3FF</div>
+    </div>
+  </div>
+  <div class="label" style="margin-top:18px">Accent (Amber)</div>
+  <div class="grid" style="grid-template-columns: repeat(5, 1fr)">
+    <div class="pair">
+      <div class="swatch" style="background:#F59E0B;color:#fff">accent</div>
+      <div class="swatch" style="background:#FFFBEB;color:#92400E">subtle</div>
+      <div class="name">accent</div><div class="hex">#F59E0B · #FFFBEB</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

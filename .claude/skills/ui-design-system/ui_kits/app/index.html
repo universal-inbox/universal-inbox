@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<title>Universal Inbox — App UI Kit</title>
+<link rel="stylesheet" href="../../colors_and_type.css?v=20260423">
+<link rel="stylesheet" href="styles.css?v=20260423">
+<script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="data.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="Sidebar.jsx"></script>
+<script type="text/babel" src="ListPanel.jsx"></script>
+<script type="text/babel" src="DetailPanel.jsx"></script>
+<script type="text/babel" src="Footer.jsx"></script>
+
+<script type="text/babel">
+const { useState } = React;
+
+function App() {
+  const [page, setPage] = useState("inbox");
+  const [notifications, setNotifications] = useState(window.UI_DATA.notifications);
+  const [selectedId, setSelectedId] = useState(notifications[0]?.id);
+  const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
+
+  const selected = notifications.find(n => n.id === selectedId);
+
+  function onComplete(id) {
+    setNotifications(ns => ns.filter(n => n.id !== id));
+    setSelectedId(notifications.find(n => n.id !== id)?.id);
+  }
+  function onDelete(id) { onComplete(id); }
+  function onSnooze(id) { onComplete(id); }
+
+  return (
+    <div className="ui-app">
+      <Sidebar page={page} setPage={setPage} />
+      <ListPanel
+        notifications={notifications}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        filter={filter}
+        setFilter={setFilter}
+        query={query}
+        setQuery={setQuery}
+      />
+      <DetailPanel
+        n={selected}
+        onComplete={onComplete}
+        onDelete={onDelete}
+        onSnooze={onSnooze}
+      />
+      <Footer />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
