@@ -256,9 +256,9 @@ pub async fn reset_password(
     user_email: &EmailAddress,
 ) -> Result<(), UniversalInboxError> {
     let password_input = if io::stdin().is_terminal() {
-        let p1 = rpassword::prompt_password_stderr(&format!("New password for {user_email}: "))
+        let p1 = rpassword::prompt_password(format!("New password for {user_email}: "))
             .context("Failed to read password")?;
-        let p2 = rpassword::prompt_password_stderr("Confirm password: ")
+        let p2 = rpassword::prompt_password("Confirm password: ")
             .context("Failed to read password confirmation")?;
         if p1 != p2 {
             return Err(UniversalInboxError::InvalidInputData {
