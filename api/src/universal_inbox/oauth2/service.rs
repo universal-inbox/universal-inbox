@@ -4,7 +4,7 @@ use anyhow::Context;
 use base64::prelude::*;
 use chrono::{TimeDelta, Utc};
 use jsonwebtoken::{EncodingKey, Header};
-use rand::RngCore;
+use rand::RngExt;
 use ring::digest;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -578,7 +578,7 @@ impl OAuth2Service {
 
 fn generate_random_token() -> String {
     let mut bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
+    rand::rng().fill(&mut bytes);
     BASE64_URL_SAFE_NO_PAD.encode(bytes)
 }
 
