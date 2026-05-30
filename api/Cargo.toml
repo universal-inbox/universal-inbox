@@ -22,7 +22,7 @@ actix-jwt-authc = { git = "https://github.com/dax/actix-jwt-authc", branch = "al
 actix-http = "3.0.0"
 actix-session = { version = "0.11.0", features = ["cookie-session"] }
 actix-web = "4.0.0"
-actix-web-lab = { version = "0.24.1", features = ["spa"] }
+actix-web-lab = { version = "0.26", features = ["spa"] }
 anyhow = { workspace = true }
 apalis = { version = "0.7", features = ["limit"] }
 apalis-redis = { version = "0.7" }
