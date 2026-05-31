@@ -12,6 +12,7 @@ use crate::{
         authenticated::AuthenticatedLayout, fullpage::FullpageLayout, nav_bar::NavBarLayout,
     },
     pages::{
+        email_validation_required_page::EmailValidationRequiredPage,
         email_verification_page::EmailVerificationPage,
         login_page::LoginPage,
         notifications_page::{NotificationPage, NotificationsPage},
@@ -44,6 +45,8 @@ pub enum Route {
         LoginPage {},
         #[route("/signup")]
         SignupPage {},
+        #[route("/verify-email")]
+        EmailValidationRequiredPage {},
         #[route("/password-reset")]
         PasswordResetPage {},
         #[route("/passkey-login")]
