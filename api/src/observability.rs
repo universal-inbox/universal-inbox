@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::{future::Future, time::Duration};
 
+use crate::middlewares::jwt_auth::Authenticated;
 use actix_http::body::MessageBody;
-use actix_jwt_authc::Authenticated;
 use actix_web::{
     HttpMessage,
     dev::{ServiceRequest, ServiceResponse},

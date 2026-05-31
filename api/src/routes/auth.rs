@@ -1,6 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
-use actix_jwt_authc::Authenticated;
+use crate::middlewares::jwt_auth::Authenticated;
 use actix_session::Session;
 use actix_web::{
     HttpResponse, Scope,
