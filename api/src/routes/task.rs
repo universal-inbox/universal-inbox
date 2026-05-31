@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use crate::middlewares::jwt_auth::{Authenticated, MaybeAuthenticated};
 use actix_http::body::BoxBody;
-use actix_jwt_authc::{Authenticated, MaybeAuthenticated};
 use actix_web::{
     HttpResponse, Scope,
     http::header::{self, CacheDirective},

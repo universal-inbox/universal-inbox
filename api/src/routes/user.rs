@@ -1,7 +1,7 @@
 use std::{num::NonZeroU32, sync::Arc};
 
+use crate::middlewares::jwt_auth::Authenticated;
 use actix_http::body::BoxBody;
-use actix_jwt_authc::Authenticated;
 use actix_session::Session;
 use actix_web::{HttpRequest, HttpResponse, Scope, web};
 use anyhow::{Context, anyhow};

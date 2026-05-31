@@ -6,7 +6,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use actix_jwt_authc::Authenticated;
+use crate::middlewares::jwt_auth::Authenticated;
 use actix_web::{
     HttpMessage, HttpResponse,
     body::EitherBody,
