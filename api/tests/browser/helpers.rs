@@ -1,6 +1,7 @@
 use std::{collections::HashMap, env, sync::Arc, time::Duration};
 
 use apalis_redis::RedisStorage;
+use email_address::EmailAddress;
 use rstest::*;
 use sqlx::PgPool;
 use tokio::sync::{OnceCell, RwLock};
@@ -18,6 +19,7 @@ use universal_inbox_api::{
     commands::generate::generate_testing_user,
     configuration::{AuthenticationSettings, LocalAuthenticationSettings, Settings},
     jobs::UniversalInboxJob,
+    repository::{Repository, user::UserRepository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
@@ -35,6 +37,7 @@ pub const DEFAULT_PASSWORD: &str = "test123456";
 
 pub struct BrowserTestedApp {
     pub app_url: String,
+    pub repository: Arc<Repository>,
     pub user_service: Arc<UserService>,
     pub task_service: Arc<RwLock<TaskService>>,
     pub notification_service: Arc<RwLock<NotificationService>>,
@@ -94,6 +97,7 @@ pub async fn browser_tested_app(
     ));
 
     let pool: Arc<PgPool> = db_connection.await;
+    let repository = Arc::new(Repository::new(pool.clone()));
     let redis_storage = redis_storage.await;
 
     let (services, _mailer_stub, _redis_storage) = build_and_spawn(
@@ -109,6 +113,7 @@ pub async fn browser_tested_app(
 
     BrowserTestedApp {
         app_url,
+        repository,
         user_service: services.user_service,
         task_service: services.task_service,
         notification_service: services.notification_service,
@@ -328,6 +333,46 @@ pub async fn register(page: &Page, app_url: &str, email: &str) {
         .to_be_visible()
         .await
         .expect("Confirmation message not visible after signup");
+}
+
+/// Mark a registered user's email as validated, server-side.
+///
+/// Registration stores an email-validation token and leaves the email
+/// unverified; the frontend now gates the app behind validation (logging in
+/// before verifying redirects to `/verify-email`). Tests that need to reach the
+/// app simulate the user clicking the verification link by reading the stored
+/// token and applying it directly through the user service.
+pub async fn verify_user_email(app: &BrowserTestedApp, email: &str) {
+    let email: EmailAddress = email.parse().expect("Test email should be valid");
+    let mut transaction = app
+        .repository
+        .begin()
+        .await
+        .expect("Failed to begin transaction");
+
+    let user = app
+        .user_service
+        .get_user_by_email(&mut transaction, &email)
+        .await
+        .expect("Failed to look up registered user")
+        .expect("Registered user should exist");
+
+    let token = app
+        .repository
+        .get_user_email_validation_token(&mut transaction, user.id)
+        .await
+        .expect("Failed to read email validation token")
+        .expect("Registered user should have an email validation token");
+
+    app.user_service
+        .verify_email(&mut transaction, user.id, token)
+        .await
+        .expect("Failed to verify email");
+
+    transaction
+        .commit()
+        .await
+        .expect("Failed to commit email verification");
 }
 
 /// Wait until at least one notification row is visible in the DOM.
