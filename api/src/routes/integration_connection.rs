@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use crate::middlewares::jwt_auth::Authenticated;
 use actix_http::body::BoxBody;
-use actix_jwt_authc::Authenticated;
 use actix_web::{
     HttpResponse, Scope, http::header::CacheControl, http::header::CacheDirective, web,
 };

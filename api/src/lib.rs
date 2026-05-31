@@ -10,11 +10,11 @@ use std::{
     time::Duration as StdDuration,
 };
 
-use actix_cors::Cors;
-use actix_http::StatusCode;
-use actix_jwt_authc::{
+use crate::middlewares::jwt_auth::{
     AuthenticateMiddlewareFactory, AuthenticateMiddlewareSettings, JWTSessionKey,
 };
+use actix_cors::Cors;
+use actix_http::StatusCode;
 use actix_session::{
     SessionMiddleware,
     config::{CookieContentSecurity, PersistentSession},
@@ -40,7 +40,6 @@ use apalis::{
 use apalis_redis::RedisStorage;
 use configuration::AuthenticationSettings;
 use csp::{CSP, Directive, Source, Sources};
-use futures::channel::mpsc;
 use integrations::{api::APIService, google_calendar::GoogleCalendarService, slack::SlackService};
 use jobs::UniversalInboxJob;
 use jsonwebtoken::{Algorithm, Validation};
@@ -232,13 +231,8 @@ pub async fn run_server(
     let server = HttpServer::new(move || {
         info!("Mounting API on {}", api_path);
 
-        // Setup JWT invalidation with no way to send invalidated token for now
-        let (_, invalidation_events_stream) = mpsc::channel(100);
-
-        let auth_middleware_factory = AuthenticateMiddlewareFactory::<Claims>::new(
-            invalidation_events_stream,
-            auth_middleware_settings.clone(),
-        );
+        let auth_middleware_factory =
+            AuthenticateMiddlewareFactory::<Claims>::new(auth_middleware_settings.clone());
 
         let api_scope = web::scope(api_path.trim_end_matches('/'))
             .wrap(

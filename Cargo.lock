@@ -97,21 +97,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "actix-jwt-authc"
-version = "0.2.0"
-source = "git+https://github.com/dax/actix-jwt-authc?branch=all-fixes#4b98861aae6007c89184c41001f1bb0bbc0e2aec"
-dependencies = [
- "actix-session",
- "actix-web",
- "derive_more",
- "futures-util",
- "jsonwebtoken",
- "serde",
- "time",
- "tokio",
-]
-
-[[package]]
 name = "actix-macros"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8414,7 +8399,6 @@ version = "0.1.0"
 dependencies = [
  "actix-cors",
  "actix-http",
- "actix-jwt-authc",
  "actix-session",
  "actix-web",
  "actix-web-lab",
