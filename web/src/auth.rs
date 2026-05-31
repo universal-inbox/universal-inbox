@@ -25,7 +25,10 @@ use crate::{
     components::loading::Loading,
     model::{AuthenticationState, UI_MODEL},
     route::Route,
-    services::{api::call_api, user_service::UserCommand},
+    services::{
+        api::call_api,
+        user_service::{CONNECTED_USER, UserCommand},
+    },
     utils::{current_location, get_local_storage, redirect_to},
 };
 
@@ -164,6 +167,22 @@ pub fn Authenticated(
                 debug!("auth: Authenticated, redirecting to /");
                 needs_update();
                 nav.replace(Route::NotificationsPage {});
+                return rsx! {};
+            }
+            // Gate the app behind email validation: a logged-in user whose email
+            // has not been verified is redirected to the verification page until
+            // they click the link. Auth methods that don't require email
+            // validation (passkey, OIDC) report `is_email_validated() == true`.
+            let needs_email_validation = CONNECTED_USER
+                .read()
+                .as_ref()
+                .map(|user| !user.is_email_validated())
+                .unwrap_or(false);
+            let on_verify_route = history().current_route() == *"/verify-email";
+            if needs_email_validation && !on_verify_route {
+                debug!("auth: Authenticated but email not validated, redirecting to verify-email");
+                nav.replace(Route::EmailValidationRequiredPage {});
+                needs_update();
                 return rsx! {};
             }
             rsx! { { children } }
