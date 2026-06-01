@@ -491,40 +491,20 @@ pub fn IntegrationSettings(
 
     let mut is_expanded = use_signal(|| false);
 
-    let status_leaf_variant = match connection() {
-        Some(Some(IntegrationConnection {
-            status: IntegrationConnectionStatus::Validated,
-            ..
-        })) => {
-            if has_all_oauth_scopes {
-                StatusLeafVariant::Connected
+    let (status_leaf_variant, status_label) = match connection() {
+        Some(Some(ref ic)) if ic.status == IntegrationConnectionStatus::Validated => {
+            if !has_all_oauth_scopes {
+                (StatusLeafVariant::Error, "Needs reconnect")
+            } else if ic.is_sync_degraded() {
+                (StatusLeafVariant::SyncIssue, "Sync issue")
             } else {
-                StatusLeafVariant::Error
+                (StatusLeafVariant::Connected, "Connected")
             }
         }
-        Some(Some(IntegrationConnection {
-            status: IntegrationConnectionStatus::Failing,
-            ..
-        })) => StatusLeafVariant::Error,
-        _ => StatusLeafVariant::Disconnected,
-    };
-
-    let status_label = match connection() {
-        Some(Some(IntegrationConnection {
-            status: IntegrationConnectionStatus::Validated,
-            ..
-        })) => {
-            if has_all_oauth_scopes {
-                "Connected"
-            } else {
-                "Needs reconnect"
-            }
+        Some(Some(ref ic)) if ic.status == IntegrationConnectionStatus::Failing => {
+            (StatusLeafVariant::Error, "Error")
         }
-        Some(Some(IntegrationConnection {
-            status: IntegrationConnectionStatus::Failing,
-            ..
-        })) => "Error",
-        _ => "Not connected",
+        _ => (StatusLeafVariant::Disconnected, "Not connected"),
     };
 
     let has_connection = matches!(
