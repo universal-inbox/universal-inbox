@@ -1168,3 +1168,59 @@ Here is a [link](https://www.universal-inbox.com/)"#
         }
     }
 }
+
+#[cfg(test)]
+mod test_rich_text_list_serde {
+    use slack_morphism::prelude::*;
+
+    // Regression for the SlackThread decode failure fixed by migration
+    // 20260601101612_fix_slack_rich_text_list_element_type. slack-morphism 2.22 changed
+    // SlackRichTextList.elements from Vec<SlackRichTextSection> (a bare struct, no "type")
+    // to Vec<SlackRichTextListElement> (#[serde(tag = "type")], requiring
+    // "type":"rich_text_section"). Data written by <= 2.21 lacks that discriminator and now
+    // fails to deserialize with `missing field type`; the migration backfills it. These tests
+    // lock both ends of that contract so a future slack-morphism bump can't silently re-break it.
+
+    fn rich_text_block_with_list(list_section_type: Option<&str>) -> serde_json::Value {
+        let mut section = serde_json::json!({
+            "elements": [ { "type": "text", "text": "item" } ]
+        });
+        if let Some(t) = list_section_type {
+            section["type"] = serde_json::json!(t);
+        }
+        serde_json::json!({
+            "type": "rich_text",
+            "elements": [
+                {
+                    "type": "rich_text_list",
+                    "style": "bullet",
+                    "elements": [ section ]
+                }
+            ]
+        })
+    }
+
+    #[test]
+    fn test_legacy_rich_text_list_element_without_type_fails() {
+        // Shape produced by slack-morphism <= 2.21: list elements have no "type".
+        let result: Result<SlackBlock, _> = serde_json::from_value(rich_text_block_with_list(None));
+        let err =
+            result.expect_err("legacy rich_text_list shape must fail under slack-morphism 2.22");
+        assert!(
+            err.to_string().contains("missing field `type`"),
+            "expected a missing `type` field error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_backfilled_rich_text_list_element_with_type_deserializes() {
+        // Shape after the backfill migration adds "type":"rich_text_section".
+        let result: Result<SlackBlock, _> =
+            serde_json::from_value(rich_text_block_with_list(Some("rich_text_section")));
+        assert!(
+            result.is_ok(),
+            "backfilled rich_text_list shape must deserialize, got: {:?}",
+            result.err()
+        );
+    }
+}
