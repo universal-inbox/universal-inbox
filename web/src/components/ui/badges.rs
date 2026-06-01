@@ -2,9 +2,8 @@
 //!
 //! ## Design system note: the CSS class hook hybrid
 //!
-//! [`Tag`] and [`StatusLeaf`] emit the CSS class names
-//! (`tag review`, `status-leaf connected`, …) that the stylesheet binds to
-//! for `::before` pseudo-element decorations, e.g.
+//! [`Tag`] emits the CSS class names (`tag review`, …) that the stylesheet
+//! binds to for `::before` pseudo-element decorations, e.g.
 //!
 //! ```css
 //! .tag.review::before { content: ""; width: 5px; height: 5px; … }
@@ -15,8 +14,8 @@
 //! React-style API + variant safety. The class string is the contract between
 //! the two layers — keep it intact.
 //!
-//! [`Badge`], by contrast, has no pseudo-element decoration, so it composes
-//! purely from utility classes + design tokens.
+//! [`Badge`] and [`StatusLeaf`], by contrast, have no pseudo-element
+//! decoration, so they compose purely from utility classes + design tokens.
 //!
 //! ## When to use each
 //!
@@ -204,8 +203,9 @@ pub fn Tag(
 
 // ─── StatusLeaf ─────────────────────────────────────────────────────────────
 
-/// Visual variant for [`StatusLeaf`]. Maps 1:1 to a CSS modifier on
-/// `.status-leaf` (e.g. `connected`, `error`).
+/// Visual variant for [`StatusLeaf`]. Each variant maps to a pair of
+/// Tailwind utility-class strings (pill + dot) — see `container_classes`
+/// and `dot_classes` below.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StatusLeafVariant {
     /// Healthy connection — green dot + subtle green fill.
@@ -214,29 +214,45 @@ pub enum StatusLeafVariant {
     Disconnected,
     /// Sync error — red dot + subtle red fill.
     Error,
-    /// Sync in progress. Falls back to base styles until a `.status-leaf.syncing`
-    /// rule is added; safe to use today.
+    /// OAuth still valid but last sync(s) failed — amber dot + subtle amber fill.
+    SyncIssue,
+    /// Sync in progress — neutral muted styling.
     Syncing,
 }
 
 impl StatusLeafVariant {
-    fn css_modifier(self) -> &'static str {
+    /// Tailwind utility classes for the outer pill (text + background).
+    fn container_classes(self) -> &'static str {
         match self {
-            StatusLeafVariant::Connected => "connected",
-            StatusLeafVariant::Disconnected => "disconnected",
-            StatusLeafVariant::Error => "error",
-            StatusLeafVariant::Syncing => "syncing",
+            StatusLeafVariant::Connected => "text-ui-success bg-ui-success-subtle",
+            StatusLeafVariant::Disconnected => "text-ui-base-muted bg-ui-secondary-subtle",
+            StatusLeafVariant::Error => "text-ui-error bg-ui-error-subtle",
+            StatusLeafVariant::SyncIssue => "text-ui-warning-text bg-ui-warning-subtle",
+            StatusLeafVariant::Syncing => "text-ui-base-muted bg-ui-secondary-subtle",
+        }
+    }
+
+    /// Tailwind utility classes for the inner dot (background + optional opacity).
+    fn dot_classes(self) -> &'static str {
+        match self {
+            StatusLeafVariant::Connected => "bg-ui-success",
+            StatusLeafVariant::Disconnected => "bg-ui-base-muted opacity-50",
+            StatusLeafVariant::Error => "bg-ui-error",
+            StatusLeafVariant::SyncIssue => "bg-ui-warning",
+            StatusLeafVariant::Syncing => "bg-ui-base-muted",
         }
     }
 }
 
 /// Connection-status pill with a leading colored dot — variants
-/// `connected` / `disconnected` / `error` / `syncing`.
+/// `Connected` / `Disconnected` / `Error` / `SyncIssue` / `Syncing`.
 ///
-/// **Same hybrid pattern as [`Tag`]**: emits `class="status-leaf {modifier}"`
-/// and an inner `<span class="leaf-dot">` so the CSS rules
-/// (`.status-leaf.connected .leaf-dot { background: var(--ui-success); }`)
-/// bind correctly. Do not collapse the dot into utilities.
+/// Composes Tailwind utilities against the `--ui-*` design tokens (exposed
+/// via `@theme`). The dot is a real inner `<span>` (not a `::before`), so
+/// utility classes are sufficient — no `.status-leaf` CSS hook needed.
+///
+/// Mobile (max-md): pill shrinks to 10px font + 7px horizontal padding via
+/// responsive variants.
 ///
 /// ```ignore
 /// rsx! { StatusLeaf { variant: StatusLeafVariant::Connected, label: "Connected".into() } }
@@ -244,16 +260,19 @@ impl StatusLeafVariant {
 /// ```
 #[component]
 pub fn StatusLeaf(
-    /// Which variant to render. Drives both the outer modifier class and the
-    /// inner `.leaf-dot` color (via the cascaded CSS rules).
+    /// Which variant to render. Drives both the pill's color and the inner dot.
     variant: StatusLeafVariant,
     /// Label to show next to the dot (e.g. "Connected", "Auth error").
     label: String,
 ) -> Element {
-    let modifier = variant.css_modifier();
+    let container = variant.container_classes();
+    let dot = variant.dot_classes();
     rsx! {
-        span { class: "status-leaf {modifier}",
-            span { class: "leaf-dot" }
+        span {
+            class: "inline-flex items-center gap-1 whitespace-nowrap rounded-[12px] \
+                    px-2 py-[3px] max-md:px-[7px] text-[10.5px] max-md:text-[10px] \
+                    font-medium {container}",
+            span { class: "w-1.5 h-1.5 rounded-full shrink-0 {dot}" }
             "{label}"
         }
     }
