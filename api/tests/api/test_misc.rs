@@ -40,6 +40,13 @@ mod content_security_policy {
             response.headers().get("x-frame-options"),
             Some(&HeaderValue::from_static("DENY"))
         );
+        // HSTS must be set on every response to force HTTPS-only connections.
+        assert_eq!(
+            response.headers().get("strict-transport-security"),
+            Some(&HeaderValue::from_static(
+                "max-age=63072000; includeSubDomains; preload"
+            ))
+        );
     }
 
     #[rstest]
@@ -69,6 +76,14 @@ mod content_security_policy {
         assert_eq!(
             response.headers().get("x-frame-options"),
             Some(&HeaderValue::from_static("DENY"))
+        );
+        // HSTS is emitted on every response, including JSON, to force
+        // HTTPS-only connections for the host.
+        assert_eq!(
+            response.headers().get("strict-transport-security"),
+            Some(&HeaderValue::from_static(
+                "max-age=63072000; includeSubDomains; preload"
+            ))
         );
     }
 }
