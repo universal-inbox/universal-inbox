@@ -382,6 +382,16 @@ pub async fn run_server(
                         header::HeaderName::from_static("x-frame-options"),
                         header::HeaderValue::from_static("DENY"),
                     );
+                    // HSTS: force HTTPS-only for this host and all subdomains.
+                    // Emitted on every response (browsers ignore it over
+                    // plaintext, honor it over HTTPS). The `preload` directive
+                    // makes the host eligible for the browser HSTS preload list.
+                    res.headers_mut().insert(
+                        header::STRICT_TRANSPORT_SECURITY,
+                        header::HeaderValue::from_static(
+                            "max-age=63072000; includeSubDomains; preload",
+                        ),
+                    );
                     if let Some(ref version) = api_version {
                         res.headers_mut().insert(
                             header::HeaderName::from_static("x-app-version"),
