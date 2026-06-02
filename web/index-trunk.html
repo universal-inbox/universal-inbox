@@ -40,6 +40,8 @@
     <link rel="icon" href="/images/favicon.ico" />
     <link data-trunk rel="copy-dir" href="images" />
     <link data-trunk rel="copy-dir" href="fonts" />
+    <link data-trunk rel="copy-file" href="js/headway-config.js" />
+
     <link rel="stylesheet" href="/css/flatpickr.min.css" />
     <link rel="stylesheet" href="/css/universal-inbox.min.css" />
     <link
@@ -59,14 +61,9 @@
 
   <body class="h-full">
     <div id="main" class="h-full"></div>
-    <script>
-      var HW_config = {
-        selector: "#ui-changelog",
-        account: "7Xr08y",
-      };
-    </script>
+    <script defer src="/headway-config.js"></script>
     <script
-      async
+      defer
       id="headway-script"
       src="https://cdn.headwayapp.co/widget.js"
     ></script>

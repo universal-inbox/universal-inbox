@@ -880,8 +880,6 @@ fn build_csp_header(settings: &Settings) -> String {
         .push(Directive::ScriptSrc(
             Sources::new_with(Source::Self_)
                 .push(Source::WasmUnsafeEval)
-                .push(Source::UnsafeInline)
-                .push(Source::UnsafeEval)
                 .push(Source::Host("https://client.crisp.chat"))
                 .push(Source::Host("https://cdn.headwayapp.co")),
         ))
