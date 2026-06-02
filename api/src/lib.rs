@@ -5,7 +5,7 @@ use std::{
     fmt::{Debug, Display},
     net::TcpListener,
     num::NonZeroUsize,
-    sync::{Arc, Weak},
+    sync::{Arc, OnceLock, Weak},
     thread,
     time::Duration as StdDuration,
 };
@@ -38,8 +38,11 @@ use apalis::{
     prelude::*,
 };
 use apalis_redis::RedisStorage;
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use configuration::AuthenticationSettings;
 use csp::{CSP, Directive, Source, Sources};
+use regex::Regex;
+use ring::digest;
 use integrations::{api::APIService, google_calendar::GoogleCalendarService, slack::SlackService};
 use jobs::UniversalInboxJob;
 use jsonwebtoken::{Algorithm, Validation};
@@ -124,7 +127,16 @@ pub async fn run_server(
         .clone()
         .unwrap_or_else(|| ".".to_string());
     let listen_address = listener.local_addr().unwrap();
-    let csp_header_value = build_csp_header(&settings);
+    // Trunk injects the WASM bootstrap as an inline <script type="module"> into the
+    // served index.html. Since script-src no longer allows 'unsafe-inline', derive a
+    // 'sha256-…' source for each inline script from the actual served file so the
+    // bootstrap can run. Only relevant when this server mounts the SPA statics.
+    let script_hashes = if static_path.is_some() {
+        inline_script_hashes(&format!("{static_dir}/index.html"))
+    } else {
+        Vec::new()
+    };
+    let csp_header_value = build_csp_header(&settings, &script_hashes);
     let api_version = settings.application.version.clone();
 
     // Slack webhook signing secret: required when the Slack integration is enabled.
@@ -851,7 +863,37 @@ pub async fn build_services(
     )
 }
 
-fn build_csp_header(settings: &Settings) -> String {
+/// Compute CSP `'sha256-…'` source values (base64-encoded SHA-256 digests) for
+/// every inline `<script>` in the served `index.html`.
+///
+/// Trunk injects the WASM bootstrap as an inline `<script type="module">` whose
+/// body references content-hashed filenames, so the digest changes on every
+/// build. Deriving it at startup from the actual served file keeps `script-src`
+/// correct without re-introducing `'unsafe-inline'`. Returns an empty vec when
+/// the file can't be read (e.g. dev servers that don't serve the built SPA).
+fn inline_script_hashes(index_html_path: &str) -> Vec<String> {
+    static SCRIPT_RE: OnceLock<Regex> = OnceLock::new();
+    static SRC_ATTR_RE: OnceLock<Regex> = OnceLock::new();
+
+    let Ok(html) = std::fs::read_to_string(index_html_path) else {
+        return Vec::new();
+    };
+
+    let script_re = SCRIPT_RE
+        .get_or_init(|| Regex::new(r"(?is)<script(?P<attrs>[^>]*)>(?P<body>.*?)</script>").unwrap());
+    // Matches a real `src` attribute, not the substring "src" elsewhere in attrs.
+    let src_attr_re = SRC_ATTR_RE.get_or_init(|| Regex::new(r"(?i)\bsrc\s*=").unwrap());
+
+    script_re
+        .captures_iter(&html)
+        .filter(|caps| !src_attr_re.is_match(&caps["attrs"]))
+        .filter(|caps| !caps["body"].trim().is_empty())
+        // Hash the exact bytes between `>` and `</script>` — what the browser hashes.
+        .map(|caps| BASE64_STANDARD.encode(digest::digest(&digest::SHA256, caps["body"].as_bytes())))
+        .collect()
+}
+
+fn build_csp_header(settings: &Settings, script_hashes: &[String]) -> String {
     let mut connect_srcs = Sources::new_with(Source::Self_);
     for oidc_issuer_url in settings
         .application
@@ -875,14 +917,19 @@ fn build_csp_header(settings: &Settings) -> String {
         .push(Source::Host("https://client.crisp.chat"))
         .push(Source::Host("wss://client.relay.crisp.chat"));
 
+    let mut script_srcs = Sources::new_with(Source::Self_)
+        .push(Source::WasmUnsafeEval)
+        .push(Source::Host("https://client.crisp.chat"))
+        .push(Source::Host("https://cdn.headwayapp.co"));
+    // Allow each inline script in the served index.html (e.g. Trunk's WASM
+    // bootstrap) by its SHA-256 hash instead of 'unsafe-inline'.
+    for hash in script_hashes {
+        script_srcs = script_srcs.push(Source::Hash(("sha256", hash.as_str())));
+    }
+
     CSP::new()
         .push(Directive::DefaultSrc(Sources::new_with(Source::Self_)))
-        .push(Directive::ScriptSrc(
-            Sources::new_with(Source::Self_)
-                .push(Source::WasmUnsafeEval)
-                .push(Source::Host("https://client.crisp.chat"))
-                .push(Source::Host("https://cdn.headwayapp.co")),
-        ))
+        .push(Directive::ScriptSrc(script_srcs))
         .push(Directive::StyleSrc(
             Sources::new_with(Source::Self_)
                 .push(Source::UnsafeInline)
@@ -923,4 +970,48 @@ fn reset_cookies<B>(mut res: ServiceResponse<B>) -> ActixResult<ErrorHandlerResp
             .finish(),
     )?;
     Ok(ErrorHandlerResponse::Response(res.map_into_left_body()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inline_script_hashes;
+
+    /// base64(sha256(`console.log("test");`)).
+    const CONSOLE_LOG_HASH: &str = "uAESwGgY2G0W8BhcAjQ5tDZK88YZcbjq65DW8JTcims=";
+
+    fn write_temp_html(name: &str, contents: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "ui_csp_{}_{}_{name}.html",
+            std::process::id(),
+            // thread id keeps parallel test cases from clobbering each other.
+            format!("{:?}", std::thread::current().id())
+                .replace(|c: char| !c.is_alphanumeric(), "")
+        ));
+        std::fs::write(&path, contents).unwrap();
+        path
+    }
+
+    #[test]
+    fn hashes_inline_script_and_ignores_external_and_empty() {
+        let path = write_temp_html(
+            "mixed",
+            r#"<!DOCTYPE html><html><body>
+                <div id="main"></div>
+                <script type="module">console.log("test");</script>
+                <script defer src="/headway-config.js"></script>
+                <script async id="headway-script" src="https://cdn.headwayapp.co/widget.js"></script>
+                <script>   </script>
+            </body></html>"#,
+        );
+
+        let hashes = inline_script_hashes(path.to_str().unwrap());
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(hashes, vec![CONSOLE_LOG_HASH.to_string()]);
+    }
+
+    #[test]
+    fn returns_empty_for_missing_file() {
+        assert!(inline_script_hashes("/nonexistent/path/to/index.html").is_empty());
+    }
 }
