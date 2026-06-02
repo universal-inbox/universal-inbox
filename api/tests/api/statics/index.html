@@ -10,5 +10,8 @@
 
   <body>
     <div id="main"></div>
+    <!-- Stands in for Trunk's injected inline WASM bootstrap: exercises the
+         CSP 'sha256-…' derivation in build_csp_header. -->
+    <script type="module">console.log("test");</script>
   </body>
 </html>
