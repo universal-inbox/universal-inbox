@@ -326,6 +326,7 @@ pub enum LinearWorkflowStateType {
     Started,
     Completed,
     Canceled,
+    Duplicate,
 }
 
 impl TryFrom<String> for LinearWorkflowStateType {
@@ -339,6 +340,7 @@ impl TryFrom<String> for LinearWorkflowStateType {
             "started" => Ok(LinearWorkflowStateType::Started),
             "completed" => Ok(LinearWorkflowStateType::Completed),
             "canceled" => Ok(LinearWorkflowStateType::Canceled),
+            "duplicate" => Ok(LinearWorkflowStateType::Duplicate),
             _ => Err(anyhow!(
                 "Unable to find LinearWorkflowStateType value for `{}`",
                 value
@@ -356,6 +358,7 @@ impl From<LinearWorkflowStateType> for TaskStatus {
             LinearWorkflowStateType::Started => TaskStatus::Active,
             LinearWorkflowStateType::Completed => TaskStatus::Done,
             LinearWorkflowStateType::Canceled => TaskStatus::Deleted,
+            LinearWorkflowStateType::Duplicate => TaskStatus::Deleted,
         }
     }
 }
@@ -469,5 +472,53 @@ impl ThirdPartyItemFromSource for LinearIssue {
 
     fn source_id(&self) -> String {
         self.id.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+
+    mod workflow_state_type {
+        use super::*;
+
+        #[rstest]
+        #[case("triage", LinearWorkflowStateType::Triage)]
+        #[case("backlog", LinearWorkflowStateType::Backlog)]
+        #[case("unstarted", LinearWorkflowStateType::Unstarted)]
+        #[case("started", LinearWorkflowStateType::Started)]
+        #[case("completed", LinearWorkflowStateType::Completed)]
+        #[case("canceled", LinearWorkflowStateType::Canceled)]
+        #[case("duplicate", LinearWorkflowStateType::Duplicate)]
+        fn test_try_from_known_values(
+            #[case] value: &str,
+            #[case] expected: LinearWorkflowStateType,
+        ) {
+            assert_eq!(
+                LinearWorkflowStateType::try_from(value.to_string()).unwrap(),
+                expected
+            );
+        }
+
+        #[rstest]
+        fn test_try_from_unknown_value_fails() {
+            assert!(LinearWorkflowStateType::try_from("unknown".to_string()).is_err());
+        }
+
+        #[rstest]
+        #[case(LinearWorkflowStateType::Triage, TaskStatus::Active)]
+        #[case(LinearWorkflowStateType::Backlog, TaskStatus::Active)]
+        #[case(LinearWorkflowStateType::Unstarted, TaskStatus::Active)]
+        #[case(LinearWorkflowStateType::Started, TaskStatus::Active)]
+        #[case(LinearWorkflowStateType::Completed, TaskStatus::Done)]
+        #[case(LinearWorkflowStateType::Canceled, TaskStatus::Deleted)]
+        #[case(LinearWorkflowStateType::Duplicate, TaskStatus::Deleted)]
+        fn test_into_task_status(
+            #[case] state: LinearWorkflowStateType,
+            #[case] expected: TaskStatus,
+        ) {
+            assert_eq!(TaskStatus::from(state), expected);
+        }
     }
 }
