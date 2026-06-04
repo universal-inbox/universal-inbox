@@ -41,12 +41,12 @@ use apalis_redis::RedisStorage;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use configuration::AuthenticationSettings;
 use csp::{CSP, Directive, Source, Sources};
-use regex::Regex;
-use ring::digest;
 use integrations::{api::APIService, google_calendar::GoogleCalendarService, slack::SlackService};
 use jobs::UniversalInboxJob;
 use jsonwebtoken::{Algorithm, Validation};
 use mailer::Mailer;
+use regex::Regex;
+use ring::digest;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 use tracing::{Level, Span, error, event, info};
@@ -879,8 +879,9 @@ fn inline_script_hashes(index_html_path: &str) -> Vec<String> {
         return Vec::new();
     };
 
-    let script_re = SCRIPT_RE
-        .get_or_init(|| Regex::new(r"(?is)<script(?P<attrs>[^>]*)>(?P<body>.*?)</script>").unwrap());
+    let script_re = SCRIPT_RE.get_or_init(|| {
+        Regex::new(r"(?is)<script(?P<attrs>[^>]*)>(?P<body>.*?)</script>").unwrap()
+    });
     // Matches a real `src` attribute, not the substring "src" elsewhere in attrs.
     let src_attr_re = SRC_ATTR_RE.get_or_init(|| Regex::new(r"(?i)\bsrc\s*=").unwrap());
 
@@ -889,7 +890,9 @@ fn inline_script_hashes(index_html_path: &str) -> Vec<String> {
         .filter(|caps| !src_attr_re.is_match(&caps["attrs"]))
         .filter(|caps| !caps["body"].trim().is_empty())
         // Hash the exact bytes between `>` and `</script>` — what the browser hashes.
-        .map(|caps| BASE64_STANDARD.encode(digest::digest(&digest::SHA256, caps["body"].as_bytes())))
+        .map(|caps| {
+            BASE64_STANDARD.encode(digest::digest(&digest::SHA256, caps["body"].as_bytes()))
+        })
         .collect()
 }
 
