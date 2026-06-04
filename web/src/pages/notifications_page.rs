@@ -21,10 +21,11 @@ use crate::{
     services::{
         flyonui::open_flyonui_modal,
         notification_service::{NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, NotificationCommand},
+        user_preferences_service::USER_PREFERENCES,
     },
     utils::{
-        get_screen_width, open_link, scroll_element, scroll_element_by_page,
-        scroll_element_into_view_by_class,
+        get_screen_width, open_link, open_link_in_background, scroll_element,
+        scroll_element_by_page, scroll_element_into_view_by_class,
     },
 };
 
@@ -311,7 +312,17 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
             }
             ("Enter", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
-                    let _ = open_link(notification.get_html_url().as_str());
+                    let url = notification.get_html_url();
+                    let open_in_background = USER_PREFERENCES
+                        .peek()
+                        .as_ref()
+                        .map(|prefs| prefs.open_links_in_background)
+                        .unwrap_or(false);
+                    let _ = if open_in_background {
+                        open_link_in_background(url.as_str())
+                    } else {
+                        open_link(url.as_str())
+                    };
                 }
             }
             ("h", false, false, false, false) | ("?", false, false, false, false) => {

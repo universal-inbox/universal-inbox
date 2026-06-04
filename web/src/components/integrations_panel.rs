@@ -214,6 +214,7 @@ pub fn IntegrationsPanel(
                                         user_preferences_service.send(
                                             UserPreferencesCommand::Patch(UserPreferencesPatch {
                                                 default_task_manager_provider_kind: Some(provider_kind),
+                                                ..Default::default()
                                             })
                                         );
                                     },
