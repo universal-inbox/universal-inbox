@@ -48,6 +48,10 @@ pub fn LinearIssueIcon(linear_issue: ReadSignal<LinearIssue>, class: Option<Stri
             rsx! { LinearIssueCanceledIcon { class: "{class}" } },
             CANCELED_TEXT_COLOR_CLASS,
         ),
+        LinearWorkflowStateType::Duplicate => (
+            rsx! { LinearIssueCanceledIcon { class: "{class}" } },
+            CANCELED_TEXT_COLOR_CLASS,
+        ),
     };
 
     rsx! {
