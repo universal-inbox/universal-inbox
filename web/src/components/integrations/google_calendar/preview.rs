@@ -288,7 +288,7 @@ pub fn GoogleCalendarEventPreview(
                                         dot: rsx! { StatusDot { variant: dot_variant } },
                                         label: "Guests".to_string(),
                                         summary,
-                                        initially_open: expand_details(),
+                                        expand: expand_details,
 
                                         for attendee in google_calendar_event().attendees {
                                             AttendeeRow { attendee }

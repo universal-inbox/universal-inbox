@@ -4,7 +4,10 @@ use gloo_timers::future::TimeoutFuture;
 use gloo_utils::errors::JsError;
 use url::Url;
 use wasm_bindgen::JsCast;
-use web_sys::{Element, HtmlElement, HtmlInputElement, ScrollBehavior, ScrollToOptions, Window};
+use web_sys::{
+    Element, HtmlElement, HtmlInputElement, MouseEvent, MouseEventInit, ScrollBehavior,
+    ScrollToOptions,
+};
 
 pub async fn focus_and_select_input_element(id: &str) -> Result<HtmlInputElement> {
     let elt = wait_for_element_by_id(id, 300)
@@ -93,12 +96,53 @@ pub fn get_local_storage() -> Result<web_sys::Storage> {
         .context("No local storage available")
 }
 
-pub fn open_link(url: &str) -> Result<Window> {
+pub fn open_link(url: &str) -> Result<()> {
+    // Open the link in a *background* tab so focus stays on Universal Inbox.
+    // `window.open(..., "_blank")` foregrounds the new tab and there is no flag
+    // to keep it in the background — browsers only open a background tab on a
+    // modifier-click. So we synthesize one on a throwaway anchor. Both Ctrl and
+    // Meta are set: each platform honors only its own (Cmd on macOS, Ctrl on
+    // Win/Linux) and ignores the other, avoiding platform sniffing.
     let window = web_sys::window().context("Unable to get the window object")?;
-    window
-        .open_with_url_and_target(url, "_blank")
-        .map_err(|err| JsError::try_from(err).unwrap())?
-        .context("Unable to open the link in a new tab")
+    let document = window
+        .document()
+        .context("Unable to get the document object")?;
+    let body = document.body().context("Unable to get the document body")?;
+
+    let anchor = document
+        .create_element("a")
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+    anchor
+        .set_attribute("href", url)
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+    anchor
+        .set_attribute("target", "_blank")
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+    anchor
+        .set_attribute("rel", "noopener")
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+
+    // Some browsers only navigate from a synthetic click when the node is in
+    // the document, so attach it, dispatch, then detach.
+    body.append_child(&anchor)
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+
+    let event_init = MouseEventInit::new();
+    event_init.set_bubbles(true);
+    event_init.set_cancelable(true);
+    event_init.set_ctrl_key(true);
+    event_init.set_meta_key(true);
+    event_init.set_view(Some(&window));
+    let event = MouseEvent::new_with_mouse_event_init_dict("click", &event_init)
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+    anchor
+        .dispatch_event(&event)
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+
+    body.remove_child(&anchor)
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+
+    Ok(())
 }
 
 pub async fn copy_to_clipboard(text: &str) -> Result<()> {

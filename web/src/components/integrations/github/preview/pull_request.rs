@@ -13,12 +13,10 @@ use universal_inbox::third_party::integrations::github::{
     GithubPullRequestState, GithubRepositorySummary, GithubReviewer, GithubTeamSummary,
     GithubUserSummary, GithubWorkflow,
 };
-use uuid::Uuid;
 
 use crate::{
     components::{
         Tag, TagList, UserWithAvatar,
-        flyonui::collapse::Collapse,
         integrations::github::{
             GithubActorDisplay, get_github_actor_name_and_url, icons::GithubPullRequestIcon,
         },
@@ -306,7 +304,7 @@ fn ChecksSection(
                 dot: rsx! { StatusDot { variant: dot_variant } },
                 label: "Checks".to_string(),
                 summary,
-                initially_open: expand_details(),
+                expand: expand_details,
 
                 ChecksSectionList { latest_commit }
             }
@@ -523,10 +521,10 @@ fn ReviewsSection(
                 dot: rsx! { StatusDot { variant: dot_variant } },
                 label: "Reviewers".to_string(),
                 summary,
-                initially_open: expand_details(),
+                expand: expand_details,
 
                 for review in reviews {
-                    GithubReviewRow { review, expand_details }
+                    GithubReviewRow { review }
                 }
             }
         }
@@ -534,8 +532,7 @@ fn ReviewsSection(
 }
 
 #[component]
-fn GithubReviewRow(review: GithubReview, expand_details: ReadSignal<bool>) -> Element {
-    let id = use_memo(|| Uuid::new_v4().to_string())();
+fn GithubReviewRow(review: GithubReview) -> Element {
     let (reviewer, review_body, review_status_icon, row_variant) = match review {
         GithubReview::Requested { reviewer } => (
             reviewer,
@@ -591,10 +588,11 @@ fn GithubReviewRow(review: GithubReview, expand_details: ReadSignal<bool>) -> El
     };
 
     if let Some(review_body) = review_body {
-        // This row hosts a Collapse (review body) — the shell is column-flex
-        // with tighter padding so it isn't a fit for the `StatusRow` shape.
-        // Reuse the variant tint and the row radius/font so it stays in
-        // family.
+        // Reviewer header + review comment, both shown inline once the
+        // Reviewers section is open — single level of expansion, no nested
+        // collapse. The column-flex shell with tighter padding isn't a fit for
+        // the `StatusRow` shape, so we reuse the variant tint + row radius/font
+        // to stay in family.
         let tint = match row_variant {
             StatusVariant::Error => "bg-ui-error-subtle",
             StatusVariant::Warning => "bg-ui-warning-subtle",
@@ -606,25 +604,19 @@ fn GithubReviewRow(review: GithubReview, expand_details: ReadSignal<bool>) -> El
         rsx! {
             div {
                 class: "{class}",
-                Collapse {
-                    id: "github-review-{id}",
-                    opened: expand_details(),
-                    header: rsx! {
-                        div {
-                            class: "flex gap-2 items-center w-full",
-                            { review_status_icon }
-                            UserWithAvatar {
-                                user_name: reviewer_display_name.clone(),
-                                avatar_url: reviewer_avatar_url,
-                                display_name: true,
-                            },
-                        }
+                div {
+                    class: "flex gap-2 items-center w-full p-2",
+                    { review_status_icon }
+                    UserWithAvatar {
+                        user_name: reviewer_display_name.clone(),
+                        avatar_url: reviewer_avatar_url,
+                        display_name: true,
                     },
+                }
 
-                    div {
-                        class: "bg-neutral text-neutral-content p-2 my-1 rounded-sm",
-                        dangerous_inner_html: "{review_body}"
-                    }
+                div {
+                    class: "bg-neutral text-neutral-content p-2 my-1 rounded-sm",
+                    dangerous_inner_html: "{review_body}"
                 }
             }
         }
