@@ -6,8 +6,8 @@
 //!
 //! - [`StatusSection`] — clickable header (dot slot + label + summary +
 //!   chevron) + collapsible body slot. Chevron rotates 180° when open;
-//!   state is local via `use_signal` with a `use_effect` re-sync on
-//!   `initially_open` so a parent-controlled "expand all" signal stays
+//!   state is local via `use_signal` with a `use_effect` re-sync on the
+//!   `expand` signal so a parent-controlled "expand all" signal stays
 //!   authoritative.
 //! - [`StatusRow`] — flex row with `space-between`. `variant` drives the
 //!   background tint (error → `bg-ui-error-subtle`, warning →
@@ -29,7 +29,7 @@
 //!     dot: rsx! { StatusDot { variant: StatusVariant::Success } },
 //!     label: "Guests",
 //!     summary: "4 guests · 3 yes, 1 awaiting",
-//!     initially_open: false,
+//!     expand: expand_details,
 //!     for attendee in attendees {
 //!         StatusRow { variant: StatusVariant::Default,
 //!             AttendeeBody { attendee }
@@ -107,15 +107,18 @@ pub fn StatusSection(
     /// Muted summary text on the right of the label
     /// ("4 guests · 3 yes, 1 awaiting", "2 successful, 1 failing").
     summary: String,
-    /// Seeds the open state. A `use_effect` re-syncs when this flips so the
-    /// parent's `expand_details` signal stays authoritative.
-    initially_open: bool,
+    /// Drives the open state. Read reactively inside a `use_effect` so the
+    /// parent's `expand_details` signal stays authoritative — when it flips
+    /// (e.g. the user presses `e` to expand details), the section re-syncs.
+    /// Must be a signal: a plain `bool` prop would be captured once and never
+    /// re-fire the effect.
+    expand: ReadSignal<bool>,
     /// Body — typically one or more [`StatusRow`]s.
     children: Element,
 ) -> Element {
-    let mut is_open = use_signal(move || initially_open);
+    let mut is_open = use_signal(move || *expand.peek());
     use_effect(move || {
-        is_open.set(initially_open);
+        is_open.set(expand());
     });
 
     // Head shell — matches the dropped `.preview-status-section-head` rule:
