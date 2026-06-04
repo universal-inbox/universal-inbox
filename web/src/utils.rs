@@ -97,6 +97,19 @@ pub fn get_local_storage() -> Result<web_sys::Storage> {
 }
 
 pub fn open_link(url: &str) -> Result<()> {
+    // Foreground open (the default): `window.open(url, "_blank")` opens — and
+    // focuses — a new tab. Users who prefer to keep focus on Universal Inbox
+    // can enable the "open links in background" preference, which routes
+    // through [`open_link_in_background`] instead.
+    let window = web_sys::window().context("Unable to get the window object")?;
+    window
+        .open_with_url_and_target(url, "_blank")
+        .map_err(|err| JsError::try_from(err).unwrap())?
+        .context("Unable to open the link in a new tab")?;
+    Ok(())
+}
+
+pub fn open_link_in_background(url: &str) -> Result<()> {
     // Open the link in a *background* tab so focus stays on Universal Inbox.
     // `window.open(..., "_blank")` foregrounds the new tab and there is no flag
     // to keep it in the background — browsers only open a background tab on a

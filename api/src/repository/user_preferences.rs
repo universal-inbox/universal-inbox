@@ -45,6 +45,7 @@ impl UserPreferencesRepository for Repository {
                 SELECT
                     user_id,
                     default_task_manager_provider_kind,
+                    open_links_in_background,
                     created_at,
                     updated_at
                 FROM user_preferences
@@ -78,27 +79,44 @@ impl UserPreferencesRepository for Repository {
         user_id: UserId,
         patch: &UserPreferencesPatch,
     ) -> Result<UserPreferences, UniversalInboxError> {
-        // $2: the value (None means NULL in DB)
-        // $3: whether the field was provided in the patch (true = update it, false = keep existing)
+        // For each field: a value bind + a "provided" flag bind. The flag drives
+        // the ON CONFLICT CASE so an absent patch field keeps the existing value.
+        // $2/$3: default_task_manager_provider_kind value / provided
         let (value, provided) = match &patch.default_task_manager_provider_kind {
             Some(opt) => (opt.as_ref().map(|kind| kind.to_string()), true),
             None => (None, false),
         };
+        // $4/$5: open_links_in_background value / provided. The value defaults to
+        // false when absent so a fresh INSERT gets the NOT NULL column's default.
+        let (open_links_in_background, open_links_in_background_provided) =
+            match patch.open_links_in_background {
+                Some(value) => (value, true),
+                None => (false, false),
+            };
 
         let row = sqlx::query(
             r#"
-                INSERT INTO user_preferences (user_id, default_task_manager_provider_kind)
-                VALUES ($1, $2)
+                INSERT INTO user_preferences (
+                    user_id,
+                    default_task_manager_provider_kind,
+                    open_links_in_background
+                )
+                VALUES ($1, $2, $4)
                 ON CONFLICT (user_id)
                 DO UPDATE SET
                     default_task_manager_provider_kind = CASE
                         WHEN $3 THEN $2
                         ELSE user_preferences.default_task_manager_provider_kind
                     END,
+                    open_links_in_background = CASE
+                        WHEN $5 THEN $4
+                        ELSE user_preferences.open_links_in_background
+                    END,
                     updated_at = NOW()
                 RETURNING
                     user_id,
                     default_task_manager_provider_kind,
+                    open_links_in_background,
                     created_at,
                     updated_at
             "#,
@@ -106,6 +124,8 @@ impl UserPreferencesRepository for Repository {
         .bind(user_id.0)
         .bind(value)
         .bind(provided)
+        .bind(open_links_in_background)
+        .bind(open_links_in_background_provided)
         .fetch_one(&mut **executor)
         .await
         .map_err(|err| {
@@ -127,6 +147,7 @@ fn user_preferences_from_row(
     let user_id: uuid::Uuid = row.get("user_id");
     let default_task_manager_provider_kind: Option<String> =
         row.get("default_task_manager_provider_kind");
+    let open_links_in_background: bool = row.get("open_links_in_background");
     let created_at: DateTime<Utc> = row.get("created_at");
     let updated_at: DateTime<Utc> = row.get("updated_at");
 
@@ -144,6 +165,7 @@ fn user_preferences_from_row(
     Ok(UserPreferences {
         user_id: user_id.into(),
         default_task_manager_provider_kind,
+        open_links_in_background,
         created_at,
         updated_at,
     })

@@ -954,6 +954,7 @@ pub async fn get_user_preferences(
         None => Ok(HttpResponse::Ok().json(UserPreferences {
             user_id,
             default_task_manager_provider_kind: None,
+            open_links_in_background: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         })),
