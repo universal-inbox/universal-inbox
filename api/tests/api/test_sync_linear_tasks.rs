@@ -1211,6 +1211,7 @@ mod sink_provider_resolution {
             .patch(format!("{}users/me/preferences", app.app.api_address))
             .json(&UserPreferencesPatch {
                 default_task_manager_provider_kind: Some(Some(IntegrationProviderKind::TickTick)),
+                ..Default::default()
             })
             .send()
             .await

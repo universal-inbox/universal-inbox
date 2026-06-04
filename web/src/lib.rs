@@ -25,7 +25,9 @@ use services::{
     oauth2_client_service::{OAUTH2_AUTHORIZED_CLIENTS, oauth2_client_service},
     task_service::task_service,
     toast_service::{TOASTS, VIEWPORT_WIDTH, toast_service},
-    user_preferences_service::{USER_PREFERENCES, user_preferences_service},
+    user_preferences_service::{
+        USER_PREFERENCES, UserPreferencesCommand, user_preferences_service,
+    },
     user_service::{AUTH_METHODS, CONNECTED_USER, user_service},
 };
 use theme::{IS_DARK_MODE, IS_SIDEBAR_COLLAPSED, init_sidebar_collapsed, toggle_dark_mode};
@@ -106,7 +108,7 @@ pub fn App() -> Element {
         )
     });
 
-    let _user_preferences_service_handle = use_coroutine(move |rx| {
+    let user_preferences_service_handle = use_coroutine(move |rx| {
         to_owned![toast_service_handle];
 
         user_preferences_service(
@@ -178,6 +180,11 @@ pub fn App() -> Element {
 
         let app_config = get_app_config().await.unwrap();
         APP_CONFIG.write().replace(app_config);
+
+        // Load user preferences app-wide so behaviors that read them outside the
+        // settings page (e.g. the Enter shortcut's foreground/background link
+        // opening) see the saved value.
+        user_preferences_service_handle.send(UserPreferencesCommand::Refresh);
     });
 
     // Dioxus 0.4.1 bug workaround: https://github.com/DioxusLabs/dioxus/issues/1511

@@ -302,6 +302,10 @@ pub enum UserAuthMethodDisplayInfo {
 pub struct UserPreferences {
     pub user_id: UserId,
     pub default_task_manager_provider_kind: Option<IntegrationProviderKind>,
+    /// When `true`, opening a notification's source (e.g. via the `Enter`
+    /// shortcut) opens it in a background tab so focus stays on Universal
+    /// Inbox. Defaults to `false` (foreground).
+    pub open_links_in_background: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -309,4 +313,5 @@ pub struct UserPreferences {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub struct UserPreferencesPatch {
     pub default_task_manager_provider_kind: Option<Option<IntegrationProviderKind>>,
+    pub open_links_in_background: Option<bool>,
 }

@@ -4,22 +4,28 @@ use dioxus::prelude::*;
 
 use log::{debug, warn};
 
-use universal_inbox::integration_connection::{
-    IntegrationConnection, config::IntegrationConnectionConfig, provider::IntegrationProviderKind,
+use universal_inbox::{
+    integration_connection::{
+        IntegrationConnection, config::IntegrationConnectionConfig,
+        provider::IntegrationProviderKind,
+    },
+    user::UserPreferencesPatch,
 };
 
 use crate::{
     components::{
         integrations_panel::IntegrationsPanel,
         loading::Loading,
+        settings_controls::SettingRow,
         toast_zone::{Toast, ToastKind},
+        ui::{Card, CardVariant, Overline, ToggleSize, ToggleSwitch},
     },
     config::APP_CONFIG,
     model::UI_MODEL,
     services::{
         integration_connection_service::{INTEGRATION_CONNECTIONS, IntegrationConnectionCommand},
         toast_service::ToastCommand,
-        user_preferences_service::UserPreferencesCommand,
+        user_preferences_service::{USER_PREFERENCES, UserPreferencesCommand},
     },
     utils::current_location,
 };
@@ -114,6 +120,12 @@ pub fn SettingsPage() -> Element {
         }
     });
 
+    let open_links_in_background = USER_PREFERENCES
+        .read()
+        .as_ref()
+        .map(|prefs| prefs.open_links_in_background)
+        .unwrap_or(false);
+
     if let Some(app_config) = APP_CONFIG.read().as_ref()
         && let Some(integration_connections) = INTEGRATION_CONNECTIONS.read().as_ref()
     {
@@ -159,6 +171,33 @@ pub fn SettingsPage() -> Element {
                                 IntegrationConnectionCommand::UpdateIntegrationConnectionConfig(connection.clone(), config)
                             );
                         },
+                    }
+
+                    Overline { class: "mt-4".to_string(), "Preferences" }
+
+                    Card {
+                        variant: CardVariant::Default,
+                        SettingRow {
+                            label: rsx! { "Open links in a background tab" },
+                            description: Some(
+                                "When pressing Enter to open a notification or task source, \
+                                 keep focus on Universal Inbox instead of switching to the new tab."
+                                    .to_string(),
+                            ),
+                            ToggleSwitch {
+                                size: ToggleSize::Md,
+                                checked: open_links_in_background,
+                                label: Some("Open links in a background tab".to_string()),
+                                onchange: move |new_value: bool| {
+                                    user_preferences_service.send(UserPreferencesCommand::Patch(
+                                        UserPreferencesPatch {
+                                            open_links_in_background: Some(new_value),
+                                            ..Default::default()
+                                        },
+                                    ));
+                                },
+                            }
+                        }
                     }
                 }
             }
