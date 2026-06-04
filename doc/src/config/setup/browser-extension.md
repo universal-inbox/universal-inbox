@@ -62,17 +62,13 @@ Universal Inbox                    Browser Extension                  Slack
 
 ### Firefox
 
-1. Download the extension from the [Universal Inbox releases page](https://github.com/universal-inbox/universal-inbox-extension/releases)
-2. Open `about:addons` in Firefox
-3. Click the gear icon and select "Install Add-on From File..."
-4. Select the downloaded `.xpi` file
+1. Open the [Universal Inbox add-on on Firefox Add-ons](https://addons.mozilla.org/en/firefox/addon/universal-inbox/)
+2. Click **Add to Firefox**, then confirm the permission prompt
 
 ### Chrome
 
-1. Download the extension from the [Universal Inbox releases page](https://github.com/universal-inbox/universal-inbox-extension/releases)
-2. Open `chrome://extensions` in Chrome
-3. Enable "Developer mode" in the top right
-4. Click "Load unpacked" and select the extracted extension directory
+1. Open the [Universal Inbox extension on the Chrome Web Store](https://chromewebstore.google.com/detail/universal-inbox/jiholcflldpafacabnmimbhecplhgmdb)
+2. Click **Add to Chrome**, then confirm by clicking **Add extension**
 
 ## Configuration
 
