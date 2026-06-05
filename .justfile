@@ -34,7 +34,8 @@ install-rust-toolchain:
   #!/usr/bin/env bash
 
   rustup show active-toolchain | grep -q "^$RUST_TOOLCHAIN_VERSION-" || rustup default $RUST_TOOLCHAIN_VERSION
-  for toolchain in $(rustup toolchain list | grep -v $(rustup show active-toolchain | awk '{ print $1 }')); do
+  active=$(rustup show active-toolchain | awk '{ print $1 }')
+  for toolchain in $(rustup toolchain list | grep -v "$active" | grep -vE '^(nightly|beta|stable)'); do
     rustup toolchain uninstall $toolchain
   done
   rustup target list --installed | grep -q '^wasm32-unknown-unknown$' || rustup target add wasm32-unknown-unknown
