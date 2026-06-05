@@ -91,6 +91,7 @@ pub fn LinearProjectDetails(
     let start_date = linear_project().start_date;
     let target_date = linear_project().target_date;
     let today_pct = today_marker_percent(start_date, target_date);
+    let description = linear_project().description.clone();
 
     let reason_label = linear_notification()
         .as_ref()
@@ -170,11 +171,13 @@ pub fn LinearProjectDetails(
                 }
             }
 
-            Card {
-                variant: CardVariant::Default,
-                Markdown {
-                    class: "{prose_style} prose prose-sm w-full max-w-full",
-                    text: linear_project().description.clone()
+            if !description.trim().is_empty() {
+                Card {
+                    variant: CardVariant::Default,
+                    Markdown {
+                        class: "{prose_style} prose prose-sm w-full max-w-full",
+                        text: description.clone()
+                    }
                 }
             }
 
@@ -196,33 +199,42 @@ fn LinearProjectUpdateDetails(
         ""
     };
 
-    let health_icon_style = match project_update().health {
-        LinearProjectUpdateHealthType::OnTrack => "text-success",
-        LinearProjectUpdateHealthType::AtRisk => "text-warning",
-        LinearProjectUpdateHealthType::OffTrack => "text-error",
+    let health_color = match project_update().health {
+        LinearProjectUpdateHealthType::OnTrack => "text-ui-success",
+        LinearProjectUpdateHealthType::AtRisk => "text-ui-warning",
+        LinearProjectUpdateHealthType::OffTrack => "text-ui-error",
     };
 
     rsx! {
-        div {
-            class: "preview-update-card",
-
+        Card {
+            variant: CardVariant::Default,
             div {
-                class: "preview-update-header",
-                LinearProjectHealtIcon { class: "h-3 w-3 {health_icon_style}" }
-                span { class: "preview-update-health", "{project_update().health}" }
-                span { class: "preview-update-by", "Latest update" }
-                MessageHeader {
-                    user_name: project_update().user.name.clone(),
-                    avatar_url: project_update().user.avatar_url.clone(),
-                    display_name: true,
-                    sent_at: Some(project_update().updated_at),
-                    date_class: "preview-update-date".to_string(),
-                }
-            }
+                class: "flex flex-col gap-2",
 
-            Markdown {
-                class: "{prose_style} prose prose-sm w-full max-w-full",
-                text: project_update().body.clone()
+                div {
+                    class: "flex items-center flex-wrap gap-2 text-xs",
+                    span { class: "font-medium text-ui-base-muted", "Latest update" }
+                    span {
+                        class: "inline-flex items-center gap-1 font-semibold {health_color}",
+                        LinearProjectHealtIcon { class: "size-4 {health_color}" }
+                        "{project_update().health}"
+                    }
+                    div {
+                        class: "ml-auto",
+                        MessageHeader {
+                            user_name: project_update().user.name.clone(),
+                            avatar_url: project_update().user.avatar_url.clone(),
+                            display_name: true,
+                            sent_at: Some(project_update().updated_at),
+                            date_class: "text-ui-base-muted".to_string(),
+                        }
+                    }
+                }
+
+                Markdown {
+                    class: "{prose_style} prose prose-sm w-full max-w-full",
+                    text: project_update().body.clone()
+                }
             }
         }
     }
