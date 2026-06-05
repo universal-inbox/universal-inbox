@@ -133,7 +133,10 @@ pub fn ListPaginationButtons<
                 class: "text-ui-base-muted",
                 onclick: move |_| {
                     current_page -= 1;
-                    on_select.call(page().previous_page_token.unwrap_or_default());
+                    // Offset-based (like the numbered page buttons) so pagination is
+                    // robust to notifications sharing an `updated_at` timestamp, which
+                    // a strict cursor (`previous_page_token`) would skip.
+                    on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
                 },
                 icon_class: "icon-[tabler--chevron-left]".to_string(),
             }
@@ -194,7 +197,10 @@ pub fn ListPaginationButtons<
                 class: "text-ui-base-muted btn-circle",
                 onclick: move |_| {
                     current_page += 1;
-                    on_select.call(page().next_page_token.unwrap_or_default());
+                    // Offset-based (like the numbered page buttons) so pagination is
+                    // robust to notifications sharing an `updated_at` timestamp, which
+                    // a strict cursor (`next_page_token`) would skip.
+                    on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
                 },
                 icon_class: "icon-[tabler--chevron-right]".to_string(),
             }
