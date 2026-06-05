@@ -32,6 +32,115 @@ async fn test_notifications_are_displayed(#[future] browser_tested_app: BrowserT
     );
 }
 
+/// Selecting a notification (by click or keyboard) must update the URL to
+/// /notifications/{id} and change it when a different notification is selected.
+#[rstest]
+#[tokio::test]
+async fn test_selecting_notification_updates_url(#[future] browser_tested_app: BrowserTestedApp) {
+    let app = browser_tested_app.await;
+    let email = generate_test_user(&app).await;
+    let (_context, page) = launch_browser().await;
+
+    login(&page, &app.app_url, &email).await;
+    wait_for_notification_rows(&page).await;
+
+    async fn url_after_click(page: &playwright_rs::Page, nth: usize) -> String {
+        let row = page
+            .locator(&format!("#notifications-list .ui-nrow >> nth={nth}"))
+            .await;
+        row.click(None).await.expect("click row");
+        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        page.url()
+    }
+
+    let url0 = url_after_click(&page, 0).await;
+    let url1 = url_after_click(&page, 1).await;
+    assert!(
+        url0.contains("/notifications/") && url1.contains("/notifications/"),
+        "Both selections should produce a /notifications/<id> URL. url0={url0}, url1={url1}"
+    );
+    assert_ne!(
+        url0, url1,
+        "Selecting a different notification must change the URL. url0={url0}, url1={url1}"
+    );
+
+    // Keyboard navigation must also update the URL.
+    let before_arrow = page.url();
+    page.keyboard()
+        .press("ArrowDown", None)
+        .await
+        .expect("press ArrowDown");
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    let after_arrow = page.url();
+    assert_ne!(
+        before_arrow, after_arrow,
+        "ArrowDown must change the URL. before={before_arrow}, after={after_arrow}"
+    );
+
+    // Deleting the selected notification must move the URL to the notification that
+    // takes its place (the next one slides into the same index).
+    let before_delete = page.url();
+    page.keyboard()
+        .press("d", None)
+        .await
+        .expect("press d to delete");
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    let after_delete = page.url();
+    assert!(
+        after_delete.contains("/notifications/"),
+        "After delete the URL should still target a notification, but is: {after_delete}"
+    );
+    assert_ne!(
+        before_delete, after_delete,
+        "Deleting the selected notification must update the URL to the new selection. \
+         before={before_delete}, after={after_delete}"
+    );
+}
+
+/// Switching to a section with notifications must update the URL to its selected
+/// (first) notification, not leave it stale on the previous section's notification.
+#[rstest]
+#[tokio::test]
+async fn test_switching_section_updates_url(#[future] browser_tested_app: BrowserTestedApp) {
+    let app = browser_tested_app.await;
+    let email = generate_test_user(&app).await;
+    let (_context, page) = launch_browser().await;
+
+    login(&page, &app.app_url, &email).await;
+    wait_for_notification_rows(&page).await;
+
+    // Snooze the first inbox notification so the Snoozed section is non-empty.
+    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0").await;
+    first_row.click(None).await.expect("click first row");
+    let active_row = page.locator("#notifications-list .ui-nrow.selected").await;
+    expect(active_row)
+        .with_timeout(EXPECT_TIMEOUT)
+        .to_be_visible()
+        .await
+        .expect("row selected");
+    page.keyboard().press("s", None).await.expect("press s");
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+
+    // Switch to the Snoozed section via the sidebar link.
+    let snoozed_link = page.locator("a[href$='/snoozed']").await;
+    snoozed_link.click(None).await.expect("click Snoozed nav");
+    wait_for_notification_rows(&page).await;
+
+    // The URL should target the (auto-selected) snoozed notification.
+    let mut url = String::new();
+    for _ in 0..25 {
+        url = page.url();
+        if url.contains("/notifications/") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    assert!(
+        url.contains("/notifications/"),
+        "Switching to a non-empty Snoozed section should select its first notification, but URL is: {url}"
+    );
+}
+
 /// Test that pressing 'd' on a notification deletes it.
 #[rstest]
 #[tokio::test]

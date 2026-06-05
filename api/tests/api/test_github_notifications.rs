@@ -14,7 +14,9 @@ use universal_inbox::{
         config::IntegrationConnectionConfig,
         integrations::{github::GithubConfig, todoist::TodoistConfig},
     },
-    notification::{Notification, NotificationStatus, service::NotificationPatch},
+    notification::{
+        Notification, NotificationStatus, NotificationWithTask, service::NotificationPatch,
+    },
     task::Task,
     third_party::{
         integrations::{github::GithubNotification, todoist::TodoistItem},
@@ -262,7 +264,7 @@ mod patch_resource {
         let body = response.text().await.expect("Cannot get response body");
         assert!(body.contains("Failed to mark Github notification `1` as done"));
 
-        let notification: Box<Notification> = get_resource(
+        let notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",

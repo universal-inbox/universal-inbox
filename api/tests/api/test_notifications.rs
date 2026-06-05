@@ -12,7 +12,8 @@ use universal_inbox::{
         integrations::{github::GithubConfig, linear::LinearConfig},
     },
     notification::{
-        Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
+        Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
+        service::NotificationPatch,
     },
     third_party::integrations::{github::GithubNotification, linear::LinearNotification},
 };
@@ -37,7 +38,7 @@ use crate::helpers::{
         linear::{
             create_notification_from_linear_notification, sync_linear_notifications_response,
         },
-        list_notifications, update_notification,
+        list_notifications, list_only_snoozed_notifications, update_notification,
     },
     rest::{
         get_resource, get_resource_response, patch_resource, patch_resource_collection,
@@ -248,6 +249,162 @@ mod list_notifications {
         .await;
 
         assert_eq!(result.len(), 0);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_list_only_snoozed_and_unsnooze_and_undelete(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
+        github_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            github_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+
+        // An untouched (Unread, not snoozed) notification
+        let unread_notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+
+        // A snoozed notification (Unread + snoozed_until in the future)
+        let mut github_notification_snoozed = github_notification.clone();
+        github_notification_snoozed.id = "65".to_string();
+        let snoozed_notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification_snoozed,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+        let snoozed_notification = update_notification(
+            &app,
+            snoozed_notification.id,
+            &NotificationPatch {
+                snoozed_until: Some(
+                    Utc::now().with_nanosecond(0).unwrap() + TimeDelta::try_minutes(10).unwrap(),
+                ),
+                ..NotificationPatch::default()
+            },
+            app.user.id,
+        )
+        .await;
+
+        // A deleted notification
+        let mut github_notification_deleted = github_notification.clone();
+        github_notification_deleted.id = "54".to_string();
+        let deleted_notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification_deleted,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+        let deleted_notification = update_notification(
+            &app,
+            deleted_notification.id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Deleted),
+                ..NotificationPatch::default()
+            },
+            app.user.id,
+        )
+        .await;
+
+        // only_snoozed returns just the snoozed notification (not the unread/deleted ones)
+        let result = list_only_snoozed_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![NotificationStatus::Unread, NotificationStatus::Read],
+        )
+        .await;
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, snoozed_notification.id);
+
+        // Unsnooze: set snoozed_until to a past instant -> back to the inbox, out of snoozed
+        update_notification(
+            &app,
+            snoozed_notification.id,
+            &NotificationPatch {
+                snoozed_until: Some(
+                    Utc::now().with_nanosecond(0).unwrap() - TimeDelta::try_minutes(1).unwrap(),
+                ),
+                ..NotificationPatch::default()
+            },
+            app.user.id,
+        )
+        .await;
+
+        let result = list_only_snoozed_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![NotificationStatus::Unread, NotificationStatus::Read],
+        )
+        .await;
+        assert!(result.is_empty());
+
+        let inbox = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![NotificationStatus::Unread],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+        assert!(inbox.iter().any(|n| n.id == unread_notification.id));
+        assert!(inbox.iter().any(|n| n.id == snoozed_notification.id));
+
+        // Undelete: set the deleted notification back to Unread -> reappears in the inbox
+        update_notification(
+            &app,
+            deleted_notification.id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Unread),
+                ..NotificationPatch::default()
+            },
+            app.user.id,
+        )
+        .await;
+
+        let inbox = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![NotificationStatus::Unread],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+        assert!(inbox.iter().any(|n| n.id == deleted_notification.id));
+
+        let deleted = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![NotificationStatus::Deleted],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+        assert!(deleted.is_empty());
     }
 
     #[rstest]
@@ -692,7 +849,7 @@ mod patch_notification {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
         // Verify notification has not been updated
-        let notification_from_db: Box<Notification> = get_resource(
+        let notification_from_db: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",

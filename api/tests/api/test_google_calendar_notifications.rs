@@ -6,7 +6,9 @@ use universal_inbox::{
         config::IntegrationConnectionConfig,
         integrations::{google_calendar::GoogleCalendarConfig, google_mail::GoogleMailConfig},
     },
-    notification::{Notification, NotificationStatus, service::NotificationPatch},
+    notification::{
+        Notification, NotificationStatus, NotificationWithTask, service::NotificationPatch,
+    },
     third_party::integrations::{
         google_calendar::GoogleCalendarEvent,
         google_mail::{GOOGLE_MAIL_INBOX_LABEL, GoogleMailThread},
@@ -406,7 +408,7 @@ mod update_invitation {
         let boxed_updated_google_calendar_event = Box::new(updated_google_calendar_event);
         assert_eq!(event, boxed_updated_google_calendar_event);
 
-        let updated_notification: Box<Notification> = get_resource(
+        let updated_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",

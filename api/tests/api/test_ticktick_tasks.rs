@@ -108,7 +108,7 @@ mod patch_task {
             })
         );
 
-        let deleted_notification: Box<Notification> = get_resource(
+        let deleted_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -183,7 +183,7 @@ mod patch_task {
             })
         );
 
-        let deleted_notification: Box<Notification> = get_resource(
+        let deleted_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -372,7 +372,7 @@ mod patch_task {
             ))
         );
 
-        let deleted_notification: Box<Notification> = get_resource(
+        let deleted_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -380,7 +380,10 @@ mod patch_task {
         )
         .await;
         assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
-        assert_eq!(deleted_notification.task_id, Some(new_task_id));
+        assert_eq!(
+            deleted_notification.task.as_ref().map(|t| t.id),
+            Some(new_task_id)
+        );
     }
 
     // Regression test for universal-inbox-4mn: linking a notification to an

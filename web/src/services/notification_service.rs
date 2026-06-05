@@ -37,7 +37,12 @@ pub enum NotificationCommand {
     DeleteAll,
     Unsubscribe(NotificationId),
     Snooze(NotificationId),
+    Unsnooze(NotificationId),
+    Undelete(NotificationId),
     MarkAsRead(NotificationId),
+    /// Resolve a notification by id: select it in the current list, or fetch it,
+    /// switch to its section and prepend it when it is off the first page.
+    LoadAndSelect(NotificationId),
     CompleteTaskFromNotification(NotificationWithTask),
     PlanTask(NotificationWithTask, TaskId, TaskPlanning),
     CreateTaskWithDetaultsFromNotification(NotificationWithTask),
@@ -48,10 +53,56 @@ pub enum NotificationCommand {
     TentativelyAcceptInvitation(NotificationId),
 }
 
+/// The list of notifications a section displays: the inbox, snoozed notifications
+/// (still `Unread`/`Read` but with `snoozed_until` in the future) or deleted ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NotificationSection {
+    #[default]
+    Inbox,
+    Snoozed,
+    Deleted,
+}
+
+impl NotificationSection {
+    pub fn title(&self) -> &'static str {
+        match self {
+            NotificationSection::Inbox => "Inbox",
+            NotificationSection::Snoozed => "Snoozed",
+            NotificationSection::Deleted => "Deleted",
+        }
+    }
+}
+
+/// Derive the section a notification belongs to from its status and snooze state.
+/// `Unsubscribed` notifications are not listed in any section and fall back to the
+/// inbox so a deep-linked one is still shown.
+pub fn section_of(notification: &NotificationWithTask) -> NotificationSection {
+    match notification.status {
+        NotificationStatus::Deleted => NotificationSection::Deleted,
+        NotificationStatus::Unread | NotificationStatus::Read
+            if notification
+                .snoozed_until
+                .map(|snoozed_until| snoozed_until > Utc::now())
+                .unwrap_or(false) =>
+        {
+            NotificationSection::Snoozed
+        }
+        _ => NotificationSection::Inbox,
+    }
+}
+
 pub static NOTIFICATIONS_PAGE: GlobalSignal<Page<NotificationWithTask>> =
     Signal::global(Page::default);
 pub static NOTIFICATION_FILTERS: GlobalSignal<NotificationFilters> =
     Signal::global(NotificationFilters::default);
+/// The section currently displayed by the notifications page. Drives both which list
+/// `refresh_notifications` fetches and which actions the preview/keyboard expose.
+pub static CURRENT_NOTIFICATION_SECTION: GlobalSignal<NotificationSection> =
+    Signal::global(NotificationSection::default);
+/// Sidebar badge counts, kept independent from `NOTIFICATIONS_PAGE` so they stay
+/// correct regardless of which section is currently displayed.
+pub static INBOX_COUNT: GlobalSignal<usize> = Signal::global(|| 0);
+pub static SNOOZED_COUNT: GlobalSignal<usize> = Signal::global(|| 0);
 
 pub async fn notification_service(
     mut rx: UnboundedReceiver<NotificationCommand>,
@@ -64,6 +115,15 @@ pub async fn notification_service(
 ) {
     loop {
         let msg = rx.next().await;
+        // Most commands change the inbox/snoozed badge counts: explicit refreshes (initial
+        // load + periodic tick), syncs, and any action moving a notification between
+        // sections. Pure navigation (LoadAndSelect) and read-state (MarkAsRead, which keeps
+        // the notification in the inbox) do not.
+        let refresh_counts = !matches!(
+            msg,
+            None | Some(NotificationCommand::LoadAndSelect(_))
+                | Some(NotificationCommand::MarkAsRead(_))
+        );
         match msg {
             Some(NotificationCommand::Refresh) => {
                 refresh_notifications(
@@ -174,6 +234,59 @@ pub async fn notification_service(
                     &toast_service,
                     "Snoozing notification...",
                     "Successfully snoozed notification",
+                )
+                .await;
+            }
+            Some(NotificationCommand::Unsnooze(notification_id)) => {
+                notifications_page
+                    .write()
+                    .remove_element(|notif| notif.id != notification_id);
+
+                // Setting `snoozed_until` to the past brings the notification back into
+                // the inbox (the inbox filter keeps `snoozed_until <= now`) and out of
+                // the snoozed list (which keeps `snoozed_until > now`).
+                let _result: Result<Option<Notification>> = call_api_and_notify(
+                    Method::PATCH,
+                    &api_base_url,
+                    &format!("notifications/{notification_id}"),
+                    Some(NotificationPatch {
+                        snoozed_until: Some(Utc::now()),
+                        ..Default::default()
+                    }),
+                    Some(ui_model),
+                    &toast_service,
+                    "Unsnoozing notification...",
+                    "Successfully unsnoozed notification",
+                )
+                .await;
+            }
+            Some(NotificationCommand::Undelete(notification_id)) => {
+                notifications_page
+                    .write()
+                    .remove_element(|notif| notif.id != notification_id);
+
+                let _result: Result<Option<Notification>> = call_api_and_notify(
+                    Method::PATCH,
+                    &api_base_url,
+                    &format!("notifications/{notification_id}"),
+                    Some(NotificationPatch {
+                        status: Some(NotificationStatus::Unread),
+                        ..Default::default()
+                    }),
+                    Some(ui_model),
+                    &toast_service,
+                    "Restoring notification...",
+                    "Successfully restored notification",
+                )
+                .await;
+            }
+            Some(NotificationCommand::LoadAndSelect(notification_id)) => {
+                load_and_select_notification(
+                    &api_base_url,
+                    notification_id,
+                    notifications_page,
+                    notification_filters,
+                    ui_model,
                 )
                 .await;
             }
@@ -305,6 +418,28 @@ pub async fn notification_service(
             }
             None => {}
         }
+
+        if refresh_counts {
+            refresh_notification_counts(&api_base_url, ui_model).await;
+        }
+    }
+}
+
+/// Build the status / snooze query parameters for a section's notification list.
+/// - Inbox: `Unread`/`Read`, future-snoozed excluded (the default backend behaviour).
+/// - Snoozed: `Unread`/`Read` restricted to `snoozed_until > now`.
+/// - Deleted: `Deleted`, including snoozed ones so none are hidden.
+fn section_list_parameters(section: NotificationSection) -> Vec<(&'static str, String)> {
+    match section {
+        NotificationSection::Inbox => vec![("status", "Unread,Read".to_string())],
+        NotificationSection::Snoozed => vec![
+            ("status", "Unread,Read".to_string()),
+            ("only_snoozed_notifications", "true".to_string()),
+        ],
+        NotificationSection::Deleted => vec![
+            ("status", "Deleted".to_string()),
+            ("include_snoozed_notifications", "true".to_string()),
+        ],
     }
 }
 
@@ -321,12 +456,10 @@ async fn refresh_notifications(
         .map(|f| f.kind.to_string())
         .collect();
 
-    let mut parameters = vec![
-        ("status", "Unread,Read".to_string()),
-        ("with_tasks", "true".to_string()),
-        ("order_by", notification_filters().sort_by.to_string()),
-        ("sources", source_filters.join(",")),
-    ];
+    let mut parameters = section_list_parameters(CURRENT_NOTIFICATION_SECTION());
+    parameters.push(("with_tasks", "true".to_string()));
+    parameters.push(("order_by", notification_filters().sort_by.to_string()));
+    parameters.push(("sources", source_filters.join(",")));
     if let Ok(url_parameters) = notification_filters().current_page_token.to_url_parameter() {
         parameters.push(("page_token", url_parameters));
     }
@@ -344,6 +477,87 @@ async fn refresh_notifications(
 
     if let Ok(new_notifications_page) = result {
         *notifications_page.write() = new_notifications_page;
+    }
+}
+
+/// Refresh the inbox and snoozed sidebar badge counts independently of the currently
+/// displayed list, so both badges stay correct on any section.
+async fn refresh_notification_counts(api_base_url: &Url, ui_model: Signal<UniversalInboxUIModel>) {
+    for (section, mut count_signal) in [
+        (NotificationSection::Inbox, INBOX_COUNT.signal()),
+        (NotificationSection::Snoozed, SNOOZED_COUNT.signal()),
+    ] {
+        let mut parameters = section_list_parameters(section);
+        parameters.push(("trigger_sync", "false".to_string()));
+        let filters = serde_urlencoded::to_string(&parameters).unwrap_or_default();
+        let result: Result<Page<NotificationWithTask>> = call_api(
+            Method::GET,
+            api_base_url,
+            &format!("notifications?{filters}"),
+            None::<i32>,
+            Some(ui_model),
+        )
+        .await;
+        if let Ok(page) = result {
+            *count_signal.write() = page.total;
+        }
+    }
+}
+
+/// Resolve a deep-linked notification: select it in the current list if present,
+/// otherwise fetch it, switch to its section, and prepend it when it is off the first
+/// page so it can be selected and previewed.
+async fn load_and_select_notification(
+    api_base_url: &Url,
+    notification_id: NotificationId,
+    mut notifications_page: Signal<Page<NotificationWithTask>>,
+    notification_filters: Signal<NotificationFilters>,
+    mut ui_model: Signal<UniversalInboxUIModel>,
+) {
+    if let Some(index) = notifications_page
+        .read()
+        .content
+        .iter()
+        .position(|notif| notif.id == notification_id)
+    {
+        ui_model.write().selected_notification_index = Some(index);
+        return;
+    }
+
+    let result: Result<NotificationWithTask> = call_api(
+        Method::GET,
+        api_base_url,
+        &format!("notifications/{notification_id}"),
+        None::<i32>,
+        Some(ui_model),
+    )
+    .await;
+    let Ok(notification) = result else {
+        return;
+    };
+
+    let section = section_of(&notification);
+    if CURRENT_NOTIFICATION_SECTION() != section {
+        *CURRENT_NOTIFICATION_SECTION.write() = section;
+        refresh_notifications(
+            api_base_url,
+            notifications_page,
+            notification_filters,
+            ui_model,
+        )
+        .await;
+    }
+
+    if let Some(index) = notifications_page
+        .read()
+        .content
+        .iter()
+        .position(|notif| notif.id == notification_id)
+    {
+        ui_model.write().selected_notification_index = Some(index);
+    } else {
+        notifications_page.write().content.insert(0, notification);
+        ui_model.write().selected_notification_index = Some(0);
     }
 }
 
@@ -640,6 +854,36 @@ mod tests {
                 6
             ),
             Utc.with_ymd_and_hms(2022, 1, 1, 23, 0, 0).unwrap()
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_section_list_parameters_inbox() {
+        assert_eq!(
+            section_list_parameters(NotificationSection::Inbox),
+            vec![("status", "Unread,Read".to_string())]
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_section_list_parameters_snoozed() {
+        assert_eq!(
+            section_list_parameters(NotificationSection::Snoozed),
+            vec![
+                ("status", "Unread,Read".to_string()),
+                ("only_snoozed_notifications", "true".to_string()),
+            ]
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_section_list_parameters_deleted() {
+        assert_eq!(
+            section_list_parameters(NotificationSection::Deleted),
+            vec![
+                ("status", "Deleted".to_string()),
+                ("include_snoozed_notifications", "true".to_string()),
+            ]
         );
     }
 }

@@ -20,7 +20,8 @@ use universal_inbox::{
         provider::IntegrationProvider,
     },
     notification::{
-        Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
+        Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
+        service::NotificationPatch,
     },
     third_party::{
         integrations::{
@@ -246,7 +247,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         app.user.id,
     );
 
-    let updated_notification: Box<Notification> = get_resource(
+    let updated_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",
@@ -276,7 +277,10 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         updated_notification.snoozed_until,
         Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap())
     );
-    assert_eq!(updated_notification.task_id, Some(existing_todoist_task.id));
+    assert_eq!(
+        updated_notification.task.as_ref().map(|t| t.id),
+        Some(existing_todoist_task.id)
+    );
 
     let updated_integration_connection =
         get_integration_connection(&app, google_mail_integration_connection.id)
@@ -450,7 +454,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
 
     assert_eq!(notifications.len(), 1);
 
-    let updated_notification: Box<Notification> = get_resource(
+    let updated_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",
@@ -611,7 +615,7 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
         NotificationSourceKind::GoogleCalendar
     );
 
-    let new_notification: Box<Notification> = get_resource(
+    let new_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",
@@ -803,7 +807,7 @@ async fn test_sync_notifications_should_update_a_google_calendar_notification_fr
     );
     assert_eq!(notifications[0].id, existing_notification.id);
 
-    let new_notification: Box<Notification> = get_resource(
+    let new_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",
@@ -979,7 +983,7 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
         NotificationSourceKind::GoogleCalendar
     );
 
-    let new_notification: Box<Notification> = get_resource(
+    let new_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",
@@ -1133,7 +1137,7 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
 
     assert_eq!(notifications.len(), 1);
 
-    let synced_notification: Box<Notification> = get_resource(
+    let synced_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",

@@ -405,11 +405,13 @@ impl NotificationService {
         err
     )]
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub async fn list_notifications(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
+        only_snoozed_notifications: bool,
         task_id: Option<TaskId>,
         order_by: NotificationListOrder,
         from_sources: Vec<NotificationSourceKind>,
@@ -423,6 +425,7 @@ impl NotificationService {
                 executor,
                 status,
                 include_snoozed_notifications,
+                only_snoozed_notifications,
                 task_id,
                 order_by,
                 from_sources,
@@ -460,6 +463,37 @@ impl NotificationService {
         let notification = self
             .repository
             .get_one_notification(executor, notification_id)
+            .await?;
+
+        if let Some(ref notif) = notification
+            && notif.user_id != for_user_id
+        {
+            return Err(UniversalInboxError::Forbidden(format!(
+                "Only the owner of the notification {notification_id} can access it"
+            )));
+        }
+
+        Ok(notification)
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_id = notification_id.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn get_notification_with_task(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        notification_id: NotificationId,
+        for_user_id: UserId,
+    ) -> Result<Option<NotificationWithTask>, UniversalInboxError> {
+        let notification = self
+            .repository
+            .get_one_notification_with_task(executor, notification_id)
             .await?;
 
         if let Some(ref notif) = notification
@@ -1456,6 +1490,7 @@ impl NotificationService {
                 executor,
                 vec![],
                 true,
+                false,
                 Some(task.id),
                 NotificationListOrder::UpdatedAtAsc,
                 vec![],

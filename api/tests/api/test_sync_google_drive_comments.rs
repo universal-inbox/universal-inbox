@@ -18,7 +18,8 @@ use universal_inbox::{
         provider::IntegrationProvider,
     },
     notification::{
-        Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
+        Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
+        service::NotificationPatch,
     },
     third_party::{
         integrations::{google_drive::GoogleDriveComment, todoist::TodoistItem},
@@ -260,7 +261,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         "Jane Doe",
     );
 
-    let updated_notification: Box<Notification> = get_resource(
+    let updated_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",
@@ -293,7 +294,10 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         updated_notification.snoozed_until,
         Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap())
     );
-    assert_eq!(updated_notification.task_id, Some(existing_todoist_task.id));
+    assert_eq!(
+        updated_notification.task.as_ref().map(|t| t.id),
+        Some(existing_todoist_task.id)
+    );
 
     let updated_integration_connection =
         get_integration_connection(&app, google_drive_integration_connection.id)
@@ -453,7 +457,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
         }
     );
 
-    let updated_notification: Box<Notification> = get_resource(
+    let updated_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",

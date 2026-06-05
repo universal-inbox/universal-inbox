@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use chrono::Local;
 use dioxus::prelude::*;
 
 use universal_inbox::{
@@ -33,7 +34,9 @@ use crate::{
         ui::{ActionButton, Button, ButtonVariant},
     },
     model::{PreviewPane, UniversalInboxUIModel},
-    services::notification_service::NotificationCommand,
+    services::notification_service::{
+        CURRENT_NOTIFICATION_SECTION, NotificationCommand, NotificationSection,
+    },
     utils::reset_scroll_top,
 };
 
@@ -79,6 +82,18 @@ pub fn NotificationPreview(
     use_context_provider(move || context);
     let has_notification_details_preview = !notification().is_built_from_task();
     let has_task_details_preview = notification().task.is_some();
+    // When previewing a snoozed notification, show when it will resurface.
+    let snoozed_until_label = (CURRENT_NOTIFICATION_SECTION() == NotificationSection::Snoozed)
+        .then(|| notification().snoozed_until)
+        .flatten()
+        .map(|snoozed_until| {
+            format!(
+                "Snoozed until {}",
+                snoozed_until
+                    .with_timezone(&Local)
+                    .format("%b %-d, %Y at %H:%M")
+            )
+        });
     let shortcut_visibility_style = use_memo(move || {
         if ui_model.read().is_help_enabled {
             "visible"
@@ -243,6 +258,14 @@ pub fn NotificationPreview(
             div {
                 class: "flex-1 overflow-hidden py-3 px-5 min-h-0 flex flex-col animate-[detail-fade_0.2s_var(--ui-ease-out)]",
 
+                if let Some(label) = snoozed_until_label.clone() {
+                    div {
+                        class: "flex items-center gap-1.5 mb-2 text-[12px] text-ui-base-muted",
+                        span { class: "icon-[lucide--alarm-clock] size-3.5" }
+                        span { "{label}" }
+                    }
+                }
+
                 match ui_model.read().selected_preview_pane {
                     PreviewPane::Notification => rsx! {
                         div {
@@ -304,7 +327,8 @@ pub fn NotificationPreview(
                     class: "flex items-center gap-1.5 min-w-0",
                     for btn in get_notification_action_buttons(
                         notification,
-                        shortcut_visibility_style == "visible") {
+                        shortcut_visibility_style == "visible",
+                        CURRENT_NOTIFICATION_SECTION()) {
                         { btn }
                     }
                 }
@@ -427,14 +451,44 @@ fn notification_sub_type(data: &ThirdPartyItemData) -> Option<&'static str> {
     }
 }
 
-pub fn get_notification_action_buttons(
+/// The first action button of every notification: Delete in most sections, Undelete in
+/// the Deleted section. Undelete is disabled for task-built notifications (the backend
+/// only allows delete/snooze status changes for those).
+/// The first action button of every notification: Delete in most sections, Undelete in
+/// the Deleted section. Undelete is disabled for task-built notifications (the backend
+/// only allows delete/snooze status changes for those).
+fn delete_or_undelete_button(
     notification: ReadSignal<NotificationWithTask>,
     show_shortcut: bool,
-) -> Vec<Element> {
-    let context = use_context::<Memo<NotificationListContext>>();
-
-    if !notification().is_built_from_task() {
-        let mut buttons = vec![rsx! {
+    section: NotificationSection,
+    context: Memo<NotificationListContext>,
+) -> Element {
+    if section == NotificationSection::Deleted {
+        if notification().is_built_from_task() {
+            rsx! {
+                ActionButton {
+                    title: "Restore notification",
+                    shortcut: "d",
+                    disabled_label: Some("Cannot restore task-linked notifications".to_string()),
+                    show_shortcut,
+                    icon_class: "icon-[lucide--archive-restore]",
+                }
+            }
+        } else {
+            rsx! {
+                ActionButton {
+                    title: "Restore notification",
+                    shortcut: "d",
+                    show_shortcut,
+                    onclick: move |_| {
+                        context().notification_service.send(NotificationCommand::Undelete(notification().id));
+                    },
+                    icon_class: "icon-[lucide--archive-restore]",
+                }
+            }
+        }
+    } else {
+        rsx! {
             ActionButton {
                 title: "Delete notification",
                 shortcut: "d",
@@ -445,7 +499,54 @@ pub fn get_notification_action_buttons(
                 },
                 icon_class: "icon-[lucide--trash-2]",
             }
-        }];
+        }
+    }
+}
+
+/// The snooze action button: Snooze in most sections, Unsnooze in the Snoozed section.
+fn snooze_or_unsnooze_button(
+    notification: ReadSignal<NotificationWithTask>,
+    show_shortcut: bool,
+    section: NotificationSection,
+    context: Memo<NotificationListContext>,
+) -> Element {
+    if section == NotificationSection::Snoozed {
+        rsx! {
+            ActionButton {
+                title: "Unsnooze notification",
+                shortcut: "s",
+                show_shortcut,
+                onclick: move |_| {
+                    context().notification_service.send(NotificationCommand::Unsnooze(notification().id));
+                },
+                icon_class: "icon-[lucide--alarm-clock-off]"
+            }
+        }
+    } else {
+        rsx! {
+            ActionButton {
+                title: "Snooze notification",
+                shortcut: "s",
+                show_shortcut,
+                onclick: move |_| {
+                    context().notification_service.send(NotificationCommand::Snooze(notification().id));
+                },
+                icon_class: "icon-[lucide--clock]"
+            }
+        }
+    }
+}
+
+pub fn get_notification_action_buttons(
+    notification: ReadSignal<NotificationWithTask>,
+    show_shortcut: bool,
+    section: NotificationSection,
+) -> Vec<Element> {
+    let context = use_context::<Memo<NotificationListContext>>();
+
+    if !notification().is_built_from_task() {
+        let mut buttons =
+            vec![delete_or_undelete_button(notification, show_shortcut, section, context)];
 
         if notification().task.is_some() {
             buttons.push(rsx! {
@@ -476,17 +577,12 @@ pub fn get_notification_action_buttons(
             }
         });
 
-        buttons.push(rsx! {
-            ActionButton {
-                title: "Snooze notification",
-                shortcut: "s",
-                show_shortcut,
-                onclick: move |_| {
-                    context().notification_service.send(NotificationCommand::Snooze(notification().id));
-                },
-                icon_class: "icon-[lucide--clock]"
-            }
-        });
+        buttons.push(snooze_or_unsnooze_button(
+            notification,
+            show_shortcut,
+            section,
+            context,
+        ));
 
         if notification().task.is_none() {
             buttons.push(rsx! {
@@ -530,7 +626,21 @@ pub fn get_notification_action_buttons(
 
         buttons
     } else {
-        vec![
+        // Task-built notification (Todoist/TickTick). In the Deleted section the first
+        // action becomes a disabled Undelete (task-linked notifications cannot be
+        // restored); otherwise it stays "Delete task". Snooze becomes Unsnooze in the
+        // Snoozed section.
+        let first_button = if section == NotificationSection::Deleted {
+            rsx! {
+                ActionButton {
+                    title: "Restore notification",
+                    shortcut: "d",
+                    disabled_label: Some("Cannot restore task-linked notifications".to_string()),
+                    show_shortcut,
+                    icon_class: "icon-[lucide--archive-restore]"
+                }
+            }
+        } else {
             rsx! {
                 ActionButton {
                     title: "Delete task",
@@ -544,7 +654,11 @@ pub fn get_notification_action_buttons(
                     },
                     icon_class: "icon-[lucide--trash-2]"
                 }
-            },
+            }
+        };
+
+        vec![
+            first_button,
             rsx! {
                 ActionButton {
                     title: "Complete task",
@@ -559,17 +673,7 @@ pub fn get_notification_action_buttons(
                     icon_class: "icon-[lucide--check-circle]"
                 }
             },
-            rsx! {
-                ActionButton {
-                    title: "Snooze notification",
-                    shortcut: "s",
-                    show_shortcut,
-                    onclick: move |_| {
-                        context().notification_service.send(NotificationCommand::Snooze(notification().id));
-                    },
-                    icon_class: "icon-[lucide--clock]"
-                }
-            },
+            snooze_or_unsnooze_button(notification, show_shortcut, section, context),
             rsx! {
                 ActionButton {
                     title: "Plan task",

@@ -42,7 +42,8 @@ use crate::{
             TASK_SERVICE_INTEGRATION_CONNECTION, TASK_SERVICE_INTEGRATION_CONNECTIONS,
         },
         notification_service::{
-            NotificationCommand, NotificationFilters, NotificationSourceKindFilter,
+            CURRENT_NOTIFICATION_SECTION, NotificationCommand, NotificationFilters,
+            NotificationSection, NotificationSourceKindFilter,
         },
     },
 };
@@ -103,7 +104,7 @@ pub fn NotificationsList(
                         class: "flex items-center justify-between gap-2",
                         h1 {
                             class: "flex items-center gap-2 text-[15px] font-bold tracking-tight",
-                            "Inbox"
+                            {CURRENT_NOTIFICATION_SECTION().title()}
                             if notifications().total > 0 {
                                 Badge { variant: BadgeVariant::Count, "{notifications().total}" }
                             }
@@ -119,7 +120,9 @@ pub fn NotificationsList(
                                 icon_class: "icon-[lucide--refresh-cw]".to_string(),
                                 enable_tooltip: true
                             }
-                            if !notifications().content.is_empty() {
+                            if !notifications().content.is_empty()
+                                && CURRENT_NOTIFICATION_SECTION() == NotificationSection::Inbox
+                            {
                                 Button {
                                     variant: ButtonVariant::Danger,
                                     title: "Delete all notifications".to_string(),

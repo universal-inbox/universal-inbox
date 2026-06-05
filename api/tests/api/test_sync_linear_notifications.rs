@@ -11,7 +11,8 @@ use universal_inbox::{
         provider::IntegrationProviderKind,
     },
     notification::{
-        Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
+        Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
+        service::NotificationPatch,
     },
     third_party::{
         integrations::{
@@ -177,7 +178,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     assert_eq!(notifications.len(), sync_linear_notifications.len());
     assert_sync_notifications(&notifications, &sync_linear_notifications, app.user.id);
 
-    let updated_notification: Box<Notification> = get_resource(
+    let updated_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",
@@ -211,7 +212,10 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         Some(Utc.with_ymd_and_hms(2023, 8, 12, 7, 0, 0).unwrap())
     );
     // `task_id` should not be reset
-    assert_eq!(updated_notification.task_id, Some(existing_task_id));
+    assert_eq!(
+        updated_notification.task.as_ref().map(|t| t.id),
+        Some(existing_task_id)
+    );
 
     let integration_connection = get_integration_connection_per_provider(
         &app,

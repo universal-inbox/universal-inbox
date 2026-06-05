@@ -124,6 +124,36 @@ pub async fn list_notifications(
     .collect()
 }
 
+pub async fn list_only_snoozed_notifications(
+    client: &Client,
+    api_address: &str,
+    status_filter: Vec<NotificationStatus>,
+) -> Vec<NotificationWithTask> {
+    let status_parameter = if status_filter.is_empty() {
+        "".to_string()
+    } else {
+        let filters = status_filter
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
+            .join(",");
+        format!("status={filters}&")
+    };
+
+    let notifications_page: Page<NotificationWithTask> = client
+        .get(format!(
+            "{api_address}notifications?trigger_sync=false&{status_parameter}only_snoozed_notifications=true"
+        ))
+        .send()
+        .await
+        .expect("Failed to execute request")
+        .json()
+        .await
+        .expect("Cannot parse JSON result");
+
+    notifications_page.content
+}
+
 pub async fn list_notifications_until(
     client: &Client,
     api_address: &str,
