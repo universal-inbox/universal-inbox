@@ -693,16 +693,12 @@ pub async fn login_user(
         .await
         .context("Failed to create new transaction while logging in user")?;
 
+    // The service applies per-account throttling on top of the per-IP limit
+    // above: a generic 401 on bad credentials, or `TooManyLoginAttempts`
+    // (→ 429 + Retry-After) once an account is temporarily locked.
     let user = service
         .validate_credentials(&mut transaction, credentials.into_inner())
-        .await
-        .map_err(|err| {
-            if let UniversalInboxError::Unauthorized(_) = err {
-                UniversalInboxError::Unauthorized(anyhow!("Invalid email address or password"))
-            } else {
-                err
-            }
-        })?;
+        .await?;
 
     let auth_token_service = auth_token_service.read().await;
 

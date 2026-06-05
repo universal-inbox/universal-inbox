@@ -1177,11 +1177,18 @@ mod auth_rate_limit {
         // A fresh forwarded IP must still be served — proving the limiter
         // is keyed per-IP and is not a global throttle. We assert only that
         // the response is NOT 429 (the actual status is 401 Unauthorized for
-        // unknown credentials).
+        // unknown credentials). Use a *different* email here: the per-account
+        // login throttle is keyed by email and follows it across IPs, so the
+        // 35 failures above locked `nobody@example.com` regardless of source
+        // IP — reusing it would conflate the two limiters.
+        let other_email_body = json!({
+            "email": "someone-else@example.com",
+            "password": "wrong-password",
+        });
         let other_ip_status = client
             .post(&url)
             .header("X-Forwarded-For", "198.51.100.7")
-            .json(&body)
+            .json(&other_email_body)
             .send()
             .await
             .expect("Failed to execute login request from second IP")

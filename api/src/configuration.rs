@@ -187,6 +187,20 @@ pub struct LocalAuthenticationSettings {
     pub argon2_memory_size: u32,
     pub argon2_iterations: u32,
     pub argon2_parallelism: u32,
+    /// Number of consecutive failed password attempts (per account / email)
+    /// tolerated before the account is temporarily locked. Defaults are used
+    /// when omitted from config so existing deployments keep working.
+    pub max_login_attempts: u32,
+    /// Sliding window, in seconds, over which failed attempts are counted. The
+    /// Redis counter key expires after this window (or the active lockout,
+    /// whichever is longer), so attempts naturally decay.
+    pub login_attempt_window_seconds: u64,
+    /// Base lockout duration, in seconds, applied the first time the attempt
+    /// threshold is crossed. Each additional failure doubles it (exponential
+    /// backoff) up to `login_lockout_max_seconds`.
+    pub login_lockout_base_seconds: u64,
+    /// Cap, in seconds, on the exponential-backoff lockout duration.
+    pub login_lockout_max_seconds: u64,
 }
 
 fn from_u32<'de, D>(deserializer: D) -> Result<argon2::Version, D::Error>
@@ -600,6 +614,10 @@ mod tests {
             argon2_memory_size: 19456,
             argon2_iterations: 2,
             argon2_parallelism: 1,
+            max_login_attempts: 5,
+            login_attempt_window_seconds: 900,
+            login_lockout_base_seconds: 60,
+            login_lockout_max_seconds: 900,
         });
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
@@ -686,6 +704,10 @@ mod tests {
             argon2_memory_size: 19456,
             argon2_iterations: 2,
             argon2_parallelism: 1,
+            max_login_attempts: 5,
+            login_attempt_window_seconds: 900,
+            login_lockout_base_seconds: 60,
+            login_lockout_max_seconds: 900,
         });
         let oidc_auth_settings =
             AuthenticationSettings::OpenIDConnect(Box::new(OpenIDConnectSettings {
