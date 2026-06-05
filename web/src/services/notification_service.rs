@@ -420,8 +420,72 @@ pub async fn notification_service(
         }
 
         if refresh_counts {
+            maybe_refill_current_page(
+                &api_base_url,
+                notifications_page,
+                notification_filters,
+                ui_model,
+            )
+            .await;
             refresh_notification_counts(&api_base_url, ui_model).await;
         }
+    }
+}
+
+/// When more than half of the current page's notifications have been removed (deleted,
+/// snoozed, ...) and there are further pages to pull from, refetch the current page to
+/// refill the list. Skips the last page (nothing to pull up) and keeps the currently
+/// selected notification selected across the refetch.
+async fn maybe_refill_current_page(
+    api_base_url: &Url,
+    notifications_page: Signal<Page<NotificationWithTask>>,
+    notification_filters: Signal<NotificationFilters>,
+    mut ui_model: Signal<UniversalInboxUIModel>,
+) {
+    let (per_page, pages_count, len) = {
+        let page = notifications_page.read();
+        (page.per_page, page.pages_count, page.content.len())
+    };
+    if per_page == 0 || pages_count <= 1 {
+        return;
+    }
+
+    let offset = match notification_filters.read().current_page_token {
+        PageToken::Offset(offset) => offset,
+        // Offset is the only token kind pagination produces; treat anything else as page 1.
+        _ => 0,
+    };
+    let current_page_index = offset / per_page;
+    let is_last_page = current_page_index + 1 >= pages_count;
+    // More than half of a (full, non-last) page gone => fewer than half remain.
+    let more_than_half_removed = len * 2 < per_page;
+
+    if is_last_page || !more_than_half_removed {
+        return;
+    }
+
+    // Preserve the selected notification across the refetch by remembering its id.
+    let selected_id = ui_model
+        .read()
+        .selected_notification_index
+        .and_then(|index| notifications_page.read().content.get(index).map(|n| n.id));
+
+    refresh_notifications(
+        api_base_url,
+        notifications_page,
+        notification_filters,
+        ui_model,
+    )
+    .await;
+
+    if let Some(id) = selected_id
+        && let Some(index) = notifications_page
+            .read()
+            .content
+            .iter()
+            .position(|n| n.id == id)
+    {
+        ui_model.write().selected_notification_index = Some(index);
     }
 }
 
