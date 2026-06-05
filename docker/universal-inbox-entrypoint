@@ -5,15 +5,15 @@ set -Eeo pipefail
 UNIVERSAL_INBOX_ENV_FILE="${UNIVERSAL_INBOX_ENV_FILE:-/app/universal-inbox.env}"
 
 if [ -f "$UNIVERSAL_INBOX_ENV_FILE" ]; then
-  echo "Loading environment variables from $UNIVERSAL_INBOX_ENV_FILE"
-  set -a
-  source "$UNIVERSAL_INBOX_ENV_FILE"
-  set +a
+    echo "Loading environment variables from $UNIVERSAL_INBOX_ENV_FILE"
+    set -a
+    source "$UNIVERSAL_INBOX_ENV_FILE"
+    set +a
 fi
 
 if [ "${AUTHENTICATION__LOCAL__ENABLED:-}" = "true" ]; then
 
-  cat <<EOF >> /app/config/prod.toml
+    cat <<EOF >>/app/config/prod.toml
 [[application.security.authentication]]
 type = "Local"
 argon2_algorithm = "argon2id"
@@ -21,17 +21,21 @@ argon2_version = 19
 argon2_memory_size = 20000
 argon2_iterations = 2
 argon2_parallelism = 1
+max_login_attempts = 5
+login_attempt_window_seconds = 3600
+login_lockout_base_seconds = 300
+login_lockout_max_seconds = 3600
 EOF
 
 fi
 
-if [ -n "$AUTH__GOOGLE__OIDC_API_CLIENT_ID" ] && \
-  [ -n "$AUTH__GOOGLE__OIDC_API_CLIENT_SECRET" ] && \
-  [ -n "$AUTH__GOOGLE__OIDC_FLOW_SETTINGS__TYPE" ] && \
-  [ -n "$AUTH__GOOGLE__OIDC_ISSUER_URL" ] && \
-  [ -n "$AUTH__GOOGLE__USER_PROFILE_URL" ]; then
+if [ -n "$AUTH__GOOGLE__OIDC_API_CLIENT_ID" ] &&
+    [ -n "$AUTH__GOOGLE__OIDC_API_CLIENT_SECRET" ] &&
+    [ -n "$AUTH__GOOGLE__OIDC_FLOW_SETTINGS__TYPE" ] &&
+    [ -n "$AUTH__GOOGLE__OIDC_ISSUER_URL" ] &&
+    [ -n "$AUTH__GOOGLE__USER_PROFILE_URL" ]; then
 
-  cat <<EOF >> /app/config/prod.toml
+    cat <<EOF >>/app/config/prod.toml
 [[application.security.authentication]]
 type = "OpenIDConnect"
 oidc_issuer_url = "$AUTH__GOOGLE__OIDC_ISSUER_URL"
@@ -45,7 +49,7 @@ fi
 
 if [ "${AUTHENTICATION__PASSKEY__ENABLED:-}" = "true" ]; then
 
-  cat <<EOF >> /app/config/prod.toml
+    cat <<EOF >>/app/config/prod.toml
 [[application.security.authentication]]
 type = "Passkey"
 EOF
@@ -58,8 +62,8 @@ echo "Migrating Database schema"
 /usr/local/bin/sqlx migrate run
 
 if [ -n "$UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL" ]; then
-  echo "Updating index.html with canonical link to $UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL"
-  sed -i "s#</head>#<link href=\"$UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL\" rel=\"canonical\" /></head>#" /app/statics/index.html
+    echo "Updating index.html with canonical link to $UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL"
+    sed -i "s#</head>#<link href=\"$UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL\" rel=\"canonical\" /></head>#" /app/statics/index.html
 fi
 
 echo "Starting Universal Inbox"
