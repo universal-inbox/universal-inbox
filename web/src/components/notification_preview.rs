@@ -321,10 +321,18 @@ fn NotificationDetailsPreview(
         ThirdPartyItemData::GithubNotification(github_notification) => {
             match github_notification.item {
                 Some(GithubNotificationItem::GithubPullRequest(github_pull_request)) => rsx! {
-                    GithubPullRequestPreview { github_pull_request, expand_details }
+                    GithubPullRequestPreview {
+                        github_pull_request,
+                        title: notification().title,
+                        expand_details
+                    }
                 },
                 Some(GithubNotificationItem::GithubDiscussion(github_discussion)) => rsx! {
-                    GithubDiscussionPreview { github_discussion, expand_details }
+                    GithubDiscussionPreview {
+                        github_discussion,
+                        title: notification().title,
+                        expand_details
+                    }
                 },
                 _ => rsx! {
                     GithubNotificationDefaultPreview {
