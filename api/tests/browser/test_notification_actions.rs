@@ -150,6 +150,83 @@ async fn test_deeplink_other_section_notification_is_selected(
     );
 }
 
+/// Deleting more than half of a non-last page refills it from the next page, keeping a
+/// notification selected. Only meaningful with multiple pages (small page size); skips
+/// when the data fits on one page.
+#[rstest]
+#[tokio::test]
+async fn test_page_refills_after_majority_removed(
+    #[future] browser_tested_app: BrowserTestedApp,
+) {
+    let app = browser_tested_app.await;
+    let email = generate_test_user(&app).await;
+    let (_context, page) = launch_browser().await;
+
+    login(&page, &app.app_url, &email).await;
+    wait_for_notification_rows(&page).await;
+    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+
+    // Pagination controls only render with more than one page; without them this
+    // behaviour cannot occur, so there is nothing to assert.
+    let has_pages = page
+        .locator("button[aria-label='Next page']")
+        .await
+        .count()
+        .await
+        .unwrap_or(0)
+        > 0;
+    if !has_pages {
+        return;
+    }
+
+    let full_page = page
+        .locator("#notifications-list .ui-nrow")
+        .await
+        .count()
+        .await
+        .unwrap_or(0);
+
+    // Select the first row, then delete more than half of the page.
+    page.locator("#notifications-list .ui-nrow >> nth=0")
+        .await
+        .click(None)
+        .await
+        .expect("select first row");
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    let to_delete = full_page / 2 + 1;
+    for _ in 0..to_delete {
+        page.keyboard().press("d", None).await.expect("press d");
+        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+    }
+
+    // The page should have refilled by pulling notifications from the next page.
+    let mut after = 0;
+    for _ in 0..25 {
+        after = page
+            .locator("#notifications-list .ui-nrow")
+            .await
+            .count()
+            .await
+            .unwrap_or(0);
+        if after > full_page - to_delete {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    assert!(
+        after > full_page - to_delete,
+        "page should refill after deleting more than half: full_page={full_page}, deleted={to_delete}, remaining={after}"
+    );
+
+    // A notification stays selected after the refill.
+    let selected = page.locator("#notifications-list .ui-nrow.selected").await;
+    expect(selected)
+        .with_timeout(EXPECT_TIMEOUT)
+        .to_be_visible()
+        .await
+        .expect("a notification should remain selected after the refill");
+}
+
 /// Switching to a section with notifications must update the URL to its selected
 /// (first) notification, not leave it stale on the previous section's notification.
 #[rstest]
