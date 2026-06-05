@@ -76,6 +76,8 @@ pub enum UniversalInboxError {
     Unauthorized(anyhow::Error),
     #[error("Forbidden access: {0}")]
     Forbidden(String),
+    #[error("Too many login attempts. Please try again later.")]
+    TooManyLoginAttempts { retry_after_seconds: u64 },
     #[error("Recoverable error: {0}")]
     Recoverable(#[source] anyhow::Error),
     #[error("OAuth2 refresh token is no longer valid (invalid_grant): {0}")]

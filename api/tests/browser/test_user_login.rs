@@ -160,6 +160,61 @@ async fn test_login_fails_with_wrong_password(#[future] browser_tested_app: Brow
     );
 }
 
+/// After the account is locked (per-account throttle, 5 failed attempts → the
+/// 6th returns HTTP 429), the user must see the friendly lockout message — NOT
+/// the raw "error decoding response body" that surfaced when `call_api` tried
+/// to decode the JSON error envelope into the success type.
+#[rstest]
+#[tokio::test]
+async fn test_login_lockout_shows_friendly_error(#[future] browser_tested_app: BrowserTestedApp) {
+    let app = browser_tested_app.await;
+    let email = generate_test_user(&app).await;
+    let (_context, page) = launch_browser().await;
+
+    page.goto(&format!("{}/login", app.app_url), None)
+        .await
+        .expect("Failed to navigate to login page");
+
+    // Submit a wrong password 6 times. Attempts 1-5 return 401; the 6th is
+    // throttled with 429 once the account is locked.
+    for attempt in 1..=6 {
+        fill_and_submit_credentials(&page, &email, "definitely-wrong-pw", "login").await;
+        let error_alert = page.locator("#auth-error").await;
+        expect(error_alert)
+            .with_timeout(EXPECT_TIMEOUT)
+            .to_be_visible()
+            .await
+            .unwrap_or_else(|_| panic!("Error alert not visible after attempt {attempt}"));
+    }
+
+    // Poll until the lockout message replaces the per-attempt 401 message.
+    let mut error_text = String::new();
+    for _ in 0..40 {
+        error_text = page
+            .locator("#auth-error")
+            .await
+            .text_content()
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        if error_text.contains("Too many login attempts") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+
+    // The regression: a JSON error body must never surface as a decode error.
+    assert!(
+        !error_text.to_lowercase().contains("decoding"),
+        "Login lockout surfaced a raw decode error to the user: {error_text:?}"
+    );
+    assert!(
+        error_text.contains("Too many login attempts"),
+        "Expected the friendly lockout message after 6 attempts, but got: {error_text:?}"
+    );
+}
+
 /// Test that login fails with non-existent user.
 #[rstest]
 #[tokio::test]

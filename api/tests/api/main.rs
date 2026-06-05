@@ -13,6 +13,7 @@ mod test_health_check;
 mod test_integration_connections;
 mod test_linear_notifications;
 mod test_linear_tasks;
+mod test_login_throttle;
 mod test_mcp;
 mod test_mcp_session_store;
 mod test_misc;
