@@ -97,6 +97,59 @@ async fn test_selecting_notification_updates_url(#[future] browser_tested_app: B
     );
 }
 
+/// Deep-linking (entering a URL) to a notification that is NOT in the current section's
+/// list must fetch it, switch to its section and select it — without bouncing the URL
+/// to the list route.
+#[rstest]
+#[tokio::test]
+async fn test_deeplink_other_section_notification_is_selected(
+    #[future] browser_tested_app: BrowserTestedApp,
+) {
+    let app = browser_tested_app.await;
+    let email = generate_test_user(&app).await;
+    let (_context, page) = launch_browser().await;
+
+    login(&page, &app.app_url, &email).await;
+    wait_for_notification_rows(&page).await;
+
+    // Select the first inbox notification and capture its URL/id.
+    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0").await;
+    first_row.click(None).await.expect("click first row");
+    let active_row = page.locator("#notifications-list .ui-nrow.selected").await;
+    expect(active_row)
+        .with_timeout(EXPECT_TIMEOUT)
+        .to_be_visible()
+        .await
+        .expect("row selected");
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let deep_url = page.url();
+    assert!(
+        deep_url.contains("/notifications/"),
+        "expected a notification URL, got {deep_url}"
+    );
+
+    // Snooze it so it leaves the inbox (now reachable only via the Snoozed section).
+    page.keyboard().press("s", None).await.expect("press s");
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+
+    // Deep-link straight to that notification while the inbox is the active section.
+    page.goto(&deep_url, None).await.expect("goto deep url");
+
+    // It must end up selected (LoadAndSelect resolves its section + selects it), and the
+    // URL must remain the deep link (the guard prevents bouncing to the list route).
+    let selected = page.locator("#notifications-list .ui-nrow.selected").await;
+    expect(selected)
+        .with_timeout(EXPECT_TIMEOUT)
+        .to_be_visible()
+        .await
+        .expect("deep-linked notification should be selected");
+    assert_eq!(
+        page.url(),
+        deep_url,
+        "URL must remain the deep link (no bounce to the list route)"
+    );
+}
+
 /// Switching to a section with notifications must update the URL to its selected
 /// (first) notification, not leave it stale on the previous section's notification.
 #[rstest]

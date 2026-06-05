@@ -177,8 +177,20 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
                     notification_id: id,
                 });
             }
-        } else if notification_id.peek().is_some() {
-            nav.push(section_list_route(*CURRENT_NOTIFICATION_SECTION.peek()));
+        } else if let Some(url_id) = *notification_id.peek() {
+            // No selection but the URL still targets a notification. Only fall back to
+            // the section list when that notification is actually loaded (the user
+            // cleared the selection, e.g. mobile back). If it is NOT in the list, a
+            // deep-link load is in flight (LoadAndSelect will fetch, prepend and select
+            // it) — leave the URL alone so we don't navigate away mid-load.
+            if notifications
+                .peek()
+                .content
+                .iter()
+                .any(|notif| notif.id == url_id)
+            {
+                nav.push(section_list_route(*CURRENT_NOTIFICATION_SECTION.peek()));
+            }
         }
     });
 
