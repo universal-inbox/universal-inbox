@@ -28,7 +28,11 @@ function isDarkTheme() {
 }
 
 function buildEmailFrameHead(dark) {
+    // Mirror the app theme tokens (see web/css/universal-inbox.css):
+    //   text   → --ui-base text color, surface → --ui-surface, border → --ui-border.
     const textColor = dark ? "#e2e8f0" : "#0f172a";
+    const surfaceColor = dark ? "#111827" : "#ffffff";
+    const borderColor = dark ? "#1e293b" : "#e2e8f0";
     const colorScheme = dark ? "dark" : "light";
     return (
         '<!doctype html><html><head><meta charset="utf-8">' +
@@ -37,11 +41,30 @@ function buildEmailFrameHead(dark) {
         "@font-face{font-family:'DM Sans';font-style:normal;font-weight:100 1000;" +
         "font-display:swap;src:url('/fonts/DMSans-Regular.woff2') format('woff2');}" +
         "html{color-scheme:" + colorScheme + ";}" +
-        "html,body{margin:0;padding:0;background:transparent;color:" + textColor + ";" +
+        // The root paints the iframe canvas — its background covers the entire
+        // scrollable area, including horizontal overflow. Filling it with the
+        // app surface color keeps the background continuous behind a wide email
+        // (the body stays transparent so an email's own background still wins
+        // over the surface within its own width).
+        "html{background:" + surfaceColor + ";}" +
+        "html,body{margin:0;padding:0;color:" + textColor + ";" +
         "font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',Roboto," +
         "'Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:1.55;" +
         "-webkit-font-smoothing:antialiased;}" +
-        "body{overflow:hidden;}img{max-width:100%;height:auto;}" +
+        "body{background:transparent;}" +
+        // Emails with fixed-width layouts (wide tables, hard pixel widths) can be
+        // wider than the preview pane. `overflow-x:auto` on the root gives the
+        // user a horizontal scrollbar to reach the full content instead of
+        // silently clipping it. `overflow-y:hidden` keeps height auto-sized by
+        // the resize handler (the preview pane itself scrolls vertically).
+        "html{overflow-x:auto;overflow-y:hidden;}img{max-width:100%;height:auto;}" +
+        // Match the preview pane's custom scrollbar (#notification-preview-details
+        // in the app CSS): thin, transparent track, --ui-border thumb, 3px radius —
+        // so the email's horizontal scrollbar aligns with the pane's vertical one.
+        "html{scrollbar-width:thin;scrollbar-color:" + borderColor + " transparent;}" +
+        "html::-webkit-scrollbar{width:5px;height:5px;}" +
+        "html::-webkit-scrollbar-track{background:transparent;}" +
+        "html::-webkit-scrollbar-thumb{background:" + borderColor + ";border-radius:3px;}" +
         "</style>" +
         "</head><body>"
     );
@@ -77,7 +100,59 @@ function buildEmailIframe(host) {
         try {
             const root = iframe.contentDocument?.documentElement;
             if (root) {
-                iframe.style.height = root.scrollHeight + "px";
+                let height = root.scrollHeight;
+                // When the email overflows horizontally, a scrollbar sits at the
+                // bottom of the iframe viewport and would overlap the last rows of
+                // content (the iframe has no vertical scroll — its height tracks
+                // the content). Reserve the scrollbar's height so it clears the body.
+                if (root.scrollWidth > root.clientWidth) {
+                    const scrollbar =
+                        (iframe.contentWindow?.innerHeight ?? 0) - root.clientHeight;
+                    height += scrollbar > 0 ? scrollbar : 16;
+                }
+                iframe.style.height = height + "px";
+            }
+        } catch (_) {
+            // Cross-origin frames or detached iframes — ignore.
+        }
+    };
+
+    // The `buildEmailFrameHead` fallback fills the canvas with the app surface so
+    // unstyled emails read on theme. But most HTML emails wrap their content in a
+    // bgcolor'd table (commonly white) that's narrower than a wide, overflowing
+    // layout — leaving the app surface exposed in the horizontal-scroll gap (e.g.
+    // a white email on the dark-theme surface). Detect the email's own background
+    // and paint the canvas with it so the background extends across the full
+    // content width, then pick a readable default text color from its luminance
+    // (so a light email stays dark-on-light even under the dark app theme).
+    const applyCanvasTheme = () => {
+        try {
+            const doc = iframe.contentDocument;
+            if (!doc || !doc.body) return;
+            const opaque = (c) => !!c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)";
+            let bg = getComputedStyle(doc.body).backgroundColor;
+            if (!opaque(bg)) {
+                // Fall back to the widest opaque top-level block — the email's
+                // main background-bearing container.
+                let widest = 0;
+                for (const el of doc.body.children) {
+                    const c = getComputedStyle(el).backgroundColor;
+                    if (opaque(c) && el.scrollWidth > widest) {
+                        widest = el.scrollWidth;
+                        bg = c;
+                    }
+                }
+            }
+            if (!opaque(bg)) return; // unstyled email — keep the app-surface fallback
+            const root = doc.documentElement;
+            root.style.background = bg;
+            const rgb = bg.match(/\d+(\.\d+)?/g);
+            if (rgb) {
+                const [r, g, b] = rgb.map(Number);
+                const textColor =
+                    0.2126 * r + 0.7152 * g + 0.0722 * b > 140 ? "#0f172a" : "#e2e8f0";
+                root.style.color = textColor;
+                doc.body.style.color = textColor;
             }
         } catch (_) {
             // Cross-origin frames or detached iframes — ignore.
@@ -91,7 +166,10 @@ function buildEmailIframe(host) {
     // `srcdoc` finishes parsing. The `load` event below fires once the
     // `srcdoc` content has actually loaded; the listener is attached before
     // `appendChild`, so it cannot have already fired.
-    iframe.addEventListener("load", resize);
+    iframe.addEventListener("load", () => {
+        applyCanvasTheme();
+        resize();
+    });
     host.appendChild(iframe);
 }
 
