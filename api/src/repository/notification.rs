@@ -47,12 +47,18 @@ pub trait NotificationRepository {
         executor: &mut Transaction<'_, Postgres>,
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
+        only_snoozed_notifications: bool,
         task_id: Option<TaskId>,
         order_by: NotificationListOrder,
         from_sources: Vec<NotificationSourceKind>,
         page_token: Option<PageToken>,
         user_id: UserId,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError>;
+    async fn get_one_notification_with_task(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        id: NotificationId,
+    ) -> Result<Option<NotificationWithTask>, UniversalInboxError>;
     async fn create_notification(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -173,6 +179,100 @@ impl NotificationRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
+        fields(notification_id = id.to_string()),
+        err
+    )]
+    async fn get_one_notification_with_task(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        id: NotificationId,
+    ) -> Result<Option<NotificationWithTask>, UniversalInboxError> {
+        let row = QueryBuilder::new(
+            r#"
+                SELECT
+                  notification.id as notification__id,
+                  notification.title as notification__title,
+                  notification.status as notification__status,
+                  notification.created_at as notification__created_at,
+                  notification.updated_at as notification__updated_at,
+                  notification.last_read_at as notification__last_read_at,
+                  notification.snoozed_until as notification__snoozed_until,
+                  notification.task_id as notification__task_id,
+                  notification.user_id as notification__user_id,
+                  notification.kind as notification__kind,
+                  source_item.id as notification__source_item__id,
+                  source_item.source_id as notification__source_item__source_id,
+                  source_item.data as notification__source_item__data,
+                  source_item.created_at as notification__source_item__created_at,
+                  source_item.updated_at as notification__source_item__updated_at,
+                  source_item.user_id as notification__source_item__user_id,
+                  source_item.integration_connection_id as notification__source_item__integration_connection_id,
+                  nested_source_item.id as notification__source_item__si__id,
+                  nested_source_item.source_id as notification__source_item__si__source_id,
+                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.created_at as notification__source_item__si__created_at,
+                  nested_source_item.updated_at as notification__source_item__si__updated_at,
+                  nested_source_item.user_id as notification__source_item__si__user_id,
+                  nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id,
+                  task.id as notification__task__id,
+                  task.title as notification__task__title,
+                  task.body as notification__task__body,
+                  task.status as notification__task__status,
+                  task.completed_at as notification__task__completed_at,
+                  task.priority as notification__task__priority,
+                  task.due_at as notification__task__due_at,
+                  task.tags as notification__task__tags,
+                  task.parent_id as notification__task__parent_id,
+                  task.project as notification__task__project,
+                  task.is_recurring as notification__task__is_recurring,
+                  task.created_at as notification__task__created_at,
+                  task.updated_at as notification__task__updated_at,
+                  task.kind::TEXT as notification__task__kind,
+                  task.user_id as notification__task__user_id,
+                  task_source_item.id as notification__task__source_item__id,
+                  task_source_item.source_id as notification__task__source_item__source_id,
+                  task_source_item.data as notification__task__source_item__data,
+                  task_source_item.created_at as notification__task__source_item__created_at,
+                  task_source_item.updated_at as notification__task__source_item__updated_at,
+                  task_source_item.user_id as notification__task__source_item__user_id,
+                  task_source_item.integration_connection_id as notification__task__source_item__integration_connection_id,
+                  task_sink_item.id as notification__task__sink_item__id,
+                  task_sink_item.source_id as notification__task__sink_item__source_id,
+                  task_sink_item.data as notification__task__sink_item__data,
+                  task_sink_item.created_at as notification__task__sink_item__created_at,
+                  task_sink_item.updated_at as notification__task__sink_item__updated_at,
+                  task_sink_item.user_id as notification__task__sink_item__user_id,
+                  task_sink_item.integration_connection_id as notification__task__sink_item__integration_connection_id
+                FROM
+                  notification
+                INNER JOIN third_party_item AS source_item
+                  ON notification.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS nested_source_item
+                  ON source_item.source_item_id = nested_source_item.id
+                LEFT JOIN task ON task.id = notification.task_id
+                LEFT JOIN third_party_item AS task_source_item
+                  ON task.source_item_id = task_source_item.id
+                LEFT JOIN third_party_item AS task_sink_item
+                  ON task.sink_item_id = task_sink_item.id
+                WHERE notification.id =
+            "#,
+        )
+        .push_bind(id.0)
+        .build_query_as::<NotificationWithTaskRow>()
+        .fetch_optional(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!("Failed to fetch notification {id} from storage: {err}");
+            UniversalInboxError::DatabaseError { source: err, message }
+        })?;
+
+        row.map(|notification_row| (&notification_row).try_into())
+            .transpose()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
         fields(source_id = source_id.to_string(), user.id = user_id.to_string()),
         err
     )]
@@ -281,16 +381,19 @@ impl NotificationRepository for Repository {
         executor: &mut Transaction<'_, Postgres>,
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
+        only_snoozed_notifications: bool,
         task_id: Option<TaskId>,
         order_by: NotificationListOrder,
         from_sources: Vec<NotificationSourceKind>,
         page_token: Option<PageToken>,
         user_id: UserId,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError> {
+        #[allow(clippy::too_many_arguments)]
         fn add_filters(
             query_builder: &mut QueryBuilder<Postgres>,
             status: Vec<NotificationStatus>,
             include_snoozed_notifications: bool,
+            only_snoozed_notifications: bool,
             task_id: Option<TaskId>,
             order_by: NotificationListOrder,
             from_sources: &[NotificationSourceKind],
@@ -313,7 +416,13 @@ impl NotificationRepository for Repository {
                 .push(" notification.user_id = ")
                 .push_bind_unseparated(user_id.0);
 
-            if !include_snoozed_notifications {
+            if only_snoozed_notifications {
+                separated
+                    .push(
+                        " notification.snoozed_until is not NULL AND notification.snoozed_until >",
+                    )
+                    .push_bind_unseparated(Utc::now().naive_utc());
+            } else if !include_snoozed_notifications {
                 separated
                     .push(" (notification.snoozed_until is NULL OR notification.snoozed_until <=")
                     .push_bind_unseparated(Utc::now().naive_utc())
@@ -371,6 +480,7 @@ impl NotificationRepository for Repository {
             &mut count_query_builder,
             status.clone(),
             include_snoozed_notifications,
+            only_snoozed_notifications,
             task_id,
             order_by,
             &from_sources,
@@ -465,6 +575,7 @@ impl NotificationRepository for Repository {
             &mut query_builder,
             status,
             include_snoozed_notifications,
+            only_snoozed_notifications,
             task_id,
             order_by,
             &from_sources,

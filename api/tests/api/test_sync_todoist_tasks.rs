@@ -15,7 +15,7 @@ use universal_inbox::{
         integrations::todoist::{SyncToken, TodoistConfig, TodoistContext},
         provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
     },
-    notification::{Notification, NotificationStatus},
+    notification::{Notification, NotificationStatus, NotificationWithTask},
     task::{Task, TaskCreationResult, TaskPriority, TaskSourceKind, TaskStatus},
     third_party::{
         integrations::todoist::{self, TodoistItem},
@@ -153,7 +153,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         ThirdPartyItemData::TodoistItem(Box::new(todoist_items[1].clone()))
     );
 
-    let updated_todoist_notification: Box<Notification> = get_resource(
+    let updated_todoist_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",
@@ -169,7 +169,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         existing_todoist_notification.source_item.source_id
     );
     assert_eq!(
-        updated_todoist_notification.task_id,
+        updated_todoist_notification.task.as_ref().map(|t| t.id),
         Some(updated_todoist_task.id)
     );
     // The existing notification will be marked as deleted but other fields will not be updated
@@ -585,7 +585,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     assert_eq!(completed_task.status, TaskStatus::Done);
     assert_eq!(completed_task.completed_at.is_some(), true);
 
-    let deleted_notification: Box<Notification> = get_resource(
+    let deleted_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",
@@ -598,7 +598,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     )
     .await;
     assert_eq!(
-        deleted_notification.task_id,
+        deleted_notification.task.as_ref().map(|t| t.id),
         Some(third_party_item_creation.task.as_ref().unwrap().id)
     );
     assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
@@ -703,14 +703,17 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
         assert_eq!(task.status, TaskStatus::Active);
         assert!(task.completed_at.is_none());
 
-        let notification: Box<Notification> = get_resource(
+        let notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
             existing_notification.id.into(),
         )
         .await;
-        assert_eq!(notification.task_id, Some(existing_task.id));
+        assert_eq!(
+            notification.task.as_ref().map(|t| t.id),
+            Some(existing_task.id)
+        );
         assert_eq!(notification.status, NotificationStatus::Unread);
     }
 }

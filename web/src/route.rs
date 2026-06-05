@@ -15,7 +15,9 @@ use crate::{
         email_validation_required_page::EmailValidationRequiredPage,
         email_verification_page::EmailVerificationPage,
         login_page::LoginPage,
-        notifications_page::{NotificationPage, NotificationsPage},
+        notifications_page::{
+            DeletedNotificationsPage, NotificationPage, NotificationsPage, SnoozedNotificationsPage,
+        },
         oauth2_consent_page::OAuth2ConsentPage,
         page_not_found::PageNotFound,
         passkey_login_page::PasskeyLoginPage,
@@ -63,6 +65,10 @@ pub enum Route {
         NotificationsPage {},
         #[route("/notifications/:notification_id")]
         NotificationPage { notification_id: NotificationId },
+        #[route("/snoozed")]
+        SnoozedNotificationsPage {},
+        #[route("/deleted")]
+        DeletedNotificationsPage {},
         #[route("/synced-tasks")]
         SyncedTasksPage {},
         #[route("/synced-task/:task_id")]

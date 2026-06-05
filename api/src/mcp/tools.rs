@@ -175,6 +175,7 @@ pub async fn execute_tool(
                     &mut transaction,
                     args.status,
                     args.include_snoozed_notifications,
+                    false,
                     args.task_id,
                     args.order_by
                         .unwrap_or(NotificationListOrder::UpdatedAtDesc),
