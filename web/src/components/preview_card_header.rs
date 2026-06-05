@@ -2,6 +2,8 @@
 
 use dioxus::prelude::*;
 
+use crate::components::markdown::Markdown;
+
 /// Unified header for every notification preview pane.
 ///
 /// Renders the source brand logo on a neutral 28x28 white tile, the title
@@ -33,9 +35,9 @@ pub fn PreviewCardHeader(
                 class: "preview-head-titles",
                 div {
                     class: "preview-head-title",
-                    span {
+                    Markdown {
+                        text: "{title}",
                         class: "preview-head-title-text {title_class}",
-                        "{title}"
                     }
                     if let Some(identifier) = identifier {
                         span { class: "preview-head-title-ext", "{identifier}" }

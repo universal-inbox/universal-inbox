@@ -20,6 +20,7 @@ use crate::{
 #[component]
 pub fn GithubDiscussionPreview(
     github_discussion: ReadSignal<GithubDiscussion>,
+    title: ReadSignal<String>,
     expand_details: ReadSignal<bool>,
 ) -> Element {
     let discussion = github_discussion();
@@ -33,7 +34,6 @@ pub fn GithubDiscussionPreview(
 
     let created_ago = format_elapsed_time(discussion.created_at);
 
-    let title = discussion.title.clone();
     let identifier = format!("#{}", discussion.number);
     let repo_name = discussion.repository.name_with_owner.clone();
     let repo_url = discussion.repository.url.clone();
@@ -46,7 +46,7 @@ pub fn GithubDiscussionPreview(
 
             PreviewCardHeader {
                 brand_icon: rsx! { span { class: "icon-[lucide--message-square] size-4" } },
-                title,
+                title: title(),
                 identifier: Some(identifier),
                 subline: rsx! {
                     if let Some(actor) = author {

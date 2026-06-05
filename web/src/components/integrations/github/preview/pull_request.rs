@@ -34,10 +34,10 @@ use crate::{
 #[component]
 pub fn GithubPullRequestPreview(
     github_pull_request: ReadSignal<GithubPullRequest>,
+    title: ReadSignal<String>,
     expand_details: ReadSignal<bool>,
 ) -> Element {
     let pr = github_pull_request();
-    let title = pr.title.clone();
     let identifier = format!("#{}", pr.number);
     let author = pr.author.clone();
     let created_age = format_elapsed_time(pr.created_at);
@@ -50,7 +50,7 @@ pub fn GithubPullRequestPreview(
                 brand_icon: rsx! {
                     GithubPullRequestIcon { class: "size-4", github_pull_request: pr.clone() }
                 },
-                title,
+                title: title(),
                 identifier: Some(identifier),
                 subline: rsx! {
                     if let Some(actor) = author {
