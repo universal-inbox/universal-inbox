@@ -17,7 +17,9 @@ use crate::{
     model::DEFAULT_USER_AVATAR,
     route::Route,
     services::{
-        notification_service::NOTIFICATIONS_PAGE,
+        notification_service::{
+            CURRENT_NOTIFICATION_SECTION, INBOX_COUNT, NotificationSection, SNOOZED_COUNT,
+        },
         task_service::SYNCED_TASKS_PAGE,
         user_service::{CONNECTED_USER, UserCommand},
     },
@@ -31,10 +33,16 @@ use crate::{
 pub fn Sidebar() -> Element {
     let user_service = use_coroutine_handle::<UserCommand>();
     let route = use_route::<Route>();
-    let notifications_active = matches!(
-        route,
-        Route::NotificationsPage {} | Route::NotificationPage { .. }
-    );
+    // The notification detail route (`/notifications/:id`) is shared across sections, so
+    // the active section link is decided by CURRENT_NOTIFICATION_SECTION when on it.
+    let on_detail = matches!(route, Route::NotificationPage { .. });
+    let section = CURRENT_NOTIFICATION_SECTION();
+    let notifications_active = matches!(route, Route::NotificationsPage {})
+        || (on_detail && section == NotificationSection::Inbox);
+    let snoozed_active = matches!(route, Route::SnoozedNotificationsPage {})
+        || (on_detail && section == NotificationSection::Snoozed);
+    let deleted_active = matches!(route, Route::DeletedNotificationsPage {})
+        || (on_detail && section == NotificationSection::Deleted);
     let synced_tasks_active = matches!(
         route,
         Route::SyncedTasksPage {} | Route::SyncedTaskPage { .. }
@@ -152,11 +160,40 @@ pub fn Sidebar() -> Element {
                             to: Route::NotificationsPage {},
                             span { class: "icon-[lucide--inbox] size-4 {NAV_ICON_BASE}" }
                             span { class: "md:[.sidebar.collapsed_&]:hidden", "Inbox" }
-                            if NOTIFICATIONS_PAGE().total > 0 {
+                            if INBOX_COUNT() > 0 {
                                 span { class: "ml-auto md:[.sidebar.collapsed_&]:hidden",
-                                    Badge { variant: BadgeVariant::Primary, "{NOTIFICATIONS_PAGE().total}" }
+                                    Badge { variant: BadgeVariant::Primary, "{INBOX_COUNT()}" }
                                 }
                             }
+                        }
+                    }
+                    Tooltip {
+                        class: "block",
+                        text: "Snoozed",
+                        placement: TooltipPlacement::Right,
+                        disabled: !*IS_SIDEBAR_COLLAPSED.read(),
+                        Link {
+                            class: if snoozed_active { "{NAV_LINK_BASE} {NAV_LINK_ACTIVE}" } else { "{NAV_LINK_BASE}" },
+                            to: Route::SnoozedNotificationsPage {},
+                            span { class: "icon-[lucide--alarm-clock] size-4 {NAV_ICON_BASE}" }
+                            span { class: "md:[.sidebar.collapsed_&]:hidden", "Snoozed" }
+                            if SNOOZED_COUNT() > 0 {
+                                span { class: "ml-auto md:[.sidebar.collapsed_&]:hidden",
+                                    Badge { variant: BadgeVariant::Muted, "{SNOOZED_COUNT()}" }
+                                }
+                            }
+                        }
+                    }
+                    Tooltip {
+                        class: "block",
+                        text: "Deleted",
+                        placement: TooltipPlacement::Right,
+                        disabled: !*IS_SIDEBAR_COLLAPSED.read(),
+                        Link {
+                            class: if deleted_active { "{NAV_LINK_BASE} {NAV_LINK_ACTIVE}" } else { "{NAV_LINK_BASE}" },
+                            to: Route::DeletedNotificationsPage {},
+                            span { class: "icon-[lucide--trash-2] size-4 {NAV_ICON_BASE}" }
+                            span { class: "md:[.sidebar.collapsed_&]:hidden", "Deleted" }
                         }
                     }
                 }

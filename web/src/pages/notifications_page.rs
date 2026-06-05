@@ -20,7 +20,10 @@ use crate::{
     route::Route,
     services::{
         flyonui::open_flyonui_modal,
-        notification_service::{NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, NotificationCommand},
+        notification_service::{
+            CURRENT_NOTIFICATION_SECTION, NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE,
+            NotificationCommand, NotificationSection,
+        },
         user_preferences_service::USER_PREFERENCES,
     },
     utils::{
@@ -36,23 +39,47 @@ pub fn NotificationPage(notification_id: NotificationId) -> Element {
     rsx! { InternalNotificationPage { notification_id } }
 }
 
-#[component]
-pub fn NotificationsPage() -> Element {
-    use_effect(move || {
-        let notifications_count = NOTIFICATIONS_PAGE().content.len();
-        if notifications_count > 0 {
-            let mut model = UI_MODEL.write();
-            if let Some(index) = model.selected_notification_index {
-                if index >= notifications_count {
-                    model.selected_notification_index = Some(notifications_count - 1);
-                }
-            } else if get_screen_width().unwrap_or_default() >= 1024 {
-                // ie. lg screen
-                model.selected_notification_index = Some(0);
-            }
+/// On entering a section's list, switch the active section and refresh the list — but
+/// only when the section actually changes. The inbox is already loaded by the periodic
+/// refresh in the authenticated layout, so re-entering the same section issues no
+/// redundant refresh (which would add render churn during navigation). Runs once per
+/// mount.
+fn enter_notification_section(section: NotificationSection) {
+    let notification_service = use_coroutine_handle::<NotificationCommand>();
+    use_hook(move || {
+        if *CURRENT_NOTIFICATION_SECTION.peek() != section {
+            *CURRENT_NOTIFICATION_SECTION.write() = section;
+            UI_MODEL.write().selected_notification_index = None;
+            notification_service.send(NotificationCommand::Refresh);
         }
     });
+}
 
+#[component]
+pub fn NotificationsPage() -> Element {
+    enter_notification_section(NotificationSection::Inbox);
+    rsx! { InternalNotificationPage {} }
+}
+
+/// The list route for a section — used to push the URL back to the list when the
+/// selection is cleared.
+fn section_list_route(section: NotificationSection) -> Route {
+    match section {
+        NotificationSection::Inbox => Route::NotificationsPage {},
+        NotificationSection::Snoozed => Route::SnoozedNotificationsPage {},
+        NotificationSection::Deleted => Route::DeletedNotificationsPage {},
+    }
+}
+
+#[component]
+pub fn SnoozedNotificationsPage() -> Element {
+    enter_notification_section(NotificationSection::Snoozed);
+    rsx! { InternalNotificationPage {} }
+}
+
+#[component]
+pub fn DeletedNotificationsPage() -> Element {
+    enter_notification_section(NotificationSection::Deleted);
     rsx! { InternalNotificationPage {} }
 }
 
@@ -65,6 +92,47 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
         "Rendering notifications page for notification {:?}",
         notification_id()
     );
+
+    let notification_service = use_coroutine_handle::<NotificationCommand>();
+
+    // Keep the selection valid as the list changes. Clamping runs on any route so that
+    // deleting/snoozing the last notification lands on the new last one (instead of an
+    // out-of-range index). Auto-selecting the first notification only happens in the
+    // list view (no id in the URL) and on large screens, so it never hijacks a deep link.
+    use_effect(move || {
+        let notifications_count = notifications().content.len();
+        if notifications_count == 0 {
+            return;
+        }
+        let has_url_id = notification_id().is_some();
+        let mut model = UI_MODEL.write();
+        if let Some(index) = model.selected_notification_index {
+            if index >= notifications_count {
+                model.selected_notification_index = Some(notifications_count - 1);
+            }
+        } else if !has_url_id && get_screen_width().unwrap_or_default() >= 1024 {
+            // ie. lg screen
+            model.selected_notification_index = Some(0);
+        }
+    });
+
+    // Deep link resolution. Keyed on the URL id ONLY (via the memo) so it fires on
+    // genuine navigation to a notification — not when the list mutates. This matters
+    // after an optimistic delete/snooze: the URL still points at the removed
+    // notification, and re-resolving it would wrongly switch sections and re-add it.
+    use_effect(move || {
+        // Tracks `notification_id()` only; the list is read via `peek()` so this does
+        // NOT re-fire when the list mutates.
+        if let Some(id) = notification_id()
+            && !NOTIFICATIONS_PAGE
+                .peek()
+                .content
+                .iter()
+                .any(|notif| notif.id == id)
+        {
+            notification_service.send(NotificationCommand::LoadAndSelect(id));
+        }
+    });
 
     // URL → state: reconcile the selected index from the URL and the current list.
     use_effect(move || {
@@ -84,35 +152,33 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
         }
     });
 
-    // state → URL: push the URL when the user explicitly changes the selected index
-    // (click, keyboard, prev/next).
+    // state → URL: push the URL to track the *identity* of the selected notification,
+    // not just its index. Keying on the resolved id (index → notification) means the
+    // URL follows the selection when:
+    //   - the user changes the selection (click / keyboard),
+    //   - an action (delete / snooze / unsubscribe) removes the current notification
+    //     and the next one slides into the same index,
+    //   - switching sections reloads a different list under the same index.
     //
-    // Two safeguards prevent this effect from racing with the URL→state effect above
-    // on list refreshes — which would flip-flop the URL between two notifications and
-    // freeze the app:
-    //
-    // 1. The `use_memo` deduplicates `selected_notification_index` changes so this
-    //    effect does NOT re-fire on every `UI_MODEL.write()` (the API layer writes
-    //    `authentication_state` on every request, which would otherwise re-trigger us).
-    // 2. `notifications.peek()` reads the list without subscribing, so this effect
-    //    does NOT re-fire on list refreshes/reorders.
-    //
-    // Together: this effect runs ONLY when the user actually changes the selected
-    // index (or on initial mount).
-    let selected_index = use_memo(move || UI_MODEL.read().selected_notification_index);
+    // The `use_memo` resolves the id and deduplicates: unrelated `UI_MODEL` writes (the
+    // API layer stamps `authentication_state` on every request) and list refreshes that
+    // don't change the selected id do NOT re-fire this effect — preventing the URL
+    // flip-flop the previous index-only version guarded against.
+    let selected_notification_id = use_memo(move || {
+        UI_MODEL
+            .read()
+            .selected_notification_index
+            .and_then(|index| notifications().content.get(index).map(|notif| notif.id))
+    });
     use_effect(move || {
-        let index = selected_index();
-        if let Some(index) = index {
-            if let Some(selected_notification) = notifications.peek().content.get(index)
-                && *notification_id.peek() != Some(selected_notification.id)
-            {
-                let route = Route::NotificationPage {
-                    notification_id: selected_notification.id,
-                };
-                nav.push(route);
+        if let Some(id) = selected_notification_id() {
+            if *notification_id.peek() != Some(id) {
+                nav.push(Route::NotificationPage {
+                    notification_id: id,
+                });
             }
         } else if notification_id.peek().is_some() {
-            nav.push(Route::NotificationsPage {});
+            nav.push(section_list_route(*CURRENT_NOTIFICATION_SECTION.peek()));
         }
     });
 
@@ -128,7 +194,10 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
                 KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
             },
 
-            if NOTIFICATIONS_PAGE.read().content.is_empty() && !NOTIFICATION_FILTERS().is_filtered() {
+            if CURRENT_NOTIFICATION_SECTION() == NotificationSection::Inbox
+                && NOTIFICATIONS_PAGE.read().content.is_empty()
+                && !NOTIFICATION_FILTERS().is_filtered()
+            {
                 WelcomeHero { inbox_zero_message: "Your notifications will appear here when they arrive." }
             } else {
                 NotificationsList {
@@ -238,9 +307,18 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
             }
             ("d", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
-                    notification_service.send(NotificationCommand::DeleteFromNotification(
-                        notification.clone(),
-                    ))
+                    if CURRENT_NOTIFICATION_SECTION() == NotificationSection::Deleted {
+                        // Undelete replaces Delete in the Deleted section; task-built
+                        // notifications cannot be restored (backend restriction).
+                        if !notification.is_built_from_task() {
+                            notification_service
+                                .send(NotificationCommand::Undelete(notification.id))
+                        }
+                    } else {
+                        notification_service.send(NotificationCommand::DeleteFromNotification(
+                            notification.clone(),
+                        ))
+                    }
                 }
             }
             ("c", false, false, false, false) => {
@@ -257,7 +335,11 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
             }
             ("s", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
-                    notification_service.send(NotificationCommand::Snooze(notification.id))
+                    if CURRENT_NOTIFICATION_SECTION() == NotificationSection::Snoozed {
+                        notification_service.send(NotificationCommand::Unsnooze(notification.id))
+                    } else {
+                        notification_service.send(NotificationCommand::Snooze(notification.id))
+                    }
                 }
             }
             ("t", false, false, false, false) => {

@@ -130,7 +130,7 @@ mod patch_task {
             })
         );
 
-        let deleted_notification: Box<Notification> = get_resource(
+        let deleted_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -210,7 +210,7 @@ mod patch_task {
             })
         );
 
-        let deleted_notification: Box<Notification> = get_resource(
+        let deleted_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -335,7 +335,7 @@ mod patch_task {
             })
         );
 
-        let deleted_notification: Box<Notification> = get_resource(
+        let deleted_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -508,7 +508,7 @@ mod patch_task {
             ))
         );
 
-        let deleted_notification: Box<Notification> = get_resource(
+        let deleted_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -516,7 +516,10 @@ mod patch_task {
         )
         .await;
         assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
-        assert_eq!(deleted_notification.task_id, Some(new_task_id));
+        assert_eq!(
+            deleted_notification.task.as_ref().map(|t| t.id),
+            Some(new_task_id)
+        );
     }
 
     #[rstest]
@@ -676,7 +679,7 @@ mod patch_task {
             ))
         );
 
-        let deleted_notification: Box<Notification> = get_resource(
+        let deleted_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -684,7 +687,10 @@ mod patch_task {
         )
         .await;
         assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
-        assert_eq!(deleted_notification.task_id, Some(new_task_id));
+        assert_eq!(
+            deleted_notification.task.as_ref().map(|t| t.id),
+            Some(new_task_id)
+        );
     }
 }
 
@@ -788,7 +794,7 @@ mod patch_notification {
             })
         );
 
-        let updated_notification = get_resource(
+        let updated_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -797,7 +803,7 @@ mod patch_notification {
         .await;
 
         assert_eq!(
-            updated_notification,
+            Box::new(Notification::from(*updated_notification)),
             Box::new(Notification {
                 task_id: Some(existing_todoist_task.id),
                 ..*notification

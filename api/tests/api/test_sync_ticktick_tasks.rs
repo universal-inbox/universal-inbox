@@ -9,7 +9,7 @@ use universal_inbox::{
         integrations::ticktick::TickTickConfig,
         provider::{IntegrationProvider, IntegrationProviderKind},
     },
-    notification::{Notification, NotificationStatus},
+    notification::{Notification, NotificationStatus, NotificationWithTask},
     task::{Task, TaskCreationResult, TaskSourceKind},
     third_party::{
         integrations::ticktick::{TickTickItem, TickTickTag},
@@ -149,7 +149,7 @@ async fn test_sync_ticktick_tasks_should_add_new_task_and_update_existing_one(
         ThirdPartyItemData::TickTickItem(Box::new(ticktick_items[1].clone()))
     );
 
-    let updated_ticktick_notification: Box<Notification> = get_resource(
+    let updated_ticktick_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",
@@ -165,7 +165,7 @@ async fn test_sync_ticktick_tasks_should_add_new_task_and_update_existing_one(
         existing_ticktick_notification.source_item.source_id
     );
     assert_eq!(
-        updated_ticktick_notification.task_id,
+        updated_ticktick_notification.task.as_ref().map(|t| t.id),
         Some(updated_ticktick_task.id)
     );
     // The existing notification will be marked as deleted because the task moved out of Inbox

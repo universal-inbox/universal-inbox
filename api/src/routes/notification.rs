@@ -65,6 +65,7 @@ pub struct ListNotificationRequest {
     #[serde_as(as = "Option<StringWithSeparator::<CommaSeparator, NotificationStatus>>")]
     status: Option<Vec<NotificationStatus>>,
     include_snoozed_notifications: Option<bool>,
+    only_snoozed_notifications: Option<bool>,
     task_id: Option<TaskId>,
     trigger_sync: Option<bool>,
     order_by: Option<NotificationListOrder>,
@@ -114,6 +115,9 @@ pub async fn list_notifications(
             list_notification_request
                 .include_snoozed_notifications
                 .unwrap_or(false),
+            list_notification_request
+                .only_snoozed_notifications
+                .unwrap_or(false),
             list_notification_request.task_id,
             list_notification_request.order_by.unwrap_or_default(),
             list_notification_request
@@ -157,7 +161,7 @@ pub async fn get_notification(
         .context("Failed to create new transaction while getting notification")?;
 
     match service
-        .get_notification(&mut transaction, notification_id, user_id)
+        .get_notification_with_task(&mut transaction, notification_id, user_id)
         .await?
     {
         Some(notification) => Ok(HttpResponse::Ok()

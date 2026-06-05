@@ -324,7 +324,7 @@ mod create_task_with_explicit_provider {
             ))
         );
 
-        let deleted_notification: Box<Notification> = get_resource(
+        let deleted_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -332,7 +332,10 @@ mod create_task_with_explicit_provider {
         )
         .await;
         assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
-        assert_eq!(deleted_notification.task_id, Some(new_task_id));
+        assert_eq!(
+            deleted_notification.task.as_ref().map(|t| t.id),
+            Some(new_task_id)
+        );
     }
 }
 
@@ -487,7 +490,7 @@ mod create_task_with_default_preference {
             ticktick_integration_connection.id
         );
 
-        let deleted_notification: Box<Notification> = get_resource(
+        let deleted_notification: Box<NotificationWithTask> = get_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -495,6 +498,9 @@ mod create_task_with_default_preference {
         )
         .await;
         assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
-        assert_eq!(deleted_notification.task_id, Some(task.id));
+        assert_eq!(
+            deleted_notification.task.as_ref().map(|t| t.id),
+            Some(task.id)
+        );
     }
 }

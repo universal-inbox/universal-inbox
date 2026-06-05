@@ -13,7 +13,8 @@ use universal_inbox::{
         provider::IntegrationProviderKind,
     },
     notification::{
-        Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
+        Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
+        service::NotificationPatch,
     },
     third_party::{
         integrations::{
@@ -177,7 +178,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         )),
     );
 
-    let updated_notification: Box<Notification> = get_resource(
+    let updated_notification: Box<NotificationWithTask> = get_resource(
         &app.client,
         &app.app.api_address,
         "notifications",
@@ -200,7 +201,10 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         updated_notification.snoozed_until,
         Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap())
     );
-    assert_eq!(updated_notification.task_id, Some(existing_todoist_task.id));
+    assert_eq!(
+        updated_notification.task.as_ref().map(|t| t.id),
+        Some(existing_todoist_task.id)
+    );
 
     let integration_connection = get_integration_connection_per_provider(
         &app,
@@ -351,7 +355,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
         )),
     );
 
-    let deleted_notification: Box<Notification> = get_resource(
+    let deleted_notification: Box<NotificationWithTask> = get_resource(
         &client,
         &app.api_address,
         "notifications",
@@ -361,7 +365,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     assert_eq!(deleted_notification.id, existing_notification.id);
     assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
 
-    let refreshed_other_user_existing_notification: Box<Notification> = get_resource(
+    let refreshed_other_user_existing_notification: Box<NotificationWithTask> = get_resource(
         &other_client,
         &app.api_address,
         "notifications",
