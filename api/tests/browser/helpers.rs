@@ -83,6 +83,10 @@ pub async fn browser_tested_app(
             argon2_memory_size: 20000,
             argon2_iterations: 2,
             argon2_parallelism: 1,
+            max_login_attempts: 5,
+            login_attempt_window_seconds: 900,
+            login_lockout_base_seconds: 60,
+            login_lockout_max_seconds: 900,
         })];
     settings.application.security.email_domain_blacklist = HashMap::new();
 

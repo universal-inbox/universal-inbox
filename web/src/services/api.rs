@@ -44,56 +44,39 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
         check_version_mismatch(version_str);
     }
 
-    if response.status().is_server_error() || response.status() == StatusCode::BAD_REQUEST {
-        let default_error_message = "Error calling Universal Inbox API".to_string();
-        if Some(HeaderValue::from_static("application/json"))
-            == response.headers().get("content-type").cloned()
-        {
-            let message: HashMap<String, String> = response.json().await?;
-            return Err(anyhow!(
-                message
-                    .get("message")
-                    .cloned()
-                    .unwrap_or(default_error_message)
-            ));
-        } else {
-            error!(
-                "Error calling Universal Inbox API: {:?}",
-                response.text().await?
-            );
-            return Err(anyhow!(default_error_message));
-        }
+    let status = response.status();
+
+    // Reflect a lost session in the UI model before surfacing the error.
+    if status == StatusCode::UNAUTHORIZED
+        && let Some(mut ui_model) = ui_model
+    {
+        ui_model.write().authentication_state = AuthenticationState::NotAuthenticated;
     }
 
-    if let Some(mut ui_model) = ui_model {
-        if response.status() == StatusCode::UNAUTHORIZED {
-            if ui_model.read().authentication_state == AuthenticationState::Unknown
-                || ui_model.read().authentication_state != AuthenticationState::Authenticated
-                || ui_model.read().authentication_state != AuthenticationState::NotAuthenticated
-            {
-                ui_model.write().authentication_state = AuthenticationState::NotAuthenticated;
-            }
-            let default_error_message = "Unauthenticated call to the API".to_string();
-            if Some(HeaderValue::from_static("application/json"))
-                == response.headers().get("content-type").cloned()
-            {
-                let message: HashMap<String, String> = response.json().await?;
-                return Err(anyhow!(
-                    message
-                        .get("message")
-                        .cloned()
-                        .unwrap_or(default_error_message)
-                ));
-            } else {
-                return Err(anyhow!(default_error_message));
-            }
-        } else if ui_model.read().authentication_state != AuthenticationState::Authenticated {
-            ui_model.write().authentication_state = AuthenticationState::Authenticated;
-        }
+    // Treat every non-success status (except 304, handled below) as a failure
+    // and surface the API's `{"message": ...}` body. Previously only 5xx / 400 /
+    // 401 were handled and any other error status — e.g. 429 Too Many Requests
+    // from the login throttle — fell through to `response.json::<R>()`, which
+    // tried to decode the JSON error body into the success type and failed with
+    // a confusing "error decoding response body" instead of the real reason.
+    if !status.is_success() && status != StatusCode::NOT_MODIFIED {
+        let default_error_message = if status == StatusCode::UNAUTHORIZED {
+            "Unauthenticated call to the API"
+        } else {
+            "Error calling Universal Inbox API"
+        };
+        return Err(extract_api_error(response, default_error_message).await);
+    }
+
+    // Successful call: mark the session authenticated.
+    if let Some(mut ui_model) = ui_model
+        && ui_model.read().authentication_state != AuthenticationState::Authenticated
+    {
+        ui_model.write().authentication_state = AuthenticationState::Authenticated;
     }
 
     // Handle 304 Not Modified responses as successful
-    if response.status() == StatusCode::NOT_MODIFIED {
+    if status == StatusCode::NOT_MODIFIED {
         debug!("Received 304 Not Modified response from {}", response.url());
 
         let empty_value_result = serde_json::from_str::<R>("{}")
@@ -109,6 +92,40 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
     }
 
     Ok(response.json().await?)
+}
+
+/// Turn a non-success response into a user-facing error, preferring the API's
+/// `{"message": ...}` body when present and falling back to `default_message`.
+/// Consumes the response. Never tries to decode the body into the success type,
+/// so a JSON error envelope can never surface as "error decoding response body".
+async fn extract_api_error(response: Response, default_message: &str) -> anyhow::Error {
+    let is_json = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        // Tolerate parameters such as `application/json; charset=utf-8`.
+        .map(|content_type| content_type.starts_with("application/json"))
+        .unwrap_or(false);
+
+    if is_json {
+        return match response.json::<HashMap<String, String>>().await {
+            Ok(body) => anyhow!(
+                body.get("message")
+                    .cloned()
+                    .unwrap_or_else(|| default_message.to_string())
+            ),
+            Err(decode_error) => {
+                error!("Failed to decode Universal Inbox API error body: {decode_error:?}");
+                anyhow!(default_message.to_string())
+            }
+        };
+    }
+
+    match response.text().await {
+        Ok(text) => error!("Error calling Universal Inbox API: {text:?}"),
+        Err(read_error) => error!("Failed to read Universal Inbox API error body: {read_error:?}"),
+    }
+    anyhow!(default_message.to_string())
 }
 
 #[allow(clippy::too_many_arguments)]

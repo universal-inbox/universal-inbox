@@ -81,6 +81,15 @@ argon2_version = 19
 argon2_memory_size = 20000
 argon2_iterations = 2
 argon2_parallelism = 1
+# Per-account login-attempt throttling (in addition to the per-IP rate limit).
+# After `max_login_attempts` consecutive failures for a given email, the account
+# is temporarily locked for `login_lockout_base_seconds`, doubling on each further
+# failure up to `login_lockout_max_seconds`. The failed-attempt counter decays
+# over `login_attempt_window_seconds`. A successful login resets the counter.
+max_login_attempts = 5
+login_attempt_window_seconds = 3600
+login_lockout_base_seconds = 300
+login_lockout_max_seconds = 3600
 #
 # OR
 #

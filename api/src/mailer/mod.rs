@@ -45,6 +45,10 @@ pub enum EmailTemplate {
         login_url: Url,
         password_reset_url: Url,
     },
+    AccountLockout {
+        first_name: Option<String>,
+        login_url: Url,
+    },
 }
 
 impl EmailTemplate {
@@ -54,6 +58,9 @@ impl EmailTemplate {
             EmailTemplate::PasswordReset { .. } => "Reset your password".to_string(),
             EmailTemplate::RegistrationAttemptOnExistingAccount { .. } => {
                 "Someone tried to create an account with your email".to_string()
+            }
+            EmailTemplate::AccountLockout { .. } => {
+                "Your Universal Inbox account was temporarily locked".to_string()
             }
         }
     }
@@ -115,6 +122,26 @@ impl EmailTemplate {
                     .intro("Someone tried to create a Universal Inbox account using your email address. If this was you, you can log in below. If you need to reset your password, use the \"Forgot password\" link on the login page. If this wasn't you, you can safely ignore this email, your account is secure.")
                     .action(Action {
                         text: "Log in",
+                        link: login_url.as_str(),
+                        color: Some(("#388FEF", "white")),
+                        ..Default::default()
+                    })
+                    .signature("Best")
+                    .build()
+            }
+            EmailTemplate::AccountLockout {
+                first_name,
+                login_url,
+            } => {
+                let mut builder = EmailBuilder::new();
+                if let Some(first_name) = first_name {
+                    builder = builder.greeting(Greeting::Name(first_name));
+                }
+
+                builder
+                    .intro("Your Universal Inbox account was temporarily locked after too many failed login attempts. It will unlock automatically shortly. If this was you, simply try again later. If this wasn't you, someone may be trying to access your account — we recommend resetting your password using the \"Forgot password\" link on the login page.")
+                    .action(Action {
+                        text: "Go to login",
                         link: login_url.as_str(),
                         color: Some(("#388FEF", "white")),
                         ..Default::default()

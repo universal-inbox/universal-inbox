@@ -46,6 +46,7 @@ use crate::{
             AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
         },
     },
+    utils::login_throttle::LoginThrottle,
 };
 
 pub struct UserService {
@@ -53,6 +54,9 @@ pub struct UserService {
     application_settings: ApplicationSettings,
     mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
     webauthn: Arc<Webauthn>,
+    /// Per-account login throttle. `None` when local password auth is not
+    /// configured (nothing to throttle) or when Redis is unavailable at startup.
+    login_throttle: Option<LoginThrottle>,
 }
 
 impl UserService {
@@ -61,12 +65,14 @@ impl UserService {
         application_settings: ApplicationSettings,
         mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
         webauthn: Arc<Webauthn>,
+        login_throttle: Option<LoginThrottle>,
     ) -> UserService {
         UserService {
             repository,
             application_settings,
             mailer,
             webauthn,
+            login_throttle,
         }
     }
 
@@ -909,8 +915,87 @@ impl UserService {
         Ok(new_user)
     }
 
+    /// Validate local-password credentials, applying per-account throttling.
+    ///
+    /// On too many recent failures for the email, returns
+    /// [`UniversalInboxError::TooManyLoginAttempts`] (→ 429) before the password
+    /// is even checked. On a wrong password it records the failure (locking the
+    /// account with exponential backoff past the threshold, emailing the owner
+    /// once per lock episode) and returns a generic `Unauthorized` that does not
+    /// reveal whether the account exists. A correct password resets the counter.
+    ///
+    /// Throttle (Redis) errors fail open: the per-IP limiter still applies and
+    /// we prefer availability over locking everyone out during a Redis outage.
     #[tracing::instrument(level = "debug", skip_all, err)]
     pub async fn validate_credentials(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        credentials: Credentials,
+    ) -> Result<User, UniversalInboxError> {
+        let email = credentials.email.clone();
+
+        if let Some(throttle) = &self.login_throttle {
+            match throttle.locked_for(&email).await {
+                Ok(Some(retry_after_seconds)) => {
+                    return Err(UniversalInboxError::TooManyLoginAttempts {
+                        retry_after_seconds,
+                    });
+                }
+                Ok(None) => {}
+                Err(err) => warn!("Login throttle check failed, allowing attempt: {err:?}"),
+            }
+        }
+
+        match self.check_password(executor, credentials).await {
+            Ok(user) => {
+                if let Some(throttle) = &self.login_throttle
+                    && let Err(err) = throttle.reset(&email).await
+                {
+                    warn!("Failed to reset login throttle after successful login: {err:?}");
+                }
+                Ok(user)
+            }
+            Err(UniversalInboxError::Unauthorized(_)) => {
+                self.record_failed_login(executor, &email).await;
+                // Generic message: must not reveal whether the account exists.
+                Err(UniversalInboxError::Unauthorized(anyhow!(
+                    "Invalid email address or password"
+                )))
+            }
+            Err(other) => Err(other),
+        }
+    }
+
+    /// Record a failed attempt with the throttle and, if it newly locked the
+    /// account, email the (real) owner once. Best-effort: throttle/email errors
+    /// are logged, never surfaced, so a failed login still returns its 401.
+    async fn record_failed_login(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        email: &EmailAddress,
+    ) {
+        let Some(throttle) = &self.login_throttle else {
+            return;
+        };
+        match throttle.record_failure(email).await {
+            Ok(outcome) if outcome.newly_locked => {
+                let dry_run = self.application_settings.dry_run;
+                if let Err(err) = self
+                    .send_account_lockout_email(executor, email, dry_run)
+                    .await
+                {
+                    warn!("Failed to send account lockout email: {err:?}");
+                }
+            }
+            Ok(_) => {}
+            Err(err) => warn!("Failed to record failed login attempt: {err:?}"),
+        }
+    }
+
+    /// Constant-time password check against the stored hash (or a dummy hash
+    /// when the email is unknown) so timing does not leak account existence.
+    #[tracing::instrument(level = "debug", skip_all, err)]
+    async fn check_password(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         credentials: Credentials,
@@ -1161,6 +1246,44 @@ impl UserService {
                 );
             }
         }
+
+        Ok(())
+    }
+
+    /// Notify an account owner that their account was temporarily locked after
+    /// too many failed login attempts. Best-effort and silent for unknown /
+    /// test accounts: the login handler must return an identical generic
+    /// response regardless, so this never reveals account existence.
+    #[tracing::instrument(level = "debug", skip_all, fields(email_address = %email), err)]
+    pub async fn send_account_lockout_email(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        email: &EmailAddress,
+        dry_run: bool,
+    ) -> Result<(), UniversalInboxError> {
+        let user = self.repository.get_user_by_email(executor, email).await?;
+
+        let Some(user) = user else {
+            return Ok(());
+        };
+        if user.is_testing {
+            debug!("Skipping account lockout email for test account {email}");
+            return Ok(());
+        }
+
+        let login_url = format!("{}login", self.application_settings.front_base_url)
+            .parse()
+            .context("Failed to build login URL")?;
+
+        let template = EmailTemplate::AccountLockout {
+            first_name: user.first_name.clone(),
+            login_url,
+        };
+        self.mailer
+            .read()
+            .await
+            .send_email(user, template, dry_run)
+            .await?;
 
         Ok(())
     }

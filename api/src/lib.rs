@@ -49,9 +49,10 @@ use regex::Regex;
 use ring::digest;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
-use tracing::{Level, Span, error, event, info};
+use tracing::{Level, Span, error, event, info, warn};
 use tracing_actix_web::TracingLogger;
 use utils::cache::Cache;
+use utils::login_throttle::LoginThrottle;
 use webauthn_rs::prelude::*;
 
 use crate::{
@@ -572,11 +573,33 @@ pub async fn build_services(
         settings.application.http_session.clone(),
     )));
 
+    // Per-account login throttle (Redis-backed), built once and shared by the
+    // UserService. `None` when local password auth is unconfigured (nothing to
+    // throttle) or Redis is unreachable at startup — the per-IP limiter still
+    // applies in that case. See utils::login_throttle.
+    let login_throttle = match Cache::new(settings.redis.connection_string()).await {
+        Ok(cache) => settings
+            .application
+            .security
+            .authentication
+            .iter()
+            .find_map(|auth| match auth {
+                AuthenticationSettings::Local(local) => Some(local.clone()),
+                _ => None,
+            })
+            .map(|local| LoginThrottle::new(cache.connection_manager, local)),
+        Err(err) => {
+            warn!("Failed to connect to Redis for login throttle; throttling disabled: {err:?}");
+            None
+        }
+    };
+
     let user_service = Arc::new(UserService::new(
         repository.clone(),
         settings.application.clone(),
         mailer.clone(),
         webauthn.clone(),
+        login_throttle,
     ));
 
     // Build the map of internal OAuth2 providers
