@@ -10,7 +10,9 @@ use tracing::info;
 
 use universal_inbox::{
     integration_connection::provider::IntegrationProviderKind,
-    notification::NotificationSyncSourceKind, task::TaskSyncSourceKind, user::UserId,
+    notification::{NotificationSourceKind, NotificationSyncSourceKind},
+    task::TaskSyncSourceKind,
+    user::UserId,
 };
 
 use crate::{
@@ -155,6 +157,10 @@ pub enum TestCommands {
     GenerateNotifications {
         #[arg(short, long)]
         user_id: UserId,
+        /// Restrict generation to these notification source kinds (repeatable).
+        /// When omitted, every known source is generated.
+        #[arg(short, long, value_enum)]
+        source: Vec<NotificationSourceKind>,
     },
     /// Anonymize database (user emails, names, passwords) after restoring a production backup
     AnonymizeDb,
@@ -441,7 +447,7 @@ impl Cli {
                     )
                     .await
                 }
-                TestCommands::GenerateNotifications { user_id } => {
+                TestCommands::GenerateNotifications { user_id, source } => {
                     generate::generate_notifications_for_user(
                         user_service,
                         integration_connection_service,
@@ -450,6 +456,7 @@ impl Cli {
                         third_party_item_service,
                         settings,
                         *user_id,
+                        source.clone(),
                     )
                     .await
                 }

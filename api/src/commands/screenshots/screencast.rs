@@ -561,6 +561,7 @@ async fn run_action(
                 third_party_item_service,
                 settings,
                 user_id,
+                vec![],
             )
             .await
             .context("GenerateNotifications beat action failed")?;

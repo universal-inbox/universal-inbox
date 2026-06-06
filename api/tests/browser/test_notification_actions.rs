@@ -155,9 +155,7 @@ async fn test_deeplink_other_section_notification_is_selected(
 /// when the data fits on one page.
 #[rstest]
 #[tokio::test]
-async fn test_page_refills_after_majority_removed(
-    #[future] browser_tested_app: BrowserTestedApp,
-) {
+async fn test_page_refills_after_majority_removed(#[future] browser_tested_app: BrowserTestedApp) {
     let app = browser_tested_app.await;
     let email = generate_test_user(&app).await;
     let (_context, page) = launch_browser().await;

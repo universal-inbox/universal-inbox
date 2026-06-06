@@ -545,8 +545,12 @@ pub fn get_notification_action_buttons(
     let context = use_context::<Memo<NotificationListContext>>();
 
     if !notification().is_built_from_task() {
-        let mut buttons =
-            vec![delete_or_undelete_button(notification, show_shortcut, section, context)];
+        let mut buttons = vec![delete_or_undelete_button(
+            notification,
+            show_shortcut,
+            section,
+            context,
+        )];
 
         if notification().task.is_some() {
             buttons.push(rsx! {
