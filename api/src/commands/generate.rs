@@ -30,10 +30,13 @@ use universal_inbox::{
         },
         provider::IntegrationProviderKind,
     },
-    notification::{Notification, NotificationSource, service::NotificationPatch},
+    notification::{
+        Notification, NotificationSource, NotificationSourceKind, service::NotificationPatch,
+    },
     task::{Task, TaskSource, service::TaskPatch},
     third_party::{
         integrations::{
+            api::WebPage,
             github::{
                 GithubDiscussion, GithubNotification, GithubNotificationItem,
                 GithubNotificationSubject, GithubPullRequest,
@@ -57,6 +60,7 @@ use universal_inbox::{
 use crate::{
     configuration::Settings,
     integrations::{
+        api::APIService,
         github::graphql::{discussion_query, pull_request_query},
         google_mail::{GoogleMailUserProfile, RawGoogleMailThread},
         linear::{
@@ -239,6 +243,7 @@ pub async fn generate_testing_user(
         &settings,
         user.id,
         &email,
+        &[],
     )
     .await?;
 
@@ -333,6 +338,7 @@ pub async fn connect_integration_for_user(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tracing::instrument(name = "generate-notifications-for-user", level = "info", skip_all, fields(user.id = %user_id), err)]
 pub async fn generate_notifications_for_user(
     user_service: Arc<UserService>,
@@ -342,6 +348,7 @@ pub async fn generate_notifications_for_user(
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     settings: Settings,
     user_id: UserId,
+    only: Vec<NotificationSourceKind>,
 ) -> Result<(), UniversalInboxError> {
     let mut transaction = user_service.begin().await.context(
         "Failed to create new transaction while generating notifications for existing user",
@@ -366,6 +373,7 @@ pub async fn generate_notifications_for_user(
         &settings,
         user.id,
         &email,
+        &only,
     )
     .await?;
 
@@ -396,99 +404,134 @@ async fn generate_all_notifications(
     settings: &Settings,
     user_id: UserId,
     user_email: &str,
+    // Empty slice means "generate every known source"; otherwise restrict to the listed kinds.
+    only: &[NotificationSourceKind],
 ) -> Result<(), UniversalInboxError> {
-    generate_todoist_notifications(
-        transaction,
-        integration_connection_service.clone(),
-        notification_service.clone(),
-        task_service.clone(),
-        third_party_item_service.clone(),
-        settings,
-        user_id,
-        user_email,
-    )
-    .await?;
+    let wants = |kind: NotificationSourceKind| only.is_empty() || only.contains(&kind);
 
-    generate_ticktick_notifications(
-        transaction,
-        integration_connection_service.clone(),
-        notification_service.clone(),
-        task_service.clone(),
-        third_party_item_service.clone(),
-        settings,
-        user_id,
-        user_email,
-    )
-    .await?;
+    if wants(NotificationSourceKind::Todoist) {
+        generate_todoist_notifications(
+            transaction,
+            integration_connection_service.clone(),
+            notification_service.clone(),
+            task_service.clone(),
+            third_party_item_service.clone(),
+            settings,
+            user_id,
+            user_email,
+        )
+        .await?;
+    }
 
-    generate_github_notifications(
-        transaction,
-        integration_connection_service.clone(),
-        notification_service.clone(),
-        third_party_item_service.clone(),
-        settings,
-        user_id,
-        user_email,
-    )
-    .await?;
+    if wants(NotificationSourceKind::TickTick) {
+        generate_ticktick_notifications(
+            transaction,
+            integration_connection_service.clone(),
+            notification_service.clone(),
+            task_service.clone(),
+            third_party_item_service.clone(),
+            settings,
+            user_id,
+            user_email,
+        )
+        .await?;
+    }
 
-    generate_linear_notifications_and_tasks(
-        transaction,
-        integration_connection_service.clone(),
-        notification_service.clone(),
-        task_service.clone(),
-        third_party_item_service.clone(),
-        settings,
-        user_id,
-        user_email,
-    )
-    .await?;
+    if wants(NotificationSourceKind::Github) {
+        generate_github_notifications(
+            transaction,
+            integration_connection_service.clone(),
+            notification_service.clone(),
+            third_party_item_service.clone(),
+            settings,
+            user_id,
+            user_email,
+        )
+        .await?;
+    }
 
-    generate_slack_notifications_and_tasks(
-        transaction,
-        integration_connection_service.clone(),
-        notification_service.clone(),
-        task_service.clone(),
-        third_party_item_service.clone(),
-        settings,
-        user_id,
-        user_email,
-    )
-    .await?;
+    if wants(NotificationSourceKind::Linear) {
+        generate_linear_notifications_and_tasks(
+            transaction,
+            integration_connection_service.clone(),
+            notification_service.clone(),
+            task_service.clone(),
+            third_party_item_service.clone(),
+            settings,
+            user_id,
+            user_email,
+        )
+        .await?;
+    }
 
-    let google_mail_integration_connection = generate_google_mail_notifications(
-        transaction,
-        integration_connection_service.clone(),
-        notification_service.clone(),
-        third_party_item_service.clone(),
-        settings,
-        user_id,
-        user_email,
-    )
-    .await?;
+    if wants(NotificationSourceKind::Slack) {
+        generate_slack_notifications_and_tasks(
+            transaction,
+            integration_connection_service.clone(),
+            notification_service.clone(),
+            task_service.clone(),
+            third_party_item_service.clone(),
+            settings,
+            user_id,
+            user_email,
+        )
+        .await?;
+    }
 
-    generate_google_calendar_notifications(
-        transaction,
-        integration_connection_service.clone(),
-        notification_service.clone(),
-        third_party_item_service.clone(),
-        settings,
-        user_id,
-        user_email,
-        &google_mail_integration_connection,
-    )
-    .await?;
+    // Google Calendar events are attached to a Google Mail thread, so the Google Mail
+    // integration connection must exist before generating calendar notifications.
+    if wants(NotificationSourceKind::GoogleMail) || wants(NotificationSourceKind::GoogleCalendar) {
+        let google_mail_integration_connection = generate_google_mail_notifications(
+            transaction,
+            integration_connection_service.clone(),
+            notification_service.clone(),
+            third_party_item_service.clone(),
+            settings,
+            user_id,
+            user_email,
+        )
+        .await?;
 
-    generate_google_drive_notifications(
-        transaction,
-        integration_connection_service,
-        notification_service,
-        third_party_item_service,
-        settings,
-        user_id,
-        user_email,
-    )
-    .await?;
+        if wants(NotificationSourceKind::GoogleCalendar) {
+            generate_google_calendar_notifications(
+                transaction,
+                integration_connection_service.clone(),
+                notification_service.clone(),
+                third_party_item_service.clone(),
+                settings,
+                user_id,
+                user_email,
+                &google_mail_integration_connection,
+            )
+            .await?;
+        }
+    }
+
+    if wants(NotificationSourceKind::GoogleDrive) {
+        generate_google_drive_notifications(
+            transaction,
+            integration_connection_service.clone(),
+            notification_service.clone(),
+            third_party_item_service.clone(),
+            settings,
+            user_id,
+            user_email,
+        )
+        .await?;
+    }
+
+    if wants(NotificationSourceKind::API) {
+        generate_web_page_notification(
+            transaction,
+            integration_connection_service,
+            notification_service,
+            third_party_item_service,
+            settings,
+            user_id,
+            user_email,
+        )
+        .await?;
+    }
 
     Ok(())
 }
@@ -1437,6 +1480,44 @@ async fn generate_google_drive_notifications(
     Ok(integration_connection)
 }
 
+async fn generate_web_page_notification(
+    executor: &mut Transaction<'_, Postgres>,
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    notification_service: Arc<RwLock<NotificationService>>,
+    third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
+    _settings: &Settings,
+    user_id: UserId,
+    user_email: &str,
+) -> Result<IntegrationConnection, UniversalInboxError> {
+    info!("Generating Web page (API) notification");
+    // The API provider (browser extension) has no OAuth2 scopes; it is only used as the
+    // integration connection that owns extension-pushed web page third party items.
+    let integration_connection = create_integration_connection(
+        executor,
+        integration_connection_service,
+        IntegrationProviderKind::API,
+        vec![],
+        user_id,
+        None,
+    )
+    .await?;
+
+    let web_page: WebPage = load_seed_fixture("web_page.json", user_email)?;
+    create_notification_from_source_item::<WebPage, APIService>(
+        executor,
+        web_page.source_id(),
+        ThirdPartyItemData::WebPage(Box::new(web_page.clone())),
+        user_id,
+        integration_connection.id,
+        Arc::new(APIService::new()),
+        notification_service,
+        third_party_item_service,
+    )
+    .await?;
+
+    Ok(integration_connection)
+}
+
 async fn create_integration_connection(
     executor: &mut Transaction<'_, Postgres>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -1676,6 +1757,7 @@ mod tests {
         load_seed_fixture::<TodoistItem>("todoist_item.json", TEST_USER_EMAIL).unwrap();
         load_seed_fixture::<TodoistItem>("todoist_item_review.json", TEST_USER_EMAIL).unwrap();
         load_seed_fixture::<TickTickItem>("ticktick_item.json", TEST_USER_EMAIL).unwrap();
+        load_seed_fixture::<WebPage>("web_page.json", TEST_USER_EMAIL).unwrap();
         load_seed_fixture::<GithubNotification>("github_notification.json", TEST_USER_EMAIL)
             .unwrap();
         load_seed_fixture::<Response<pull_request_query::ResponseData>>(
