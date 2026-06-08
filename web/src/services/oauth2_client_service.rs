@@ -45,10 +45,18 @@ pub async fn oauth2_client_service(
                 }
             }
             Some(OAuth2ClientCommand::RevokeClient(client_id)) => {
+                // `client_id` may be a CIMD URL (e.g.
+                // `https://claude.ai/oauth/claude-code-client-metadata`), so it
+                // must be percent-encoded into a query parameter rather than
+                // placed in the path — slashes/colon would otherwise break path
+                // matching and 404.
+                let query = url::form_urlencoded::Serializer::new(String::new())
+                    .append_pair("client_id", &client_id)
+                    .finish();
                 let result: Result<SuccessResponse> = call_api_and_notify(
                     Method::DELETE,
                     &api_base_url,
-                    &format!("users/me/oauth2-authorized-clients/{client_id}"),
+                    &format!("users/me/oauth2-authorized-clients?{query}"),
                     None::<i32>,
                     Some(ui_model),
                     &toast_service,

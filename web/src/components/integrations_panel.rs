@@ -20,6 +20,7 @@ use universal_inbox::{
 
 use crate::{
     components::{
+        ai_agents_card::AiAgentsCard,
         integrations::{
             github::config::GithubProviderConfiguration,
             google_calendar::config::GoogleCalendarProviderConfiguration,
@@ -270,6 +271,11 @@ pub fn IntegrationsPanel(
                     }
                 }
             }
+
+            // AI agents connect to the MCP server as OAuth2 clients (initiated
+            // by the agent), so they aren't IntegrationProviderKind providers —
+            // render their card directly. See `ai_agents_card`.
+            AiAgentsCard {}
 
         }
     }

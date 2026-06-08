@@ -8,6 +8,7 @@ use universal_inbox::third_party::integrations::todoist::TodoistLabel;
 
 use crate::utils::format_elapsed_time;
 
+pub mod ai_agents_card;
 pub mod auth_methods_card;
 pub mod auth_widgets;
 pub mod authentication_tokens_card;
