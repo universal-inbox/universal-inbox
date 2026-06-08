@@ -35,7 +35,7 @@ pub fn NavBarLayout() -> Element {
 
     rsx! {
         div {
-            class: "flex flex-col h-screen overflow-hidden",
+            class: "flex flex-col h-dvh overflow-hidden",
             a {
                 class: "skip-link",
                 href: "#main-content",
