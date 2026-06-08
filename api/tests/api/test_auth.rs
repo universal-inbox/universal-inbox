@@ -139,8 +139,9 @@ mod close_session {
         let response = logout_user_response(&app.client, &app.app.api_address).await;
 
         assert_eq!(response.status(), 200);
+        let cookie_name = app.app.session_cookie_name();
         for cookie in response.cookies() {
-            assert_eq!(cookie.name(), "id");
+            assert_eq!(cookie.name(), cookie_name.as_str());
             assert_eq!(cookie.value(), "");
             assert!(cookie.expires().unwrap() < SystemTime::now());
         }

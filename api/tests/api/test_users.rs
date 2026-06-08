@@ -360,9 +360,10 @@ mod login_user {
         let response = get_current_user_response(&client, &app).await;
 
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+        let cookie_name = app.session_cookie_name();
         // Cookies are reset on unauthorized access in case of malformed cookies
         for cookie in response.cookies() {
-            assert_eq!(cookie.name(), "id");
+            assert_eq!(cookie.name(), cookie_name.as_str());
             assert_eq!(cookie.value(), "");
             assert!(cookie.expires().unwrap() < SystemTime::now());
         }
@@ -453,8 +454,9 @@ mod login_user {
 
         let logout_response = logout_user_response(&client, &app.api_address).await;
 
+        let cookie_name = app.session_cookie_name();
         for cookie in logout_response.cookies() {
-            assert_eq!(cookie.name(), "id");
+            assert_eq!(cookie.name(), cookie_name.as_str());
             assert_eq!(cookie.value(), "");
             assert!(cookie.expires().unwrap() < SystemTime::now());
         }
@@ -465,7 +467,7 @@ mod login_user {
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
         // Cookies are reset on unauthorized access in case of malformed cookies
         for cookie in response.cookies() {
-            assert_eq!(cookie.name(), "id");
+            assert_eq!(cookie.name(), cookie_name.as_str());
             assert_eq!(cookie.value(), "");
             assert!(cookie.expires().unwrap() < SystemTime::now());
         }

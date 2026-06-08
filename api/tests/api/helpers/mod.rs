@@ -69,6 +69,19 @@ pub struct TestedApp {
     pub cache: Cache,
 }
 
+impl TestedApp {
+    /// Session cookie name as the server computes it. The server port-scopes the
+    /// cookie on loopback hosts (`id-{port}`), so tests must derive the expected
+    /// name from the bound port rather than hard-coding `"id"`.
+    pub fn session_cookie_name(&self) -> String {
+        let port = Url::parse(&self.app_address)
+            .ok()
+            .and_then(|url| url.port())
+            .expect("test app_address must carry a port");
+        universal_inbox_api::session_cookie_name(&self.front_base_url, port)
+    }
+}
+
 impl Drop for TestedApp {
     fn drop(&mut self) {
         let cache = self.cache.clone();
