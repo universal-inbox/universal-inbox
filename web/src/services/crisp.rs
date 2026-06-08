@@ -12,4 +12,5 @@ extern "C" {
     );
     pub fn unload_crisp();
     pub fn is_crisp_chat_opened() -> bool;
+    pub fn open_crisp_chat();
 }

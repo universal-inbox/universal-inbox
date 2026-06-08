@@ -351,7 +351,19 @@ export function init_headway() {
 
 export function show_headway() {
     if (typeof Headway === "object") {
-        Headway.show();
+        // Defer to the next tick so the click that triggered this finishes
+        // bubbling first. Headway attaches a document-level click handler to
+        // close the popin on outside clicks; opening synchronously from a click
+        // handler races that handler (it closes the popin we just opened, so it
+        // never appears). By the time this timeout fires, the click has settled
+        // and Headway's close handler has already run as a no-op.
+        setTimeout(() => {
+            try {
+                Headway.show();
+            } catch (e) {
+                console.warn("Failed to show Headway changelog:", e);
+            }
+        }, 0);
     }
 }
 
@@ -388,9 +400,38 @@ export function init_crisp(
                 user_id: user_id,
             });
         }
+
+        // Hide Crisp's default floating launcher — it overlaps the notification
+        // preview pane's action buttons (bottom-right). The chat is opened from a
+        // dedicated "Support" button in the sidebar via `open_crisp_chat()`.
+        // Re-hide whenever the user closes the chat so no bubble lingers.
+        Crisp.chat.hide();
+        Crisp.chat.onChatClosed(() => {
+            Crisp.chat.hide();
+        });
     } catch (e) {
         console.warn("Failed to initialize Crisp chat:", e);
     }
+}
+
+export function open_crisp_chat() {
+    if (typeof Crisp === "undefined") {
+        return;
+    }
+    // Defer to the next tick so the click that triggered this finishes bubbling
+    // first. Crisp closes the chat on outside clicks; opening synchronously from
+    // a click handler races that handler, which closes the chat we just opened
+    // (it flashes open then shut on the first click). By the time this timeout
+    // fires, the click has settled. The default launcher is hidden (see
+    // `init_crisp`), so show the widget then open the conversation window.
+    setTimeout(() => {
+        try {
+            Crisp.chat.show();
+            Crisp.chat.open();
+        } catch (e) {
+            console.warn("Failed to open Crisp chat:", e);
+        }
+    }, 0);
 }
 
 export function unload_crisp() {
