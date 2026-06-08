@@ -166,6 +166,10 @@ pub async fn run_server(
     // Setup HTTP session + JWT auth
     let session_secret_key = Key::from(settings.application.http_session.secret_key.as_bytes());
     let max_age_days = settings.application.http_session.max_age_days;
+    // Port-scoped cookie name so parallel localhost instances don't share a
+    // session cookie. See [`session_cookie_name`].
+    let session_cookie_name =
+        session_cookie_name(&settings.application.front_base_url, listen_address.port());
     let jwt_signing_keys =
         JWTSigningKeys::load_from_base64_encoded_keys(JWTBase64EncodedSigningKeys {
             secret_key: settings.application.http_session.jwt_secret_key.clone(),
@@ -243,6 +247,11 @@ pub async fn run_server(
 
     let server = HttpServer::new(move || {
         info!("Mounting API on {}", api_path);
+
+        // Per-worker clones of the port-scoped session cookie name — used both
+        // to name the session cookie and to clear the matching cookie on 401.
+        let session_cookie_name = session_cookie_name.clone();
+        let reset_cookie_name = session_cookie_name.clone();
 
         let auth_middleware_factory =
             AuthenticateMiddlewareFactory::<Claims>::new(auth_middleware_settings.clone());
@@ -356,6 +365,7 @@ pub async fn run_server(
                 .session_lifecycle(
                     PersistentSession::default().session_ttl(Duration::days(max_age_days)),
                 )
+                .cookie_name(session_cookie_name)
                 .cookie_same_site(SameSite::Lax)
                 .cookie_content_security(CookieContentSecurity::Signed)
                 .build(),
@@ -363,7 +373,11 @@ pub async fn run_server(
             .wrap(middleware::Compress::default())
             .wrap(cors)
             // Cookies are reset when returning an 401 because it can be due to an invalid JWT token
-            .wrap(ErrorHandlers::new().handler(StatusCode::UNAUTHORIZED, reset_cookies))
+            .wrap(
+                ErrorHandlers::new().handler(StatusCode::UNAUTHORIZED, move |res| {
+                    reset_cookies(res, &reset_cookie_name)
+                }),
+            )
             .wrap_fn(move |req, srv| {
                 let csp_header_value = csp_header_value.clone();
                 let api_version = api_version.clone();
@@ -984,9 +998,38 @@ fn build_csp_header(settings: &Settings, script_hashes: &[String]) -> String {
         .to_string()
 }
 
-fn reset_cookies<B>(mut res: ServiceResponse<B>) -> ActixResult<ErrorHandlerResponse<B>> {
+/// Name of the session cookie.
+///
+/// Cookies are not scoped by port (RFC 6265 §1: "the port ... is not part of
+/// [a cookie's] identity"), so two Universal Inbox instances on
+/// `localhost:8000` and `localhost:8001` would otherwise share a single `id`
+/// cookie and clobber each other's session — a problem when the same user does
+/// not exist on every local instance. To isolate them, the listening port is
+/// folded into the cookie *name* (the one cookie attribute that does
+/// distinguish them) for loopback front-ends.
+///
+/// On real hosts the stable `id` name is kept, so several replicas behind a
+/// load balancer continue to share sessions (they each listen on the same
+/// container port, but more importantly we never want per-replica cookie
+/// fragmentation in production).
+pub fn session_cookie_name(front_base_url: &url::Url, port: u16) -> String {
+    let is_loopback = matches!(
+        front_base_url.host_str(),
+        Some("localhost") | Some("127.0.0.1") | Some("::1") | Some("[::1]")
+    );
+    if is_loopback {
+        format!("id-{port}")
+    } else {
+        "id".to_string()
+    }
+}
+
+fn reset_cookies<B>(
+    mut res: ServiceResponse<B>,
+    cookie_name: &str,
+) -> ActixResult<ErrorHandlerResponse<B>> {
     res.response_mut().add_cookie(
-        &Cookie::build("id", "")
+        &Cookie::build(cookie_name.to_string(), "")
             .path("/")
             .http_only(true)
             .secure(true)
