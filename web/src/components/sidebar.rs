@@ -13,10 +13,13 @@ use crate::{
         },
         universal_inbox_title::UniversalInboxTitle,
     },
+    config::APP_CONFIG,
     icons::UILogo,
     model::DEFAULT_USER_AVATAR,
     route::Route,
     services::{
+        crisp::{init_crisp, open_crisp_chat},
+        headway::{init_headway, show_headway},
         notification_service::{
             CURRENT_NOTIFICATION_SECTION, INBOX_COUNT, NotificationSection, SNOOZED_COUNT,
         },
@@ -92,6 +95,52 @@ pub fn Sidebar() -> Element {
                 }
             })
             .unwrap_or_else(|| DEFAULT_USER_AVATAR.to_string())
+    });
+
+    let show_changelog = APP_CONFIG
+        .read()
+        .as_ref()
+        .map(|config| config.show_changelog)
+        .unwrap_or_default();
+    let has_chat_support = APP_CONFIG
+        .read()
+        .as_ref()
+        .is_some_and(|config| config.chat_support_website_id.is_some());
+
+    // Re-init the Crisp chat bubble and the Headway changelog widget inside the
+    // authenticated shell (the redesign dropped this when it removed NavBar; Crisp
+    // otherwise only inits on the unauthenticated pages via FullpageLayout).
+    // `init_headway` runs here so the `#ui-changelog` anchor below already exists
+    // when Headway binds its unread badge + click handler to it.
+    use_effect(move || {
+        if show_changelog {
+            init_headway();
+        }
+        if let Some(chat_support_website_id) = &APP_CONFIG
+            .read()
+            .as_ref()
+            .and_then(|config| config.chat_support_website_id.clone())
+        {
+            let user_email = CONNECTED_USER()
+                .as_ref()
+                .and_then(|user| user.email.as_ref().map(|email| email.to_string()));
+            let user_email_signature = CONNECTED_USER().as_ref().and_then(|user| {
+                user.chat_support_email_signature
+                    .as_ref()
+                    .map(|signature| signature.to_string())
+            });
+            let user_full_name = CONNECTED_USER().as_ref().and_then(|user| user.full_name());
+            let user_id = CONNECTED_USER().as_ref().map(|user| user.id.to_string());
+
+            init_crisp(
+                chat_support_website_id,
+                user_email.as_deref(),
+                user_email_signature.as_deref(),
+                user_full_name.as_deref(),
+                Some(&user_avatar()),
+                user_id.as_deref(),
+            );
+        }
     });
 
     rsx! {
@@ -247,6 +296,69 @@ pub fn Sidebar() -> Element {
 
             // Footer with user profile and actions
             div { class: "py-2 px-1.5 border-t border-sidebar-border md:[.sidebar.collapsed_&]:py-2 md:[.sidebar.collapsed_&]:px-1",
+                // Help / resource shortcuts: documentation, GitHub, and the
+                // Headway changelog bell. Stacks vertically in the collapsed
+                // rail so the icons don't overflow the 56px width.
+                div { class: "flex items-center gap-1 mb-1 md:[.sidebar.collapsed_&]:flex-col md:[.sidebar.collapsed_&]:gap-0.5",
+                    Tooltip {
+                        text: "Documentation",
+                        placement: TooltipPlacement::Top,
+                        a {
+                            class: "flex items-center justify-center w-8 h-8 rounded-ui-md text-sidebar-text-muted hover:bg-sidebar-hover-bg hover:text-sidebar-text-bright transition-colors duration-[120ms]",
+                            href: "https://doc.universal-inbox.com",
+                            title: "Universal Inbox documentation",
+                            target: "_blank",
+                            rel: "noopener noreferrer",
+                            span { class: "icon-[lucide--book-open] size-4" }
+                        }
+                    }
+                    Tooltip {
+                        text: "GitHub",
+                        placement: TooltipPlacement::Top,
+                        a {
+                            class: "flex items-center justify-center w-8 h-8 rounded-ui-md text-sidebar-text-muted hover:bg-sidebar-hover-bg hover:text-sidebar-text-bright transition-colors duration-[120ms]",
+                            href: "https://github.com/universal-inbox/universal-inbox",
+                            title: "Universal Inbox on GitHub",
+                            target: "_blank",
+                            rel: "noopener noreferrer",
+                            span { class: "icon-[lucide--github] size-4" }
+                        }
+                    }
+                    if show_changelog {
+                        Tooltip {
+                            text: "What's new",
+                            placement: TooltipPlacement::Top,
+                            button {
+                                class: "relative flex items-center justify-center w-8 h-8 rounded-ui-md text-sidebar-text-muted hover:bg-sidebar-hover-bg hover:text-sidebar-text-bright transition-colors duration-[120ms] bg-transparent border-0 cursor-pointer",
+                                "aria-label": "What's new",
+                                // The button opens the changelog itself (Headway only binds its click
+                                // handler to the injected badge, which sits at the corner — so clicking
+                                // the bell glyph would otherwise do nothing).
+                                onclick: move |_| show_headway(),
+                                // Headway injects its badge container here. The container overlays the
+                                // bell (kept pointer-events:none so clicks reach the button); the
+                                // `#ui-changelog .HW_badge` rules in the stylesheet re-pin the badge to
+                                // the bell's top-right corner.
+                                div { id: "ui-changelog", class: "absolute inset-0 pointer-events-none" }
+                                span { class: "icon-[lucide--bell] size-4" }
+                            }
+                        }
+                    }
+                    if has_chat_support {
+                        Tooltip {
+                            text: "Support",
+                            placement: TooltipPlacement::Top,
+                            button {
+                                class: "flex items-center justify-center w-8 h-8 rounded-ui-md text-sidebar-text-muted hover:bg-sidebar-hover-bg hover:text-sidebar-text-bright transition-colors duration-[120ms] bg-transparent border-0 cursor-pointer",
+                                "aria-label": "Contact support",
+                                // Crisp's floating launcher is hidden (see init_crisp); this opens the chat.
+                                onclick: move |_| open_crisp_chat(),
+                                span { class: "icon-[lucide--life-buoy] size-4" }
+                            }
+                        }
+                    }
+                }
+
                 // Dark mode toggle
                 // NOTE: the inner `<span class="ui-toggle">` is kept as a
                 // non-interactive visual indicator. Swapping it for
