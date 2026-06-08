@@ -73,7 +73,7 @@ pub fn Sidebar() -> Element {
     // (`-translate-x-full`), which slides into view when the `.open` class
     // is toggled. `max-lg:[&.collapsed]:` also defeats the desktop collapsed
     // rail (`md:[&.collapsed]:w-14`) so the drawer always renders full-width.
-    let shell_class = "sidebar flex flex-col w-56 min-w-56 bg-sidebar-bg border-r border-sidebar-border md:[&.collapsed]:w-14 md:[&.collapsed]:min-w-14 max-lg:fixed max-lg:top-0 max-lg:left-0 max-lg:h-screen max-lg:w-[280px] max-lg:min-w-[280px] max-lg:z-[1000] max-lg:-translate-x-full max-lg:transition-transform max-lg:duration-[250ms] max-lg:ease-out max-lg:shadow-ui-lg max-lg:[&.open]:translate-x-0 max-lg:[&.collapsed]:w-[280px] max-lg:[&.collapsed]:min-w-[280px]";
+    let shell_class = "sidebar flex flex-col w-56 min-w-56 bg-sidebar-bg border-r border-sidebar-border md:[&.collapsed]:w-14 md:[&.collapsed]:min-w-14 max-lg:fixed max-lg:top-0 max-lg:left-0 max-lg:h-dvh max-lg:w-[280px] max-lg:min-w-[280px] max-lg:z-[1000] max-lg:-translate-x-full max-lg:transition-transform max-lg:duration-[250ms] max-lg:ease-out max-lg:shadow-ui-lg max-lg:[&.open]:translate-x-0 max-lg:[&.collapsed]:w-[280px] max-lg:[&.collapsed]:min-w-[280px]";
     let sidebar_class = match (*IS_SIDEBAR_COLLAPSED.read(), *IS_SIDEBAR_DRAWER_OPEN.read()) {
         (true, true) => format!("{shell_class} collapsed open"),
         (true, false) => format!("{shell_class} collapsed"),
