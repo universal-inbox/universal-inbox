@@ -30,6 +30,7 @@ bundle-fonts output-dir="public":
 
 clear-dev-assets:
     rm -rf ../target/dx/universal-inbox-web/debug/web/public/assets
+    rm -rf public
 
 build-ci: install build-assets build
 

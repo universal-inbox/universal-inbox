@@ -1994,3 +1994,34 @@ span.flatpickr-weekday,
         padding: 10px 12px;
     }
 }
+
+/*
+ * Headway changelog badge alignment.
+ *
+ * Headway injects a `.HW_badge_cont` (a ~48x48 block) into the `#ui-changelog`
+ * anchor and positions its badge for that container, which overflows our 32px
+ * bell button and lands the badge well off to the right. Headway sets the
+ * badge's `top`/`left` with `!important`, so overriding requires `!important`
+ * too. We (1) collapse the container onto the bell (`inset: 0`) and (2) re-pin
+ * the badge to the bell's top-right corner. Kept UNLAYERED so it competes with
+ * Headway's own unlayered injected `<style>` (an `@layer` rule would always
+ * lose to unlayered styles regardless of specificity). `pointer-events: none`
+ * lets clicks fall through to the button, which calls `show_headway()` itself.
+ * Verified against the live widget (account 7Xr08y).
+ */
+#ui-changelog .HW_badge_cont {
+    position: absolute !important;
+    inset: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    pointer-events: none !important;
+}
+#ui-changelog .HW_badge {
+    position: absolute !important;
+    top: -6px !important;
+    right: -6px !important;
+    left: auto !important;
+    bottom: auto !important;
+    border: 2px solid var(--color-sidebar-bg);
+    box-sizing: content-box;
+}
