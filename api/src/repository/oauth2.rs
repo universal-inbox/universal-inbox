@@ -621,9 +621,25 @@ impl OAuth2Repository for Repository {
                   c.client_name,
                   rt.scope,
                   MIN(rt.created_at) AS first_authorized_at,
-                  MAX(rt.created_at) AS last_used_at
+                  MAX(rt.created_at) AS last_used_at,
+                  -- A client is flagged as MCP when ANY of its active grants
+                  -- has an *effective* resource targeting the MCP server.
+                  -- A grant either carries an explicit RFC 8707 resource
+                  -- indicator ending in `/mcp`, OR carries none at all (NULL):
+                  -- clients like Claude Code don't send a resource indicator,
+                  -- and the token endpoint then defaults the audience to the
+                  -- MCP `resource_url` — so NULL is the MCP audience too.
+                  -- Clients that DO request a different resource store that non-NULL value and are
+                  -- correctly excluded. `bool_or` is an aggregate, so the
+                  -- GROUP BY below is unchanged.
+                  bool_or(rt.resource IS NULL OR rt.resource LIKE '%/mcp') AS is_mcp,
+                  -- `software_id` lives in the cached CIMD metadata document and
+                  -- is NULL for plain DCR clients (no cache row). Aggregated so
+                  -- it need not appear in GROUP BY.
+                  MAX(mc.document->>'software_id') AS software_id
                 FROM oauth2_refresh_token rt
                 JOIN oauth2_client c ON c.client_id = rt.client_id
+                LEFT JOIN oauth2_client_metadata_cache mc ON mc.client_id = rt.client_id
                 WHERE rt.user_id =
             "#,
         );
@@ -952,6 +968,10 @@ struct AuthorizedClientRow {
     scope: Option<String>,
     first_authorized_at: DateTime<Utc>,
     last_used_at: DateTime<Utc>,
+    // `bool_or` over zero rows is NULL, and a LEFT JOIN can yield no match, so
+    // both aggregates come back nullable; normalize in the `From` impl.
+    is_mcp: Option<bool>,
+    software_id: Option<String>,
 }
 
 impl From<AuthorizedClientRow> for AuthorizedOAuth2Client {
@@ -962,6 +982,8 @@ impl From<AuthorizedClientRow> for AuthorizedOAuth2Client {
             scope: row.scope,
             first_authorized_at: row.first_authorized_at,
             last_used_at: row.last_used_at,
+            is_mcp: row.is_mcp.unwrap_or(false),
+            software_id: row.software_id,
         }
     }
 }

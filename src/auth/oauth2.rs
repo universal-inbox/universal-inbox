@@ -61,6 +61,20 @@ pub struct AuthorizedOAuth2Client {
     pub scope: Option<String>,
     pub first_authorized_at: DateTime<Utc>,
     pub last_used_at: DateTime<Utc>,
+    /// True when this client holds an active grant whose *effective* resource
+    /// targets the MCP server — i.e. an explicit RFC 8707 resource indicator
+    /// ending in `/mcp`, or no indicator at all (clients such as Claude Code
+    /// don't send one, and the token endpoint then defaults the audience to
+    /// the MCP `resource_url`). Drives membership in the "AI Agents (MCP)"
+    /// settings card. Computed server-side so the frontend stays free of
+    /// base-URL knowledge. Clients that request a different resource are excluded.
+    #[serde(default)]
+    pub is_mcp: bool,
+    /// `software_id` from the client's CIMD metadata document, when available
+    /// (NULL for clients registered via plain RFC 7591 DCR). Used together with
+    /// `client_name` to pick a per-agent icon.
+    #[serde(default)]
+    pub software_id: Option<String>,
 }
 
 /// Recorded user consent for an OAuth2 client (granted scope is the union of

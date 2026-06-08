@@ -197,11 +197,14 @@ pub fn scope(auth_rate_limiter: Arc<AuthRateLimiter>) -> Scope {
                         .route(web::post().to(create_authentication_token)),
                 )
                 .service(
+                    // `client_id` is passed as a query parameter (not a path
+                    // segment) on DELETE because CIMD clients use an https URL
+                    // as their client_id (e.g.
+                    // `https://claude.ai/oauth/claude-code-client-metadata`),
+                    // whose slashes/colon can't be carried in a single
+                    // `{client_id}` path segment.
                     web::resource("/oauth2-authorized-clients")
-                        .route(web::get().to(list_oauth2_authorized_clients)),
-                )
-                .service(
-                    web::resource("/oauth2-authorized-clients/{client_id}")
+                        .route(web::get().to(list_oauth2_authorized_clients))
                         .route(web::delete().to(revoke_oauth2_authorized_client)),
                 )
                 .service(
@@ -1238,17 +1241,22 @@ pub async fn list_oauth2_authorized_clients(
     ))
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct RevokeOAuth2ClientQuery {
+    pub client_id: String,
+}
+
 pub async fn revoke_oauth2_authorized_client(
     oauth2_service: web::Data<Arc<OAuth2Service>>,
     authenticated: Authenticated<Claims>,
-    path: web::Path<String>,
+    query: web::Query<RevokeOAuth2ClientQuery>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let user_id = authenticated
         .claims
         .sub
         .parse::<UserId>()
         .context("Wrong user ID format")?;
-    let client_id = path.into_inner();
+    let client_id = query.into_inner().client_id;
     let service = oauth2_service.clone();
     let mut transaction = service
         .begin()
