@@ -995,6 +995,14 @@ fn build_csp_header(settings: &Settings, script_hashes: &[String]) -> String {
         // (injected on every response by the middleware in `run_server`)
         // covers older user agents.
         .push(Directive::FrameAncestors(Sources::new_with(Source::Self_)))
+        // `base-uri` and `form-action` do NOT fall back to `default-src`;
+        // without them an injected `<base>` can hijack relative-URL resolution
+        // and an injected `<form>` can exfiltrate to any origin. Restrict both
+        // to self. The OIDC login and Crisp widget use top-level redirects /
+        // XHR / websockets (covered by `connect-src`), not cross-origin form
+        // posts, so `'self'` is sufficient here.
+        .push(Directive::BaseUri(Sources::new_with(Source::Self_)))
+        .push(Directive::FormAction(Sources::new_with(Source::Self_)))
         .to_string()
 }
 
