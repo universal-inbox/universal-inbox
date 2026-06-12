@@ -82,13 +82,11 @@ pub fn IntegrationsPanel(
         .iter()
         .filter(|c| {
             c.status == IntegrationConnectionStatus::Validated
-                && c.has_oauth_scopes(
-                    &sorted_integration_providers
-                        .iter()
-                        .find(|(k, _)| *k == c.provider.kind())
-                        .map(|(_, p)| p.required_oauth_scopes.clone())
-                        .unwrap_or_default(),
-                )
+                && sorted_integration_providers
+                    .iter()
+                    .find(|(k, _)| *k == c.provider.kind())
+                    .map(|(_, p)| p.is_enabled && c.has_oauth_scopes(&p.required_oauth_scopes))
+                    .unwrap_or(false)
         })
         .count();
     let last_full_sync = integration_connections
@@ -106,13 +104,11 @@ pub fn IntegrationsPanel(
         .filter(|c| {
             c.status == IntegrationConnectionStatus::Failing
                 || (c.status == IntegrationConnectionStatus::Validated
-                    && !c.has_oauth_scopes(
-                        &sorted_integration_providers
-                            .iter()
-                            .find(|(k, _)| *k == c.provider.kind())
-                            .map(|(_, p)| p.required_oauth_scopes.clone())
-                            .unwrap_or_default(),
-                    ))
+                    && sorted_integration_providers
+                        .iter()
+                        .find(|(k, _)| *k == c.provider.kind())
+                        .map(|(_, p)| p.is_enabled && !c.has_oauth_scopes(&p.required_oauth_scopes))
+                        .unwrap_or(false))
         })
         .collect();
 
