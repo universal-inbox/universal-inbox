@@ -178,18 +178,25 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
                 });
             }
         } else if let Some(url_id) = *notification_id.peek() {
-            // No selection but the URL still targets a notification. Only fall back to
-            // the section list when that notification is actually loaded (the user
-            // cleared the selection, e.g. mobile back). If it is NOT in the list, a
-            // deep-link load is in flight (LoadAndSelect will fetch, prepend and select
-            // it) — leave the URL alone so we don't navigate away mid-load.
-            if notifications
+            // No resolved selection but the URL still targets a notification. Fall back
+            // to the section list when either:
+            //   - that notification is still loaded (the user cleared the selection,
+            //     e.g. mobile back), or
+            //   - a stale selection lingers: a deep-link load starts with NO selection,
+            //     so a leftover `selected_notification_index` here means the selected
+            //     notification was removed and nothing replaced it (e.g. deleting the
+            //     last one emptied the list) — the URL must not stay on the dead id.
+            // Otherwise a genuine deep-link load is in flight (LoadAndSelect will fetch,
+            // prepend and select it) — leave the URL alone so we don't navigate mid-load.
+            let url_id_in_list = notifications
                 .peek()
                 .content
                 .iter()
-                .any(|notif| notif.id == url_id)
-            {
+                .any(|notif| notif.id == url_id);
+            let stale_selection = UI_MODEL.peek().selected_notification_index.is_some();
+            if url_id_in_list || stale_selection {
                 nav.push(section_list_route(*CURRENT_NOTIFICATION_SECTION.peek()));
+                UI_MODEL.write().selected_notification_index = None;
             }
         }
     });
