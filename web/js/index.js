@@ -21,6 +21,14 @@ export { flatpickr };
 // overrides them. The default text color tracks the parent app theme so
 // unstyled emails stay readable in both light and dark modes; emails that
 // declare their own color win via the same low-specificity cascade.
+// HTML emails are almost always authored for a light (white) background — they
+// set dark text colors (e.g. color:#333) but often declare no background of
+// their own, relying on the mail client's default white. On the dark app theme
+// that dark text lands on the dark canvas and disappears. `applyCanvasTheme`
+// (below) handles this after load: emails that DO declare their own opaque
+// background are trusted as-authored; background-less emails get a dark-mode
+// contrast pass that lifts only their unreadable (dark-on-dark) text to a
+// readable lightness while preserving hue.
 const EMAIL_FRAME_FOOT = "</body></html>";
 
 function isDarkTheme() {
@@ -117,6 +125,54 @@ function buildEmailIframe(host) {
         }
     };
 
+    // Relative luminance (0–255 scale) of a CSS `rgb()/rgba()` color string, or
+    // null if it can't be parsed. Used both to read a readable text color off a
+    // background and to decide whether the email's own text is too dark to read
+    // on the dark canvas.
+    const luminance = (color) => {
+        const rgb = color && color.match(/\d+(\.\d+)?/g);
+        if (!rgb || rgb.length < 3) return null;
+        const [r, g, b] = rgb.map(Number);
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    // Lift a too-dark color to a readable lightness for the dark canvas while
+    // keeping its hue and saturation — so grayscale body text becomes light gray
+    // and a dark-orange link stays orange but legible, instead of flattening
+    // every fixed color to one gray. Returns a CSS `rgb(...)` string.
+    const lightenForDark = (color) => {
+        const rgb = color && color.match(/\d+(\.\d+)?/g);
+        if (!rgb || rgb.length < 3) return "#e2e8f0";
+        let [r, g, b] = rgb.map(Number).map((v) => v / 255);
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        let h = 0;
+        const d = max - min;
+        const l = (max + min) / 2;
+        const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+        if (d !== 0) {
+            if (max === r) h = ((g - b) / d) % 6;
+            else if (max === g) h = (b - r) / d + 2;
+            else h = (r - g) / d + 4;
+            h *= 60;
+            if (h < 0) h += 360;
+        }
+        const targetL = Math.max(l, 0.8); // floor lightness so it reads on dark
+        const c = (1 - Math.abs(2 * targetL - 1)) * s;
+        const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+        const m = targetL - c / 2;
+        let rr = 0,
+            gg = 0,
+            bb = 0;
+        if (h < 60) [rr, gg, bb] = [c, x, 0];
+        else if (h < 120) [rr, gg, bb] = [x, c, 0];
+        else if (h < 180) [rr, gg, bb] = [0, c, x];
+        else if (h < 240) [rr, gg, bb] = [0, x, c];
+        else if (h < 300) [rr, gg, bb] = [x, 0, c];
+        else [rr, gg, bb] = [c, 0, x];
+        const to = (v) => Math.round((v + m) * 255);
+        return `rgb(${to(rr)}, ${to(gg)}, ${to(bb)})`;
+    };
+
     // The `buildEmailFrameHead` fallback fills the canvas with the app surface so
     // unstyled emails read on theme. But most HTML emails wrap their content in a
     // bgcolor'd table (commonly white) that's narrower than a wide, overflowing
@@ -125,11 +181,19 @@ function buildEmailIframe(host) {
     // and paint the canvas with it so the background extends across the full
     // content width, then pick a readable default text color from its luminance
     // (so a light email stays dark-on-light even under the dark app theme).
+    //
+    // Emails that declare NO opaque background are a special case: they were
+    // authored for the client's default white, so their dark text disappears on
+    // the dark canvas. We keep the dark canvas and run a contrast pass that lifts
+    // only the text that's actually unreadable (dark-on-dark) to a readable
+    // lightness, leaving self-styled "light island" content (elements with their
+    // own opaque background) and already-light text untouched.
     const applyCanvasTheme = () => {
         try {
             const doc = iframe.contentDocument;
             if (!doc || !doc.body) return;
             const opaque = (c) => !!c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)";
+            const root = doc.documentElement;
             let bg = getComputedStyle(doc.body).backgroundColor;
             if (!opaque(bg)) {
                 // Fall back to the widest opaque top-level block — the email's
@@ -143,16 +207,49 @@ function buildEmailIframe(host) {
                     }
                 }
             }
-            if (!opaque(bg)) return; // unstyled email — keep the app-surface fallback
-            const root = doc.documentElement;
-            root.style.background = bg;
-            const rgb = bg.match(/\d+(\.\d+)?/g);
-            if (rgb) {
-                const [r, g, b] = rgb.map(Number);
-                const textColor =
-                    0.2126 * r + 0.7152 * g + 0.0722 * b > 140 ? "#0f172a" : "#e2e8f0";
-                root.style.color = textColor;
-                doc.body.style.color = textColor;
+            if (opaque(bg)) {
+                // Self-styled email — honor its background and pick a readable
+                // default text color from it. Trust the email's own colors.
+                root.style.background = bg;
+                const l = luminance(bg);
+                if (l != null) {
+                    const textColor = l > 140 ? "#0f172a" : "#e2e8f0";
+                    root.style.color = textColor;
+                    doc.body.style.color = textColor;
+                }
+                return;
+            }
+
+            // Background-less email. In light mode the app-surface fallback is
+            // light, so the email's dark text already reads — nothing to do.
+            if (!isDarkTheme()) return;
+
+            // Dark mode + no declared background: the canvas stays the dark app
+            // surface but the email's text was authored for white. Lift only the
+            // unreadable (dark) text to a readable lightness, preserving hue.
+            const hasOpaqueBgAncestor = (el) => {
+                for (let n = el.parentElement; n && n !== root; n = n.parentElement) {
+                    if (opaque(getComputedStyle(n).backgroundColor)) return true;
+                }
+                return false;
+            };
+            const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_ELEMENT);
+            let node = walker.currentNode;
+            while (node) {
+                const hasOwnText = Array.from(node.childNodes).some(
+                    (n) => n.nodeType === 3 && n.textContent.trim() !== "",
+                );
+                if (hasOwnText && !hasOpaqueBgAncestor(node)) {
+                    const l = luminance(getComputedStyle(node).color);
+                    if (l != null && l < 140) {
+                        node.style.setProperty(
+                            "color",
+                            lightenForDark(getComputedStyle(node).color),
+                            "important",
+                        );
+                    }
+                }
+                node = walker.nextNode();
             }
         } catch (_) {
             // Cross-origin frames or detached iframes — ignore.
