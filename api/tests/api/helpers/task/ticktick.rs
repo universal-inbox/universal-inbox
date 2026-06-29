@@ -141,6 +141,43 @@ pub async fn mock_ticktick_create_task_service(
         .await;
 }
 
+/// Like [`mock_ticktick_create_task_service`] but also asserts the schedule
+/// fields derived from a `TaskTimeConfig` (`timeZone`, `startDate`, `dueDate`,
+/// `isAllDay`) are present in the outgoing create request body.
+#[allow(clippy::too_many_arguments)]
+pub async fn mock_ticktick_create_task_service_with_schedule(
+    ticktick_mock_server: &MockServer,
+    expected_title: &str,
+    expected_project_id: &str,
+    expected_priority: TickTickItemPriority,
+    expected_time_zone: &str,
+    expected_start_date: &str,
+    expected_due_date: &str,
+    result: &TickTickCreateTaskResponse,
+) {
+    let body = json!({
+        "title": expected_title,
+        "projectId": expected_project_id,
+        "priority": expected_priority,
+        "timeZone": expected_time_zone,
+        "startDate": expected_start_date,
+        "dueDate": expected_due_date,
+        "allDay": false,
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/task"))
+        .and(body_partial_json(body))
+        .and(header("authorization", "Bearer ticktick_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(ticktick_mock_server)
+        .await;
+}
+
 pub async fn mock_ticktick_update_task_service(
     ticktick_mock_server: &MockServer,
     task_id: &str,

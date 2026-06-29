@@ -4,7 +4,10 @@ use dioxus::prelude::*;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
-        integrations::linear::{LinearConfig, LinearSyncTaskConfig},
+        integrations::{
+            linear::{LinearConfig, LinearSyncTaskConfig},
+            task_time_config::TaskTimeConfig,
+        },
         provider::IntegrationProviderKind,
     },
     task::{PresetDueDate, ProjectSummary},
@@ -16,6 +19,7 @@ use crate::{
         project_search_field::ProjectSearchField,
         settings_controls::SettingRow,
         task_manager_picker::{ProviderIcon, resolve_task_manager_kind},
+        task_time_config_row::TaskTimeConfigRow,
         ui::{
             TaskMgrOption, TaskMgrValue, ToggleSize, ToggleSwitch, UISelect, UISelectOption,
             preset_due_date_options,
@@ -36,12 +40,16 @@ pub fn LinearProviderConfiguration(
     let mut default_due_at: Signal<Option<PresetDueDate>> = use_signal(|| None);
     let mut default_task_manager_provider_kind: Signal<Option<IntegrationProviderKind>> =
         use_signal(|| None);
+    let mut default_time_config: Signal<Option<TaskTimeConfig>> = use_signal(|| None);
     let mut task_config_enabled = use_signal(|| false);
     use_memo(move || {
         *default_project.write() = config().sync_task_config.target_project;
         default_due_at
             .write()
             .clone_from(&config().sync_task_config.default_due_at);
+        default_time_config
+            .write()
+            .clone_from(&config().sync_task_config.default_time_config);
         *default_task_manager_provider_kind.write() =
             config().sync_task_config.task_manager_provider_kind;
         *task_config_enabled.write() = if !ui_model.read().is_task_actions_enabled {
@@ -82,6 +90,7 @@ pub fn LinearProviderConfiguration(
         Tooltip {
             placement: TooltipPlacement::Bottom,
             disabled: !as_tasks_disabled,
+            full_width: true,
             tooltip_class: "tooltip-error",
             text: "A task management service must be connected to enable this feature",
 
@@ -89,7 +98,10 @@ pub fn LinearProviderConfiguration(
                 label: rsx! { "Synchronize Linear assigned issues as tasks" },
                 ToggleSwitch {
                     size: ToggleSize::Md,
-                    checked: config().sync_task_config.enabled,
+                    // Force OFF when no task manager is connected: the feature
+                    // can't be active, so the stored `enabled` flag must not
+                    // surface as a checked toggle.
+                    checked: config().sync_task_config.enabled && !as_tasks_disabled,
                     disabled: as_tasks_disabled,
                     onchange: move |new_value: bool| {
                         on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
@@ -147,6 +159,23 @@ pub fn LinearProviderConfiguration(
                     disabled: !ui_model.read().is_task_actions_enabled,
                     width: "260px".to_string(),
                     name: "task-due-at-input".to_string(),
+                }
+            }
+
+            SettingRow {
+                label: rsx! { "Scheduled time to assign to synchronized tasks" },
+                TaskTimeConfigRow {
+                    value: default_time_config,
+                    disabled: !ui_model.read().is_task_actions_enabled,
+                    on_change: move |default_time_config: Option<TaskTimeConfig>| {
+                        on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
+                            sync_task_config: LinearSyncTaskConfig {
+                                default_time_config,
+                                ..config().sync_task_config
+                            },
+                            ..config()
+                        }));
+                    },
                 }
             }
 

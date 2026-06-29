@@ -56,6 +56,7 @@ pub async fn create_linear_task(
                 due_at: Some(PresetDueDate::Today.into()),
                 priority: TaskPriority::default(),
                 task_manager_provider_kind: None,
+                time_config: None,
             }),
             user_id,
         )

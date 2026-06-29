@@ -32,8 +32,8 @@ use universal_inbox::{
     },
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
-        CreateOrUpdateTaskRequest, ProjectSummary, TaskCreation, TaskCreationConfig, TaskSource,
-        TaskSourceKind, TaskStatus,
+        CreateOrUpdateTaskRequest, DueDate, ProjectSummary, TaskCreation, TaskCreationConfig,
+        TaskSource, TaskSourceKind, TaskStatus,
         integrations::ticktick::{TICKTICK_INBOX_PROJECT, TickTickProject},
         service::TaskPatch,
     },
@@ -131,9 +131,13 @@ pub struct TickTickCreateTaskRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub due_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub all_day: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_zone: Option<String>,
     pub priority: TickTickItemPriority,
 }
 
@@ -915,18 +919,43 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
             None
         };
 
-        let due_date = task.due_at.as_ref().map(|due| due.to_string());
+        // Only attach the timezone when the due is a timezone-aware datetime
+        // computed from a `time_config` (mirrors the Todoist conversion).
+        let time_zone = match (task.due_at.as_ref(), &task.time_config) {
+            (Some(DueDate::DateTimeWithTz(_)), Some(time_config)) => {
+                Some(time_config.timezone.clone())
+            }
+            _ => None,
+        };
+
+        let duration_minutes = task.time_config.as_ref().and_then(|tc| tc.duration_minutes);
+
+        // TickTick's API has no duration field; model a duration as a
+        // `startDate`..`dueDate` range so the task shows as a timed block.
+        let (start_date, due_date) = match (task.due_at.as_ref(), duration_minutes) {
+            (Some(due @ DueDate::DateTimeWithTz(datetime)), Some(minutes)) => {
+                let end = *datetime + chrono::Duration::minutes(minutes as i64);
+                (
+                    Some(due.to_string()),
+                    Some(end.format("%Y-%m-%dT%H:%M:%SZ").to_string()),
+                )
+            }
+            (due_at, _) => (None, due_at.map(|due| due.to_string())),
+        };
+
         let all_day = task
             .due_at
             .as_ref()
-            .map(|due| matches!(due, universal_inbox::task::DueDate::Date(_)));
+            .map(|due| matches!(due, DueDate::Date(_)));
 
         let create_request = TickTickCreateTaskRequest {
             title: task.title.clone(),
             content: task.body.clone(),
             project_id,
+            start_date,
             due_date,
             all_day,
+            time_zone,
             priority: task.priority.into(),
         };
 

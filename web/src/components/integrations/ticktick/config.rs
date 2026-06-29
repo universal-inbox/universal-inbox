@@ -3,7 +3,8 @@ use dioxus::prelude::*;
 
 use universal_inbox::{
     integration_connection::{
-        config::IntegrationConnectionConfig, integrations::ticktick::TickTickConfig,
+        config::IntegrationConnectionConfig,
+        integrations::{task_time_config::TaskTimeConfig, ticktick::TickTickConfig},
         provider::IntegrationProviderKind,
     },
     task::{
@@ -15,6 +16,7 @@ use crate::{
     components::{
         project_search_field::ProjectSearchField,
         settings_controls::SettingRow,
+        task_time_config_row::TaskTimeConfigRow,
         ui::{
             ToggleSize, ToggleSwitch, UISelect, preset_due_date_options, priority_select_renderers,
             task_priority_options,
@@ -31,11 +33,15 @@ pub fn TickTickProviderConfiguration(
     let mut default_priority = use_signal(|| Some(TaskPriority::P4));
     let mut default_due_at: Signal<Option<PresetDueDate>> = use_signal(|| None);
     let mut default_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
+    let mut default_time_config: Signal<Option<TaskTimeConfig>> = use_signal(|| None);
 
     use_effect(move || {
         *default_priority.write() = config().default_priority;
         default_due_at.write().clone_from(&config().default_due_at);
         *default_project.write() = config().default_project;
+        default_time_config
+            .write()
+            .clone_from(&config().default_time_config);
     });
 
     let api_base_url = get_api_base_url().unwrap();
@@ -133,6 +139,19 @@ pub fn TickTickProviderConfiguration(
                     name: "task-priority-input".to_string(),
                     render_value: priority_render_value,
                     render_option: priority_render_option,
+                }
+            }
+
+            SettingRow {
+                label: rsx! { "Scheduled time for new tasks" },
+                TaskTimeConfigRow {
+                    value: default_time_config,
+                    on_change: move |default_time_config: Option<TaskTimeConfig>| {
+                        on_config_change.call(IntegrationConnectionConfig::TickTick(TickTickConfig {
+                            default_time_config,
+                            ..config()
+                        }));
+                    },
                 }
             }
         }

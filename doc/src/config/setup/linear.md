@@ -36,6 +36,7 @@ You can customize how Linear issues appear in your task management tool:
 
 - **Project Assignment**: Automatically sort issues into a specific project
 - **Due Date**: Set the default due date for synchronized issues
+- **Scheduled time for new tasks**: Optionally attach a time of day to the due date, a time, an optional duration (15 min up to 2h), and the IANA timezone it is expressed in (defaults to your browser timezone)
 - **Task manager**: If both [Todoist](todoist.md) and [TickTick](ticktick.md) are connected, this picker chooses which one receives Linear-assigned issues. With only one task manager connected, the picker is hidden and tasks flow there automatically.
 
 ```admonish tip

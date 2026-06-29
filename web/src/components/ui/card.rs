@@ -112,6 +112,8 @@ pub fn Card(
     children: Element,
     #[props(default)] variant: CardVariant,
     #[props(default)] expanded: bool,
+    /// Optional DOM `id`, used as a stable anchor for doc-screenshot tests.
+    id: Option<String>,
     class: Option<String>,
 ) -> Element {
     let mut classes = String::from(variant.base_class());
@@ -126,7 +128,7 @@ pub fn Card(
     }
 
     rsx! {
-        div { class: "{classes}", {children} }
+        div { class: "{classes}", id: id, {children} }
     }
 }
 

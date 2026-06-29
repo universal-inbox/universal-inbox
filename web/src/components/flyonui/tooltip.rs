@@ -15,6 +15,12 @@ pub fn Tooltip(
     tooltip_class: ReadSignal<Option<String>>,
     placement: Option<TooltipPlacement>,
     disabled: ReadSignal<Option<bool>>,
+    /// Make the wrapper spans `block w-full` so a block-level child (e.g. a
+    /// `SettingRow` using `justify-between`) keeps its full width instead of
+    /// collapsing to content width. Leave `false` (default) when wrapping
+    /// inline targets like icons or buttons.
+    #[props(default = false)]
+    full_width: bool,
     children: Element,
 ) -> Element {
     if disabled().unwrap_or_default() {
@@ -22,6 +28,7 @@ pub fn Tooltip(
     }
 
     let placement_attr = placement.unwrap_or(TooltipPlacement::Left).to_data_attr();
+    let width_class = if full_width { "block w-full" } else { "" };
     let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
 
     use_drop(move || {
@@ -32,7 +39,7 @@ pub fn Tooltip(
 
     rsx! {
         span {
-            class: "tooltip {tooltip_class().unwrap_or_default()} {class().unwrap_or_default()}",
+            class: "tooltip {width_class} {tooltip_class().unwrap_or_default()} {class().unwrap_or_default()}",
             style: "--placement: {placement_attr};",
             onmounted: move |element| {
                 let web_element = element.as_web_event();
@@ -41,7 +48,7 @@ pub fn Tooltip(
             },
 
             span {
-                class: "tooltip-toggle",
+                class: "tooltip-toggle {width_class}",
                 { children }
             }
 

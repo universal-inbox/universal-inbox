@@ -658,6 +658,7 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
                 due_at: Some(PresetDueDate::Today.into()),
                 priority: TaskPriority::default(),
                 task_manager_provider_kind: None,
+                time_config: None,
             }),
             app.user.id,
         )
