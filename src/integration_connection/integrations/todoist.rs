@@ -2,6 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::integration_connection::integrations::task_time_config::TaskTimeConfig;
 use crate::task::{PresetDueDate, ProjectSummary, TaskPriority};
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -38,6 +39,8 @@ pub struct TodoistConfig {
     pub default_project: Option<ProjectSummary>,
     pub default_due_at: Option<PresetDueDate>,
     pub default_priority: Option<TaskPriority>,
+    #[serde(default)]
+    pub default_time_config: Option<TaskTimeConfig>,
 }
 
 impl Default for TodoistConfig {
@@ -48,6 +51,7 @@ impl Default for TodoistConfig {
             default_project: None,
             default_due_at: None,
             default_priority: None,
+            default_time_config: None,
         }
     }
 }
@@ -60,6 +64,7 @@ impl TodoistConfig {
             default_project: None,
             default_due_at: None,
             default_priority: None,
+            default_time_config: None,
         }
     }
 
@@ -70,6 +75,7 @@ impl TodoistConfig {
             default_project: None,
             default_due_at: None,
             default_priority: None,
+            default_time_config: None,
         }
     }
 }

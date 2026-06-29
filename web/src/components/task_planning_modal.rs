@@ -10,6 +10,7 @@ use web_sys::HtmlInputElement;
 use universal_inbox::{
     integration_connection::{
         IntegrationConnection, IntegrationConnectionId,
+        integrations::task_time_config::TaskTimeConfig,
         integrations::ticktick::TickTickConfig,
         integrations::todoist::TodoistConfig,
         provider::{IntegrationProvider, IntegrationProviderKind},
@@ -29,6 +30,7 @@ use crate::{
         integrations::icons::NotificationIcon,
         project_search_field::ProjectSearchField,
         task_manager_picker::{default_task_manager_kind, user_default_task_manager_kind},
+        task_time_config_row::TaskTimeConfigRow,
         ui::{
             ModalFooter, ModalHeader, ModalSourceRow, PriorityOption, PriorityValue,
             TaskAppTileSelect, UISelect, UISelectOption,
@@ -56,6 +58,7 @@ pub fn TaskPlanningModal(
     let mut project: Signal<Option<String>> = use_signal(|| None);
     let mut due_at = use_signal(|| Utc::now().format("%Y-%m-%d").to_string());
     let mut priority = use_signal(|| Some(TaskPriority::P4));
+    let mut time_config: Signal<Option<TaskTimeConfig>> = use_signal(|| None);
     let mut task_title = use_signal(|| "".to_string());
     let mut task_to_plan = use_signal(|| None);
     let mut force_validation = use_signal(|| false);
@@ -219,7 +222,7 @@ pub fn TaskPlanningModal(
                             }
                             if let Some(task) = task_to_plan() {
                                 if let Some(params) = build_planning(
-                                    project(), &due_at.read(), priority(),
+                                    project(), &due_at.read(), priority(), time_config(),
                                 ) {
                                     on_task_planning.call((params, task.id));
                                     close_flyonui_modal("#task-planning-modal");
@@ -228,7 +231,7 @@ pub fn TaskPlanningModal(
                                 }
                             } else if let Some(params) = build_creation(
                                 &task_title.read(), project(), &due_at.read(),
-                                priority(), selected_task_provider_kind(),
+                                priority(), selected_task_provider_kind(), time_config(),
                             ) {
                                 on_task_creation.call(params);
                                 close_flyonui_modal("#task-planning-modal");
@@ -367,6 +370,17 @@ pub fn TaskPlanningModal(
                                     }
                                 }
                             }
+
+                            div { class: "flex items-center justify-between gap-2",
+                                span { class: "text-[11px] font-semibold text-ui-base-muted tracking-[0.01em] inline-flex items-center gap-1",
+                                    "Scheduled time"
+                                    span { class: "font-medium normal-case tracking-normal", "(optional)" }
+                                }
+                                TaskTimeConfigRow {
+                                    value: time_config,
+                                    on_change: move |tc: Option<TaskTimeConfig>| time_config.set(tc),
+                                }
+                            }
                         }
 
                         ModalFooter {
@@ -437,10 +451,25 @@ fn ModalProjectField(
     }
 }
 
+/// Combine a parsed due date with the optional time config: when both a date
+/// and a time config are present, upgrade the date to a timezone-aware
+/// datetime (shared [`DueDate::with_time_config`]). A time config with no due
+/// date has nothing to anchor to and is left to flow as task metadata only.
+fn apply_time_config(
+    due_at: Option<DueDate>,
+    time_config: &Option<TaskTimeConfig>,
+) -> Option<DueDate> {
+    match (due_at, time_config) {
+        (Some(due), Some(tc)) => Some(due.with_time_config(tc)),
+        (due, _) => due,
+    }
+}
+
 fn build_planning(
     selected_project: Option<String>,
     due_at_str: &str,
     priority: Option<TaskPriority>,
+    time_config: Option<TaskTimeConfig>,
 ) -> Option<TaskPlanning> {
     let due_at = if due_at_str.is_empty() {
         Ok(None)
@@ -453,8 +482,9 @@ fn build_planning(
     if let (Ok(project_name), Ok(due_at), Ok(priority)) = (project_name, due_at, priority) {
         return Some(TaskPlanning {
             project_name,
-            due_at,
+            due_at: apply_time_config(due_at, &time_config),
             priority,
+            time_config,
         });
     }
 
@@ -467,6 +497,7 @@ fn build_creation(
     due_at_str: &str,
     priority: Option<TaskPriority>,
     task_provider_kind: Option<IntegrationProviderKind>,
+    time_config: Option<TaskTimeConfig>,
 ) -> Option<TaskCreation> {
     let title = title.trim();
     if title.is_empty() {
@@ -485,9 +516,10 @@ fn build_creation(
             title: title.to_string(),
             body: None,
             project_name: Some(project_name),
-            due_at,
+            due_at: apply_time_config(due_at, &time_config),
             priority,
             task_provider_kind,
+            time_config,
         });
     }
 

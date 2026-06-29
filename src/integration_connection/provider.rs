@@ -19,7 +19,7 @@ use crate::{
             todoist::{TodoistConfig, TodoistContext},
         },
     },
-    task::{TaskCreationConfig, TaskPriority},
+    task::{DueDate, TaskCreationConfig, TaskPriority},
     third_party::item::{ThirdPartyItem, ThirdPartyItemSource, ThirdPartyItemSourceKind},
 };
 
@@ -250,53 +250,69 @@ impl IntegrationProvider {
         &self,
         third_party_item: &ThirdPartyItem,
     ) -> Option<TaskCreationConfig> {
-        let (target_project, default_due_at, default_priority, task_manager_provider_kind) =
-            match self {
-                IntegrationProvider::Slack { config, .. } => {
-                    match third_party_item.get_third_party_item_source_kind() {
-                        ThirdPartyItemSourceKind::SlackReaction => {
-                            let SlackConfig {
-                                reaction_config:
-                                    SlackReactionConfig {
-                                        sync_type:
-                                            SlackSyncType::AsTasks(SlackSyncTaskConfig {
-                                                target_project,
-                                                default_due_at,
-                                                default_priority,
-                                                task_manager_provider_kind,
-                                            }),
-                                        ..
-                                    },
-                                ..
-                            } = config
-                            else {
-                                return None;
-                            };
+        let (
+            target_project,
+            default_due_at,
+            default_priority,
+            task_manager_provider_kind,
+            default_time_config,
+        ) = match self {
+            IntegrationProvider::Slack { config, .. } => {
+                match third_party_item.get_third_party_item_source_kind() {
+                    ThirdPartyItemSourceKind::SlackReaction => {
+                        let SlackConfig {
+                            reaction_config:
+                                SlackReactionConfig {
+                                    sync_type:
+                                        SlackSyncType::AsTasks(SlackSyncTaskConfig {
+                                            target_project,
+                                            default_due_at,
+                                            default_priority,
+                                            task_manager_provider_kind,
+                                            default_time_config,
+                                        }),
+                                    ..
+                                },
+                            ..
+                        } = config
+                        else {
+                            return None;
+                        };
 
-                            (
-                                target_project.as_ref(),
-                                default_due_at.as_ref(),
-                                default_priority,
-                                task_manager_provider_kind.as_ref(),
-                            )
-                        }
-                        _ => return None,
+                        (
+                            target_project.as_ref(),
+                            default_due_at.as_ref(),
+                            default_priority,
+                            task_manager_provider_kind.as_ref(),
+                            default_time_config.as_ref(),
+                        )
                     }
+                    _ => return None,
                 }
-                IntegrationProvider::Linear { config } => (
-                    config.sync_task_config.target_project.as_ref(),
-                    config.sync_task_config.default_due_at.as_ref(),
-                    &TaskPriority::default(),
-                    config.sync_task_config.task_manager_provider_kind.as_ref(),
-                ),
-                _ => return None,
-            };
+            }
+            IntegrationProvider::Linear { config } => (
+                config.sync_task_config.target_project.as_ref(),
+                config.sync_task_config.default_due_at.as_ref(),
+                &TaskPriority::default(),
+                config.sync_task_config.task_manager_provider_kind.as_ref(),
+                config.sync_task_config.default_time_config.as_ref(),
+            ),
+            _ => return None,
+        };
+
+        let due_at = default_due_at
+            .map(|due_at| due_at.clone().into())
+            .map(|due: DueDate| match default_time_config {
+                Some(time_config) => due.with_time_config(time_config),
+                None => due,
+            });
 
         Some(TaskCreationConfig {
             project_name: target_project.map(|project| project.name.clone()),
-            due_at: default_due_at.map(|due_at| due_at.clone().into()),
+            due_at,
             priority: *default_priority,
             task_manager_provider_kind: task_manager_provider_kind.copied(),
+            time_config: default_time_config.cloned(),
         })
     }
 }

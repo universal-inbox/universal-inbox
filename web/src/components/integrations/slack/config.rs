@@ -11,9 +11,12 @@ use universal_inbox::{
     integration_connection::{
         IntegrationConnectionId,
         config::IntegrationConnectionConfig,
-        integrations::slack::{
-            SlackConfig, SlackContext, SlackEmojiSuggestion, SlackMessageConfig,
-            SlackReactionConfig, SlackSyncTaskConfig, SlackSyncType,
+        integrations::{
+            slack::{
+                SlackConfig, SlackContext, SlackEmojiSuggestion, SlackMessageConfig,
+                SlackReactionConfig, SlackSyncTaskConfig, SlackSyncType,
+            },
+            task_time_config::TaskTimeConfig,
         },
         provider::IntegrationProviderKind,
     },
@@ -28,6 +31,7 @@ use crate::{
         project_search_field::ProjectSearchField,
         settings_controls::{SegmentedChoice, SegmentedChoiceOption, SettingRow},
         task_manager_picker::{ProviderIcon, resolve_task_manager_kind},
+        task_time_config_row::TaskTimeConfigRow,
         ui::{
             TaskMgrOption, TaskMgrValue, ToggleSize, ToggleSwitch, UISelect, UISelectOption,
             preset_due_date_options, priority_select_renderers, task_priority_options,
@@ -143,6 +147,7 @@ fn SlackReactionConfiguration(
     let mut default_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
     let mut default_task_manager_provider_kind: Signal<Option<IntegrationProviderKind>> =
         use_signal(|| None);
+    let mut default_time_config: Signal<Option<TaskTimeConfig>> = use_signal(|| None);
     let mut task_config_enabled = use_signal(|| false);
     use_memo(move || {
         *default_emoji.write() = config().reaction_config.reaction_name.0.clone();
@@ -156,6 +161,9 @@ fn SlackReactionConfiguration(
             default_due_at.write().clone_from(&config.default_due_at);
             *default_project.write() = config.target_project;
             *default_task_manager_provider_kind.write() = config.task_manager_provider_kind;
+            default_time_config
+                .write()
+                .clone_from(&config.default_time_config);
             *task_config_enabled.write() = ui_model.read().is_task_actions_enabled;
         } else {
             *task_config_enabled.write() = false;
@@ -285,6 +293,7 @@ fn SlackReactionConfiguration(
         Tooltip {
             placement: TooltipPlacement::Bottom,
             disabled: !as_tasks_disabled,
+            full_width: true,
             tooltip_class: "tooltip-error",
             text: "A task management service must be connected to enable this feature",
 
@@ -410,6 +419,32 @@ fn SlackReactionConfiguration(
                     name: "task-priority-input".to_string(),
                     render_value: priority_render_value,
                     render_option: priority_render_option,
+                }
+            }
+
+            SettingRow {
+                label: rsx! { "Scheduled time to assign to synchronized tasks" },
+                TaskTimeConfigRow {
+                    value: default_time_config,
+                    disabled: !ui_model.read().is_task_actions_enabled,
+                    on_change: move |default_time_config: Option<TaskTimeConfig>| {
+                        on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
+                            reaction_config: SlackReactionConfig {
+                                sync_type: SlackSyncType::AsTasks(match &config().reaction_config.sync_type {
+                                    SlackSyncType::AsTasks(task_config) => SlackSyncTaskConfig {
+                                        default_time_config,
+                                        ..task_config.clone()
+                                    },
+                                    _ => SlackSyncTaskConfig {
+                                        default_time_config,
+                                        ..Default::default()
+                                    },
+                                }),
+                                ..config().reaction_config
+                            },
+                            ..config()
+                        }));
+                    },
                 }
             }
 

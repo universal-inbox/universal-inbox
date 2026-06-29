@@ -4,7 +4,8 @@ use std::{
 };
 
 use anyhow::anyhow;
-use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, ParseError, TimeDelta, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, ParseError, TimeDelta, TimeZone, Utc};
+use chrono_tz::Tz;
 use clap::ValueEnum;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use schemars::JsonSchema;
@@ -16,6 +17,7 @@ use uuid::Uuid;
 
 use crate::{
     HasHtmlUrl,
+    integration_connection::integrations::task_time_config::TaskTimeConfig,
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::Notification,
     task::integrations::todoist::{DEFAULT_TODOIST_HTML_URL, TODOIST_INBOX_PROJECT},
@@ -343,6 +345,32 @@ impl From<PresetDueDate> for DueDate {
     }
 }
 
+impl DueDate {
+    /// Upgrade this due date to a timezone-aware datetime by applying a
+    /// [`TaskTimeConfig`]: keep the date part, attach the configured
+    /// time-of-day interpreted in the configured IANA timezone, and store the
+    /// result as UTC ([`DueDate::DateTimeWithTz`]).
+    ///
+    /// Unknown timezone strings fall back to UTC. A nonexistent local time
+    /// (spring-forward DST gap) falls back to interpreting the wall-clock time
+    /// as UTC rather than dropping the time entirely.
+    pub fn with_time_config(self, time_config: &TaskTimeConfig) -> Self {
+        let date = match self {
+            DueDate::Date(date) => date,
+            DueDate::DateTime(datetime) => datetime.date(),
+            DueDate::DateTimeWithTz(datetime) => datetime.date_naive(),
+        };
+        let naive = date.and_time(time_config.time);
+        let tz: Tz = time_config.timezone.parse().unwrap_or(chrono_tz::UTC);
+        let utc = tz
+            .from_local_datetime(&naive)
+            .earliest()
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|| DateTime::from_naive_utc_and_offset(naive, Utc));
+        DueDate::DateTimeWithTz(utc)
+    }
+}
+
 impl From<NaiveDate> for DueDate {
     fn from(date: NaiveDate) -> Self {
         DueDate::Date(date)
@@ -366,6 +394,8 @@ pub struct TaskCreation {
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
     pub task_provider_kind: Option<IntegrationProviderKind>,
+    #[serde(default)]
+    pub time_config: Option<TaskTimeConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -374,6 +404,8 @@ pub struct TaskCreationConfig {
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
     pub task_manager_provider_kind: Option<IntegrationProviderKind>,
+    #[serde(default)]
+    pub time_config: Option<TaskTimeConfig>,
 }
 
 #[serde_as]
@@ -427,6 +459,8 @@ pub struct TaskPlanning {
     pub project_name: String,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
+    #[serde(default)]
+    pub time_config: Option<TaskTimeConfig>,
 }
 
 #[derive(
@@ -643,6 +677,95 @@ mod tests {
         #[rstest]
         fn test_parse_due_date_for_wrong_date_format() {
             assert_eq!("5".parse::<TaskPriority>().is_err(), true);
+        }
+    }
+
+    mod with_time_config {
+        use super::super::*;
+        use chrono::NaiveTime;
+        use pretty_assertions::assert_eq;
+        use rstest::*;
+
+        fn cfg(time: NaiveTime, timezone: &str) -> TaskTimeConfig {
+            TaskTimeConfig {
+                time,
+                duration_minutes: None,
+                timezone: timezone.to_string(),
+            }
+        }
+
+        #[rstest]
+        fn test_applies_time_in_timezone_as_utc() {
+            // 09:00 in Europe/Paris (UTC+1 in January) -> 08:00 UTC
+            let due =
+                DueDate::Date(NaiveDate::from_ymd_opt(2024, 1, 10).unwrap()).with_time_config(
+                    &cfg(NaiveTime::from_hms_opt(9, 0, 0).unwrap(), "Europe/Paris"),
+                );
+            assert_eq!(
+                due,
+                DueDate::DateTimeWithTz(DateTime::from_naive_utc_and_offset(
+                    NaiveDate::from_ymd_opt(2024, 1, 10)
+                        .unwrap()
+                        .and_hms_opt(8, 0, 0)
+                        .unwrap(),
+                    Utc
+                ))
+            );
+        }
+
+        #[rstest]
+        fn test_utc_timezone_keeps_wall_clock() {
+            let due = DueDate::Date(NaiveDate::from_ymd_opt(2024, 6, 1).unwrap())
+                .with_time_config(&cfg(NaiveTime::from_hms_opt(14, 30, 0).unwrap(), "UTC"));
+            assert_eq!(
+                due,
+                DueDate::DateTimeWithTz(DateTime::from_naive_utc_and_offset(
+                    NaiveDate::from_ymd_opt(2024, 6, 1)
+                        .unwrap()
+                        .and_hms_opt(14, 30, 0)
+                        .unwrap(),
+                    Utc
+                ))
+            );
+        }
+
+        #[rstest]
+        fn test_unknown_timezone_falls_back_to_utc() {
+            let due = DueDate::Date(NaiveDate::from_ymd_opt(2024, 6, 1).unwrap()).with_time_config(
+                &cfg(NaiveTime::from_hms_opt(10, 0, 0).unwrap(), "Not/AZone"),
+            );
+            assert_eq!(
+                due,
+                DueDate::DateTimeWithTz(DateTime::from_naive_utc_and_offset(
+                    NaiveDate::from_ymd_opt(2024, 6, 1)
+                        .unwrap()
+                        .and_hms_opt(10, 0, 0)
+                        .unwrap(),
+                    Utc
+                ))
+            );
+        }
+
+        #[rstest]
+        fn test_replaces_existing_time_part() {
+            // Starting from a DateTime, only the date is kept; the new time wins.
+            let due = DueDate::DateTime(
+                NaiveDate::from_ymd_opt(2024, 6, 1)
+                    .unwrap()
+                    .and_hms_opt(23, 59, 0)
+                    .unwrap(),
+            )
+            .with_time_config(&cfg(NaiveTime::from_hms_opt(8, 0, 0).unwrap(), "UTC"));
+            assert_eq!(
+                due,
+                DueDate::DateTimeWithTz(DateTime::from_naive_utc_and_offset(
+                    NaiveDate::from_ymd_opt(2024, 6, 1)
+                        .unwrap()
+                        .and_hms_opt(8, 0, 0)
+                        .unwrap(),
+                    Utc
+                ))
+            );
         }
     }
 

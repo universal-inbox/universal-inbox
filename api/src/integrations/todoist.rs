@@ -34,8 +34,8 @@ use universal_inbox::{
     },
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
-        CreateOrUpdateTaskRequest, ProjectSummary, TaskCreation, TaskCreationConfig, TaskSource,
-        TaskSourceKind, TaskStatus,
+        CreateOrUpdateTaskRequest, DueDate, ProjectSummary, TaskCreation, TaskCreationConfig,
+        TaskSource, TaskSourceKind, TaskStatus,
         integrations::todoist::{TODOIST_INBOX_PROJECT, TodoistProject},
         service::TaskPatch,
     },
@@ -121,6 +121,28 @@ pub struct TodoistSyncCommandItemAddArgs {
     pub project_id: Option<String>,
     pub due: Option<TodoistItemDue>,
     pub priority: TodoistItemPriority,
+    /// Task duration as a `{ amount, unit }` object (Todoist's Sync API shape).
+    /// Only honored when `due` carries a time-of-day. Omitted entirely when
+    /// no duration is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration: Option<TodoistItemDuration>,
+}
+
+/// Unit for a [`TodoistItemDuration`]. Todoist's Sync API accepts only
+/// `"minute"` or `"day"`.
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum TodoistItemDurationUnit {
+    Minute,
+    Day,
+}
+
+/// Task duration in Todoist's Sync API representation: an amount plus a unit
+/// (`minute` or `day`).
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistItemDuration {
+    pub amount: u32,
+    pub unit: TodoistItemDurationUnit,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -910,6 +932,24 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
         } else {
             None
         };
+        // Build the due object, attaching the IANA timezone when the due is a
+        // UTC datetime. Todoist treats a `...Z` date as a *fixed-timezone* due
+        // and rejects it (error 20) unless `timezone` is also set.
+        let due = task.due_at.as_ref().map(|due_at| {
+            let mut todoist_due: TodoistItemDue = due_at.into();
+            if let (DueDate::DateTimeWithTz(_), Some(time_config)) = (due_at, &task.time_config) {
+                todoist_due.timezone = Some(time_config.timezone.clone());
+            }
+            todoist_due
+        });
+        let duration = task
+            .time_config
+            .as_ref()
+            .and_then(|tc| tc.duration_minutes)
+            .map(|amount| TodoistItemDuration {
+                amount,
+                unit: TodoistItemDurationUnit::Minute,
+            });
         let sync_result = self
             .send_sync_commands(
                 vec![TodoistSyncCommand::ItemAdd {
@@ -919,8 +959,9 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
                         content: task.title.clone(),
                         description: task.body.clone(),
                         project_id,
-                        due: task.due_at.as_ref().map(|due| due.into()),
+                        due,
                         priority: task.priority.into(),
+                        duration,
                     },
                 }],
                 &access_token,
@@ -1254,6 +1295,68 @@ mod tests {
                 }
             })
             .to_string()
+        );
+    }
+
+    #[rstest]
+    fn test_todoist_sync_command_item_add_args_serialization_with_duration_and_fixed_tz_due() {
+        let due_utc = chrono::DateTime::from_naive_utc_and_offset(
+            NaiveDate::from_ymd_opt(2026, 6, 6)
+                .unwrap()
+                .and_hms_opt(16, 0, 0)
+                .unwrap(),
+            chrono::Utc,
+        );
+        assert_eq!(
+            serde_json::to_value(TodoistSyncCommandItemAddArgs {
+                content: "Task".to_string(),
+                description: None,
+                project_id: Some("p1".to_string()),
+                due: Some(TodoistItemDue {
+                    string: "".to_string(),
+                    date: DueDate::DateTimeWithTz(due_utc),
+                    is_recurring: false,
+                    timezone: Some("Europe/Paris".to_string()),
+                    lang: "en".to_string(),
+                }),
+                priority: TodoistItemPriority::P1,
+                duration: Some(TodoistItemDuration {
+                    amount: 60,
+                    unit: TodoistItemDurationUnit::Minute,
+                }),
+            })
+            .unwrap(),
+            json!({
+                "content": "Task",
+                "description": null,
+                "project_id": "p1",
+                "due": {
+                    "string": "",
+                    "date": "2026-06-06T16:00:00Z",
+                    "is_recurring": false,
+                    "timezone": "Europe/Paris",
+                    "lang": "en"
+                },
+                "priority": 1,
+                "duration": { "amount": 60, "unit": "minute" }
+            })
+        );
+    }
+
+    #[rstest]
+    fn test_todoist_sync_command_item_add_args_serialization_omits_absent_duration() {
+        let value = serde_json::to_value(TodoistSyncCommandItemAddArgs {
+            content: "Task".to_string(),
+            description: None,
+            project_id: None,
+            due: None,
+            priority: TodoistItemPriority::P4,
+            duration: None,
+        })
+        .unwrap();
+        assert!(
+            value.get("duration").is_none(),
+            "duration must be omitted when None, got: {value}"
         );
     }
 
