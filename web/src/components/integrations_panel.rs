@@ -336,6 +336,22 @@ pub fn IntegrationSettings(
                 "Connected — ready to receive events from Slack".to_string(),
                 None::<DateTime<Utc>>,
             )),
+            // Failure arms must come before success arms so a task-sync failure
+            // is not masked by a successful notification sync (or vice versa).
+            Some(Some(IntegrationConnection {
+                status: IntegrationConnectionStatus::Validated,
+                last_notifications_sync_failure_message: Some(message),
+                ..
+            })) => Some((
+                "error",
+                format!("Notifications sync issue: {message}"),
+                None,
+            )),
+            Some(Some(IntegrationConnection {
+                status: IntegrationConnectionStatus::Validated,
+                last_tasks_sync_failure_message: Some(message),
+                ..
+            })) => Some(("error", format!("Tasks sync issue: {message}"), None)),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
                 last_notifications_sync_scheduled_at: Some(scheduled_at),
@@ -390,20 +406,6 @@ pub fn IntegrationSettings(
                 ),
                 Some(scheduled_at),
             )),
-            Some(Some(IntegrationConnection {
-                status: IntegrationConnectionStatus::Validated,
-                last_notifications_sync_failure_message: Some(message),
-                ..
-            })) => Some((
-                "error",
-                format!("Notifications sync issue: {message}"),
-                None,
-            )),
-            Some(Some(IntegrationConnection {
-                status: IntegrationConnectionStatus::Validated,
-                last_tasks_sync_failure_message: Some(message),
-                ..
-            })) => Some(("error", format!("Tasks sync issue: {message}"), None)),
             Some(Some(
                 c @ IntegrationConnection {
                     status: IntegrationConnectionStatus::Validated,
@@ -578,6 +580,7 @@ pub fn IntegrationSettings(
         Card {
             variant: CardVariant::Integration,
             expanded: card_expanded,
+            id: format!("integration-card-{kind}"),
             class: card_modifier_class,
 
             if has_connection {

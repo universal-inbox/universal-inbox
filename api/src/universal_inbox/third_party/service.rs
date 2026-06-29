@@ -503,6 +503,9 @@ impl ThirdPartyItemService {
             due_at: task.due_at.clone(),
             priority: task.priority,
             task_provider_kind: None,
+            // The source task's `due_at` already carries any time-of-day; there
+            // is no separate time config to apply when mirroring to a sink.
+            time_config: None,
         };
 
         if let Some(sink_item) = &task.sink_item

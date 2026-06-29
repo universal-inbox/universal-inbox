@@ -27,7 +27,7 @@ use universal_inbox::{
         NotificationWithTask,
         service::{InvitationPatch, NotificationPatch},
     },
-    task::{Task, TaskCreation, TaskId, TaskStatus, service::TaskPatch},
+    task::{DueDate, Task, TaskCreation, TaskId, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::slack::{SlackReaction, SlackThread},
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId, ThirdPartyItemKind},
@@ -1073,43 +1073,62 @@ impl NotificationService {
                 )));
             };
 
-            let (default_project, default_due_at, default_priority) = match integration_connection
-                .provider
-            {
-                IntegrationProvider::Todoist {
-                    config:
-                        TodoistConfig {
-                            default_project,
-                            default_due_at,
-                            default_priority,
-                            ..
-                        },
-                    ..
-                } => (default_project, default_due_at, default_priority),
-                IntegrationProvider::TickTick {
-                    config:
-                        TickTickConfig {
-                            default_project,
-                            default_due_at,
-                            default_priority,
-                            ..
-                        },
-                    ..
-                } => (default_project, default_due_at, default_priority),
-                _ => {
-                    return Err(UniversalInboxError::Unexpected(anyhow!(
-                        "Cannot create task from notification {notification_id}: unsupported provider {resolved_provider_kind}"
-                    )));
-                }
-            };
+            let (default_project, default_due_at, default_priority, default_time_config) =
+                match integration_connection.provider {
+                    IntegrationProvider::Todoist {
+                        config:
+                            TodoistConfig {
+                                default_project,
+                                default_due_at,
+                                default_priority,
+                                default_time_config,
+                                ..
+                            },
+                        ..
+                    } => (
+                        default_project,
+                        default_due_at,
+                        default_priority,
+                        default_time_config,
+                    ),
+                    IntegrationProvider::TickTick {
+                        config:
+                            TickTickConfig {
+                                default_project,
+                                default_due_at,
+                                default_priority,
+                                default_time_config,
+                                ..
+                            },
+                        ..
+                    } => (
+                        default_project,
+                        default_due_at,
+                        default_priority,
+                        default_time_config,
+                    ),
+                    _ => {
+                        return Err(UniversalInboxError::Unexpected(anyhow!(
+                            "Cannot create task from notification {notification_id}: unsupported provider {resolved_provider_kind}"
+                        )));
+                    }
+                };
+
+            let due_at = default_due_at
+                .map(DueDate::from)
+                .map(|due| match &default_time_config {
+                    Some(time_config) => due.with_time_config(time_config),
+                    None => due,
+                });
 
             TaskCreation {
                 title: notification.title.clone(),
                 body: None,
                 project_name: default_project.map(|p| p.name),
-                due_at: default_due_at.map(|d| d.into()),
+                due_at,
                 priority: default_priority.unwrap_or_default(),
                 task_provider_kind: Some(resolved_provider_kind),
+                time_config: default_time_config,
             }
         };
 

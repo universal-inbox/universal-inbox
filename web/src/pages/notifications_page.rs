@@ -234,6 +234,7 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
                             // renders both panes side-by-side regardless. `!important`
                             // (`!` suffix) wins against the baseline `flex` so the
                             // responsive `hidden!`/`flex!` toggle is decisive.
+                            id: "detail-panel",
                             class: "flex-1 flex flex-col bg-ui-base-200 overflow-hidden min-w-0 max-md:hidden! max-md:[.app-layout.show-detail_&]:flex! max-md:[.app-layout.show-detail_&]:flex-1!",
                             NotificationPreview {
                                 notification: notification.clone(),

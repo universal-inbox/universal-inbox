@@ -13,6 +13,8 @@
 - Internalize OAuth for GitHub, Slack, Todoist, Google Mail, Google Calendar, and Google Drive (replace Nango).
 - Add TickTick integration with internalized OAuth2 (PKCE), task sync, plan/link flows, and emoji-aware task completion
 - Support hosted MCP clients (Claude, ChatGPT, Gemini, Mistral) via Client ID Metadata Document (CIMD) discovery and an allow-listed Dynamic Client Registration flow (MCP 2025-11-25 auth spec)
+- Add per-task scheduled time, duration, and timezone configuration in integration settings and the planning modal
+- Sync per-task time, duration, and timezone to TickTick (duration modeled as a start/due time range)
 
 ### Changed
 

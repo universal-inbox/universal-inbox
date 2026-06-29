@@ -20,6 +20,7 @@ doctest = false
 anyhow = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
+chrono-tz = { workspace = true }
 clap = { workspace = true }
 email_address = { workspace = true }
 emojis = { workspace = true }
@@ -53,6 +54,7 @@ chrono = { version = "0.4.0", default-features = false, features = [
   "clock",
   "std",
 ] }
+chrono-tz = { version = "0.10" }
 clap = { version = "4.1.0", features = ["derive"] }
 email_address = { version = "0.2" }
 emojis = { version = "0.8.0" }

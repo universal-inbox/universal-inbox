@@ -1,13 +1,15 @@
+use chrono::{NaiveTime, TimeZone, Utc};
 use rstest::*;
 
 use universal_inbox::{
     HasHtmlUrl,
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::github::GithubConfig,
-        integrations::ticktick::TickTickConfig, provider::IntegrationProviderKind,
+        integrations::task_time_config::TaskTimeConfig, integrations::ticktick::TickTickConfig,
+        provider::IntegrationProviderKind,
     },
     notification::{Notification, NotificationStatus, NotificationWithTask},
-    task::{Task, TaskCreation, TaskStatus, service::TaskPatch},
+    task::{DueDate, Task, TaskCreation, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::ticktick::TickTickItem,
         item::{ThirdPartyItem, ThirdPartyItemData},
@@ -303,6 +305,7 @@ mod patch_task {
                 due_at: ticktick_item.get_due_date(),
                 priority: ticktick_item.priority.into(),
                 task_provider_kind: Some(IntegrationProviderKind::TickTick),
+                time_config: None,
             }),
         )
         .await;
@@ -384,6 +387,148 @@ mod patch_task {
             deleted_notification.task.as_ref().map(|t| t.id),
             Some(new_task_id)
         );
+    }
+
+    // A TaskCreation carrying a `time_config` (time-of-day, duration, timezone)
+    // must reach the TickTick create request as `timeZone` plus a
+    // `startDate`..`dueDate` range (TickTick has no duration field). The mock
+    // rejects any request body that doesn't carry these schedule fields, so a
+    // mismatch makes task creation fail.
+    #[rstest]
+    #[tokio::test]
+    async fn test_create_ticktick_task_from_notification_with_time_config(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
+        ticktick_item: Box<TickTickItem>,
+        ticktick_projects_response: Vec<TickTickProject>,
+        github_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            github_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+
+        let notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+
+        let project = "Project2".to_string();
+        let project_id = "tt_proj_2222".to_string();
+        let ticktick_item = Box::new(TickTickItem {
+            project_id: project_id.clone(),
+            ..*ticktick_item
+        });
+        let body = Some(format!(
+            "- [{}]({})",
+            notification.title,
+            notification.get_html_url().as_ref()
+        ));
+        let ticktick_integration_connection = create_ticktick_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings,
+            IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+            None,
+        )
+        .await;
+
+        // Mock GitHub notification deletion
+        wiremock::Mock::given(wiremock::matchers::method("DELETE"))
+            .and(wiremock::matchers::path("/notifications/threads/1"))
+            .respond_with(wiremock::ResponseTemplate::new(205))
+            .mount(&app.app.github_mock_server)
+            .await;
+
+        // Mock TickTick list projects
+        mock_ticktick_list_projects_service(
+            &app.app.ticktick_mock_server,
+            &ticktick_projects_response,
+        )
+        .await;
+
+        // A timezone-aware due at 12:00 UTC; a 30-minute duration must produce a
+        // dueDate of 12:30 UTC.
+        let due_at = DueDate::DateTimeWithTz(Utc.with_ymd_and_hms(2026, 6, 29, 12, 0, 0).unwrap());
+        let time_config = TaskTimeConfig {
+            time: NaiveTime::from_hms_opt(14, 0, 0).unwrap(),
+            duration_minutes: Some(30),
+            timezone: "Europe/Paris".to_string(),
+        };
+
+        let create_response = TickTickCreateTaskResponse {
+            id: ticktick_item.id.clone(),
+            project_id: ticktick_item.project_id.clone(),
+            title: ticktick_item.title.clone(),
+            content: ticktick_item.content.clone(),
+            desc: ticktick_item.desc.clone(),
+            all_day: ticktick_item.all_day,
+            start_date: ticktick_item.start_date,
+            due_date: ticktick_item.due_date,
+            time_zone: ticktick_item.time_zone.clone(),
+            priority: ticktick_item.priority,
+            status: ticktick_item.status,
+            tags: ticktick_item.tags.clone(),
+        };
+        crate::helpers::task::ticktick::mock_ticktick_create_task_service_with_schedule(
+            &app.app.ticktick_mock_server,
+            &ticktick_item.title,
+            &project_id,
+            ticktick_item.priority,
+            "Europe/Paris",
+            "2026-06-29T12:00:00Z",
+            "2026-06-29T12:30:00Z",
+            &create_response,
+        )
+        .await;
+
+        // Mock TickTick get task (used to fetch the full item after creation)
+        crate::helpers::task::ticktick::mock_ticktick_get_task_service(
+            &app.app.ticktick_mock_server,
+            &ticktick_item.project_id,
+            &ticktick_item.id,
+            &ticktick_item,
+        )
+        .await;
+
+        let notification_with_task = create_task_from_notification(
+            &app.client,
+            &app.app.api_address,
+            notification.id,
+            Some(TaskCreation {
+                title: ticktick_item.title.clone(),
+                body,
+                project_name: Some(project.clone()),
+                due_at: Some(due_at),
+                priority: ticktick_item.priority.into(),
+                task_provider_kind: Some(IntegrationProviderKind::TickTick),
+                time_config: Some(time_config),
+            }),
+        )
+        .await;
+
+        // Task creation only succeeds if the create request body matched the
+        // schedule mock above.
+        assert!(
+            notification_with_task
+                .as_ref()
+                .and_then(|nwt| nwt.task.as_ref())
+                .is_some(),
+            "expected a task to be created with the configured schedule"
+        );
+        let _ = ticktick_integration_connection;
     }
 
     // Regression test for universal-inbox-4mn: linking a notification to an

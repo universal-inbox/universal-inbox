@@ -26,6 +26,7 @@ This option is particularly useful if you use Todoist's quick-add features or em
 ```
 
 - **Default tasks settings**: This allows you to create a Todoist task from a notification with a single click or key stroke without the need to enter parameters each time.
+  - **Scheduled time for new tasks**: Optionally attach a time of day to the task's due date. Pick a time (e.g. `09:00`), an optional duration (15 min up to 2h), and the IANA timezone the time is expressed in (defaults to your browser timezone). The bare due date is then upgraded to a precise due datetime and the duration is synced to Todoist alongside it. Leave it _Not set_ to keep due dates without a time.
 
 ## Available Actions
 

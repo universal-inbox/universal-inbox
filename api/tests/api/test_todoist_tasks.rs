@@ -439,6 +439,7 @@ mod patch_task {
                 due_at,
                 priority: todoist_item.priority.into(),
                 task_provider_kind: None,
+                time_config: None,
             }),
         )
         .await;

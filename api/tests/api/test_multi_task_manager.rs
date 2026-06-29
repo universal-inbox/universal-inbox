@@ -254,6 +254,7 @@ mod create_task_with_explicit_provider {
                 due_at: ticktick_item.get_due_date(),
                 priority: ticktick_item.priority.into(),
                 task_provider_kind: Some(IntegrationProviderKind::TickTick),
+                time_config: None,
             }),
         )
         .await;

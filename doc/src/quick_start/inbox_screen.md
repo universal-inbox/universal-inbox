@@ -54,7 +54,7 @@ To use the task management features below, you must first connect a task managem
 ![create task modal](images/create-task-modal.png =350x center)
 
 {:.icon-text}
-![create task button](images/create-task-button.png =30x30) Convert to Task: Transform your notification into an actionable task in your task management tool. After clicking this button, you can customize the task details (title, project, due date, priority) before creation.
+![create task button](images/create-task-button.png =30x30) Convert to Task: Transform your notification into an actionable task in your task management tool. After clicking this button, you can customize the task details (title, project, due date, scheduled time, priority) before creation. The scheduled time lets you attach a time of day, optional duration, and timezone on top of the due date.
 
 {:.icon-text}
 ![create task with defaults button](images/create-task-with-defaults-button.png =30x30) Convert to Task with default settings: Transform your notification into an actionable task in your task management tool. Default task details are automatically set from Todoist settings.

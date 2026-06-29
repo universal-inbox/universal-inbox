@@ -38,6 +38,7 @@ You must choose one of the following synchronization methods:
   - **Project Assignment**: Optionally assign tasks to a specific project
   - **Due Date**: Set a default due date for tasks created from reactions
   - **Priority**: Set a default priority (P1–P4) for the new task
+  - **Scheduled time for new tasks**: Optionally attach a time of day to the due date, a time, an optional duration (15 min up to 2h), and the IANA timezone it is expressed in (defaults to your browser timezone)
   - **Task manager**: If both Todoist and TickTick are connected, pick which one receives Slack-reaction tasks
 
 ### Message Mentions

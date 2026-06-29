@@ -38,6 +38,7 @@ pub mod task_link_modal;
 pub mod task_manager_picker;
 pub mod task_planning_modal;
 pub mod task_preview;
+pub mod task_time_config_row;
 pub mod tasks_list;
 pub mod thread;
 pub mod threaded_message;

@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use slack_morphism::{SlackReactionName, SlackTeamId};
 
+use crate::integration_connection::integrations::task_time_config::TaskTimeConfig;
 use crate::integration_connection::provider::IntegrationProviderKind;
 use crate::task::{PresetDueDate, ProjectSummary, TaskPriority};
 
@@ -126,6 +127,8 @@ pub struct SlackSyncTaskConfig {
     pub default_due_at: Option<PresetDueDate>,
     pub default_priority: TaskPriority,
     pub task_manager_provider_kind: Option<IntegrationProviderKind>,
+    #[serde(default)]
+    pub default_time_config: Option<TaskTimeConfig>,
 }
 
 impl Default for SlackSyncTaskConfig {
@@ -135,6 +138,7 @@ impl Default for SlackSyncTaskConfig {
             default_due_at: None,
             default_priority: TaskPriority::P4,
             task_manager_provider_kind: None,
+            default_time_config: None,
         }
     }
 }

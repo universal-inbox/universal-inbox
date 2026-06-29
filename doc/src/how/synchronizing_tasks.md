@@ -65,6 +65,7 @@ To ensure accurate synchronization, Universal Inbox maps fields between differen
 - **Task Title**: Maintained across platforms with source context
 - **Task Status**: Completion status is synchronized bidirectionally
 - **Task Priority**: When available, priority levels are mapped between systems
+- **Task Due Date & Time**: A due date can carry an optional scheduled time of day, duration, and timezone. When set, the bare due date is upgraded to a precise, timezone-aware due datetime, synced to Todoist as a fixed-timezone due plus a duration. Configure it per integration (a default applied to every synchronized task) or per task in the task creation modal. See the [Todoist](../config/setup/todoist.md) settings for details.
 - **Task Details**: Description, notes, and metadata are preserved
 
 ## Task Lifecycle

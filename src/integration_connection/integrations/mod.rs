@@ -4,5 +4,6 @@ pub mod google_drive;
 pub mod google_mail;
 pub mod linear;
 pub mod slack;
+pub mod task_time_config;
 pub mod ticktick;
 pub mod todoist;

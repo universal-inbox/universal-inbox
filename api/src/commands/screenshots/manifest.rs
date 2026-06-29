@@ -98,26 +98,28 @@ const LINEAR_ROW: &str = ".ui-nrow:has([class*='logos--linear-icon'])";
 const GCAL_ROW: &str = ".ui-nrow:has([class*='logos--google-calendar'])";
 const ANY_ROW: &str = "#notifications-list .ui-nrow";
 
-// Integration card selectors use `.card-name` text content so they match the
-// card regardless of whether it's connected (header is a clickable toggle) or
-// disconnected (header is a "Connect" call-to-action). The header selectors
-// reuse the aria-label set on the toggle button by `IntegrationSettings` — only
-// meaningful when the connection is Validated/Failing.
-const GITHUB_CARD: &str = ".integration-card:has(.card-name:text-is(\"Github\"))";
+// Integration card selectors anchor on the stable `#integration-card-{Kind}` id
+// emitted by the integration `Card` (the suffix is the `IntegrationProviderKind`
+// variant name), so they match the card regardless of whether it's connected
+// (header is a clickable toggle) or disconnected (header is a "Connect"
+// call-to-action). The header selectors reuse the aria-label set on the toggle
+// button by `IntegrationSettings` — only meaningful when the connection is
+// Validated/Failing.
+const GITHUB_CARD: &str = "#integration-card-Github";
 const GITHUB_CARD_HEADER: &str = "[aria-label=\"Toggle Github settings\"]";
-const LINEAR_CARD: &str = ".integration-card:has(.card-name:text-is(\"Linear\"))";
+const LINEAR_CARD: &str = "#integration-card-Linear";
 const LINEAR_CARD_HEADER: &str = "[aria-label=\"Toggle Linear settings\"]";
-const SLACK_CARD: &str = ".integration-card:has(.card-name:text-is(\"Slack\"))";
+const SLACK_CARD: &str = "#integration-card-Slack";
 const SLACK_CARD_HEADER: &str = "[aria-label=\"Toggle Slack settings\"]";
-const GMAIL_CARD: &str = ".integration-card:has(.card-name:text-is(\"Google Mail\"))";
+const GMAIL_CARD: &str = "#integration-card-GoogleMail";
 const GMAIL_CARD_HEADER: &str = "[aria-label=\"Toggle Google Mail settings\"]";
-const GCAL_CARD: &str = ".integration-card:has(.card-name:text-is(\"Google Calendar\"))";
+const GCAL_CARD: &str = "#integration-card-GoogleCalendar";
 const GCAL_CARD_HEADER: &str = "[aria-label=\"Toggle Google Calendar settings\"]";
-const GDRIVE_CARD: &str = ".integration-card:has(.card-name:text-is(\"Google Drive\"))";
+const GDRIVE_CARD: &str = "#integration-card-GoogleDrive";
 const GDRIVE_CARD_HEADER: &str = "[aria-label=\"Toggle Google Drive settings\"]";
-const TODOIST_CARD: &str = ".integration-card:has(.card-name:text-is(\"Todoist\"))";
+const TODOIST_CARD: &str = "#integration-card-Todoist";
 const TODOIST_CARD_HEADER: &str = "[aria-label=\"Toggle Todoist settings\"]";
-const TICKTICK_CARD: &str = ".integration-card:has(.card-name:text-is(\"Tick Tick\"))";
+const TICKTICK_CARD: &str = "#integration-card-TickTick";
 const TICKTICK_CARD_HEADER: &str = "[aria-label=\"Toggle Tick Tick settings\"]";
 
 /// The full screenshot manifest used by `cargo run -- test generate-doc-screenshots`.
@@ -200,10 +202,10 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(LINEAR_ROW),
             Action::Click(LINEAR_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Sleep(500),
         ],
-        capture: Capture::Element(".detail-panel"),
+        capture: Capture::Element("#detail-panel"),
     },
     // ---------- config/setup/images: integration cards (expanded) ----------
     ScreenshotSpec {
@@ -427,7 +429,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(ANY_ROW),
             Action::Click(ANY_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Sleep(300),
         ],
         capture: Capture::Element("button[aria-label='Delete notification']"),
@@ -441,7 +443,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(ANY_ROW),
             Action::Click(ANY_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Sleep(300),
         ],
         capture: Capture::Element("button[aria-label='Snooze notification']"),
@@ -455,7 +457,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(ANY_ROW),
             Action::Click(ANY_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Sleep(300),
         ],
         capture: Capture::Element("button[aria-label='Unsubscribe from the notification']"),
@@ -469,7 +471,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(ANY_ROW),
             Action::Click(ANY_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Sleep(300),
         ],
         capture: Capture::Element("button[aria-label='Create task']"),
@@ -483,7 +485,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(ANY_ROW),
             Action::Click(ANY_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Sleep(300),
         ],
         capture: Capture::Element("button[aria-label='Create task with defaults']"),
@@ -497,7 +499,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(ANY_ROW),
             Action::Click(ANY_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Sleep(300),
         ],
         capture: Capture::Element("button[aria-label='Link to task']"),
@@ -512,7 +514,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(ANY_ROW),
             Action::Click(ANY_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Click("button[aria-label='Create task']"),
             Action::WaitFor("#task-planning-modal"),
             Action::Sleep(500),
@@ -528,7 +530,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(ANY_ROW),
             Action::Click(ANY_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Click("button[aria-label='Link to task']"),
             Action::WaitFor("#task-linking-modal"),
             Action::Sleep(500),
@@ -550,7 +552,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(GCAL_ROW),
             Action::Click(GCAL_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::WaitFor(".preview-rsvp-inline"),
             Action::Sleep(500),
         ],
@@ -567,7 +569,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(GCAL_ROW),
             Action::Click(GCAL_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Sleep(500),
         ],
         capture: Capture::Element(
@@ -583,7 +585,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(GCAL_ROW),
             Action::Click(GCAL_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Sleep(500),
         ],
         capture: Capture::Element(".preview-rsvp-inline button:has(.icon-\\[lucide--user-x\\])"),
@@ -597,7 +599,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         pre: &[
             Action::WaitFor(GCAL_ROW),
             Action::Click(GCAL_ROW),
-            Action::WaitFor(".detail-panel"),
+            Action::WaitFor("#detail-panel"),
             Action::Sleep(500),
         ],
         capture: Capture::Element(

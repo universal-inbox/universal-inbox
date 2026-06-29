@@ -27,6 +27,7 @@ Connecting TickTick with Universal Inbox enables you to:
   - **Project to assign new tasks**: The TickTick project where new tasks land by default.
   - **Due date to assign to new tasks**: A relative due date (today, tomorrow, this week, etc.).
   - **Priority to assign to new tasks**: P1, P2, P3, or P4.
+  - **Scheduled time for new tasks**: Optionally attach a time of day to the due date, a time (e.g. `09:00`), an optional duration (15 min up to 2h), and the IANA timezone the time is expressed in (defaults to your browser timezone). Leave it _Not set_ to keep due dates without a time.
 
 ```admonish tip
 The defaults are also used when you press the "Create task with defaults" shortcut on a notification, which creates the task in one step instead of opening the task-creation modal.

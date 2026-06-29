@@ -66,6 +66,7 @@ pub async fn mock_todoist_item_add_service(
                 project_id,
                 due,
                 priority,
+                duration: None,
             },
         }],
         Some(sync_item_add_todoist_response),
