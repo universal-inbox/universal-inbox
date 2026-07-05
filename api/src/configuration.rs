@@ -58,6 +58,52 @@ pub struct ApplicationSettings {
     pub dry_run: bool,
     pub chat_support: Option<ChatSupportSettings>,
     pub mcp_session_store: McpSessionStoreSettings,
+    /// Cron jobs run by the asynchronous workers. Every field has a
+    /// `serde(default)` so the section can be omitted entirely from config files.
+    #[serde(default)]
+    pub cron: CronSettings,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct CronSettings {
+    #[serde(default)]
+    pub refresh_oauth_tokens: RefreshOAuthTokensCronSettings,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct RefreshOAuthTokensCronSettings {
+    #[serde(default = "yes")]
+    pub is_enabled: bool,
+    /// Cron expression with a seconds field, e.g. `0 */5 * * * *`
+    #[serde(default = "default_refresh_oauth_tokens_schedule")]
+    pub schedule: String,
+    /// Refresh OAuth tokens expiring within the next N minutes
+    #[serde(default = "default_refresh_oauth_tokens_minutes_before_expiry")]
+    pub minutes_before_expiry: i64,
+    /// TTL of the per-tick deduplication lock key in Redis
+    #[serde(default = "default_refresh_oauth_tokens_lock_ttl_seconds")]
+    pub lock_ttl_seconds: u64,
+}
+
+impl Default for RefreshOAuthTokensCronSettings {
+    fn default() -> Self {
+        Self {
+            is_enabled: yes(),
+            schedule: default_refresh_oauth_tokens_schedule(),
+            minutes_before_expiry: default_refresh_oauth_tokens_minutes_before_expiry(),
+            lock_ttl_seconds: default_refresh_oauth_tokens_lock_ttl_seconds(),
+        }
+    }
+}
+
+fn default_refresh_oauth_tokens_schedule() -> String {
+    "0 */5 * * * *".to_string()
+}
+fn default_refresh_oauth_tokens_minutes_before_expiry() -> i64 {
+    10
+}
+fn default_refresh_oauth_tokens_lock_ttl_seconds() -> u64 {
+    60
 }
 
 /// Configuration for the Redis-backed MCP session store.

@@ -11,7 +11,7 @@ use uuid::Uuid;
 use wiremock::MockServer;
 
 use universal_inbox_api::{
-    configuration::Settings,
+    configuration::{CronSettings, Settings},
     integrations::slack::SlackService,
     jobs::UniversalInboxJob,
     observability::{get_subscriber, init_subscriber},
@@ -242,11 +242,15 @@ pub async fn spawn_test_server(
 
 pub async fn spawn_test_worker(
     redis_storage: RedisStorage<UniversalInboxJob>,
+    cron_settings: CronSettings,
+    cache: Cache,
     services: &TestServices,
 ) {
     let worker = universal_inbox_api::run_worker(
         Some(1),
         redis_storage,
+        cron_settings,
+        cache,
         services.notification_service.clone(),
         services.task_service.clone(),
         services.integration_connection_service.clone(),
@@ -298,6 +302,10 @@ pub async fn build_and_spawn(
     let (services, auth_token_service) =
         build_test_services(pool, &settings, mock_servers, mailer_stub.clone()).await;
 
+    let cron_settings = settings.application.cron.clone();
+    let cache = Cache::new(settings.redis.connection_string())
+        .await
+        .expect("Failed to create cache");
     spawn_test_server(
         listener,
         redis_storage.clone(),
@@ -307,7 +315,7 @@ pub async fn build_and_spawn(
     )
     .await;
 
-    spawn_test_worker(redis_storage.clone(), &services).await;
+    spawn_test_worker(redis_storage.clone(), cron_settings, cache, &services).await;
 
     (services, mailer_stub, redis_storage)
 }
