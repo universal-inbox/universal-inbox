@@ -340,6 +340,8 @@ impl Cli {
                 ))
                 .expect("Failed to bind port");
 
+                let cron_settings = settings.application.cron.clone();
+                let redis_connection_string = settings.redis.connection_string();
                 let server = run_server(
                     listener,
                     redis_storage.clone(),
@@ -357,9 +359,14 @@ impl Cli {
                 .expect("Failed to start HTTP server");
 
                 if async_workers_count.is_some() || *embed_async_workers {
+                    let cache = Cache::new(redis_connection_string)
+                        .await
+                        .expect("Failed to create cache");
                     let worker = run_worker(
                         *async_workers_count,
                         redis_storage,
+                        cron_settings,
+                        cache,
                         notification_service,
                         task_service,
                         integration_connection_service,
@@ -404,14 +411,19 @@ impl Cli {
                 let cache = Cache::new(settings.redis.connection_string())
                     .await
                     .expect("Failed to create cache");
-                let ping_server =
-                    run_ping_server(listener, cache, integration_connection_service.clone())
-                        .await
-                        .expect("Failed to start worker health-check server");
+                let ping_server = run_ping_server(
+                    listener,
+                    cache.clone(),
+                    integration_connection_service.clone(),
+                )
+                .await
+                .expect("Failed to start worker health-check server");
 
                 let worker = run_worker(
                     *count,
                     redis_storage,
+                    settings.application.cron.clone(),
+                    cache,
                     notification_service,
                     task_service,
                     integration_connection_service,

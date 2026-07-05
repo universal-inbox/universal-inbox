@@ -22,6 +22,7 @@ actix-web = "4.0.0"
 actix-web-lab = { version = "0.26", features = ["spa"] }
 anyhow = { workspace = true }
 apalis = { version = "0.7", features = ["limit"] }
+apalis-cron = { version = "0.7" }
 apalis-redis = { version = "0.7" }
 argon2 = { version = "0.5", features = ["std"] }
 async-trait = "0.1.0"

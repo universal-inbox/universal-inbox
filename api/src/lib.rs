@@ -5,6 +5,7 @@ use std::{
     fmt::{Debug, Display},
     net::TcpListener,
     num::NonZeroUsize,
+    str::FromStr,
     sync::{Arc, OnceLock, Weak},
     thread,
     time::Duration as StdDuration,
@@ -37,9 +38,11 @@ use apalis::{
     layers::tracing::{DefaultOnRequest, DefaultOnResponse, OnFailure, TraceLayer},
     prelude::*,
 };
+use apalis_cron::{CronStream, Schedule};
 use apalis_redis::RedisStorage;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
-use configuration::AuthenticationSettings;
+use chrono::Utc;
+use configuration::{AuthenticationSettings, CronSettings};
 use csp::{CSP, Directive, Source, Sources};
 use integrations::{api::APIService, google_calendar::GoogleCalendarService, slack::SlackService};
 use jobs::UniversalInboxJob;
@@ -69,7 +72,7 @@ use crate::{
         todoist::TodoistService,
         todoist_oauth::TodoistOAuth2Provider,
     },
-    jobs::handle_universal_inbox_job,
+    jobs::{cron::handle_refresh_oauth_tokens_cron_tick, handle_universal_inbox_job},
     observability::AuthenticatedRootSpanBuilder,
     repository::Repository,
     universal_inbox::{
@@ -528,9 +531,12 @@ impl<E: Display + Debug> OnFailure<E> for WorkerOnFailure {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run_worker(
     workers_count: Option<usize>,
     redis_storage: RedisStorage<UniversalInboxJob>,
+    cron_settings: CronSettings,
+    cache: Cache,
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -543,40 +549,64 @@ pub async fn run_worker(
             .get()
     });
     info!("Starting {count} asynchronous Workers");
-    Monitor::new()
-        .register(
-            WorkerBuilder::new("universal-inbox-worker")
+    let mut monitor = Monitor::new().register(
+        WorkerBuilder::new("universal-inbox-worker")
+            .layer(
+                TraceLayer::new()
+                    .on_request(DefaultOnRequest::default().level(Level::INFO))
+                    .on_response(DefaultOnResponse::default().level(Level::INFO))
+                    .on_failure(WorkerOnFailure {}),
+            )
+            .concurrency(count)
+            .data(notification_service)
+            .data(task_service)
+            .data(integration_connection_service)
+            .data(third_party_item_service)
+            .data(slack_service)
+            .backend(redis_storage.clone())
+            .build_fn(handle_universal_inbox_job),
+    );
+
+    let refresh_oauth_tokens_settings = cron_settings.refresh_oauth_tokens;
+    if refresh_oauth_tokens_settings.is_enabled {
+        let schedule = Schedule::from_str(&refresh_oauth_tokens_settings.schedule)
+            .expect("Invalid cron schedule for the refresh-oauth-tokens job");
+        info!(
+            "Registering refresh-oauth-tokens cron worker with schedule `{}`",
+            refresh_oauth_tokens_settings.schedule
+        );
+        monitor = monitor.register(
+            WorkerBuilder::new("universal-inbox-cron-refresh-oauth-tokens")
                 .layer(
                     TraceLayer::new()
                         .on_request(DefaultOnRequest::default().level(Level::INFO))
                         .on_response(DefaultOnResponse::default().level(Level::INFO))
                         .on_failure(WorkerOnFailure {}),
                 )
-                .concurrency(count)
-                .data(notification_service)
-                .data(task_service)
-                .data(integration_connection_service)
-                .data(third_party_item_service)
-                .data(slack_service)
-                .backend(redis_storage.clone())
-                .build_fn(handle_universal_inbox_job),
-        )
-        .on_event(|e| {
-            let worker_id = e.id();
-            match e.inner() {
-                Event::Start => {
-                    info!("Worker [{worker_id}] started");
-                }
-                Event::Error(e) => {
-                    error!("Worker [{worker_id}] encountered an error: {e}");
-                }
+                .data(redis_storage.clone())
+                .data(cache)
+                .data(refresh_oauth_tokens_settings)
+                .backend(CronStream::new_with_timezone(schedule, Utc))
+                .build_fn(handle_refresh_oauth_tokens_cron_tick),
+        );
+    }
 
-                Event::Exit => {
-                    info!("Worker [{worker_id}] exited");
-                }
-                _ => {}
+    monitor.on_event(|e| {
+        let worker_id = e.id();
+        match e.inner() {
+            Event::Start => {
+                info!("Worker [{worker_id}] started");
             }
-        })
+            Event::Error(e) => {
+                error!("Worker [{worker_id}] encountered an error: {e}");
+            }
+
+            Event::Exit => {
+                info!("Worker [{worker_id}] exited");
+            }
+            _ => {}
+        }
+    })
 }
 
 #[derive(Debug, Clone, Copy)]

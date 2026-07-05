@@ -21,6 +21,8 @@ use crate::{
     },
 };
 
+pub mod cron;
+pub mod oauth;
 pub mod slack;
 pub mod sync;
 
@@ -35,6 +37,9 @@ pub enum UniversalInboxJob {
         patch: NotificationPatch,
         user_id: UserId,
     },
+    RefreshOAuthTokens {
+        minutes_before_expiry: i64,
+    },
 }
 
 impl UniversalInboxJob {
@@ -44,6 +49,7 @@ impl UniversalInboxJob {
             Self::SyncTasks(_) => "SyncTasks",
             Self::SlackPushEventCallback(_) => "SlackPushEventCallback",
             Self::ProcessNotificationSideEffects { .. } => "ProcessNotificationSideEffects",
+            Self::RefreshOAuthTokens { .. } => "RefreshOAuthTokens",
         }
     }
 }
@@ -107,6 +113,16 @@ pub async fn handle_universal_inbox_job(
                 patch,
                 user_id,
                 notification_service,
+            )
+            .await
+        }
+        UniversalInboxJob::RefreshOAuthTokens {
+            minutes_before_expiry,
+        } => {
+            oauth::refresh_oauth_tokens(
+                (*integration_connection_service).clone(),
+                None,
+                minutes_before_expiry,
             )
             .await
         }
