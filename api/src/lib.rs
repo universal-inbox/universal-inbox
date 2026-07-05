@@ -483,6 +483,37 @@ pub async fn run_server(
     Ok(server.run())
 }
 
+/// Minimal HTTP server exposing only the `GET /ping` health-check endpoint.
+///
+/// Started alongside the apalis worker `Monitor` (see the `StartWorkers` command)
+/// so a worker process can be probed for liveness/readiness the same way as the API.
+/// Reuses the API's `routes::health_check::ping` handler (Redis + Postgres checks).
+pub async fn run_ping_server(
+    listener: TcpListener,
+    cache: Cache,
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+) -> Result<Server, UniversalInboxError> {
+    let cache_data = web::Data::new(cache);
+    let integration_connection_service_data = web::Data::new(integration_connection_service);
+    // Built once outside the `HttpServer::new` closure so all Actix worker threads
+    // share the same governor state (same reasoning as the API's `/ping`).
+    let ping_rate_limiter = routes::health_check::build_rate_limiter();
+
+    let server = HttpServer::new(move || {
+        App::new()
+            .wrap(TracingLogger::default())
+            .route("/ping", web::get().to(routes::health_check::ping))
+            .app_data(cache_data.clone())
+            .app_data(integration_connection_service_data.clone())
+            .app_data(web::Data::new(ping_rate_limiter.clone()))
+    })
+    .shutdown_timeout(10)
+    .listen(listener)
+    .context("Failed to listen on worker health-check port")?;
+
+    Ok(server.run())
+}
+
 #[derive(Clone, Debug)]
 struct WorkerOnFailure {}
 

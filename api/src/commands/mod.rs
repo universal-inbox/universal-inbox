@@ -18,7 +18,7 @@ use universal_inbox::{
 use crate::{
     configuration::Settings,
     integrations::slack::SlackService,
-    run_server, run_worker,
+    run_ping_server, run_server, run_worker,
     universal_inbox::{
         UniversalInboxError, auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
@@ -391,6 +391,24 @@ impl Cli {
                         .set_namespace("universal-inbox:jobs:UniversalInboxJob"),
                 );
 
+                let worker_port = settings
+                    .application
+                    .worker_listen_port
+                    .unwrap_or(settings.application.listen_port);
+                let listener = TcpListener::bind(format!(
+                    "{}:{}",
+                    settings.application.listen_address, worker_port
+                ))
+                .expect("Failed to bind worker health-check port");
+
+                let cache = Cache::new(settings.redis.connection_string())
+                    .await
+                    .expect("Failed to create cache");
+                let ping_server =
+                    run_ping_server(listener, cache, integration_connection_service.clone())
+                        .await
+                        .expect("Failed to start worker health-check server");
+
                 let worker = run_worker(
                     *count,
                     redis_storage,
@@ -402,10 +420,11 @@ impl Cli {
                 )
                 .await;
 
-                worker
-                    .run_with_signal(shutdown_signal())
+                future::try_join(ping_server, worker.run_with_signal(shutdown_signal()))
                     .await
-                    .expect("Failed to run asynchronous Workers");
+                    .expect(
+                        "Failed to wait for worker health-check server and asynchronous Workers",
+                    );
 
                 Ok(())
             }
