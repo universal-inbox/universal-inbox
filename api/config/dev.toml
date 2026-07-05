@@ -1,6 +1,9 @@
 [application]
 environment = "dev"
 listen_address = "127.0.0.1"
+# Distinct from the API's listen_port (8000) so `just api run-workers` and
+# `just api run-api` can run side by side on the same host without colliding.
+worker_listen_port = 8001
 static_dir = "../target/dx/universal-inbox-web/debug/web/public"
 static_path = ""
 min_sync_tasks_interval_in_minutes = 2

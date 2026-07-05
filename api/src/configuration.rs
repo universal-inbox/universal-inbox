@@ -35,6 +35,10 @@ pub struct ApplicationSettings {
     pub environment: String,
     pub listen_address: String,
     pub listen_port: u16,
+    /// Port for the worker's health-check (`/ping`) HTTP server.
+    /// Falls back to `listen_port` when unset. Set distinctly in local dev so the
+    /// worker process does not collide with the API on the same host.
+    pub worker_listen_port: Option<u16>,
     pub front_base_url: Url,
     pub api_path: String,
     pub static_path: Option<String>,
