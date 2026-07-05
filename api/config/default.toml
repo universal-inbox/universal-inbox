@@ -19,6 +19,13 @@ sync_failure_window_in_hours = 48
 show_changelog = false
 dry_run = false
 
+[application.cron.refresh_oauth_tokens]
+is_enabled = false
+# Cron expression with a seconds field
+schedule = "0 */5 * * * *"
+minutes_before_expiry = 10
+lock_ttl_seconds = 60
+
 [application.email]
 smtp_server = "smtp.example.com"
 smtp_port = 465
