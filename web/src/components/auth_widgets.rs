@@ -86,9 +86,9 @@ pub fn LegalFooter() -> Element {
     rsx! {
         p { class: "text-xs text-ui-base-muted leading-normal text-center mt-3.5 [&_a]:text-ui-base-muted [&_a]:underline [&_a]:underline-offset-2 [&_a]:hover:text-ui-base-content",
             "By continuing, you agree to our "
-            a { href: "https://www.universal-inbox.com/terms-of-service", "Terms" }
+            a { href: "https://www.universal-inbox.com/terms", "Terms" }
             " and "
-            a { href: "https://www.universal-inbox.com/privacy-policy", "Privacy Policy" }
+            a { href: "https://www.universal-inbox.com/privacy", "Privacy Policy" }
             "."
         }
     }
