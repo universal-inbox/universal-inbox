@@ -68,6 +68,8 @@ pub struct ApplicationSettings {
 pub struct CronSettings {
     #[serde(default)]
     pub refresh_oauth_tokens: RefreshOAuthTokensCronSettings,
+    #[serde(default)]
+    pub vacuum_jobs: VacuumJobsCronSettings,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -104,6 +106,64 @@ fn default_refresh_oauth_tokens_minutes_before_expiry() -> i64 {
 }
 fn default_refresh_oauth_tokens_lock_ttl_seconds() -> u64 {
     60
+}
+
+/// Configuration for the `vacuum-jobs` cron, purging completed jobs from the
+/// Redis job queue.
+///
+/// apalis-redis never frees the `data` hash entry of a completed job, so the
+/// queue grows without bound until Redis hits its `maxmemory` cap. Unlike the
+/// other crons, this one is enabled by default: it is storage maintenance that
+/// every deployment needs, and relying on an explicit opt-in is what caused the
+/// 2026-08-12 outage.
+#[derive(Deserialize, Clone, Debug)]
+pub struct VacuumJobsCronSettings {
+    #[serde(default = "yes")]
+    pub is_enabled: bool,
+    /// Cron expression with a seconds field, e.g. `0 */10 * * * *`
+    #[serde(default = "default_vacuum_jobs_schedule")]
+    pub schedule: String,
+    /// Keep completed jobs younger than this; purge the rest
+    #[serde(default = "default_vacuum_jobs_retention_hours")]
+    pub retention_hours: i64,
+    /// Maximum number of jobs purged per Redis round trip
+    #[serde(default = "default_vacuum_jobs_batch_size")]
+    pub batch_size: usize,
+    /// Maximum number of batches per tick, so a tick cannot run unbounded
+    #[serde(default = "default_vacuum_jobs_max_batches_per_tick")]
+    pub max_batches_per_tick: usize,
+    /// TTL of the per-tick deduplication lock key in Redis
+    #[serde(default = "default_vacuum_jobs_lock_ttl_seconds")]
+    pub lock_ttl_seconds: u64,
+}
+
+impl Default for VacuumJobsCronSettings {
+    fn default() -> Self {
+        Self {
+            is_enabled: yes(),
+            schedule: default_vacuum_jobs_schedule(),
+            retention_hours: default_vacuum_jobs_retention_hours(),
+            batch_size: default_vacuum_jobs_batch_size(),
+            max_batches_per_tick: default_vacuum_jobs_max_batches_per_tick(),
+            lock_ttl_seconds: default_vacuum_jobs_lock_ttl_seconds(),
+        }
+    }
+}
+
+fn default_vacuum_jobs_schedule() -> String {
+    "0 */10 * * * *".to_string()
+}
+fn default_vacuum_jobs_retention_hours() -> i64 {
+    6
+}
+fn default_vacuum_jobs_batch_size() -> usize {
+    1000
+}
+fn default_vacuum_jobs_max_batches_per_tick() -> usize {
+    200
+}
+fn default_vacuum_jobs_lock_ttl_seconds() -> u64 {
+    300
 }
 
 /// Configuration for the Redis-backed MCP session store.

@@ -72,7 +72,10 @@ use crate::{
         todoist::TodoistService,
         todoist_oauth::TodoistOAuth2Provider,
     },
-    jobs::{cron::handle_refresh_oauth_tokens_cron_tick, handle_universal_inbox_job},
+    jobs::{
+        cron::{handle_refresh_oauth_tokens_cron_tick, handle_vacuum_jobs_cron_tick},
+        handle_universal_inbox_job,
+    },
     observability::AuthenticatedRootSpanBuilder,
     repository::Repository,
     universal_inbox::{
@@ -584,10 +587,34 @@ pub async fn run_worker(
                         .on_failure(WorkerOnFailure {}),
                 )
                 .data(redis_storage.clone())
-                .data(cache)
+                .data(cache.clone())
                 .data(refresh_oauth_tokens_settings)
                 .backend(CronStream::new_with_timezone(schedule, Utc))
                 .build_fn(handle_refresh_oauth_tokens_cron_tick),
+        );
+    }
+
+    let vacuum_jobs_settings = cron_settings.vacuum_jobs;
+    if vacuum_jobs_settings.is_enabled {
+        let schedule = Schedule::from_str(&vacuum_jobs_settings.schedule)
+            .expect("Invalid cron schedule for the vacuum-jobs job");
+        info!(
+            "Registering vacuum-jobs cron worker with schedule `{}`",
+            vacuum_jobs_settings.schedule
+        );
+        monitor = monitor.register(
+            WorkerBuilder::new("universal-inbox-cron-vacuum-jobs")
+                .layer(
+                    TraceLayer::new()
+                        .on_request(DefaultOnRequest::default().level(Level::INFO))
+                        .on_response(DefaultOnResponse::default().level(Level::INFO))
+                        .on_failure(WorkerOnFailure {}),
+                )
+                .data(redis_storage.clone())
+                .data(cache)
+                .data(vacuum_jobs_settings)
+                .backend(CronStream::new_with_timezone(schedule, Utc))
+                .build_fn(handle_vacuum_jobs_cron_tick),
         );
     }
 

@@ -26,6 +26,19 @@ schedule = "0 */5 * * * *"
 minutes_before_expiry = 10
 lock_ttl_seconds = 60
 
+# Purge completed jobs from the Redis job queue. Enabled by default: apalis-redis
+# never frees the `data` hash entry of a completed job, so without this cron the
+# queue grows until Redis hits its `maxmemory` cap and stops accepting writes.
+[application.cron.vacuum_jobs]
+is_enabled = true
+# Cron expression with a seconds field
+schedule = "0 */10 * * * *"
+# Completed jobs younger than this are kept, so recent results stay inspectable
+retention_hours = 6
+batch_size = 1000
+max_batches_per_tick = 200
+lock_ttl_seconds = 300
+
 [application.email]
 smtp_server = "smtp.example.com"
 smtp_port = 465
