@@ -4,6 +4,11 @@ static_path = ""
 static_dir = "tests/api/statics"
 sync_failure_window_in_hours = 1
 
+# Enabled by default, disabled in tests: the vacuum is exercised by calling its
+# handler directly, a background worker would race with those assertions
+[application.cron.vacuum_jobs]
+is_enabled = false
+
 [application.observability.logging]
 log_directive = "debug"
 dependencies_log_level = "debug"
