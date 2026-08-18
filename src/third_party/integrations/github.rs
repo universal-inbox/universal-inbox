@@ -592,7 +592,7 @@ pub struct GithubPullRequest {
     pub labels: Vec<GithubLabel>,
     pub comments_count: i64,
     pub comments: Vec<GithubIssueComment>,
-    pub latest_commit: GithubCommitChecks,
+    pub latest_commit: Option<GithubCommitChecks>,
     pub base_ref_name: String,
     pub base_repository: Option<GithubRepositorySummary>,
     pub head_ref_name: String,

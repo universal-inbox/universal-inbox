@@ -1,0 +1,70 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "id": "PR_abcdef",
+        "number": 123,
+        "url": "https://github.com/octokit/octokit.rb/pull/123",
+        "titleHTML": "test change",
+        "bodyHTML": "<p dir=\"auto\">This is a test change</p>",
+        "labels": {
+          "nodes": []
+        },
+        "comments": {
+          "totalCount": 0
+        },
+        "commits": {
+          "nodes": [],
+          "totalCount": 0
+        },
+        "baseRefName": "main",
+        "baseRepository": {
+          "nameWithOwner": "octokit/octokit.rb",
+          "url": "https://github.com/octokit/octokit.rb"
+        },
+        "headRefName": "test-branch",
+        "headRepository": {
+          "nameWithOwner": "octokit/octokit.rb",
+          "url": "https://github.com/octokit/octokit.rb"
+        },
+        "author": {
+          "__typename": "User",
+          "avatarUrl": "https://avatars.githubusercontent.com/u/12345",
+          "login": "test",
+          "name": "Test user"
+        },
+        "assignees": {
+          "nodes": []
+        },
+        "reviewDecision": null,
+        "reviews": {
+          "nodes": []
+        },
+        "reviewRequests": {
+          "nodes": [
+            {
+              "requestedReviewer": {
+                "__typename": "User",
+                "userAvatarUrl": "https://avatars.githubusercontent.com/u/67890",
+                "userLogin": "other-test",
+                "userName": null
+              }
+            }
+          ]
+        },
+        "state": "OPEN",
+        "isDraft": false,
+        "closedAt": null,
+        "createdAt": "2023-10-21T20:36:42Z",
+        "updatedAt": "2023-10-21T20:36:42Z",
+        "mergeable": "MERGEABLE",
+        "mergedAt": null,
+        "mergeStateStatus": "CLEAN",
+        "mergedBy": null,
+        "deletions": 1,
+        "additions": 1,
+        "changedFiles": 1
+      }
+    }
+  }
+}

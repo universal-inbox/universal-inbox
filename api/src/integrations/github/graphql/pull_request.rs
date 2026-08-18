@@ -657,12 +657,7 @@ impl TryFrom<pull_request_query::ResponseData> for GithubPullRequest {
                         .collect::<Vec<GithubIssueComment>>()
                 })
                 .unwrap_or_default(),
-            latest_commit: TryInto::<Option<GithubCommitChecks>>::try_into(pr.commits)?
-                .with_context(|| {
-                    format!(
-                        "Expected at least 1 commit associated with a Github pull request {pr_url}"
-                    )
-                })?,
+            latest_commit: TryInto::<Option<GithubCommitChecks>>::try_into(pr.commits)?,
             base_ref_name: pr.base_ref_name,
             base_repository: pr
                 .base_repository
