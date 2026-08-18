@@ -132,6 +132,11 @@ pub fn github_pull_request_123_response() -> Response<pull_request_query::Respon
 }
 
 #[fixture]
+pub fn github_pull_request_123_no_commits_response() -> Response<pull_request_query::ResponseData> {
+    load_json_fixture_file("github_pull_request_123_no_commits_response.json")
+}
+
+#[fixture]
 pub fn github_discussion_123_response() -> Response<discussion_query::ResponseData> {
     load_json_fixture_file("github_discussion_123_response.json")
 }

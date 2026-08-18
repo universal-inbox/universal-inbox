@@ -284,11 +284,12 @@ fn GithubPullRequestDetails(
 
 #[component]
 fn ChecksSection(
-    latest_commit: ReadSignal<GithubCommitChecks>,
+    latest_commit: ReadSignal<Option<GithubCommitChecks>>,
     expand_details: ReadSignal<bool>,
 ) -> Element {
-    let progress_memo =
-        use_memo(move || compute_pull_request_checks_progress(&latest_commit().check_suites));
+    let progress_memo = use_memo(move || {
+        compute_pull_request_checks_progress(&latest_commit().and_then(|c| c.check_suites))
+    });
     let Some(progress) = progress_memo() else {
         return rsx! {};
     };
@@ -313,8 +314,8 @@ fn ChecksSection(
 }
 
 #[component]
-fn ChecksSectionList(latest_commit: ReadSignal<GithubCommitChecks>) -> Element {
-    let Some(check_suites) = &latest_commit().check_suites else {
+fn ChecksSectionList(latest_commit: ReadSignal<Option<GithubCommitChecks>>) -> Element {
+    let Some(check_suites) = latest_commit().and_then(|c| c.check_suites) else {
         return rsx! {};
     };
 

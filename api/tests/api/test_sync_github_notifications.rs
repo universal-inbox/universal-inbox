@@ -47,7 +47,8 @@ use crate::helpers::{
     notification::{
         github::{
             assert_sync_notifications, create_notification_from_github_notification,
-            github_discussion_123_response, github_notification, github_pull_request_123_response,
+            github_discussion_123_response, github_notification,
+            github_pull_request_123_no_commits_response, github_pull_request_123_response,
             mock_github_discussion_query, mock_github_notifications_service,
             mock_github_pull_request_query, sync_github_notifications,
         },
@@ -241,6 +242,96 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         IntegrationConnectionStatus::Validated
     );
     assert!(integration_connection.failure_message.is_none(),);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_notifications_should_handle_pull_request_without_commits(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
+    sync_github_notifications: Vec<GithubNotification>,
+    github_pull_request_123_no_commits_response: Response<pull_request_query::ResponseData>,
+    github_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+
+    let _github_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings,
+        github_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    let _github_notifications_mock = mock_github_notifications_service(
+        &app.app.github_mock_server,
+        "1",
+        &sync_github_notifications,
+    )
+    .await;
+    let empty_result = Vec::<GithubNotification>::new();
+    let _github_notifications_mock2 =
+        mock_github_notifications_service(&app.app.github_mock_server, "2", &empty_result).await;
+
+    // The pull request associated with notification "123" has no commit at all
+    // (e.g. an empty/administrative PR): syncing should still succeed and simply
+    // store `latest_commit: None` instead of failing the whole sync.
+    let _github_pull_request_123_query_mock = mock_github_pull_request_query(
+        &app.app.github_mock_server,
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
+        &github_pull_request_123_no_commits_response,
+    )
+    .await;
+
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::Github),
+        false,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), sync_github_notifications.len());
+    assert_sync_notifications(
+        &notifications,
+        &sync_github_notifications,
+        app.user.id,
+        Some(GithubNotificationItem::GithubPullRequest(
+            github_pull_request_123_no_commits_response
+                .data
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        )),
+    );
+
+    let integration_connection = get_integration_connection_per_provider(
+        &app,
+        app.user.id,
+        IntegrationProviderKind::Github,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(
+        integration_connection
+            .last_notifications_sync_completed_at
+            .is_some()
+    );
+    assert!(
+        integration_connection
+            .last_notifications_sync_failed_at
+            .is_none()
+    );
+    assert_eq!(integration_connection.notifications_sync_failures, 0);
+    assert!(integration_connection.failure_message.is_none());
 }
 
 #[rstest]
