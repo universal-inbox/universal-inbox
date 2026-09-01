@@ -63,9 +63,15 @@ mod list_integration_connections {
 
         let result = list_integration_connections(&app.client, &app.app.api_address).await;
 
+        // The repository orders rows by id (ascending) for deterministic row-lock
+        // ordering, not by insertion order, so sort the expected connections the same
+        // way before comparing rather than assuming creation order.
+        let mut expected = [*integration_connection1, *integration_connection2];
+        expected.sort_by_key(|connection| connection.id.0);
+
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0], *integration_connection1);
-        assert_eq!(result[1], *integration_connection2);
+        assert_eq!(result[0], expected[0]);
+        assert_eq!(result[1], expected[1]);
 
         // Test listing notifications of another user
         let (client, _user) =

@@ -2,9 +2,7 @@ use std::{net::TcpListener, str::FromStr, sync::Arc};
 
 use apalis_redis::RedisStorage;
 use rstest::*;
-use sqlx::{
-    ConnectOptions, Connection, Executor, PgConnection, PgPool, postgres::PgConnectOptions,
-};
+use sqlx::{Connection, Executor, PgConnection, PgPool};
 use tokio::sync::RwLock;
 use tracing::info;
 use uuid::Uuid;
@@ -68,14 +66,11 @@ pub async fn db_connection(mut settings: Settings) -> Arc<PgPool> {
         .await
         .expect("Failed to create database.");
 
-    let options = PgConnectOptions::new()
-        .username(&settings.database.username)
-        .password(&settings.database.password)
-        .host(&settings.database.host)
-        .port(settings.database.port)
-        .database(&settings.database.database_name)
-        .log_statements(log::LevelFilter::Info);
-    let db_connection = PgPool::connect_with(options).await.expect("error");
+    let db_connection = settings
+        .database
+        .connect_pool(log::LevelFilter::Info)
+        .await
+        .expect("error");
 
     sqlx::migrate!("./migrations")
         .run(&db_connection)
