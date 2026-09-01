@@ -44,7 +44,10 @@ use crate::{
         search_tasks_output_schema, sync_notifications_output_schema, sync_tasks_output_schema,
         update_task_output_schema,
     },
-    universal_inbox::{notification::service::NotificationService, task::service::TaskService},
+    universal_inbox::{
+        integration_connection::service::IntegrationConnectionService,
+        notification::service::NotificationService, task::service::TaskService,
+    },
     utils::jwt::Claims,
 };
 
@@ -73,12 +76,14 @@ pub type McpRateLimiter = RateLimiter<UserId, DefaultKeyedStateStore<UserId>, De
 pub fn build_http_service(
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     job_storage: RedisStorage<UniversalInboxJob>,
     session_store: Arc<dyn SessionStore>,
 ) -> StreamableHttpService<UniversalInboxMcpServer, LocalSessionManager> {
     let services = McpServices {
         notification_service,
         task_service,
+        integration_connection_service,
         job_storage,
     };
 

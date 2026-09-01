@@ -8,6 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
+use tracing::warn;
 
 use universal_inbox::{
     Page, PageToken,
@@ -26,7 +27,8 @@ use universal_inbox::{
 use crate::{
     jobs::UniversalInboxJob,
     universal_inbox::{
-        UpdateStatus, notification::service::NotificationService, task::service::TaskService,
+        UpdateStatus, integration_connection::service::IntegrationConnectionService,
+        notification::service::NotificationService, task::service::TaskService,
     },
 };
 
@@ -34,6 +36,7 @@ use crate::{
 pub struct McpServices {
     pub notification_service: Arc<RwLock<NotificationService>>,
     pub task_service: Arc<RwLock<TaskService>>,
+    pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     pub job_storage: RedisStorage<UniversalInboxJob>,
 }
 
@@ -182,7 +185,6 @@ pub async fn execute_tool(
                     args.sources,
                     args.page_token,
                     user_id,
-                    args.trigger_sync.then(|| services.job_storage.clone()),
                 )
                 .await
                 .map_err(ToolCallError::execution)?;
@@ -190,6 +192,19 @@ pub async fn execute_tool(
                 .commit()
                 .await
                 .map_err(ToolCallError::execution)?;
+            if args.trigger_sync {
+                // Best-effort, after commit — see IntegrationConnectionService::schedule_due_syncs.
+                let mut job_storage = services.job_storage.clone();
+                if let Err(error) = services
+                    .integration_connection_service
+                    .read()
+                    .await
+                    .schedule_due_syncs(user_id, &mut job_storage)
+                    .await
+                {
+                    warn!(?error, user.id = %user_id, "Failed to schedule integration syncs from MCP list_notifications; serving notifications anyway");
+                }
+            }
             let summary_page = page.map(NotificationWithTaskSummary::from);
             serde_json::to_value(summary_page)
                 .context("Failed to serialize notifications page")
@@ -330,7 +345,6 @@ pub async fn execute_tool(
                     args.status.unwrap_or(TaskStatus::Active),
                     args.only_synced_tasks,
                     user_id,
-                    args.trigger_sync.then(|| services.job_storage.clone()),
                 )
                 .await
                 .map_err(ToolCallError::execution)?;
@@ -338,6 +352,19 @@ pub async fn execute_tool(
                 .commit()
                 .await
                 .map_err(ToolCallError::execution)?;
+            if args.trigger_sync {
+                // Best-effort, after commit — see IntegrationConnectionService::schedule_due_syncs.
+                let mut job_storage = services.job_storage.clone();
+                if let Err(error) = services
+                    .integration_connection_service
+                    .read()
+                    .await
+                    .schedule_due_syncs(user_id, &mut job_storage)
+                    .await
+                {
+                    warn!(?error, user.id = %user_id, "Failed to schedule integration syncs from MCP list_tasks; serving tasks anyway");
+                }
+            }
             let summary_page = page.map(TaskSummaryWithStatus::from);
             serde_json::to_value(summary_page)
                 .context("Failed to serialize tasks page")
