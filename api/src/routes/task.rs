@@ -194,12 +194,18 @@ pub async fn sync_tasks(
                 .await
                 .context("Failed to create new transaction while triggering tasks sync")?;
             service
-                .trigger_sync_tasks(&mut transaction, source, Some(user_id), &mut storage)
+                .schedule_tasks_sync_status(&mut transaction, source.map(Into::into), Some(user_id))
                 .await?;
             transaction
                 .commit()
                 .await
                 .context("Failed to commit while triggering tasks sync")?;
+            // Push the job only after the scheduling transaction has committed and
+            // released its row lock(s) — the Redis push retries with backoff and must
+            // never hold a Postgres lock open for that long.
+            service
+                .push_sync_tasks_job(&mut storage, source, Some(user_id))
+                .await?;
             Ok(HttpResponse::Created().finish())
         } else {
             let service = task_service.read().await;
@@ -222,12 +228,15 @@ pub async fn sync_tasks(
             .await
             .context("Failed to create new transaction while triggering tasks sync")?;
         service
-            .trigger_sync_tasks(&mut transaction, source, None, &mut storage)
+            .schedule_tasks_sync_status(&mut transaction, source.map(Into::into), None)
             .await?;
         transaction
             .commit()
             .await
             .context("Failed to commit while triggering tasks sync")?;
+        service
+            .push_sync_tasks_job(&mut storage, source, None)
+            .await?;
         Ok(HttpResponse::Created().finish())
     }
 }

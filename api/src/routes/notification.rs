@@ -200,12 +200,22 @@ pub async fn sync_notifications(
                 .await
                 .context("Failed to create new transaction while triggering notifications sync")?;
             service
-                .trigger_sync_notifications(&mut transaction, source, Some(user_id), &mut storage)
+                .schedule_notifications_sync_status(
+                    &mut transaction,
+                    source.map(Into::into),
+                    Some(user_id),
+                )
                 .await?;
             transaction
                 .commit()
                 .await
                 .context("Failed to commit while triggering notifications sync")?;
+            // Push the job only after the scheduling transaction has committed and
+            // released its row lock(s) — the Redis push retries with backoff and must
+            // never hold a Postgres lock open for that long.
+            service
+                .push_sync_notifications_job(&mut storage, source, Some(user_id))
+                .await?;
             Ok(HttpResponse::Created().finish())
         } else {
             let service = notification_service.read().await;
@@ -228,12 +238,15 @@ pub async fn sync_notifications(
             .await
             .context("Failed to create new transaction while triggering notifications sync")?;
         service
-            .trigger_sync_notifications(&mut transaction, source, None, &mut storage)
+            .schedule_notifications_sync_status(&mut transaction, source.map(Into::into), None)
             .await?;
         transaction
             .commit()
             .await
             .context("Failed to commit while triggering notifications sync")?;
+        service
+            .push_sync_notifications_job(&mut storage, source, None)
+            .await?;
         Ok(HttpResponse::Created().finish())
     }
 }

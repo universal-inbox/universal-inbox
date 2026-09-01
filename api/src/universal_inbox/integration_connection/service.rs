@@ -329,6 +329,82 @@ impl IntegrationConnectionService {
         Ok(())
     }
 
+    /// Pushes a `SyncNotifications` job to the queue without touching the database.
+    ///
+    /// Split out of `trigger_sync_notifications` so HTTP handlers that schedule a sync
+    /// outside a caller-visible batch (the sync-trigger endpoint's authenticated and
+    /// unauthenticated branches) can commit their DB transaction first and only then push
+    /// the job — the Redis push retries with backoff (`tokio-retry`, up to 10 attempts) and
+    /// must never hold a Postgres row lock open for that long.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_sync_source_kind = notification_sync_source_kind.map(|kind| kind.to_string()),
+            user.id = for_user_id.map(|id| id.to_string())
+        ),
+        err
+    )]
+    pub async fn push_sync_notifications_job(
+        &self,
+        job_storage: &mut RedisStorage<UniversalInboxJob>,
+        notification_sync_source_kind: Option<NotificationSyncSourceKind>,
+        for_user_id: Option<UserId>,
+    ) -> Result<(), UniversalInboxError> {
+        Retry::spawn(
+            ExponentialBackoff::from_millis(10).map(jitter).take(10),
+            || async {
+                job_storage
+                    .clone()
+                    .push(UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
+                        source: notification_sync_source_kind,
+                        user_id: for_user_id,
+                    }))
+                    .await
+            },
+        )
+        .await
+        .context("Failed to push SyncNotifications job to queue")?;
+
+        Ok(())
+    }
+
+    /// Pushes a `SyncTasks` job to the queue without touching the database. See
+    /// [`Self::push_sync_notifications_job`] for why this is split out of
+    /// `trigger_sync_tasks`.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            task_sync_source_kind = task_sync_source_kind.map(|kind| kind.to_string()),
+            user.id = for_user_id.map(|id| id.to_string())
+        ),
+        err
+    )]
+    pub async fn push_sync_tasks_job(
+        &self,
+        job_storage: &mut RedisStorage<UniversalInboxJob>,
+        task_sync_source_kind: Option<TaskSyncSourceKind>,
+        for_user_id: Option<UserId>,
+    ) -> Result<(), UniversalInboxError> {
+        Retry::spawn(
+            ExponentialBackoff::from_millis(10).map(jitter).take(10),
+            || async {
+                job_storage
+                    .clone()
+                    .push(UniversalInboxJob::SyncTasks(SyncTasksJob {
+                        source: task_sync_source_kind,
+                        user_id: for_user_id,
+                    }))
+                    .await
+            },
+        )
+        .await
+        .context("Failed to push SyncTasks job to queue")?;
+
+        Ok(())
+    }
+
     #[tracing::instrument(
         level = "debug",
         skip_all,
