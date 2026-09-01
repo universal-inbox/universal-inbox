@@ -97,6 +97,46 @@ impl UniversalInboxError {
             )))
         }
     }
+
+    /// True for a Postgres deadlock (`40P01`), serialization failure (`40001`), or
+    /// lock-timeout (`55P03`) — errors worth retrying a *short* transaction for, since none
+    /// of them indicate a problem with the statement itself, just contention that already
+    /// resolved by the time the error surfaced. Never retry a whole sync attempt on this —
+    /// only the small atomic claim transactions this crate builds around `FOR UPDATE SKIP
+    /// LOCKED` / single-row `UPDATE ... WHERE id = $id`, where a blind retry is cheap and
+    /// safe because the statement is idempotent and tiny.
+    pub fn is_transient_database_error(&self) -> bool {
+        matches!(
+            self,
+            UniversalInboxError::DatabaseError { source, .. }
+                if source
+                    .as_database_error()
+                    .and_then(|db_error| db_error.code())
+                    .is_some_and(|code| matches!(code.as_ref(), "40001" | "40P01" | "55P03"))
+        )
+    }
+}
+
+/// Retries `action` up to 3 times (20ms base, jittered exponential backoff) when it fails
+/// with [`UniversalInboxError::is_transient_database_error`]. Intended for the short, atomic
+/// claim transactions in this crate (a `FOR UPDATE SKIP LOCKED` claim, or a single-row
+/// `UPDATE ... WHERE id = $id`) — never for a whole multi-statement sync attempt, where
+/// blindly retrying could repeat non-idempotent work.
+pub async fn retry_on_transient_database_error<F, Fut, T>(
+    action: F,
+) -> Result<T, UniversalInboxError>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<T, UniversalInboxError>>,
+{
+    tokio_retry::RetryIf::spawn(
+        tokio_retry::strategy::ExponentialBackoff::from_millis(20)
+            .map(tokio_retry::strategy::jitter)
+            .take(3),
+        action,
+        |error: &UniversalInboxError| error.is_transient_database_error(),
+    )
+    .await
 }
 
 #[derive(Debug, PartialEq)]

@@ -49,7 +49,7 @@ use crate::{
         notification::NotificationRepository,
         oauth_credential::OAuthCredentialRepository,
     },
-    universal_inbox::{UniversalInboxError, UpdateStatus},
+    universal_inbox::{UniversalInboxError, UpdateStatus, retry_on_transient_database_error},
     utils::{
         cache::{Cache, build_redis_cache},
         crypto::{TokenEncryptionKey, decrypt_token, encrypt_token},
@@ -214,34 +214,41 @@ impl IntegrationConnectionService {
                 .map(|kind| (*kind).into())
                 .collect();
 
-        let mut transaction = self
-            .begin()
-            .await
-            .context("Failed to create new transaction while claiming due syncs")?;
-        let claimed_notification_syncs = self
-            .repository
-            .claim_due_notification_syncs(
-                &mut transaction,
-                for_user_id,
-                &notification_provider_kinds,
-                now,
-                notifications_synced_before,
-            )
+        // Retried on a transient DB error (deadlock/serialization/lock-timeout): this
+        // whole block is one short, idempotent claim — safe to just redo it.
+        let (claimed_notification_syncs, claimed_task_syncs) =
+            retry_on_transient_database_error(|| async {
+                let mut transaction = self
+                    .begin()
+                    .await
+                    .context("Failed to create new transaction while claiming due syncs")?;
+                let claimed_notification_syncs = self
+                    .repository
+                    .claim_due_notification_syncs(
+                        &mut transaction,
+                        for_user_id,
+                        &notification_provider_kinds,
+                        now,
+                        notifications_synced_before,
+                    )
+                    .await?;
+                let claimed_task_syncs = self
+                    .repository
+                    .claim_due_task_syncs(
+                        &mut transaction,
+                        for_user_id,
+                        &task_provider_kinds,
+                        now,
+                        tasks_synced_before,
+                    )
+                    .await?;
+                transaction
+                    .commit()
+                    .await
+                    .context("Failed to commit while claiming due syncs")?;
+                Ok((claimed_notification_syncs, claimed_task_syncs))
+            })
             .await?;
-        let claimed_task_syncs = self
-            .repository
-            .claim_due_task_syncs(
-                &mut transaction,
-                for_user_id,
-                &task_provider_kinds,
-                now,
-                tasks_synced_before,
-            )
-            .await?;
-        transaction
-            .commit()
-            .await
-            .context("Failed to commit while claiming due syncs")?;
 
         for (_integration_connection_id, provider_kind) in claimed_notification_syncs {
             if let Ok(notification_sync_source_kind) =
