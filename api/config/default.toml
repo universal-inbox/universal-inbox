@@ -157,6 +157,13 @@ password = "password"
 database_name = "universal-inbox"
 use_tls = false
 max_connections = 10
+# Max time to wait for a row/table lock before failing fast (SQLSTATE 55P03) instead of
+# hanging behind another transaction.
+lock_timeout_in_milliseconds = 3000
+# Max time a single statement may run before Postgres cancels it (SQLSTATE 57014).
+statement_timeout_in_milliseconds = 60000
+# Max time to wait for a connection from the pool before failing fast.
+acquire_timeout_in_seconds = 5
 
 [redis]
 host = "127.0.0.1"

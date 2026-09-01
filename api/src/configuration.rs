@@ -1,5 +1,7 @@
 use std::{collections::HashMap, env, time::Duration};
 
+use sqlx::ConnectOptions;
+
 use anyhow::Context;
 use config::{Config, ConfigError, Environment, File};
 use hex;
@@ -345,6 +347,18 @@ pub struct HttpSessionSettings {
     pub max_age_days: i64,
 }
 
+fn default_lock_timeout_in_milliseconds() -> u64 {
+    3_000
+}
+
+fn default_statement_timeout_in_milliseconds() -> u64 {
+    60_000
+}
+
+fn default_acquire_timeout_in_seconds() -> u64 {
+    5
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct DatabaseSettings {
     pub username: String,
@@ -354,6 +368,19 @@ pub struct DatabaseSettings {
     pub database_name: String,
     pub use_tls: bool,
     pub max_connections: u32,
+    /// Max time to wait to acquire a row/table lock before giving up (SQLSTATE 55P03) rather
+    /// than hanging. Kept short: legitimate single-row contention resolves in milliseconds.
+    #[serde(default = "default_lock_timeout_in_milliseconds")]
+    pub lock_timeout_in_milliseconds: u64,
+    /// Max time a single statement may run before Postgres cancels it (SQLSTATE 57014).
+    /// Bounds a stuck/slow query instead of letting it hold locks and a pool connection
+    /// indefinitely.
+    #[serde(default = "default_statement_timeout_in_milliseconds")]
+    pub statement_timeout_in_milliseconds: u64,
+    /// Max time to wait for a connection from the pool before failing fast instead of
+    /// hanging when the pool is exhausted.
+    #[serde(default = "default_acquire_timeout_in_seconds")]
+    pub acquire_timeout_in_seconds: u64,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -555,6 +582,48 @@ impl DatabaseSettings {
             self.port,
             if self.use_tls { "?sslmode=require" } else { "" }
         )
+    }
+
+    /// Builds the single, shared connection pool for this database, applying
+    /// `max_connections`, `acquire_timeout`, and the per-connection `lock_timeout` /
+    /// `statement_timeout` guards. Used by both the running server (`main.rs`) and the test
+    /// harness (`api/tests/common/mod.rs`) so the timeout behavior under test matches production.
+    pub async fn connect_pool(
+        &self,
+        log_statements_level: log::LevelFilter,
+    ) -> Result<sqlx::PgPool, sqlx::Error> {
+        let lock_timeout_in_milliseconds = self.lock_timeout_in_milliseconds;
+        let statement_timeout_in_milliseconds = self.statement_timeout_in_milliseconds;
+        let options = sqlx::postgres::PgConnectOptions::new()
+            .username(&self.username)
+            .password(&self.password)
+            .host(&self.host)
+            .port(self.port)
+            .database(&self.database_name)
+            .log_statements(log_statements_level);
+
+        sqlx::postgres::PgPoolOptions::new()
+            .max_connections(self.max_connections)
+            .acquire_timeout(Duration::from_secs(self.acquire_timeout_in_seconds))
+            .after_connect(move |conn, _meta| {
+                Box::pin(async move {
+                    use sqlx::Executor;
+                    conn.execute("SET default_transaction_isolation TO 'read committed'")
+                        .await?;
+                    conn.execute(
+                        format!("SET lock_timeout TO '{lock_timeout_in_milliseconds}ms'").as_str(),
+                    )
+                    .await?;
+                    conn.execute(
+                        format!("SET statement_timeout TO '{statement_timeout_in_milliseconds}ms'")
+                            .as_str(),
+                    )
+                    .await?;
+                    Ok(())
+                })
+            })
+            .connect_with(options)
+            .await
     }
 }
 
