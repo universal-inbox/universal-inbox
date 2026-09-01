@@ -124,7 +124,7 @@ mod patch_resource {
         Mock::given(method("POST"))
             .and(path(format!(
                 "/users/me/threads/{}/modify",
-                &google_mail_thread_get_123.id
+                google_mail_thread_get_123.id
             )))
             .respond_with(ResponseTemplate::new(403))
             .mount(&app.app.google_mail_mock_server)

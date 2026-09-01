@@ -94,7 +94,7 @@ pub async fn mock_google_drive_files_list_service(
             "q",
             format!(
                 r#"modifiedTime>"{}""#,
-                &modified_time.format("%Y-%m-%dT%H:%M:%SZ")
+                modified_time.format("%Y-%m-%dT%H:%M:%SZ")
             ),
         ));
 
