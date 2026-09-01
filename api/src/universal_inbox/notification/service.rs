@@ -6,7 +6,7 @@ use std::{
 use anyhow::{Context, anyhow};
 use apalis::prelude::Storage;
 use apalis_redis::RedisStorage;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tokio_retry::{
@@ -615,9 +615,8 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn sync_notifications(
+    async fn sync_notifications_for_source(
         &self,
-        executor: &mut Transaction<'_, Postgres>,
         source: NotificationSyncSourceKind,
         user_id: UserId,
         force_sync: bool,
@@ -626,7 +625,6 @@ impl NotificationService {
         match source {
             NotificationSyncSourceKind::Github => {
                 self.sync_third_party_notifications(
-                    executor,
                     self.github_service.clone(),
                     user_id,
                     force_sync,
@@ -635,7 +633,6 @@ impl NotificationService {
             }
             NotificationSyncSourceKind::Linear => {
                 self.sync_third_party_notifications(
-                    executor,
                     self.linear_service.clone(),
                     user_id,
                     force_sync,
@@ -644,7 +641,6 @@ impl NotificationService {
             }
             NotificationSyncSourceKind::GoogleDrive => {
                 self.sync_third_party_notifications(
-                    executor,
                     (*self.google_drive_service.read().await).clone().into(),
                     user_id,
                     force_sync,
@@ -653,7 +649,6 @@ impl NotificationService {
             }
             NotificationSyncSourceKind::GoogleMail => {
                 self.sync_third_party_notifications(
-                    executor,
                     (*self.google_mail_service.read().await).clone().into(),
                     user_id,
                     force_sync,
@@ -661,17 +656,18 @@ impl NotificationService {
                 .await
             }
             NotificationSyncSourceKind::Slack => {
-                self.sync_third_party_notifications(
-                    executor,
-                    self.slack_service.clone(),
-                    user_id,
-                    force_sync,
-                )
-                .await
+                self.sync_third_party_notifications(self.slack_service.clone(), user_id, force_sync)
+                    .await
             }
             // Todoist and TickTick notifications are produced as a side effect
             // of task sync (see `create_notification_from_inbox_task`), so
-            // delegate to the task service here.
+            // delegate to the task service here. This now runs in the task
+            // service's own transaction(s) rather than sharing this one — see
+            // `sync_third_party_notifications` for why sharing a transaction across a
+            // whole sync (including third-party network I/O) is what this refactor
+            // moves away from. The two are no longer atomic with each other, but the
+            // `Recoverable` path already meant a failed sync could commit partial
+            // work, so this was never a hard atomicity guarantee.
             NotificationSyncSourceKind::Todoist | NotificationSyncSourceKind::TickTick => {
                 let task_sync_source = source
                     .try_into()
@@ -681,7 +677,7 @@ impl NotificationService {
                     .context("Unable to access task_service from notification_service")?
                     .read()
                     .await
-                    .sync_tasks(executor, task_sync_source, user_id, force_sync)
+                    .sync_tasks_with_transaction(task_sync_source, user_id, force_sync)
                     .await?;
                 // Notifications have been upserted by the task sync; the
                 // current API contract returns the list of notifications, but
@@ -697,36 +693,8 @@ impl NotificationService {
         user_id: UserId,
         force_sync: bool,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
-        let mut transaction = self.begin().await.context(format!(
-            "Failed to create new transaction while syncing {source:?}"
-        ))?;
-
-        match self
-            .sync_notifications(&mut transaction, source, user_id, force_sync)
+        self.sync_notifications_for_source(source, user_id, force_sync)
             .await
-        {
-            Ok(notifications) => {
-                transaction
-                    .commit()
-                    .await
-                    .context(format!("Failed to commit while syncing {source:?}"))?;
-                Ok(notifications)
-            }
-            Err(error @ UniversalInboxError::Recoverable(_)) => {
-                transaction
-                    .commit()
-                    .await
-                    .context(format!("Failed to commit while syncing {source:?}"))?;
-                Err(error)
-            }
-            Err(error) => {
-                transaction
-                    .rollback()
-                    .await
-                    .context(format!("Failed to rollback while syncing {source:?}"))?;
-                Err(error)
-            }
-        }
     }
 
     pub async fn sync_all_notifications(
@@ -1264,7 +1232,6 @@ impl NotificationService {
 
     async fn sync_third_party_notifications<T, U>(
         &self,
-        executor: &mut Transaction<'_, Postgres>,
         third_party_notification_service: Arc<U>,
         user_id: UserId,
         force_sync: bool,
@@ -1278,7 +1245,7 @@ impl NotificationService {
             + Sync,
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
-        async fn sync_third_party_notifications<T, U>(
+        async fn fetch_and_upsert_third_party_notifications<T, U>(
             notification_service: &NotificationService,
             executor: &mut Transaction<'_, Postgres>,
             third_party_notification_service: Arc<U>,
@@ -1349,9 +1316,18 @@ impl NotificationService {
         } else {
             Default::default()
         };
+
+        // Phase 1 — short transaction: check whether this connection is due, and if so
+        // atomically claim the sync start (so an overlapping caller racing this one backs
+        // off instead of double-syncing), then commit immediately, well before any
+        // third-party network I/O. This is what keeps a slow/stuck provider from pinning a
+        // Postgres row lock — and a pool connection — for the sync's whole duration.
+        let mut claim_transaction = self.begin().await.context(format!(
+            "Failed to create new transaction while claiming {integration_provider_kind} notifications sync start for user {user_id}"
+        ))?;
         let Some(integration_connection) = integration_connection_service
             .get_integration_connection_to_sync(
-                executor,
+                &mut claim_transaction,
                 integration_provider_kind,
                 min_sync_interval_in_minutes,
                 IntegrationConnectionSyncType::Notifications,
@@ -1375,39 +1351,87 @@ impl NotificationService {
             return Ok(vec![]);
         }
 
-        info!("Syncing {integration_provider_kind} notifications for user {user_id}");
-        integration_connection_service
-            .start_notifications_sync_status(executor, integration_provider_kind, user_id)
+        let synced_before = (min_sync_interval_in_minutes != 0).then(|| {
+            Utc::now()
+                - TimeDelta::try_minutes(min_sync_interval_in_minutes).unwrap_or_else(|| {
+                    panic!(
+                        "Invalid `min_sync_notifications_interval_in_minutes` value: {min_sync_interval_in_minutes}"
+                    )
+                })
+        });
+        let claimed = integration_connection_service
+            .claim_notification_sync_start(
+                &mut claim_transaction,
+                integration_connection.id,
+                user_id,
+                synced_before,
+            )
             .await?;
+        claim_transaction.commit().await.context(format!(
+            "Failed to commit while claiming {integration_provider_kind} notifications sync start for user {user_id}"
+        ))?;
 
-        let notification_creation_results = match sync_third_party_notifications(
+        if !claimed {
+            debug!(
+                "{integration_provider_kind} notifications sync for user {user_id} is already in flight, skipping"
+            );
+            return Ok(vec![]);
+        }
+
+        info!("Syncing {integration_provider_kind} notifications for user {user_id}");
+
+        // Phase 2 — the actual fetch + upsert, in its own transaction. This is the one that
+        // may hold third-party network I/O open for minutes, but it no longer holds the
+        // `integration_connection` row lock: that was released when phase 1 committed.
+        // Commit regardless of outcome: a fetch/upsert failure here was, before this split,
+        // still committed (the failure was always wrapped as `Recoverable` before reaching
+        // `sync_notifications_with_transaction`'s commit/rollback decision), so any partial
+        // upserts from a failed attempt persist, same as before.
+        let mut sync_transaction = self.begin().await.context(format!(
+            "Failed to create new transaction while syncing {integration_provider_kind} notifications for user {user_id}"
+        ))?;
+        let sync_result = fetch_and_upsert_third_party_notifications(
             self,
-            executor,
+            &mut sync_transaction,
             third_party_notification_service,
             user_id,
             integration_connection.last_notifications_sync_completed_at,
         )
-        .await
-        {
+        .await;
+        sync_transaction.commit().await.context(format!(
+            "Failed to commit while syncing {integration_provider_kind} notifications for user {user_id}"
+        ))?;
+
+        // Phase 3 — short transaction to record the outcome.
+        let mut status_transaction = self.begin().await.context(format!(
+            "Failed to create new transaction while recording {integration_provider_kind} notifications sync status for user {user_id}"
+        ))?;
+        let notification_creation_results = match sync_result {
             Err(e) => {
                 integration_connection_service
                     .error_notifications_sync_status(
-                        executor,
+                        &mut status_transaction,
                         integration_provider_kind,
                         format!("Failed to fetch notifications from {integration_provider_kind}"),
                         user_id,
                     )
                     .await?;
+                status_transaction.commit().await.context(format!(
+                    "Failed to commit while recording {integration_provider_kind} notifications sync status for user {user_id}"
+                ))?;
                 return Err(UniversalInboxError::Recoverable(e.into()));
             }
             Ok(notification_creation_results) => {
                 integration_connection_service
                     .complete_notifications_sync_status(
-                        executor,
+                        &mut status_transaction,
                         integration_provider_kind,
                         user_id,
                     )
                     .await?;
+                status_transaction.commit().await.context(format!(
+                    "Failed to commit while recording {integration_provider_kind} notifications sync status for user {user_id}"
+                ))?;
                 notification_creation_results
             }
         };

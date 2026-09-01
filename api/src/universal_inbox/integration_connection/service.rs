@@ -5,7 +5,7 @@ use anyhow::{Context, anyhow};
 use apalis::prelude::*;
 use apalis_redis::RedisStorage;
 use cached::proc_macro::io_cached;
-use chrono::{TimeDelta, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use clap::ValueEnum;
 use oauth2::{CsrfToken, PkceCodeChallenge};
 use redis::AsyncCommands;
@@ -1023,28 +1023,62 @@ impl IntegrationConnectionService {
             .await
     }
 
+    /// Atomically claims the start of a notifications sync for `integration_connection_id`:
+    /// stamps `last_notifications_sync_started_at = now` and returns `true`, unless another
+    /// caller already (re)started it more recently than `synced_before` (pass `None` to
+    /// unconditionally reclaim, matching `force_sync`), in which case it returns `false` and
+    /// this caller should back off rather than duplicate the sync.
     #[tracing::instrument(
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
+            integration_connection_id = integration_connection_id.to_string(),
             user.id = for_user_id.to_string()
         ),
         err
     )]
-    pub async fn start_notifications_sync_status(
+    pub async fn claim_notification_sync_start(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        integration_provider_kind: IntegrationProviderKind,
+        integration_connection_id: IntegrationConnectionId,
         for_user_id: UserId,
-    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        synced_before: Option<DateTime<Utc>>,
+    ) -> Result<bool, UniversalInboxError> {
+        let _ = for_user_id; // carried for the tracing field only; claim is by connection id
         self.repository
-            .update_integration_connection_sync_status(
+            .claim_notification_sync_start(
                 executor,
-                Some(for_user_id),
-                Some(integration_provider_kind),
-                IntegrationConnectionSyncStatusUpdate::NotificationsSyncStarted,
-                self.sync_failure_window_in_hours,
+                integration_connection_id,
+                Utc::now(),
+                synced_before,
+            )
+            .await
+    }
+
+    /// Tasks counterpart of [`Self::claim_notification_sync_start`].
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection_id = integration_connection_id.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn claim_task_sync_start(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        for_user_id: UserId,
+        synced_before: Option<DateTime<Utc>>,
+    ) -> Result<bool, UniversalInboxError> {
+        let _ = for_user_id; // carried for the tracing field only; claim is by connection id
+        self.repository
+            .claim_task_sync_start(
+                executor,
+                integration_connection_id,
+                Utc::now(),
+                synced_before,
             )
             .await
     }
@@ -1123,32 +1157,6 @@ impl IntegrationConnectionService {
                 for_user_id,
                 integration_provider_kind,
                 IntegrationConnectionSyncStatusUpdate::TasksSyncScheduled,
-                self.sync_failure_window_in_hours,
-            )
-            .await
-    }
-
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
-            user.id = for_user_id.to_string()
-        ),
-        err
-    )]
-    pub async fn start_tasks_sync_status(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        integration_provider_kind: IntegrationProviderKind,
-        for_user_id: UserId,
-    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        self.repository
-            .update_integration_connection_sync_status(
-                executor,
-                Some(for_user_id),
-                Some(integration_provider_kind),
-                IntegrationConnectionSyncStatusUpdate::TasksSyncStarted,
                 self.sync_failure_window_in_hours,
             )
             .await

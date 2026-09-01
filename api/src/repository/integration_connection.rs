@@ -22,11 +22,9 @@ use crate::{
 #[derive(Debug)]
 pub enum IntegrationConnectionSyncStatusUpdate {
     NotificationsSyncScheduled,
-    NotificationsSyncStarted,
     NotificationsSyncCompleted,
     NotificationsSyncFailed(String),
     TasksSyncScheduled,
-    TasksSyncStarted,
     TasksSyncCompleted,
     TasksSyncFailed(String),
 }
@@ -126,6 +124,32 @@ pub trait IntegrationConnectionRepository {
         now: DateTime<Utc>,
         synced_before: DateTime<Utc>,
     ) -> Result<Vec<(IntegrationConnectionId, IntegrationProviderKind)>, UniversalInboxError>;
+
+    /// Atomically claims the start of a notifications sync for one connection: stamps
+    /// `last_notifications_sync_started_at = now` and returns `true`, unless
+    /// `synced_before` is given and the connection was already (re)started more recently
+    /// than that, in which case it does nothing and returns `false` — another worker (or
+    /// this one, racing itself) already has this sync in flight. `synced_before: None`
+    /// unconditionally (re)claims, matching `force_sync`.
+    ///
+    /// A single-row `UPDATE ... WHERE id = $id` is already atomic with respect to any
+    /// concurrent caller — no explicit locking clause needed.
+    async fn claim_notification_sync_start(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        now: DateTime<Utc>,
+        synced_before: Option<DateTime<Utc>>,
+    ) -> Result<bool, UniversalInboxError>;
+
+    /// Tasks counterpart of [`Self::claim_notification_sync_start`].
+    async fn claim_task_sync_start(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        now: DateTime<Utc>,
+        synced_before: Option<DateTime<Utc>>,
+    ) -> Result<bool, UniversalInboxError>;
 
     async fn create_integration_connection(
         &self,
@@ -247,6 +271,51 @@ async fn claim_due_syncs(
             Ok((IntegrationConnectionId(row.id), provider_kind))
         })
         .collect::<Result<Vec<_>, UniversalInboxError>>()
+}
+
+/// Shared implementation for `claim_notification_sync_start`/`claim_task_sync_start`. A
+/// single-row `UPDATE ... WHERE id = $id [AND started_at is-due]` is already atomic — no
+/// explicit locking clause is needed, unlike `claim_due_syncs` above which can touch several
+/// rows at once.
+async fn claim_sync_start(
+    executor: &mut Transaction<'_, Postgres>,
+    started_at_column: &'static str,
+    integration_connection_id: IntegrationConnectionId,
+    now: DateTime<Utc>,
+    synced_before: Option<DateTime<Utc>>,
+) -> Result<bool, UniversalInboxError> {
+    let mut query_builder = QueryBuilder::new(format!(
+        "UPDATE integration_connection SET {started_at_column} = "
+    ));
+    query_builder
+        .push_bind(now)
+        .push(" WHERE id = ")
+        .push_bind(integration_connection_id.0);
+    if let Some(synced_before) = synced_before {
+        query_builder
+            .push(format!(
+                " AND ({started_at_column} IS NULL OR {started_at_column} <= "
+            ))
+            .push_bind(synced_before)
+            .push(" )");
+    }
+    query_builder.push(" RETURNING id");
+
+    let claimed_id: Option<Uuid> = query_builder
+        .build_query_scalar()
+        .fetch_optional(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to claim sync start for integration connection {integration_connection_id} from storage: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+    Ok(claimed_id.is_some())
 }
 
 #[async_trait]
@@ -763,11 +832,6 @@ impl IntegrationConnectionRepository for Repository {
                     .push(" last_notifications_sync_scheduled_at = ")
                     .push_bind_unseparated(Utc::now());
             }
-            IntegrationConnectionSyncStatusUpdate::NotificationsSyncStarted => {
-                separated
-                    .push(" last_notifications_sync_started_at = ")
-                    .push_bind_unseparated(Utc::now());
-            }
             IntegrationConnectionSyncStatusUpdate::NotificationsSyncCompleted => {
                 separated
                     .push(" last_notifications_sync_completed_at = ")
@@ -796,11 +860,6 @@ impl IntegrationConnectionRepository for Repository {
             IntegrationConnectionSyncStatusUpdate::TasksSyncScheduled => {
                 separated
                     .push(" last_tasks_sync_scheduled_at = ")
-                    .push_bind_unseparated(Utc::now());
-            }
-            IntegrationConnectionSyncStatusUpdate::TasksSyncStarted => {
-                separated
-                    .push(" last_tasks_sync_started_at = ")
                     .push_bind_unseparated(Utc::now());
             }
             IntegrationConnectionSyncStatusUpdate::TasksSyncCompleted => {
@@ -1140,6 +1199,52 @@ impl IntegrationConnectionRepository for Repository {
             "last_tasks_sync_scheduled_at",
             for_user_id,
             provider_kinds,
+            now,
+            synced_before,
+        )
+        .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(integration_connection_id = integration_connection_id.to_string()),
+        err
+    )]
+    async fn claim_notification_sync_start(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        now: DateTime<Utc>,
+        synced_before: Option<DateTime<Utc>>,
+    ) -> Result<bool, UniversalInboxError> {
+        claim_sync_start(
+            executor,
+            "last_notifications_sync_started_at",
+            integration_connection_id,
+            now,
+            synced_before,
+        )
+        .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(integration_connection_id = integration_connection_id.to_string()),
+        err
+    )]
+    async fn claim_task_sync_start(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        now: DateTime<Utc>,
+        synced_before: Option<DateTime<Utc>>,
+    ) -> Result<bool, UniversalInboxError> {
+        claim_sync_start(
+            executor,
+            "last_tasks_sync_started_at",
+            integration_connection_id,
             now,
             synced_before,
         )
