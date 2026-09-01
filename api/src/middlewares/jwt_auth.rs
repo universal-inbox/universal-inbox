@@ -292,7 +292,7 @@ mod tests {
         App, HttpResponse,
         body::{BoxBody, EitherBody},
         cookie::Key,
-        dev::{Service as _, ServiceResponse},
+        dev::ServiceResponse,
         get, test, web,
     };
     use chrono::Utc;
