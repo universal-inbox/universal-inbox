@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, anyhow};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
@@ -734,7 +734,6 @@ impl TaskService {
 
     async fn sync_third_party_tasks<T, U>(
         &self,
-        executor: &mut Transaction<'_, Postgres>,
         third_party_task_service: Arc<U>,
         user_id: UserId,
         force_sync: bool,
@@ -749,7 +748,7 @@ impl TaskService {
             + Sync,
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
-        async fn sync_third_party_tasks<T, U>(
+        async fn fetch_and_upsert_third_party_tasks<T, U>(
             task_service: &TaskService,
             executor: &mut Transaction<'_, Postgres>,
             third_party_task_service: Arc<U>,
@@ -804,9 +803,18 @@ impl TaskService {
         } else {
             Default::default()
         };
+
+        // Phase 1 — short transaction: check whether this connection is due, and if so
+        // atomically claim the sync start (so an overlapping caller racing this one backs
+        // off instead of double-syncing), then commit immediately, well before any
+        // third-party network I/O. See the notification-side twin
+        // (`NotificationService::sync_third_party_notifications`) for the full rationale.
+        let mut claim_transaction = self.begin().await.context(format!(
+            "Failed to create new transaction while claiming {integration_provider_kind} tasks sync start for user {user_id}"
+        ))?;
         let Some(integration_connection) = integration_connection_service
             .get_integration_connection_to_sync(
-                executor,
+                &mut claim_transaction,
                 integration_provider_kind,
                 min_sync_interval_in_minutes,
                 IntegrationConnectionSyncType::Tasks,
@@ -827,35 +835,85 @@ impl TaskService {
             return Ok(vec![]);
         }
 
-        info!("Syncing {integration_provider_kind} tasks for user {user_id}");
-        integration_connection_service
-            .start_tasks_sync_status(executor, integration_provider_kind, user_id)
+        let synced_before = (min_sync_interval_in_minutes != 0).then(|| {
+            Utc::now()
+                - TimeDelta::try_minutes(min_sync_interval_in_minutes).unwrap_or_else(|| {
+                    panic!(
+                        "Invalid `min_sync_tasks_interval_in_minutes` value: {min_sync_interval_in_minutes}"
+                    )
+                })
+        });
+        let claimed = integration_connection_service
+            .claim_task_sync_start(
+                &mut claim_transaction,
+                integration_connection.id,
+                user_id,
+                synced_before,
+            )
             .await?;
+        claim_transaction.commit().await.context(format!(
+            "Failed to commit while claiming {integration_provider_kind} tasks sync start for user {user_id}"
+        ))?;
 
-        let task_creation_results = match sync_third_party_tasks(
+        if !claimed {
+            debug!(
+                "{integration_provider_kind} tasks sync for user {user_id} is already in flight, skipping"
+            );
+            return Ok(vec![]);
+        }
+
+        info!("Syncing {integration_provider_kind} tasks for user {user_id}");
+
+        // Phase 2 — the actual fetch + upsert, in its own transaction, committed
+        // regardless of outcome for the same reason as the notification-side twin: a
+        // fetch/upsert failure here was, before this split, still committed (always
+        // wrapped as `Recoverable` before reaching `sync_tasks_with_transaction`'s
+        // commit/rollback decision).
+        let mut sync_transaction = self.begin().await.context(format!(
+            "Failed to create new transaction while syncing {integration_provider_kind} tasks for user {user_id}"
+        ))?;
+        let sync_result = fetch_and_upsert_third_party_tasks(
             self,
-            executor,
+            &mut sync_transaction,
             third_party_task_service,
             user_id,
             integration_connection.last_tasks_sync_completed_at,
         )
-        .await
-        {
+        .await;
+        sync_transaction.commit().await.context(format!(
+            "Failed to commit while syncing {integration_provider_kind} tasks for user {user_id}"
+        ))?;
+
+        // Phase 3 — short transaction to record the outcome.
+        let mut status_transaction = self.begin().await.context(format!(
+            "Failed to create new transaction while recording {integration_provider_kind} tasks sync status for user {user_id}"
+        ))?;
+        let task_creation_results = match sync_result {
             Err(e) => {
                 integration_connection_service
                     .error_tasks_sync_status(
-                        executor,
+                        &mut status_transaction,
                         integration_provider_kind,
                         format!("Failed to fetch tasks from {integration_provider_kind}"),
                         user_id,
                     )
                     .await?;
+                status_transaction.commit().await.context(format!(
+                    "Failed to commit while recording {integration_provider_kind} tasks sync status for user {user_id}"
+                ))?;
                 return Err(UniversalInboxError::Recoverable(e.into()));
             }
             Ok(task_creation_results) => {
                 integration_connection_service
-                    .complete_tasks_sync_status(executor, integration_provider_kind, user_id)
+                    .complete_tasks_sync_status(
+                        &mut status_transaction,
+                        integration_provider_kind,
+                        user_id,
+                    )
                     .await?;
+                status_transaction.commit().await.context(format!(
+                    "Failed to commit while recording {integration_provider_kind} tasks sync status for user {user_id}"
+                ))?;
                 task_creation_results
             }
         };
@@ -1036,40 +1094,24 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn sync_tasks(
+    async fn sync_tasks_for_source(
         &self,
-        executor: &mut Transaction<'_, Postgres>,
         source: TaskSyncSourceKind,
         user_id: UserId,
         force_sync: bool,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
         match source {
             TaskSyncSourceKind::Todoist => {
-                self.sync_third_party_tasks(
-                    executor,
-                    self.todoist_service.clone(),
-                    user_id,
-                    force_sync,
-                )
-                .await
+                self.sync_third_party_tasks(self.todoist_service.clone(), user_id, force_sync)
+                    .await
             }
             TaskSyncSourceKind::Linear => {
-                self.sync_third_party_tasks(
-                    executor,
-                    self.linear_service.clone(),
-                    user_id,
-                    force_sync,
-                )
-                .await
+                self.sync_third_party_tasks(self.linear_service.clone(), user_id, force_sync)
+                    .await
             }
             TaskSyncSourceKind::TickTick => {
-                self.sync_third_party_tasks(
-                    executor,
-                    self.ticktick_service.clone(),
-                    user_id,
-                    force_sync,
-                )
-                .await
+                self.sync_third_party_tasks(self.ticktick_service.clone(), user_id, force_sync)
+                    .await
             }
         }
     }
@@ -1080,36 +1122,8 @@ impl TaskService {
         user_id: UserId,
         force_sync: bool,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
-        let mut transaction = self.begin().await.context(format!(
-            "Failed to create new transaction while syncing {source:?}"
-        ))?;
-
-        match self
-            .sync_tasks(&mut transaction, source, user_id, force_sync)
+        self.sync_tasks_for_source(source, user_id, force_sync)
             .await
-        {
-            Ok(tasks) => {
-                transaction
-                    .commit()
-                    .await
-                    .context(format!("Failed to commit while syncing {source:?}"))?;
-                Ok(tasks)
-            }
-            Err(error @ UniversalInboxError::Recoverable(_)) => {
-                transaction
-                    .commit()
-                    .await
-                    .context(format!("Failed to commit while syncing {source:?}"))?;
-                Err(error)
-            }
-            Err(error) => {
-                transaction
-                    .rollback()
-                    .await
-                    .context(format!("Failed to rollback while syncing {source:?}"))?;
-                Err(error)
-            }
-        }
     }
 
     pub async fn sync_all_tasks(
