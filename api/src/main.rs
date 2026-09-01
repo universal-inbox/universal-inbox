@@ -2,10 +2,6 @@
 use std::sync::Arc;
 
 use clap::Parser;
-use sqlx::{
-    ConnectOptions, Executor,
-    postgres::{PgConnectOptions, PgPoolOptions},
-};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 use wiremock::MockServer;
@@ -78,24 +74,10 @@ async fn main() -> std::io::Result<()> {
         "Connecting to PostgreSQL on {}",
         &settings.database.safe_connection_string()
     );
-    let options = PgConnectOptions::new()
-        .username(&settings.database.username)
-        .password(&settings.database.password)
-        .host(&settings.database.host)
-        .port(settings.database.port)
-        .database(&settings.database.database_name)
-        .log_statements(log::LevelFilter::Debug);
     let pool = Arc::new(
-        PgPoolOptions::new()
-            .max_connections(settings.database.max_connections)
-            .after_connect(|conn, _meta| {
-                Box::pin(async move {
-                    conn.execute("SET default_transaction_isolation TO 'read committed'")
-                        .await?;
-                    Ok(())
-                })
-            })
-            .connect_with(options)
+        settings
+            .database
+            .connect_pool(log::LevelFilter::Debug)
             .await
             .expect("Failed to connect to Postgresql"),
     );

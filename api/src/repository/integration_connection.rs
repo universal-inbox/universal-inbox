@@ -948,6 +948,10 @@ impl IntegrationConnectionRepository for Repository {
                 .push("integration_connection.status::TEXT = ")
                 .push_bind_unseparated(status.to_string());
         }
+        // Deterministic row order so concurrent callers that lock (or update) several rows
+        // from this same set always do so in the same order, closing off one class of
+        // Postgres deadlock (SQLSTATE 40P01) between two overlapping transactions.
+        query_builder.push(" ORDER BY integration_connection.id ");
         if lock_rows {
             query_builder.push(" FOR UPDATE ");
         }
