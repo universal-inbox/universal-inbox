@@ -12,6 +12,7 @@ use apalis_redis::RedisStorage;
 use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::RwLock;
+use tracing::warn;
 
 use universal_inbox::{
     Page,
@@ -59,6 +60,7 @@ pub struct ListTaskRequest {
 pub async fn list_tasks(
     list_task_request: web::Query<ListTaskRequest>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
+    integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     authenticated: Authenticated<Claims>,
     job_storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
@@ -79,16 +81,31 @@ pub async fn list_tasks(
             list_task_request.status,
             list_task_request.only_synced_tasks.unwrap_or_default(),
             user_id,
-            list_task_request
-                .trigger_sync
-                .unwrap_or(true)
-                .then(|| job_storage.as_ref().clone()),
         )
         .await?;
     transaction
         .commit()
         .await
         .context("Failed to commit while listing tasks")?;
+
+    if list_task_request.trigger_sync.unwrap_or(true) {
+        // Scheduling runs after this transaction has committed, in its own short
+        // transaction — see IntegrationConnectionService::schedule_due_syncs. Best-effort:
+        // a failure here must never turn a successful tasks page fetch into a 500.
+        let mut storage = job_storage.as_ref().clone();
+        if let Err(error) = integration_connection_service
+            .read()
+            .await
+            .schedule_due_syncs(user_id, &mut storage)
+            .await
+        {
+            warn!(
+                ?error,
+                user.id = %user_id,
+                "Failed to schedule integration syncs while listing tasks; serving tasks anyway"
+            );
+        }
+    }
 
     Ok(HttpResponse::Ok()
         .content_type("application/json")

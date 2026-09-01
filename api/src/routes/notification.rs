@@ -9,6 +9,7 @@ use serde::Deserialize;
 use serde_json::json;
 use serde_with::{StringWithSeparator, formats::CommaSeparator, serde_as};
 use tokio::sync::RwLock;
+use tracing::warn;
 
 use universal_inbox::{
     Page, PageToken,
@@ -77,6 +78,7 @@ pub struct ListNotificationRequest {
 pub async fn list_notifications(
     list_notification_request: web::Query<ListNotificationRequest>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+    integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     authenticated: Authenticated<Claims>,
     job_storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
@@ -126,10 +128,6 @@ pub async fn list_notifications(
                 .unwrap_or_default(),
             page_token,
             user_id,
-            list_notification_request
-                .trigger_sync
-                .unwrap_or(true)
-                .then(|| job_storage.as_ref().clone()),
         )
         .await?;
 
@@ -137,6 +135,25 @@ pub async fn list_notifications(
         .commit()
         .await
         .context("Failed to commit while listing notifications")?;
+
+    if list_notification_request.trigger_sync.unwrap_or(true) {
+        // Scheduling runs after this transaction has committed, in its own short
+        // transaction — see IntegrationConnectionService::schedule_due_syncs. Best-effort:
+        // a failure here must never turn a successful notifications page fetch into a 500.
+        let mut storage = job_storage.as_ref().clone();
+        if let Err(error) = integration_connection_service
+            .read()
+            .await
+            .schedule_due_syncs(user_id, &mut storage)
+            .await
+        {
+            warn!(
+                ?error,
+                user.id = %user_id,
+                "Failed to schedule integration syncs while listing notifications; serving notifications anyway"
+            );
+        }
+    }
 
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&result).context("Cannot serialize notifications list result")?,

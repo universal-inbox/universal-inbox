@@ -6,6 +6,7 @@ use apalis::prelude::*;
 use apalis_redis::RedisStorage;
 use cached::proc_macro::io_cached;
 use chrono::{TimeDelta, Utc};
+use clap::ValueEnum;
 use oauth2::{CsrfToken, PkceCodeChallenge};
 use redis::AsyncCommands;
 use secrecy::{ExposeSecret, SecretBox};
@@ -162,79 +163,106 @@ impl IntegrationConnectionService {
             .await
     }
 
+    /// Atomically claims every one of `for_user_id`'s connections whose notifications or
+    /// tasks sync is due, and pushes one job per claimed connection.
+    ///
+    /// Replaces the old `trigger_sync_for_integration_connections` (a Rust-side
+    /// read-then-per-connection-write loop, run on the caller's own transaction): the claim
+    /// is one atomic, `FOR UPDATE SKIP LOCKED` statement per sync type in a *short*
+    /// transaction this method owns and commits itself, so callers should invoke it after
+    /// their own transaction (e.g. the one that fetched a notifications/tasks page) has
+    /// already committed — this can then never hold up, or be deadlocked by, that read.
     #[tracing::instrument(
         level = "debug",
         skip_all,
         fields(user.id = for_user_id.to_string()),
         err
     )]
-    pub async fn trigger_sync_for_integration_connections(
+    pub async fn schedule_due_syncs(
         &self,
-        executor: &mut Transaction<'_, Postgres>,
         for_user_id: UserId,
-        mut job_storage: RedisStorage<UniversalInboxJob>,
+        job_storage: &mut RedisStorage<UniversalInboxJob>,
     ) -> Result<(), UniversalInboxError> {
-        let mut integration_connections = self
-            .fetch_all_integration_connections(
-                executor,
+        let now = Utc::now();
+        let notifications_synced_before = now
+            - TimeDelta::try_minutes(self.min_sync_notifications_interval_in_minutes)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Invalid `min_sync_notifications_interval_in_minutes` value: {}",
+                        self.min_sync_notifications_interval_in_minutes
+                    )
+                });
+        let tasks_synced_before = now
+            - TimeDelta::try_minutes(self.min_sync_tasks_interval_in_minutes).unwrap_or_else(
+                || {
+                    panic!(
+                        "Invalid `min_sync_tasks_interval_in_minutes` value: {}",
+                        self.min_sync_tasks_interval_in_minutes
+                    )
+                },
+            );
+
+        // tag: New notification integration
+        let notification_provider_kinds: Vec<IntegrationProviderKind> =
+            NotificationSyncSourceKind::value_variants()
+                .iter()
+                .map(|kind| (*kind).into())
+                .collect();
+        let task_provider_kinds: Vec<IntegrationProviderKind> =
+            TaskSyncSourceKind::value_variants()
+                .iter()
+                .map(|kind| (*kind).into())
+                .collect();
+
+        let mut transaction = self
+            .begin()
+            .await
+            .context("Failed to create new transaction while claiming due syncs")?;
+        let claimed_notification_syncs = self
+            .repository
+            .claim_due_notification_syncs(
+                &mut transaction,
                 for_user_id,
-                Some(IntegrationConnectionStatus::Validated),
-                false,
+                &notification_provider_kinds,
+                now,
+                notifications_synced_before,
             )
             .await?;
-        for integration_connection in integration_connections.iter_mut() {
-            if integration_connection.is_connected() {
-                if let Ok(notification_sync_source_kind) =
-                    integration_connection.provider.kind().try_into()
-                {
-                    let synced_before = Utc::now()
-                            - TimeDelta::try_minutes(self.min_sync_notifications_interval_in_minutes)
-                                .unwrap_or_else(|| {
-                                    panic!(
-                                        "Invalid `min_sync_notifications_interval_in_minutes` value: {}",
-                                        self.min_sync_notifications_interval_in_minutes
-                                    )
-                                });
+        let claimed_task_syncs = self
+            .repository
+            .claim_due_task_syncs(
+                &mut transaction,
+                for_user_id,
+                &task_provider_kinds,
+                now,
+                tasks_synced_before,
+            )
+            .await?;
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit while claiming due syncs")?;
 
-                    if integration_connection
-                        .last_notifications_sync_scheduled_at
-                        .map(|scheduled_at| scheduled_at <= synced_before)
-                        .unwrap_or(true)
-                    {
-                        self.trigger_sync_notifications(
-                            executor,
-                            Some(notification_sync_source_kind),
-                            Some(for_user_id),
-                            &mut job_storage,
-                        )
-                        .await?;
-                    }
-                }
-                if let Ok(task_sync_source_kind) = integration_connection.provider.kind().try_into()
-                {
-                    let synced_before = Utc::now()
-                        - TimeDelta::try_minutes(self.min_sync_tasks_interval_in_minutes)
-                            .unwrap_or_else(|| {
-                                panic!(
-                                    "Invalid `min_sync_tasks_interval_in_minutes` value: {}",
-                                    self.min_sync_tasks_interval_in_minutes
-                                )
-                            });
-
-                    if integration_connection
-                        .last_tasks_sync_scheduled_at
-                        .map(|scheduled_at| scheduled_at <= synced_before)
-                        .unwrap_or(true)
-                    {
-                        self.trigger_sync_tasks(
-                            executor,
-                            Some(task_sync_source_kind),
-                            Some(for_user_id),
-                            &mut job_storage,
-                        )
-                        .await?;
-                    }
-                }
+        for (_integration_connection_id, provider_kind) in claimed_notification_syncs {
+            if let Ok(notification_sync_source_kind) =
+                NotificationSyncSourceKind::try_from(provider_kind)
+            {
+                self.push_sync_notifications_job(
+                    job_storage,
+                    Some(notification_sync_source_kind),
+                    Some(for_user_id),
+                )
+                .await?;
+            }
+        }
+        for (_integration_connection_id, provider_kind) in claimed_task_syncs {
+            if let Ok(task_sync_source_kind) = TaskSyncSourceKind::try_from(provider_kind) {
+                self.push_sync_tasks_job(
+                    job_storage,
+                    Some(task_sync_source_kind),
+                    Some(for_user_id),
+                )
+                .await?;
             }
         }
 

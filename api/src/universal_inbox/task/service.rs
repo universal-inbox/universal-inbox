@@ -4,11 +4,10 @@ use std::{
 };
 
 use anyhow::{Context, anyhow};
-use apalis_redis::RedisStorage;
 use chrono::{DateTime, Utc};
-use sqlx::{Acquire, Postgres, Transaction};
+use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use universal_inbox::{
     HasHtmlUrl, Page,
@@ -40,7 +39,6 @@ use crate::{
         ticktick::TickTickService,
         todoist::TodoistService,
     },
-    jobs::UniversalInboxJob,
     repository::{Repository, task::TaskRepository},
     universal_inbox::{
         UniversalInboxError, UpdateStatus, UpsertStatus,
@@ -374,7 +372,6 @@ impl TaskService {
             status = status.to_string(),
             only_synced_tasks,
             user.id = user_id.to_string(),
-            trigger_sync = job_storage.is_none()
         ),
         err
     )]
@@ -384,68 +381,14 @@ impl TaskService {
         status: TaskStatus,
         only_synced_tasks: bool,
         user_id: UserId,
-        job_storage: Option<RedisStorage<UniversalInboxJob>>,
     ) -> Result<Page<Task>, UniversalInboxError> {
-        let tasks_page = self
-            .repository
+        // Sync scheduling used to run here, on this same read transaction (see
+        // `IntegrationConnectionService::schedule_due_syncs` for the replacement and why).
+        // Callers that want to trigger a sync now call it themselves, after this
+        // transaction has committed.
+        self.repository
             .fetch_all_tasks(executor, status, only_synced_tasks, user_id)
-            .await?;
-
-        if let Some(job_storage) = job_storage {
-            // Schedule sync triggering in its own SAVEPOINT (a nested transaction on top of
-            // `executor`) rather than on the read's own statements. A failure here (e.g. a
-            // lock-acquisition timeout racing another sync-scheduling caller) must never turn
-            // a successful tasks page fetch into a 500: it's best-effort background work, not
-            // part of what this request promises to its caller.
-            match executor.begin().await {
-                Ok(mut savepoint) => {
-                    match self
-                        .integration_connection_service
-                        .read()
-                        .await
-                        .trigger_sync_for_integration_connections(
-                            &mut savepoint,
-                            user_id,
-                            job_storage,
-                        )
-                        .await
-                    {
-                        Ok(()) => {
-                            if let Err(error) = savepoint.commit().await {
-                                warn!(
-                                    ?error,
-                                    user.id = %user_id,
-                                    "Failed to commit sync scheduling savepoint while listing tasks"
-                                );
-                            }
-                        }
-                        Err(error) => {
-                            warn!(
-                                ?error,
-                                user.id = %user_id,
-                                "Failed to schedule integration syncs while listing tasks; serving tasks anyway"
-                            );
-                            if let Err(rollback_error) = savepoint.rollback().await {
-                                warn!(
-                                    ?rollback_error,
-                                    user.id = %user_id,
-                                    "Failed to roll back sync scheduling savepoint"
-                                );
-                            }
-                        }
-                    }
-                }
-                Err(error) => {
-                    warn!(
-                        ?error,
-                        user.id = %user_id,
-                        "Failed to open sync scheduling savepoint while listing tasks; skipping sync scheduling"
-                    );
-                }
-            }
-        }
-
-        Ok(tasks_page)
+            .await
     }
 
     #[tracing::instrument(

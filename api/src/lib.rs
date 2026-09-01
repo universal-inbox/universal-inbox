@@ -229,6 +229,7 @@ pub async fn run_server(
     let mcp_http_service = mcp::build_http_service(
         notification_service.clone(),
         task_service.clone(),
+        integration_connection_service.clone(),
         redis_storage.clone(),
         mcp_session_store,
     );

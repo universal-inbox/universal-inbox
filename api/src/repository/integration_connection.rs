@@ -102,6 +102,31 @@ pub trait IntegrationConnectionRepository {
         lock_rows: bool,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError>;
 
+    /// Atomically claims every one of `for_user_id`'s `Validated` connections (among
+    /// `provider_kinds`) whose notifications sync is due, stamping
+    /// `last_notifications_sync_scheduled_at = now` and returning only the rows it claimed.
+    /// `FOR UPDATE SKIP LOCKED` makes two overlapping callers non-blocking by construction: a
+    /// connection someone else is concurrently claiming is simply skipped, not waited on, so
+    /// this can never deadlock and never holds a lock beyond this one short statement.
+    async fn claim_due_notification_syncs(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: UserId,
+        provider_kinds: &[IntegrationProviderKind],
+        now: DateTime<Utc>,
+        synced_before: DateTime<Utc>,
+    ) -> Result<Vec<(IntegrationConnectionId, IntegrationProviderKind)>, UniversalInboxError>;
+
+    /// Tasks counterpart of [`Self::claim_due_notification_syncs`].
+    async fn claim_due_task_syncs(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: UserId,
+        provider_kinds: &[IntegrationProviderKind],
+        now: DateTime<Utc>,
+        synced_before: DateTime<Utc>,
+    ) -> Result<Vec<(IntegrationConnectionId, IntegrationProviderKind)>, UniversalInboxError>;
+
     async fn create_integration_connection(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -144,6 +169,85 @@ pub const OAUTH_INVALID_GRANT_ERROR_MESSAGE: &str =
 
 pub const OAUTH_MISSING_REFRESH_TOKEN_ERROR_MESSAGE: &str =
     "🔌 Authorization is missing a refresh token. Please reconnect this integration.";
+
+#[derive(sqlx::FromRow)]
+struct ClaimedIntegrationConnectionRow {
+    id: Uuid,
+    provider_kind: String,
+}
+
+/// Shared implementation for `claim_due_notification_syncs`/`claim_due_task_syncs`. Atomically
+/// claims and stamps every `Validated` connection (among `provider_kinds`) belonging to
+/// `for_user_id` whose `scheduled_at_column` is either unset or older than `synced_before`.
+///
+/// `scheduled_at_column` is one of two hardcoded literals chosen by the caller (never
+/// user input), interpolated as a column identifier since SQL has no way to bind an
+/// identifier as a parameter.
+///
+/// `FOR UPDATE SKIP LOCKED` is what makes this safe to call from a live HTTP request: a
+/// connection another transaction is already touching (a running sync claiming/updating it,
+/// or another concurrent claim) is simply left out of the result rather than blocked on —
+/// this statement never waits on a lock, so it can never be a party to a deadlock, and it
+/// holds its own claimed-row locks only for the remainder of this one short transaction.
+async fn claim_due_syncs(
+    executor: &mut Transaction<'_, Postgres>,
+    scheduled_at_column: &'static str,
+    for_user_id: UserId,
+    provider_kinds: &[IntegrationProviderKind],
+    now: DateTime<Utc>,
+    synced_before: DateTime<Utc>,
+) -> Result<Vec<(IntegrationConnectionId, IntegrationProviderKind)>, UniversalInboxError> {
+    if provider_kinds.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let provider_kind_strings: Vec<String> =
+        provider_kinds.iter().map(|kind| kind.to_string()).collect();
+    let validated_status = IntegrationConnectionStatus::Validated.to_string();
+
+    let mut query_builder = QueryBuilder::new(format!(
+        "UPDATE integration_connection SET {scheduled_at_column} = "
+    ));
+    query_builder
+        .push_bind(now)
+        .push(" WHERE id IN ( SELECT id FROM integration_connection WHERE user_id = ")
+        .push_bind(for_user_id.0)
+        .push(" AND status::TEXT = ")
+        .push_bind(validated_status)
+        .push(" AND provider_kind::TEXT = ANY(")
+        .push_bind(provider_kind_strings)
+        .push(format!(
+            ") AND ({scheduled_at_column} IS NULL OR {scheduled_at_column} <= "
+        ))
+        .push_bind(synced_before)
+        .push(" ) ORDER BY id FOR UPDATE SKIP LOCKED ) RETURNING id, provider_kind::TEXT AS provider_kind");
+
+    let rows: Vec<ClaimedIntegrationConnectionRow> = query_builder
+        .build_query_as()
+        .fetch_all(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message =
+                format!("Failed to claim due syncs for user {for_user_id} from storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+    rows.into_iter()
+        .map(|row| {
+            let provider_kind =
+                row.provider_kind
+                    .parse()
+                    .map_err(|e| UniversalInboxError::InvalidEnumData {
+                        source: e,
+                        output: row.provider_kind,
+                    })?;
+            Ok((IntegrationConnectionId(row.id), provider_kind))
+        })
+        .collect::<Result<Vec<_>, UniversalInboxError>>()
+}
 
 #[async_trait]
 impl IntegrationConnectionRepository for Repository {
@@ -984,6 +1088,62 @@ impl IntegrationConnectionRepository for Repository {
         rows.into_iter()
             .map(|r| r.try_into())
             .collect::<Result<Vec<IntegrationConnection>, UniversalInboxError>>()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            user.id = for_user_id.to_string(),
+            provider_kinds = ?provider_kinds,
+        ),
+        err
+    )]
+    async fn claim_due_notification_syncs(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: UserId,
+        provider_kinds: &[IntegrationProviderKind],
+        now: DateTime<Utc>,
+        synced_before: DateTime<Utc>,
+    ) -> Result<Vec<(IntegrationConnectionId, IntegrationProviderKind)>, UniversalInboxError> {
+        claim_due_syncs(
+            executor,
+            "last_notifications_sync_scheduled_at",
+            for_user_id,
+            provider_kinds,
+            now,
+            synced_before,
+        )
+        .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            user.id = for_user_id.to_string(),
+            provider_kinds = ?provider_kinds,
+        ),
+        err
+    )]
+    async fn claim_due_task_syncs(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: UserId,
+        provider_kinds: &[IntegrationProviderKind],
+        now: DateTime<Utc>,
+        synced_before: DateTime<Utc>,
+    ) -> Result<Vec<(IntegrationConnectionId, IntegrationProviderKind)>, UniversalInboxError> {
+        claim_due_syncs(
+            executor,
+            "last_tasks_sync_scheduled_at",
+            for_user_id,
+            provider_kinds,
+            now,
+            synced_before,
+        )
+        .await
     }
 
     #[tracing::instrument(
