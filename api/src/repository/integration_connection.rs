@@ -728,23 +728,37 @@ impl IntegrationConnectionRepository for Repository {
             }
         }
 
+        // Route the row selection through an ordered, row-locking subquery rather than
+        // a bare WHERE on the UPDATE (UPDATE itself has no ORDER BY). When `user_id` or
+        // `integration_provider_kind` is None this predicate can match more than one row
+        // (e.g. the unauthenticated global sync-trigger endpoint updates every connection
+        // for a given provider, or every connection for a given user); without a
+        // deterministic lock order, two overlapping callers scanning the same row set in
+        // different orders is exactly the shape that produces a Postgres deadlock
+        // (SQLSTATE 40P01).
         query_builder
             .push(" FROM integration_connection_config ")
-            .push(" WHERE ");
-        let mut separated = query_builder.separated(" AND ");
-        separated.push(
-            " integration_connection_config.integration_connection_id = integration_connection.id ",
-        );
+            .push(
+                " WHERE integration_connection_config.integration_connection_id = integration_connection.id ",
+            )
+            .push(" AND integration_connection.id IN ( ")
+            .push(" SELECT integration_connection.id FROM integration_connection WHERE TRUE ");
+        // Not `.separated(" AND ")`: a fresh `Separated` does not prepend its separator
+        // before its *first* push, so the first optional predicate here would otherwise
+        // concatenate directly onto "WHERE TRUE" with no connective. Each predicate is
+        // independently optional (not a comma/and-joined list built from scratch), so
+        // prepend " AND " explicitly instead.
         if let Some(integration_provider_kind) = integration_provider_kind {
-            separated
-                .push(" integration_connection.provider_kind::TEXT = ")
-                .push_bind_unseparated(integration_provider_kind.to_string());
+            query_builder
+                .push(" AND integration_connection.provider_kind::TEXT = ")
+                .push_bind(integration_provider_kind.to_string());
         }
         if let Some(user_id) = user_id {
-            separated
-                .push(" integration_connection.user_id = ")
-                .push_bind_unseparated(user_id.0);
+            query_builder
+                .push(" AND integration_connection.user_id = ")
+                .push_bind(user_id.0);
         }
+        query_builder.push(" ORDER BY integration_connection.id FOR UPDATE ) ");
 
         query_builder.push(
             r#"
