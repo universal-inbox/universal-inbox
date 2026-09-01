@@ -293,7 +293,7 @@ async fn run_state_group(
     }
 
     // Apply DB state mutations AFTER login because the notifications page load
-    // triggers `trigger_sync_for_integration_connections`, which would clobber
+    // triggers IntegrationConnectionService::schedule_due_syncs, which would clobber
     // any sync-state mutation made before login.
     if let Err(err) = apply_state(state, user_id, integration_connection_service.clone()).await {
         let msg = format!("failed to apply DB state {state:?}: {err:#}");

@@ -7,13 +7,13 @@ use anyhow::{Context, anyhow};
 use apalis::prelude::Storage;
 use apalis_redis::RedisStorage;
 use chrono::{DateTime, Utc};
-use sqlx::{Acquire, Postgres, Transaction};
+use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tokio_retry::{
     Retry,
     strategy::{ExponentialBackoff, jitter},
 };
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use universal_inbox::{
     Page, PageToken,
@@ -393,7 +393,6 @@ impl NotificationService {
         level = "debug", 
         skip_all,
         fields(
-            trigger_sync = job_storage.is_some(),
             status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
             include_snoozed_notifications,
             task_id = task_id.map(|id| id.to_string()),
@@ -417,10 +416,12 @@ impl NotificationService {
         from_sources: Vec<NotificationSourceKind>,
         page_token: Option<PageToken>,
         user_id: UserId,
-        job_storage: Option<RedisStorage<UniversalInboxJob>>,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError> {
-        let notifications_page = self
-            .repository
+        // Sync scheduling used to run here, on this same read transaction (see
+        // `IntegrationConnectionService::schedule_due_syncs` for the replacement and why).
+        // Callers that want to trigger a sync now call it themselves, after this
+        // transaction has committed.
+        self.repository
             .fetch_all_notifications(
                 executor,
                 status,
@@ -432,63 +433,7 @@ impl NotificationService {
                 page_token,
                 user_id,
             )
-            .await?;
-
-        if let Some(job_storage) = job_storage {
-            // Schedule sync triggering in its own SAVEPOINT (a nested transaction on top of
-            // `executor`) rather than on the read's own statements. A failure here (e.g. a
-            // lock-acquisition timeout racing another sync-scheduling caller) must never turn
-            // a successful notifications page fetch into a 500: it's best-effort background
-            // work, not part of what this request promises to its caller.
-            match executor.begin().await {
-                Ok(mut savepoint) => {
-                    match self
-                        .integration_connection_service
-                        .read()
-                        .await
-                        .trigger_sync_for_integration_connections(
-                            &mut savepoint,
-                            user_id,
-                            job_storage,
-                        )
-                        .await
-                    {
-                        Ok(()) => {
-                            if let Err(error) = savepoint.commit().await {
-                                warn!(
-                                    ?error,
-                                    user.id = %user_id,
-                                    "Failed to commit sync scheduling savepoint while listing notifications"
-                                );
-                            }
-                        }
-                        Err(error) => {
-                            warn!(
-                                ?error,
-                                user.id = %user_id,
-                                "Failed to schedule integration syncs while listing notifications; serving notifications anyway"
-                            );
-                            if let Err(rollback_error) = savepoint.rollback().await {
-                                warn!(
-                                    ?rollback_error,
-                                    user.id = %user_id,
-                                    "Failed to roll back sync scheduling savepoint"
-                                );
-                            }
-                        }
-                    }
-                }
-                Err(error) => {
-                    warn!(
-                        ?error,
-                        user.id = %user_id,
-                        "Failed to open sync scheduling savepoint while listing notifications; skipping sync scheduling"
-                    );
-                }
-            }
-        }
-
-        Ok(notifications_page)
+            .await
     }
 
     #[tracing::instrument(
@@ -1561,7 +1506,6 @@ impl NotificationService {
                 vec![],
                 None,
                 user_id,
-                None,
             )
             .await?
             // Considering the list of notifications for a task is small enough to fit in a single page
