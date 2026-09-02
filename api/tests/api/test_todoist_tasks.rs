@@ -44,14 +44,14 @@ use crate::helpers::{
         create_task_from_notification,
         github::{create_notification_from_github_notification, github_notification},
     },
-    rest::{get_resource, patch_resource},
+    rest::{get_resource, patch_resource, patch_resource_response},
     settings,
     task::todoist::{
         TodoistSyncPartialCommand, mock_todoist_complete_item_service,
         mock_todoist_delete_item_service, mock_todoist_get_item_service,
-        mock_todoist_item_add_service, mock_todoist_sync_project_add,
+        mock_todoist_item_add_service, mock_todoist_no_sync_call, mock_todoist_sync_project_add,
         mock_todoist_sync_resources_service, mock_todoist_sync_service,
-        sync_todoist_projects_response, todoist_item,
+        mock_todoist_sync_service_expecting_one_call, sync_todoist_projects_response, todoist_item,
     },
 };
 
@@ -343,6 +343,155 @@ mod patch_task {
         )
         .await;
         assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
+    }
+
+    /// The task manager owns the title, so an explicit rename must reach it —
+    /// even when `title` is the only field in the patch.
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_todoist_task_title_only(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        let _integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            todoist_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        let _todoist_projects_mock = mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        )
+        .await;
+
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(), // ie. "Inbox"
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            })),
+            app.user.id,
+        )
+        .await;
+        let existing_todoist_task = creation.task.as_ref().unwrap().clone();
+        let new_title = "Reply to Marc about the billing thread".to_string();
+        assert_ne!(existing_todoist_task.title, new_title);
+
+        // The rename must be sent as the `content` of an `item_update` command,
+        // with no other field riding along.
+        let _todoist_sync_mock = mock_todoist_sync_service_expecting_one_call(
+            &app.app.todoist_mock_server,
+            vec![TodoistSyncPartialCommand::ItemUpdate {
+                args: TodoistSyncCommandItemUpdateArgs {
+                    id: creation.third_party_item.source_id.clone(),
+                    content: Some(new_title.clone()),
+                    ..Default::default()
+                },
+            }],
+            None,
+        )
+        .await;
+
+        let patched_task: Box<Task> = patch_resource(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            existing_todoist_task.id.into(),
+            &TaskPatch {
+                title: Some(new_title.clone()),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert_eq!(
+            patched_task,
+            Box::new(Task {
+                title: new_title.clone(),
+                ..existing_todoist_task.clone()
+            })
+        );
+
+        let reloaded_task: Box<Task> = get_resource(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            existing_todoist_task.id.into(),
+        )
+        .await;
+        assert_eq!(reloaded_task.title, new_title);
+    }
+
+    /// Renaming a task to the title it already has changes nothing, so it must
+    /// answer `304` and reach no provider.
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_todoist_task_title_unchanged_is_a_no_op(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        let _integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            todoist_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        let _todoist_projects_mock = mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        )
+        .await;
+
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(), // ie. "Inbox"
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            })),
+            app.user.id,
+        )
+        .await;
+        let existing_todoist_task = creation.task.as_ref().unwrap().clone();
+
+        // No sync command must be sent: verified when the mock server drops.
+        mock_todoist_no_sync_call(&app.app.todoist_mock_server).await;
+
+        let response = patch_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            existing_todoist_task.id.into(),
+            &TaskPatch {
+                title: Some(existing_todoist_task.title.clone()),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert_eq!(response.status(), http::StatusCode::NOT_MODIFIED);
     }
 
     // Cannot test project creation as it will fetch projects more than once

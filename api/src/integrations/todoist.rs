@@ -873,7 +873,11 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
             });
         }
 
-        if patch.priority.is_some() || patch.due_at.is_some() || patch.body.is_some() {
+        if patch.priority.is_some()
+            || patch.due_at.is_some()
+            || patch.body.is_some()
+            || patch.title.is_some()
+        {
             let priority = patch.priority.map(|priority| priority.into());
             let due = patch
                 .due_at

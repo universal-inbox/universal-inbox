@@ -1094,6 +1094,10 @@ impl TaskRepository for Repository {
             separated.push(" body != ").push_bind_unseparated(body);
         }
 
+        if let Some(title) = &patch.title {
+            separated.push(" title != ").push_bind_unseparated(title);
+        }
+
         query_builder
             .push(" FROM task WHERE id = ")
             .push_bind(task_id.0);
