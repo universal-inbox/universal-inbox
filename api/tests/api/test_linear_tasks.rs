@@ -15,8 +15,12 @@ use universal_inbox::{
     },
     notification::{NotificationSourceKind, NotificationStatus},
     task::{PresetDueDate, ProjectSummary, Task, TaskCreationResult, TaskSourceKind, TaskStatus},
-    third_party::integrations::linear::{
-        LinearIssue, LinearWorkflowState, LinearWorkflowStateType,
+    third_party::{
+        integrations::{
+            linear::{LinearIssue, LinearWorkflowState, LinearWorkflowStateType},
+            todoist::TodoistItem,
+        },
+        item::ThirdPartyItemData,
     },
 };
 
@@ -231,4 +235,119 @@ async fn test_sync_todoist_linear_task(
 
         assert_eq!(notifications.len(), 0);
     }
+}
+
+/// Todoist is the user's own task manager, so it owns a mirrored task's title:
+/// renaming the Todoist item is adopted by Universal Inbox on the next sync of
+/// the sink side, even though the task is sourced from Linear.
+#[rstest]
+#[tokio::test]
+async fn test_sync_todoist_linear_task_should_adopt_the_sink_rename(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    mut sync_todoist_items_response: TodoistSyncResponse,
+    sync_todoist_projects_response: TodoistSyncResponse,
+    sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+    let todoist_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        todoist_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    let project = ProjectSummary {
+        name: "Project2".to_string(),
+        source_id: "2222".into(),
+    };
+    let linear_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Linear(LinearConfig {
+            sync_notifications_enabled: true,
+            sync_task_config: LinearSyncTaskConfig {
+                enabled: true,
+                target_project: Some(project.clone()),
+                default_due_at: Some(PresetDueDate::Today),
+                task_manager_provider_kind: None,
+                ..Default::default()
+            },
+        }),
+        &settings,
+        linear_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let existing_task = create_linear_task(
+        &app.app,
+        &linear_issues[0],
+        project,
+        app.user.id,
+        linear_integration_connection.id,
+        todoist_integration_connection.id,
+        "1456".to_string(),
+    )
+    .await;
+    let ThirdPartyItemData::TodoistItem(sink_todoist_item) =
+        existing_task.sink_item.as_ref().unwrap().data.clone()
+    else {
+        panic!("Expected the sink item to be a Todoist item");
+    };
+
+    // The user renamed the mirrored task in Todoist. Everything else is left as
+    // Universal Inbox created it, so the title is the only field that moved.
+    let new_title = "Reply to Marc about the billing thread";
+    sync_todoist_items_response.items = Some(vec![TodoistItem {
+        content: new_title.to_string(),
+        ..*sink_todoist_item
+    }]);
+
+    let _todoist_projects_mock = mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    )
+    .await;
+    let _todoist_tasks_mock = mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "items",
+        &sync_todoist_items_response,
+        None,
+    )
+    .await;
+
+    let task_creations: Vec<TaskCreationResult> = sync_tasks(
+        &app.client,
+        &app.app.api_address,
+        Some(TaskSourceKind::Todoist),
+        false,
+    )
+    .await;
+    assert_eq!(task_creations.len(), 1);
+    assert_eq!(task_creations[0].task.id, existing_task.id);
+
+    let updated_task: Box<Task> = get_resource(
+        &app.client,
+        &app.app.api_address,
+        "tasks",
+        existing_task.id.into(),
+    )
+    .await;
+    assert_eq!(updated_task.id, existing_task.id);
+    assert_eq!(updated_task.title, new_title);
 }

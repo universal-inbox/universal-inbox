@@ -498,7 +498,9 @@ impl TodoistService {
     ) -> Box<CreateOrUpdateTaskRequest> {
         Box::new(CreateOrUpdateTaskRequest {
             id: Uuid::new_v4().into(),
-            title: source.content.clone(),
+            // Todoist is the user's own task manager: it owns the title and a
+            // rename is adopted on every sync.
+            title: DefaultValue::new(source.content.clone(), Some(source.content.clone())),
             body: source.description.clone(),
             status: if source.checked {
                 TaskStatus::Done

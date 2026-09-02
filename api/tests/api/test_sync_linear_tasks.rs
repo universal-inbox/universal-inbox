@@ -66,8 +66,8 @@ use crate::helpers::{
         todoist::{
             TodoistSyncPartialCommand, mock_todoist_complete_item_service,
             mock_todoist_get_item_service, mock_todoist_item_add_service,
-            mock_todoist_sync_resources_service, mock_todoist_sync_service,
-            sync_todoist_projects_response, todoist_item,
+            mock_todoist_no_sync_call, mock_todoist_sync_resources_service,
+            mock_todoist_sync_service, sync_todoist_projects_response, todoist_item,
         },
     },
 };
@@ -324,6 +324,268 @@ async fn test_sync_tasks_should_not_update_default_values(
     assert_eq!(task.id, existing_task.id);
     assert_eq!(task.due_at, existing_task.due_at);
     assert_eq!(task.project, existing_task.project);
+}
+
+/// Linear is a source-only integration: it seeds the title when the task is
+/// created and never re-asserts it. Retitling the issue upstream must leave the
+/// mirrored task's title — the one the user owns in their task manager — alone,
+/// and must not push anything to the sink.
+#[rstest]
+#[tokio::test]
+async fn test_sync_tasks_should_not_overwrite_nor_push_the_title_of_a_mirrored_task(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+    let todoist_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        todoist_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    let project = ProjectSummary {
+        name: "Project2".to_string(),
+        source_id: "2222".into(),
+    };
+    let linear_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Linear(LinearConfig {
+            sync_notifications_enabled: true,
+            sync_task_config: LinearSyncTaskConfig {
+                enabled: true,
+                target_project: Some(project.clone()),
+                default_due_at: Some(PresetDueDate::Today),
+                ..Default::default()
+            },
+        }),
+        &settings,
+        linear_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let linear_issue: &LinearIssue = &linear_issues[0];
+    let existing_task = create_linear_task(
+        &app.app,
+        linear_issue,
+        project,
+        app.user.id,
+        linear_integration_connection.id,
+        todoist_integration_connection.id,
+        "todoist_source_id".to_string(),
+    )
+    .await;
+
+    // Nothing at all must reach Todoist: verified when the mock server drops.
+    mock_todoist_no_sync_call(&app.app.todoist_mock_server).await;
+
+    // Sleep so the third party item created during sync has a different
+    // `updated_at` and thus forces the task to be updated.
+    sleep(Duration::from_secs(1)).await;
+
+    let mut source_linear_issue = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .issues
+        .nodes[0]
+        .clone();
+    source_linear_issue.title = "Renamed upstream in Linear".to_string();
+    let single_sync_linear_tasks_response = Response {
+        data: Some(assigned_issues_query::ResponseData {
+            issues: assigned_issues_query::AssignedIssuesQueryIssues {
+                nodes: vec![source_linear_issue],
+            },
+        }),
+        errors: None,
+        extensions: None,
+    };
+    let _linear_assigned_issues_mock = mock_linear_assigned_issues_query(
+        &app.app.linear_mock_server,
+        &single_sync_linear_tasks_response,
+    )
+    .await;
+
+    let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
+        &app.client,
+        &app.app.api_address,
+        Some(TaskSourceKind::Linear),
+        false,
+    )
+    .await;
+    assert_eq!(task_creation_results.len(), 1);
+    assert_eq!(task_creation_results[0].task.id, existing_task.id);
+
+    let task = get_task(&app.client, &app.app.api_address, existing_task.id)
+        .await
+        .unwrap();
+    assert_eq!(task.title, existing_task.title);
+    assert!(
+        !task.title.contains("Renamed upstream in Linear"),
+        "the upstream Linear title must not reach the task, got: {}",
+        task.title
+    );
+}
+
+/// The rule does not depend on a sink item existing: an unmirrored Linear task
+/// also stops following its source. Its title is the one Universal Inbox minted
+/// when the task was created.
+#[rstest]
+#[tokio::test]
+async fn test_sync_tasks_should_not_overwrite_the_title_of_an_unmirrored_task(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+    let _todoist_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        todoist_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    let project = ProjectSummary {
+        name: "Project2".to_string(),
+        source_id: "2222".into(),
+    };
+    let linear_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Linear(LinearConfig {
+            sync_notifications_enabled: true,
+            sync_task_config: LinearSyncTaskConfig {
+                enabled: true,
+                target_project: Some(project.clone()),
+                default_due_at: Some(PresetDueDate::Today),
+                ..Default::default()
+            },
+        }),
+        &settings,
+        linear_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let linear_issue: &LinearIssue = &linear_issues[0];
+
+    let mut transaction = app.app.repository.begin().await.unwrap();
+    let source_third_party_item = ThirdPartyItem::new(
+        linear_issue.id.to_string(),
+        ThirdPartyItemData::LinearIssue(Box::new(linear_issue.clone())),
+        app.user.id,
+        linear_integration_connection.id,
+    );
+    let source_third_party_item = app
+        .app
+        .repository
+        .create_or_update_third_party_item(&mut transaction, Box::new(source_third_party_item))
+        .await
+        .unwrap()
+        .value();
+    let task_request = app
+        .app
+        .task_service
+        .read()
+        .await
+        .linear_service
+        .third_party_item_into_task(
+            &mut transaction,
+            linear_issue,
+            &source_third_party_item,
+            Some(TaskCreationConfig {
+                project_name: Some(project.name.clone()),
+                due_at: Some(PresetDueDate::Today.into()),
+                priority: TaskPriority::default(),
+                task_manager_provider_kind: None,
+                time_config: None,
+            }),
+            app.user.id,
+        )
+        .await
+        .unwrap();
+    let existing_task = app
+        .app
+        .repository
+        .create_or_update_task(&mut transaction, task_request)
+        .await
+        .unwrap()
+        .value();
+    assert!(
+        existing_task.sink_item.is_none(),
+        "Task should have no sink_item"
+    );
+    transaction.commit().await.unwrap();
+
+    // An unmirrored task whose only upstream change is its title is a no-op:
+    // no sink item is created, so Todoist is never called.
+    mock_todoist_no_sync_call(&app.app.todoist_mock_server).await;
+
+    sleep(Duration::from_secs(1)).await;
+
+    let mut source_linear_issue = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .issues
+        .nodes[0]
+        .clone();
+    source_linear_issue.title = "Renamed upstream in Linear".to_string();
+    let single_sync_linear_tasks_response = Response {
+        data: Some(assigned_issues_query::ResponseData {
+            issues: assigned_issues_query::AssignedIssuesQueryIssues {
+                nodes: vec![source_linear_issue],
+            },
+        }),
+        errors: None,
+        extensions: None,
+    };
+    let _linear_assigned_issues_mock = mock_linear_assigned_issues_query(
+        &app.app.linear_mock_server,
+        &single_sync_linear_tasks_response,
+    )
+    .await;
+
+    let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
+        &app.client,
+        &app.app.api_address,
+        Some(TaskSourceKind::Linear),
+        false,
+    )
+    .await;
+    assert_eq!(task_creation_results.len(), 1);
+
+    let task = get_task(&app.client, &app.app.api_address, existing_task.id)
+        .await
+        .unwrap();
+    assert_eq!(task.title, existing_task.title);
 }
 
 #[rstest]
@@ -681,13 +943,18 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
 
     sleep(Duration::from_secs(1)).await;
 
-    let source_linear_issue = sync_linear_tasks_response
+    // The issue's description changed upstream, so the task really is updated.
+    // A payload that only differs in fields Linear declines to own (title,
+    // due date, project) is a no-op and would not reach the sink-item creation.
+    let new_description = "This issue was edited upstream";
+    let mut source_linear_issue = sync_linear_tasks_response
         .data
         .clone()
         .unwrap()
         .issues
         .nodes[0]
         .clone();
+    source_linear_issue.description = Some(new_description.to_string());
     let single_sync_linear_tasks_response = Response {
         data: Some(assigned_issues_query::ResponseData {
             issues: assigned_issues_query::AssignedIssuesQueryIssues {
@@ -716,7 +983,7 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
         &app.app.todoist_mock_server,
         &new_todoist_item_id,
         existing_task.title.clone(),
-        Some(existing_task.body.clone()),
+        Some(new_description.to_string()),
         Some("2222".to_string()),
         Some((&Into::<DueDate>::into(PresetDueDate::Today)).into()),
         TodoistItemPriority::P1,

@@ -1,3 +1,4 @@
+use graphql_client::Response;
 use http::StatusCode;
 use pretty_assertions::assert_eq;
 use rstest::*;
@@ -6,31 +7,42 @@ use universal_inbox::{
     integration_connection::{
         IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
-        integrations::ticktick::TickTickConfig,
+        integrations::{
+            linear::{LinearConfig, LinearSyncTaskConfig},
+            ticktick::TickTickConfig,
+        },
         provider::{IntegrationProvider, IntegrationProviderKind},
     },
     notification::{Notification, NotificationStatus, NotificationWithTask},
-    task::{Task, TaskCreationResult, TaskSourceKind},
+    task::{PresetDueDate, ProjectSummary, Task, TaskCreationResult, TaskSourceKind},
     third_party::{
-        integrations::ticktick::{TickTickItem, TickTickTag},
+        integrations::{
+            linear::LinearIssue,
+            ticktick::{TickTickItem, TickTickTag},
+        },
         item::ThirdPartyItemData,
     },
 };
-use universal_inbox_api::configuration::Settings;
+use universal_inbox_api::{
+    configuration::Settings, integrations::linear::graphql::assigned_issues_query,
+};
 
 use universal_inbox::task::integrations::ticktick::TickTickProject;
 
+use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::third_party::create_task_third_party_item;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_integration_connection, create_ticktick_integration_connection,
-        get_integration_connection, get_integration_connection_per_provider,
+        create_and_mock_integration_connection, create_integration_connection,
+        create_ticktick_integration_connection, get_integration_connection,
+        get_integration_connection_per_provider, linear_oauth_credential,
     },
-    notification::list_notifications_with_tasks,
+    notification::{linear::sync_linear_tasks_response, list_notifications_with_tasks},
     rest::get_resource,
     settings,
     task::{
+        linear::create_linear_task_with_ticktick_sink,
         sync_tasks, sync_tasks_response,
         ticktick::{
             assert_sync_ticktick_items, mock_ticktick_inbox_data_service,
@@ -244,6 +256,114 @@ async fn test_sync_ticktick_tasks_should_add_new_task_and_update_existing_one(
         IntegrationConnectionStatus::Validated
     );
     assert!(integration_connection.failure_message.is_none());
+}
+
+/// TickTick is the user's own task manager, so it owns a mirrored task's title:
+/// renaming the TickTick item is adopted by Universal Inbox on the next sync of
+/// the sink side, even though the task is sourced from Linear.
+#[rstest]
+#[tokio::test]
+async fn test_sync_ticktick_tasks_should_adopt_the_sink_rename_of_a_linear_task(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+    ticktick_projects_response: Vec<TickTickProject>,
+    linear_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+    let ticktick_integration_connection = create_ticktick_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings,
+        IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+        None,
+    )
+    .await;
+    let project = ProjectSummary {
+        name: "Project2".to_string(),
+        source_id: "tt_proj_2222".into(),
+    };
+    let linear_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Linear(LinearConfig {
+            sync_notifications_enabled: true,
+            sync_task_config: LinearSyncTaskConfig {
+                enabled: true,
+                target_project: Some(project.clone()),
+                default_due_at: Some(PresetDueDate::Today),
+                task_manager_provider_kind: Some(IntegrationProviderKind::TickTick),
+                ..Default::default()
+            },
+        }),
+        &settings,
+        linear_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let existing_task = create_linear_task_with_ticktick_sink(
+        &app.app,
+        &linear_issues[0],
+        project,
+        app.user.id,
+        linear_integration_connection.id,
+        ticktick_integration_connection.id,
+        "tt_task_9999".to_string(),
+        "tt_proj_2222".to_string(),
+    )
+    .await;
+    let ThirdPartyItemData::TickTickItem(sink_ticktick_item) =
+        existing_task.sink_item.as_ref().unwrap().data.clone()
+    else {
+        panic!("Expected the sink item to be a TickTick item");
+    };
+
+    // The user renamed the mirrored task in TickTick.
+    let new_title = "Reply to Marc about the billing thread";
+    let renamed_ticktick_item = TickTickItem {
+        title: new_title.to_string(),
+        ..*sink_ticktick_item
+    };
+
+    mock_ticktick_list_projects_service(&app.app.ticktick_mock_server, &ticktick_projects_response)
+        .await;
+    mock_ticktick_inbox_data_service(&app.app.ticktick_mock_server, &[]).await;
+    mock_ticktick_list_tasks_service(&app.app.ticktick_mock_server, "tt_proj_1111", &[]).await;
+    mock_ticktick_list_tasks_service(
+        &app.app.ticktick_mock_server,
+        "tt_proj_2222",
+        &[renamed_ticktick_item],
+    )
+    .await;
+
+    let task_creations: Vec<TaskCreationResult> = sync_tasks(
+        &app.client,
+        &app.app.api_address,
+        Some(TaskSourceKind::TickTick),
+        false,
+    )
+    .await;
+
+    assert_eq!(task_creations.len(), 1);
+    assert_eq!(task_creations[0].task.id, existing_task.id);
+
+    let updated_task: Box<Task> = get_resource(
+        &app.client,
+        &app.app.api_address,
+        "tasks",
+        existing_task.id.into(),
+    )
+    .await;
+    assert_eq!(updated_task.id, existing_task.id);
+    assert_eq!(updated_task.title, new_title);
 }
 
 #[rstest]

@@ -412,7 +412,13 @@ pub struct TaskCreationConfig {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct CreateOrUpdateTaskRequest {
     pub id: TaskId,
-    pub title: String,
+    /// The title an integration wants the task to carry.
+    ///
+    /// The `default_value` seeds the title when the task is created. The
+    /// `value` is only set by integrations that *own* the title — the user's own
+    /// task managers (Todoist, TickTick). Source-only integrations (Linear,
+    /// Slack) leave it `None` so a sync never overwrites a rename.
+    pub title: DefaultValue<String>,
     pub body: String,
     pub status: TaskStatus,
     pub completed_at: Option<DateTime<Utc>>,
@@ -434,7 +440,7 @@ impl From<CreateOrUpdateTaskRequest> for Task {
     fn from(request: CreateOrUpdateTaskRequest) -> Self {
         Task {
             id: request.id,
-            title: request.title,
+            title: request.title.into_value(),
             body: request.body,
             status: request.status,
             completed_at: request.completed_at,

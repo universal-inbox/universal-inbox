@@ -1721,7 +1721,9 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
 
         Ok(Box::new(CreateOrUpdateTaskRequest {
             id: Uuid::new_v4().into(),
-            title,
+            // Slack only ever *reads* a task: it seeds the title at creation and
+            // never re-asserts it, so a rename in the task manager survives.
+            title: DefaultValue::new(title, None),
             body,
             status,
             completed_at,

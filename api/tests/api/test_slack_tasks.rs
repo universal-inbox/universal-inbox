@@ -50,8 +50,9 @@ use crate::helpers::{
         list_tasks_until, sync_tasks,
         todoist::{
             mock_todoist_complete_item_service, mock_todoist_get_item_service,
-            mock_todoist_item_add_service, mock_todoist_sync_resources_service,
-            sync_todoist_items_response, sync_todoist_projects_response, todoist_item,
+            mock_todoist_item_add_service, mock_todoist_no_sync_call,
+            mock_todoist_sync_resources_service, sync_todoist_items_response,
+            sync_todoist_projects_response, todoist_item,
         },
     },
 };
@@ -323,6 +324,143 @@ Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal
 
         assert_eq!(notifications.len(), 0);
     }
+}
+
+/// Slack is a source-only integration: it seeds the title when the task is
+/// created and never re-asserts it. Editing the message so its rendered summary
+/// changes must leave the mirrored task's title alone and push nothing to
+/// Todoist.
+#[rstest]
+#[tokio::test]
+async fn test_slack_task_should_not_overwrite_nor_push_the_title_of_a_mirrored_task(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    slack_reacted_message: Box<SlackReactionItem>,
+    todoist_item: Box<TodoistItem>,
+    sync_todoist_projects_response: TodoistSyncResponse,
+    slack_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+    let _integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_tasks()),
+        &settings,
+        slack_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        todoist_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    )
+    .await;
+    mock_todoist_item_add_service(
+        &app.app.todoist_mock_server,
+        &todoist_item.id,
+        "[📥  Universal Inbox new release 📥...](https://example.com/)".to_string(),
+        Some(
+            r#"📥  *Universal Inbox new release* 📥
+- list 1
+- list 2
+
+1. number 1
+1. number 2
+
+> quote
+
+
+```
+$ echo Hello world
+```
+\
+_Some_ `formatted` ~text~.\
+\
+Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal-inbox
+👋![:unknown2:](https://emoji.com/unknown2.png)"#
+                .to_string(),
+        ),
+        Some(todoist_item.project_id.clone()),
+        None,
+        TodoistItemPriority::P1,
+    )
+    .await;
+    mock_todoist_get_item_service(
+        &app.app.todoist_mock_server,
+        Box::new(*todoist_item.clone()),
+    )
+    .await;
+
+    let creation = create_task_third_party_item(
+        &app.app,
+        ThirdPartyItemData::SlackReaction(Box::new(SlackReaction {
+            name: SlackReactionName("eyes".to_string()),
+            state: SlackReactionState::ReactionAdded,
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            item: *slack_reacted_message.clone(),
+        })),
+        app.user.id,
+    )
+    .await;
+    let existing_task = creation.task.as_ref().unwrap().clone();
+    assert!(existing_task.sink_item.is_some());
+
+    // From here on nothing more must reach Todoist. Mounted last so the setup
+    // calls above keep matching their own, earlier-registered mocks.
+    mock_todoist_no_sync_call(&app.app.todoist_mock_server).await;
+
+    // The message is edited: an attachment title now drives `render_title`,
+    // while `render_content` still comes from the (unchanged) blocks — so the
+    // title is the only thing the Slack payload would move.
+    let SlackReactionItem::SlackMessage(mut edited_message) = *slack_reacted_message else {
+        panic!("Expected the reacted item to be a Slack message");
+    };
+    edited_message.message.content.attachments = Some(vec![SlackMessageAttachment {
+        id: None,
+        color: None,
+        fallback: None,
+        title: Some("Edited upstream in Slack".to_string()),
+        fields: None,
+        mrkdwn_in: None,
+        text: None,
+        blocks: None,
+    }]);
+
+    let updated_creation = create_task_third_party_item(
+        &app.app,
+        ThirdPartyItemData::SlackReaction(Box::new(SlackReaction {
+            name: SlackReactionName("eyes".to_string()),
+            state: SlackReactionState::ReactionAdded,
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            item: SlackReactionItem::SlackMessage(edited_message),
+        })),
+        app.user.id,
+    )
+    .await;
+
+    let updated_task = updated_creation.task.as_ref().unwrap();
+    assert_eq!(updated_task.id, existing_task.id);
+    assert_eq!(updated_task.title, existing_task.title);
+    assert!(
+        !updated_task.title.contains("Edited upstream in Slack"),
+        "the edited Slack summary must not reach the task, got: {}",
+        updated_task.title
+    );
 }
 
 #[rstest]

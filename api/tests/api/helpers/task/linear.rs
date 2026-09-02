@@ -1,12 +1,16 @@
 use chrono::{TimeDelta, Timelike, Utc};
 
 use universal_inbox::{
-    integration_connection::IntegrationConnectionId,
+    integration_connection::{IntegrationConnectionId, provider::IntegrationProviderKind},
     task::{
         PresetDueDate, ProjectSummary, Task, TaskCreationConfig, TaskPriority, service::TaskPatch,
     },
     third_party::{
-        integrations::{linear::LinearIssue, todoist::TodoistItem},
+        integrations::{
+            linear::LinearIssue,
+            ticktick::{TickTickItem, TickTickTaskStatus},
+            todoist::TodoistItem,
+        },
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     },
     user::UserId,
@@ -68,7 +72,7 @@ pub async fn create_linear_task(
         project_id: project.source_id.to_string(),
         sync_id: None,
         section_id: None,
-        content: task_request.title.clone(),
+        content: task_request.title.clone().into_value(),
         description: task_request.body.clone(),
         labels: vec![],
         child_order: 1,
@@ -98,6 +102,111 @@ pub async fn create_linear_task(
 
     let mut sink_third_party_item =
         todoist_item.into_third_party_item(user_id, sink_integration_connection_id);
+    // Make sure it will be updated
+    sink_third_party_item.updated_at = Utc::now() - TimeDelta::seconds(1);
+    let sink_third_party_item = app
+        .repository
+        .create_or_update_third_party_item(&mut transaction, Box::new(sink_third_party_item))
+        .await
+        .unwrap();
+
+    let mut task = upsert_task.value();
+    task.sink_item = Some(*sink_third_party_item.value());
+    app.repository
+        .update_task(
+            &mut transaction,
+            task.id,
+            &TaskPatch {
+                sink_item_id: Some(task.sink_item.as_ref().unwrap().id),
+                ..Default::default()
+            },
+            user_id,
+        )
+        .await
+        .unwrap();
+
+    transaction.commit().await.unwrap();
+
+    *task
+}
+
+/// Same shape as [`create_linear_task`] — a Linear-sourced task mirrored into a
+/// distinct sink item — but with TickTick as the task manager.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_linear_task_with_ticktick_sink(
+    app: &TestedApp,
+    linear_issue: &LinearIssue,
+    project: ProjectSummary,
+    user_id: UserId,
+    source_integration_connection_id: IntegrationConnectionId,
+    sink_integration_connection_id: IntegrationConnectionId,
+    ticktick_source_id: String,
+    ticktick_project_id: String,
+) -> Task {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let source_third_party_item = ThirdPartyItem::new(
+        linear_issue.id.to_string(),
+        ThirdPartyItemData::LinearIssue(Box::new(linear_issue.clone())),
+        user_id,
+        source_integration_connection_id,
+    );
+    let source_third_party_item = app
+        .repository
+        .create_or_update_third_party_item(&mut transaction, Box::new(source_third_party_item))
+        .await
+        .unwrap()
+        .value();
+
+    let task_request = app
+        .task_service
+        .read()
+        .await
+        .linear_service
+        .third_party_item_into_task(
+            &mut transaction,
+            linear_issue,
+            &source_third_party_item,
+            Some(TaskCreationConfig {
+                project_name: Some(project.name.clone()),
+                due_at: Some(PresetDueDate::Today.into()),
+                priority: TaskPriority::default(),
+                task_manager_provider_kind: Some(IntegrationProviderKind::TickTick),
+                time_config: None,
+            }),
+            user_id,
+        )
+        .await
+        .unwrap();
+    let ticktick_item = TickTickItem {
+        id: ticktick_source_id,
+        project_id: ticktick_project_id,
+        title: task_request.title.clone().into_value(),
+        content: Some(task_request.body.clone()),
+        desc: None,
+        all_day: None,
+        start_date: None,
+        due_date: None,
+        time_zone: None,
+        reminders: None,
+        repeat: None,
+        priority: task_request.priority.into(),
+        status: TickTickTaskStatus::Normal,
+        completed_time: None,
+        sort_order: None,
+        items: None,
+        tags: None,
+        created_time: Some(Utc::now().with_nanosecond(0).unwrap()),
+        modified_time: Some(Utc::now().with_nanosecond(0).unwrap()),
+    };
+
+    let upsert_task = app
+        .repository
+        .create_or_update_task(&mut transaction, task_request)
+        .await
+        .unwrap();
+
+    let mut sink_third_party_item =
+        ticktick_item.into_third_party_item(user_id, sink_integration_connection_id);
     // Make sure it will be updated
     sink_third_party_item.updated_at = Utc::now() - TimeDelta::seconds(1);
     let sink_third_party_item = app

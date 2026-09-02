@@ -180,6 +180,9 @@ pub fn TaskDetailsPreview(task: ReadSignal<Task>, expand_details: ReadSignal<boo
         },
         ThirdPartyItemData::LinearIssue(linear_issue) => rsx! {
             LinearIssuePreview {
+                // The task manager owns the title, so show the task's own
+                // title rather than re-reading the raw issue payload.
+                title: task().title,
                 linear_issue: *linear_issue,
                 linear_notification: None,
                 expand_details
