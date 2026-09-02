@@ -103,6 +103,21 @@ impl HasHtmlUrl for SlackReaction {
     }
 }
 
+impl SlackReaction {
+    /// The title Universal Inbox seeds a task with when it creates one from
+    /// this reaction.
+    ///
+    /// Slack is a source-only integration: it seeds this title once and then
+    /// never re-asserts it, so the stored title can diverge from it as soon as
+    /// the user renames the task in their task manager. The frontend renders
+    /// this value as the task's *source* title and compares the stored title
+    /// against it to tell a rename from an untouched task, which is why the
+    /// formatting lives here rather than in the API crate.
+    pub fn render_task_title(&self) -> String {
+        format!("[{}]({})", self.item.render_title(), self.get_html_url())
+    }
+}
+
 impl TryFrom<ThirdPartyItem> for SlackReaction {
     type Error = anyhow::Error;
 

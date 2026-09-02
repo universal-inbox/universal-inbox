@@ -24,9 +24,11 @@ pub fn LinearTaskListItem(
     rsx! {
         ListItem {
             key: "{task().id}",
-            // The task manager owns the title, so show the task's own title
-            // rather than re-reading the raw issue payload.
-            title: "{task().title}",
+            // Show the title Linear seeded the task with rather than the stored
+            // one: a row sits next to Linear's own icon, so a name the user
+            // gave the task in their task manager would read as the wrong
+            // title there. The rename shows up in the preview header instead.
+            title: "{linear_issue().render_task_title()}",
             subtitle: rsx! {
                 LinearIssueListItemSubtitle { linear_issue }
             },

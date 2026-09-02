@@ -32,7 +32,6 @@ use wiremock::{
 };
 
 use universal_inbox::{
-    HasHtmlUrl,
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
@@ -812,10 +811,7 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
             id: Uuid::new_v4().into(),
             // Linear only ever *reads* a task: it seeds the title at creation and
             // never re-asserts it, so a rename in the task manager survives.
-            title: DefaultValue::new(
-                format!("[{}]({})", source.title.clone(), source.get_html_url()),
-                None,
-            ),
+            title: DefaultValue::new(source.render_task_title(), None),
             body: source.description.clone().unwrap_or_default(),
             status: source.state.r#type.into(),
             completed_at: source.completed_at,
