@@ -728,7 +728,29 @@ impl TaskRepository for Repository {
         let parent_id = task_request.parent_id.map(|id| id.0);
 
         if let Some(existing_task) = existing_task {
-            if existing_task == (*task_request.clone()).into() {
+            // The request only *asserts* the fields the integration owns. For the
+            // declinable ones (`title`, `due_at`, `project`) an absent value means
+            // "keep what is stored", so the comparison target — and the `new` task
+            // reported back — resolve against `existing_task` rather than against
+            // the request's seed. This keeps the equality check in agreement with
+            // what the `UPDATE` below actually writes.
+            let requested_task: Task = Task {
+                title: task_request
+                    .title
+                    .clone()
+                    .value_or(existing_task.title.clone()),
+                due_at: task_request
+                    .due_at
+                    .clone()
+                    .value_or(existing_task.due_at.clone()),
+                project: task_request
+                    .project
+                    .clone()
+                    .value_or(existing_task.project.clone()),
+                ..(*task_request.clone()).into()
+            };
+
+            if existing_task == requested_task {
                 debug!(
                     "Existing {} task {} (from {}) for {} does not need updating: {:?}",
                     existing_task.kind,
@@ -762,9 +784,11 @@ impl TaskRepository for Repository {
 
             let mut query_builder = QueryBuilder::new("UPDATE task SET ");
             let mut separated = query_builder.separated(", ");
-            separated
-                .push("title = ")
-                .push_bind_unseparated(task_request.title.clone());
+            if task_request.title.has_value() {
+                separated
+                    .push("title = ")
+                    .push_bind_unseparated(task_request.title.clone().into_value());
+            }
             separated
                 .push("body = ")
                 .push_bind_unseparated(task_request.body.clone());
@@ -829,17 +853,7 @@ impl TaskRepository for Repository {
                     created_at: existing_task.created_at,
                     source_item: existing_task.source_item.clone(),
                     sink_item: existing_task.sink_item.clone(),
-                    due_at: task_request
-                        .due_at
-                        .value
-                        .clone()
-                        .unwrap_or_else(|| existing_task.due_at.clone()),
-                    project: task_request
-                        .project
-                        .value
-                        .clone()
-                        .unwrap_or_else(|| existing_task.project.clone()),
-                    ..Into::<Task>::into(*task_request)
+                    ..requested_task
                 }),
                 old: Box::new(existing_task),
             });
@@ -881,7 +895,8 @@ impl TaskRepository for Repository {
                   id
             "#,
                     task_request.id.0,
-                    task_request.title,
+                    // No stored task to fall back to: the seed *is* the value.
+                    task_request.title.clone().into_value(),
                     task_request.body,
                     task_request.status.to_string() as _,
                     completed_at,

@@ -188,6 +188,35 @@ pub async fn mock_todoist_sync_service(
         .await;
 }
 
+/// Assert that *nothing* is sent to Todoist's Sync API.
+///
+/// `mock_todoist_sync_service` matches with `body_partial_json` and every field
+/// of `TodoistSyncCommandItemUpdateArgs` is `skip_serializing_if =
+/// "Option::is_none"`, so pinning `content: None` in a command fixture
+/// serializes to *absence* and proves nothing. The only way to assert a field
+/// was not pushed is to assert the endpoint was never called at all.
+///
+/// The zero expectation is verified when the `MockServer` is dropped, i.e. at
+/// the end of the test.
+pub async fn mock_todoist_no_sync_call(todoist_mock_server: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path("/sync"))
+        .and(header("authorization", "Bearer todoist_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(TodoistSyncStatusResponse {
+                    sync_status: HashMap::new(),
+                    full_sync: false,
+                    temp_id_mapping: HashMap::new(),
+                    sync_token: SyncToken("sync token".to_string()),
+                }),
+        )
+        .expect(0)
+        .mount(todoist_mock_server)
+        .await;
+}
+
 pub async fn mock_todoist_sync_resources_service(
     todoist_mock_server: &MockServer,
     resource_name: &str,

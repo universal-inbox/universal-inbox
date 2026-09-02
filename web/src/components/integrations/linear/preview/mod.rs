@@ -29,6 +29,9 @@ pub fn LinearNotificationPreview(
     match linear_notification() {
         LinearNotification::IssueNotification { issue, .. } => rsx! {
             LinearIssuePreview {
+                // A notification has no owned title: the issue's own title is
+                // the right thing to show.
+                title: issue.title.clone(),
                 linear_issue: issue,
                 linear_notification: Some(linear_notification()),
                 expand_details
