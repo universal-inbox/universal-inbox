@@ -160,6 +160,29 @@ pub async fn mock_todoist_sync_service(
     commands: Vec<TodoistSyncPartialCommand>,
     result: Option<TodoistSyncStatusResponse>,
 ) {
+    mount_todoist_sync_mock(todoist_mock_server, commands, result, None).await;
+}
+
+/// Same as [`mock_todoist_sync_service`], but pinning the call count to exactly
+/// one.
+///
+/// A mounted mock that is never called is silently satisfied, so a test whose
+/// point is that an outbound command *is* sent has to state the expectation.
+/// It is verified when the `MockServer` is dropped, i.e. at the end of the test.
+pub async fn mock_todoist_sync_service_expecting_one_call(
+    todoist_mock_server: &MockServer,
+    commands: Vec<TodoistSyncPartialCommand>,
+    result: Option<TodoistSyncStatusResponse>,
+) {
+    mount_todoist_sync_mock(todoist_mock_server, commands, result, Some(1)).await;
+}
+
+async fn mount_todoist_sync_mock(
+    todoist_mock_server: &MockServer,
+    commands: Vec<TodoistSyncPartialCommand>,
+    result: Option<TodoistSyncStatusResponse>,
+    expected_calls: Option<u64>,
+) {
     let body = json!({ "commands": commands });
 
     let response = result.unwrap_or_else(|| {
@@ -175,7 +198,7 @@ pub async fn mock_todoist_sync_service(
         }
     });
 
-    Mock::given(method("POST"))
+    let mock = Mock::given(method("POST"))
         .and(path("/sync"))
         .and(body_partial_json(body))
         .and(header("authorization", "Bearer todoist_test_access_token"))
@@ -183,9 +206,12 @@ pub async fn mock_todoist_sync_service(
             ResponseTemplate::new(200)
                 .insert_header("content-type", "application/json")
                 .set_body_json(&response),
-        )
-        .mount(todoist_mock_server)
-        .await;
+        );
+
+    match expected_calls {
+        Some(expected_calls) => mock.expect(expected_calls).mount(todoist_mock_server).await,
+        None => mock.mount(todoist_mock_server).await,
+    }
 }
 
 /// Assert that *nothing* is sent to Todoist's Sync API.
