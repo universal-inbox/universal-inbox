@@ -35,7 +35,11 @@ pub fn SlackReactionTaskListItem(
     rsx! {
         ListItem {
             key: "{task().id}",
-            title: "{task().title}",
+            // Show the title Slack seeded the task with rather than the stored
+            // one: a row sits next to Slack's own icon, so a name the user gave
+            // the task in their task manager would read as the wrong title
+            // there. The rename shows up in the preview header instead.
+            title: "{slack_reaction().render_task_title()}",
             subtitle: rsx! {
                 SlackReactionTaskSubtitle { slack_reaction }
                 span { class: "tag", "{reaction_emoji}" }

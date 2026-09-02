@@ -21,6 +21,9 @@ use crate::{
 pub fn SlackMessagePreview(
     slack_message: ReadSignal<SlackMessageDetails>,
     title: ReadSignal<String>,
+    // Where the task preview puts the name a renamed task carries in the user's
+    // task manager. The notification preview leaves it unset.
+    #[props(default = None)] subtitle: Option<Element>,
 ) -> Element {
     let channel_name = slack_message()
         .channel
@@ -35,6 +38,7 @@ pub fn SlackMessagePreview(
             PreviewCardHeader {
                 brand_icon: rsx! { span { class: "icon-[lucide--message-square-text] size-4" } },
                 title: strip_markdown_links(&title()),
+                subtitle,
                 subline: rsx! {
                     SlackTeamDisplay { team: slack_message().team, display_name: true, class: "" }
                     span { class: "sep", "·" }

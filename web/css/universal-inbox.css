@@ -1515,6 +1515,25 @@ select:focus-visible:not(.outline-none) {
     font-family: var(--font-mono);
     font-size: 12px;
 }
+/* Second title, owned by another system than the one the preview is showing —
+   today the name a renamed task carries in the user's task manager. Reads as a
+   title (same weight as the source title) but a size down and muted, so the
+   source title stays the primary one. */
+.preview-head-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ui-base-muted);
+}
+.preview-head-subtitle-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .preview-head-sub {
     display: flex;
     align-items: center;

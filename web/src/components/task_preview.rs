@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use universal_inbox::{
     HasHtmlUrl,
     task::{Task, TaskId, TaskSourceKind},
-    third_party::item::{ThirdPartyItemData, ThirdPartyItemKind},
+    third_party::item::{ThirdPartyItemData, ThirdPartyItemKind, ThirdPartyItemSource},
 };
 
 use crate::{
@@ -15,6 +15,7 @@ use crate::{
             slack::preview::slack_reaction::SlackReactionTaskPreview,
             ticktick::preview::TickTickTaskPreview, todoist::preview::TodoistTaskPreview,
         },
+        markdown::Markdown,
         notification_preview::{
             DETAIL_BODY_INNER, DETAIL_KBD, SOURCE_PILL_ACTIVE, SOURCE_PILL_BASE, SOURCE_PILL_SUB,
             SOURCE_PILL_TILE,
@@ -178,16 +179,22 @@ pub fn TaskDetailsPreview(task: ReadSignal<Task>, expand_details: ReadSignal<boo
         ThirdPartyItemData::SlackReaction(slack_reaction) => rsx! {
             SlackReactionTaskPreview { slack_reaction: *slack_reaction, task }
         },
-        ThirdPartyItemData::LinearIssue(linear_issue) => rsx! {
-            LinearIssuePreview {
-                // The task manager owns the title, so show the task's own
-                // title rather than re-reading the raw issue payload.
-                title: task().title,
-                linear_issue: *linear_issue,
-                linear_notification: None,
-                expand_details
+        ThirdPartyItemData::LinearIssue(linear_issue) => {
+            // Show the issue's own title, so the name reads the same as it does
+            // in Linear, and hand any renamed task-manager title to the
+            // subtitle so both names stay visible.
+            let source_title = linear_issue.render_task_title();
+            let subtitle = task_manager_title_subtitle(&task(), &source_title);
+            rsx! {
+                LinearIssuePreview {
+                    title: source_title,
+                    subtitle,
+                    linear_issue: *linear_issue,
+                    linear_notification: None,
+                    expand_details
+                }
             }
-        },
+        }
         ThirdPartyItemData::SlackThread(_)
         | ThirdPartyItemData::LinearNotification(_)
         | ThirdPartyItemData::GithubNotification(_)
@@ -196,6 +203,51 @@ pub fn TaskDetailsPreview(task: ReadSignal<Task>, expand_details: ReadSignal<boo
         | ThirdPartyItemData::GoogleDriveComment(_)
         | ThirdPartyItemData::WebPage(_) => rsx! {},
     }
+}
+
+/// The header subtitle that surfaces the title a task carries in the user's
+/// task manager.
+///
+/// A source-only integration (Linear, Slack) seeds a task's title once and then
+/// never re-asserts it, so the stored title diverges from the source's as soon
+/// as the user renames the task in Todoist or TickTick. The preview keeps
+/// showing the source title next to the source's own brand icon, and this
+/// subtitle carries the other name next to the task manager's icon, so both are
+/// visible at once. It returns `None` when the two agree, which is the common
+/// case and would otherwise print the same string twice.
+pub fn task_manager_title_subtitle(task: &Task, source_title: &str) -> Option<Element> {
+    if task.title == source_title {
+        return None;
+    }
+
+    let title = task.title.clone();
+    let task_manager_kind = task
+        .sink_item
+        .as_ref()
+        .and_then(|sink_item| {
+            TaskSourceKind::try_from(sink_item.get_third_party_item_source_kind()).ok()
+        })
+        // An unmirrored task has no sink item, yet its title can still have been
+        // renamed through the API. Show the name without claiming an owner.
+        .map(|kind| {
+            rsx! {
+                span {
+                    class: "shrink-0 inline-flex items-center",
+                    "aria-hidden": "true",
+                    TaskIcon { class: "h-3.5 w-3.5".to_string(), kind }
+                }
+            }
+        });
+
+    Some(rsx! {
+        if let Some(icon) = task_manager_kind {
+            { icon }
+        }
+        Markdown {
+            text: "{title}",
+            class: "preview-head-subtitle-text".to_string(),
+        }
+    })
 }
 
 pub fn task_source_display_name(kind: TaskSourceKind) -> &'static str {

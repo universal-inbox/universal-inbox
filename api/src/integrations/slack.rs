@@ -23,7 +23,6 @@ use wiremock::{
 };
 
 use universal_inbox::{
-    HasHtmlUrl,
     integration_connection::{
         IntegrationConnectionId,
         integrations::slack::SlackEmojiSuggestion,
@@ -1707,11 +1706,7 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         };
         let created_at = source.created_at;
         let updated_at = source.created_at;
-        let title = format!(
-            "[{}]({})",
-            source.item.render_title(),
-            source.get_html_url()
-        );
+        let title = source.render_task_title();
         let body = truncate_with_ellipse(&source.item.render_content(), 16300, "...", false);
         let completed_at = if status == TaskStatus::Done {
             Some(Utc::now())

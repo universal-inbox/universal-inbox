@@ -35,12 +35,17 @@ fn linear_priority(issue: &LinearIssue) -> Option<(String, PriorityLevel)> {
 /// notification preview.
 ///
 /// `title` is a required prop rather than something derived from
-/// `linear_issue`: a task's title is owned by the user's task manager and can
-/// diverge from the issue's own title, so each caller states where the title it
-/// wants displayed comes from.
+/// `linear_issue`: the notification preview shows the issue's plain title while
+/// the task preview shows the title Universal Inbox seeded the task with, so
+/// each caller states where the title it wants displayed comes from.
+///
+/// `subtitle` is where the task preview puts the name the task carries in the
+/// user's task manager when they have renamed it; the notification preview
+/// leaves it unset.
 #[component]
 pub fn LinearIssuePreview(
     title: String,
+    #[props(default = None)] subtitle: Option<Element>,
     linear_issue: ReadSignal<LinearIssue>,
     linear_notification: ReadSignal<Option<LinearNotification>>,
     expand_details: ReadSignal<bool>,
@@ -59,6 +64,7 @@ pub fn LinearIssuePreview(
                 brand_icon: rsx! { LinearIssueIcon { linear_issue, class: "size-4" } },
                 title,
                 identifier: Some(identifier),
+                subtitle,
                 subline: rsx! {
                     if let Some(creator) = creator {
                         span { "Opened by" }
