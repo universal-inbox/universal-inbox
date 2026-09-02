@@ -13,6 +13,9 @@ use crate::{
 pub fn SlackFilePreview(
     slack_file: ReadSignal<SlackFileDetails>,
     title: ReadSignal<String>,
+    // Where the task preview puts the name a renamed task carries in the user's
+    // task manager. The notification preview leaves it unset.
+    #[props(default = None)] subtitle: Option<Element>,
 ) -> Element {
     let channel_name = slack_file()
         .channel
@@ -27,6 +30,7 @@ pub fn SlackFilePreview(
             PreviewCardHeader {
                 brand_icon: rsx! { span { class: "icon-[lucide--paperclip] size-4" } },
                 title: strip_markdown_links(&title()),
+                subtitle,
                 subline: rsx! {
                     SlackTeamDisplay { team: slack_file().team, display_name: true }
                     span { class: "sep", "·" }
