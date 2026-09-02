@@ -565,7 +565,9 @@ impl TickTickService {
     ) -> Box<CreateOrUpdateTaskRequest> {
         Box::new(CreateOrUpdateTaskRequest {
             id: Uuid::new_v4().into(),
-            title: source.title.clone(),
+            // TickTick is the user's own task manager: it owns the title and a
+            // rename is adopted on every sync.
+            title: DefaultValue::new(source.title.clone(), Some(source.title.clone())),
             body: source.content.clone().unwrap_or_default(),
             status: if source.is_completed() {
                 TaskStatus::Done

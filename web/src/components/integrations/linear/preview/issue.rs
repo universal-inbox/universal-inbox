@@ -31,8 +31,16 @@ fn linear_priority(issue: &LinearIssue) -> Option<(String, PriorityLevel)> {
     Some((issue.priority.to_string(), level))
 }
 
+/// Preview pane for a Linear issue, shared by the task preview and the
+/// notification preview.
+///
+/// `title` is a required prop rather than something derived from
+/// `linear_issue`: a task's title is owned by the user's task manager and can
+/// diverge from the issue's own title, so each caller states where the title it
+/// wants displayed comes from.
 #[component]
 pub fn LinearIssuePreview(
+    title: String,
     linear_issue: ReadSignal<LinearIssue>,
     linear_notification: ReadSignal<Option<LinearNotification>>,
     expand_details: ReadSignal<bool>,
@@ -49,7 +57,7 @@ pub fn LinearIssuePreview(
 
             PreviewCardHeader {
                 brand_icon: rsx! { LinearIssueIcon { linear_issue, class: "size-4" } },
-                title: linear_issue().title.clone(),
+                title,
                 identifier: Some(identifier),
                 subline: rsx! {
                     if let Some(creator) = creator {

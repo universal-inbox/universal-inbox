@@ -24,7 +24,9 @@ pub fn LinearTaskListItem(
     rsx! {
         ListItem {
             key: "{task().id}",
-            title: "{linear_issue().title}",
+            // The task manager owns the title, so show the task's own title
+            // rather than re-reading the raw issue payload.
+            title: "{task().title}",
             subtitle: rsx! {
                 LinearIssueListItemSubtitle { linear_issue }
             },
