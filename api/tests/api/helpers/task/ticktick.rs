@@ -203,6 +203,10 @@ pub async fn mock_ticktick_update_task_service(
                 .insert_header("content-type", "application/json")
                 .set_body_json(result),
         )
+        // A mounted mock that is never called is silently satisfied, so pin the
+        // call count: every caller's point is that the update *is* sent.
+        // Verified when the `MockServer` is dropped.
+        .expect(1)
         .mount(ticktick_mock_server)
         .await;
 }

@@ -195,6 +195,99 @@ mod patch_task {
         assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
     }
 
+    /// The task manager owns the title, so an explicit rename must reach it —
+    /// even when `title` is the only field in the patch.
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_ticktick_task_title_only(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        ticktick_item: Box<TickTickItem>,
+        ticktick_projects_response: Vec<TickTickProject>,
+    ) {
+        let app = authenticated_app.await;
+        let _integration_connection = create_ticktick_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings,
+            IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+            None,
+        )
+        .await;
+        mock_ticktick_list_projects_service(
+            &app.app.ticktick_mock_server,
+            &ticktick_projects_response,
+        )
+        .await;
+
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
+                project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
+                ..*ticktick_item.clone()
+            })),
+            app.user.id,
+        )
+        .await;
+        let existing_task = creation.task.as_ref().unwrap().clone();
+        let new_title = "Reply to Marc about the billing thread".to_string();
+        assert_ne!(existing_task.title, new_title);
+
+        let update_response = TickTickCreateTaskResponse {
+            id: ticktick_item.id.clone(),
+            project_id: ticktick_item.project_id.clone(),
+            title: new_title.clone(),
+            content: ticktick_item.content.clone(),
+            desc: ticktick_item.desc.clone(),
+            all_day: ticktick_item.all_day,
+            start_date: ticktick_item.start_date,
+            due_date: ticktick_item.due_date,
+            time_zone: ticktick_item.time_zone.clone(),
+            priority: ticktick_item.priority,
+            status: ticktick_item.status,
+            tags: ticktick_item.tags.clone(),
+        };
+        // The rename must reach `POST /task/{id}` with the real projectId and
+        // the new title in the body.
+        mock_ticktick_update_task_service(
+            &app.app.ticktick_mock_server,
+            &ticktick_item.id,
+            &ticktick_item.project_id,
+            new_title.as_str(),
+            &update_response,
+        )
+        .await;
+
+        let patched_task: Box<Task> = patch_resource(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            existing_task.id.into(),
+            &TaskPatch {
+                title: Some(new_title.clone()),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert_eq!(
+            patched_task,
+            Box::new(Task {
+                title: new_title.clone(),
+                ..existing_task.clone()
+            })
+        );
+
+        let reloaded_task: Box<Task> = get_resource(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            existing_task.id.into(),
+        )
+        .await;
+        assert_eq!(reloaded_task.title, new_title);
+    }
+
     #[rstest]
     #[tokio::test]
     async fn test_create_ticktick_task_from_notification(
