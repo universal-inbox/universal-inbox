@@ -1,10 +1,7 @@
-use std::collections::HashMap;
-
 use graphql_client::Response;
 use pretty_assertions::assert_ne;
 use rstest::*;
 use tokio::time::{Duration, sleep};
-use uuid::Uuid;
 
 use universal_inbox::{
     HasHtmlUrl,
@@ -13,14 +10,14 @@ use universal_inbox::{
         config::IntegrationConnectionConfig,
         integrations::{
             linear::{LinearConfig, LinearSyncTaskConfig},
-            todoist::{SyncToken, TodoistConfig},
+            todoist::TodoistConfig,
         },
         provider::IntegrationProviderKind,
     },
     notification::NotificationStatus,
     task::{
         DueDate, PresetDueDate, ProjectSummary, TaskCreationConfig, TaskCreationResult,
-        TaskPriority, TaskSourceKind, TaskStatus,
+        TaskPriority, TaskSourceKind, TaskStatus, service::TaskPatch,
     },
     third_party::{
         integrations::{
@@ -37,8 +34,8 @@ use universal_inbox_api::{
         linear::graphql::{assigned_issues_query, notifications_query},
         task::ThirdPartyTaskService,
         todoist::{
-            TodoistCommandStatus, TodoistSyncCommandItemCompleteArgs, TodoistSyncResponse,
-            TodoistSyncStatusResponse,
+            TodoistSyncCommandItemCompleteArgs, TodoistSyncCommandItemUpdateArgs,
+            TodoistSyncResponse,
         },
     },
     repository::{task::TaskRepository, third_party::ThirdPartyItemRepository},
@@ -67,7 +64,8 @@ use crate::helpers::{
             TodoistSyncPartialCommand, mock_todoist_complete_item_service,
             mock_todoist_get_item_service, mock_todoist_item_add_service,
             mock_todoist_no_sync_call, mock_todoist_sync_resources_service,
-            mock_todoist_sync_service, sync_todoist_projects_response, todoist_item,
+            mock_todoist_sync_service_with_command_error, sync_todoist_projects_response,
+            todoist_item,
         },
     },
 };
@@ -776,25 +774,14 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
     )
     .await;
 
-    let _todoist_complete_item_mock = mock_todoist_sync_service(
+    let _todoist_complete_item_mock = mock_todoist_sync_service_with_command_error(
         &app.app.todoist_mock_server,
         vec![TodoistSyncPartialCommand::ItemComplete {
             args: TodoistSyncCommandItemCompleteArgs {
                 id: existing_task.sink_item.as_ref().unwrap().source_id.clone(),
             },
         }],
-        Some(TodoistSyncStatusResponse {
-            sync_status: HashMap::from([(
-                Uuid::new_v4(),
-                TodoistCommandStatus::Error {
-                    error_code: 22,
-                    error: "Item not found".to_string(),
-                },
-            )]),
-            full_sync: false,
-            temp_id_mapping: HashMap::new(),
-            sync_token: SyncToken("sync token".to_string()),
-        }),
+        22,
     )
     .await;
     let new_todoist_item_id = "another_id".to_string();
@@ -835,6 +822,199 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         task.sink_item.as_ref().unwrap().source_id,
         new_todoist_item_id
     );
+}
+
+/// Losing the mirrored item must not silently reset the name the user gave the
+/// task in their task manager.
+///
+/// Sink recreation seeds its `TaskCreation` from the task rather than from the
+/// source payload, so this is the one case whose correctness depends on two
+/// things interacting: the stored title surviving the Linear sync, then being
+/// read back by the recreation.
+#[rstest]
+#[tokio::test]
+async fn test_sync_tasks_should_recreate_sink_task_with_the_renamed_title(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+    sync_todoist_projects_response: TodoistSyncResponse,
+    linear_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+    let todoist_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        todoist_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    let project = ProjectSummary {
+        name: "Project2".to_string(),
+        source_id: "2222".into(),
+    };
+    let linear_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Linear(LinearConfig {
+            sync_notifications_enabled: true,
+            sync_task_config: LinearSyncTaskConfig {
+                enabled: true,
+                target_project: Some(project.clone()),
+                default_due_at: None,
+                ..Default::default()
+            },
+        }),
+        &settings,
+        linear_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let linear_issue: &LinearIssue = &linear_issues[0];
+    let existing_task = create_linear_task(
+        &app.app,
+        linear_issue,
+        project,
+        app.user.id,
+        linear_integration_connection.id,
+        todoist_integration_connection.id,
+        "todoist_source_id".to_string(),
+    )
+    .await;
+    let existing_sink_item = existing_task.sink_item.as_ref().unwrap().clone();
+    let ThirdPartyItemData::TodoistItem(todoist_item) = existing_sink_item.data.clone() else {
+        panic!("Expected sink item to be a Todoist item");
+    };
+
+    // The user renamed the mirrored task in Todoist and a sink sync adopted it,
+    // so the task now carries a title the Linear issue knows nothing about.
+    let renamed_title = "Reply to Marc about the billing thread".to_string();
+    let mut transaction = app.app.repository.begin().await.unwrap();
+    app.app
+        .repository
+        .update_task(
+            &mut transaction,
+            existing_task.id,
+            &TaskPatch {
+                title: Some(renamed_title.clone()),
+                ..Default::default()
+            },
+            app.user.id,
+        )
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+
+    // Sleep so the third party item updated during sync has a different
+    // `updated_at` and thus forces the task to be updated.
+    sleep(Duration::from_secs(1)).await;
+
+    // A non-title field changed upstream, so this sync does push an update to
+    // the sink item.
+    let new_body = "The issue description changed upstream".to_string();
+    let mut source_linear_issue = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .issues
+        .nodes[0]
+        .clone();
+    source_linear_issue.description = Some(new_body.clone());
+    let single_sync_linear_tasks_response = Response {
+        data: Some(assigned_issues_query::ResponseData {
+            issues: assigned_issues_query::AssignedIssuesQueryIssues {
+                nodes: vec![source_linear_issue],
+            },
+        }),
+        errors: None,
+        extensions: None,
+    };
+    let _linear_assigned_issues_mock = mock_linear_assigned_issues_query(
+        &app.app.linear_mock_server,
+        &single_sync_linear_tasks_response,
+    )
+    .await;
+
+    mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    )
+    .await;
+
+    // The mirrored item is gone from Todoist: the update fails with command
+    // error 22, which is what triggers the recreation.
+    let _todoist_item_update_mock = mock_todoist_sync_service_with_command_error(
+        &app.app.todoist_mock_server,
+        vec![TodoistSyncPartialCommand::ItemUpdate {
+            args: TodoistSyncCommandItemUpdateArgs {
+                id: existing_sink_item.source_id.clone(),
+                due: None,
+                priority: None,
+                description: Some(new_body.clone()),
+                content: None,
+            },
+        }],
+        22,
+    )
+    .await;
+
+    // The recreated item must be seeded with the rename, not with the Linear
+    // issue's title.
+    let new_todoist_item_id = "another_id".to_string();
+    let _todoist_item_add_mock = mock_todoist_item_add_service(
+        &app.app.todoist_mock_server,
+        &new_todoist_item_id,
+        renamed_title.clone(),
+        Some(new_body.clone()),
+        Some("2222".to_string()), // ie. "Project2"
+        Some((&Into::<DueDate>::into(PresetDueDate::Today)).into()),
+        TodoistItemPriority::P1,
+    )
+    .await;
+    let _todoist_get_item_mock = mock_todoist_get_item_service(
+        &app.app.todoist_mock_server,
+        Box::new(TodoistItem {
+            id: new_todoist_item_id.clone(),
+            ..*todoist_item.clone()
+        }),
+    )
+    .await;
+
+    let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
+        &app.client,
+        &app.app.api_address,
+        Some(TaskSourceKind::Linear),
+        false,
+    )
+    .await;
+
+    assert_eq!(task_creation_results.len(), 1);
+    let task = &task_creation_results[0].task;
+    assert_eq!(task.id, existing_task.id);
+    assert_eq!(task.title, renamed_title);
+    assert_ne!(task.sink_item.as_ref().unwrap().id, existing_sink_item.id);
+    assert_eq!(
+        task.sink_item.as_ref().unwrap().source_id,
+        new_todoist_item_id
+    );
+
+    let task = get_task(&app.client, &app.app.api_address, existing_task.id)
+        .await
+        .unwrap();
+    assert_eq!(task.title, renamed_title);
 }
 
 #[rstest]

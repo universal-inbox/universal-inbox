@@ -177,6 +177,36 @@ pub async fn mock_todoist_sync_service_expecting_one_call(
     mount_todoist_sync_mock(todoist_mock_server, commands, result, Some(1)).await;
 }
 
+/// Same as [`mock_todoist_sync_service`], but answering with a failing command
+/// status instead of an `ok`.
+///
+/// Todoist reports a per-command failure inside a `200` response, and error code
+/// `22` ("item not found") is the one Universal Inbox turns into
+/// `UniversalInboxError::ItemNotFound`, which triggers the sink item recreation.
+pub async fn mock_todoist_sync_service_with_command_error(
+    todoist_mock_server: &MockServer,
+    commands: Vec<TodoistSyncPartialCommand>,
+    error_code: i32,
+) {
+    mock_todoist_sync_service(
+        todoist_mock_server,
+        commands,
+        Some(TodoistSyncStatusResponse {
+            sync_status: HashMap::from([(
+                Uuid::new_v4(),
+                TodoistCommandStatus::Error {
+                    error_code,
+                    error: format!("Command failed with error code {error_code}"),
+                },
+            )]),
+            full_sync: false,
+            temp_id_mapping: HashMap::new(),
+            sync_token: SyncToken("sync token".to_string()),
+        }),
+    )
+    .await;
+}
+
 async fn mount_todoist_sync_mock(
     todoist_mock_server: &MockServer,
     commands: Vec<TodoistSyncPartialCommand>,
