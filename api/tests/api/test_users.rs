@@ -429,8 +429,12 @@ mod login_user {
             .build()
             .unwrap();
 
+        // Unique per run: a fixed email accumulates failed attempts in the shared Redis
+        // login-throttle key and starts answering 429 instead of 401. See the note in
+        // `test_auth_endpoints_are_ip_rate_limited`.
+        let unknown_email = format!("unknown-{}@doe.name", Uuid::new_v4());
         let login_response =
-            login_user_response(&client, &app, "unknown@doe.name".parse().unwrap(), "").await;
+            login_user_response(&client, &app, unknown_email.parse().unwrap(), "").await;
 
         assert_eq!(login_response.status(), http::StatusCode::UNAUTHORIZED);
         let body: HashMap<String, String> = login_response.json().await.unwrap();
@@ -1148,9 +1152,16 @@ mod auth_rate_limit {
         // which 5+ tokens refill and the burst is never exhausted.
         // `check_ip_rate_limit` is an atomic CAS, so concurrent dispatch is
         // safe and deterministic.
+        // Unique per run: the per-account login throttle lives in a Redis key derived from
+        // the email alone, shared by every run on this machine for `login_attempt_window_seconds`
+        // (900s in the test config). A hardcoded email accumulates one failed attempt per run and
+        // locks out after `max_login_attempts`, making this test fail from the 6th run onwards.
+        let exhausted_email = format!("nobody-{}@example.com", Uuid::new_v4());
+        let fresh_email = format!("someone-else-{}@example.com", Uuid::new_v4());
+
         let url = format!("{}users/me", app.api_address);
         let body = json!({
-            "email": "nobody@example.com",
+            "email": exhausted_email,
             "password": "wrong-password",
         });
 
@@ -1181,10 +1192,10 @@ mod auth_rate_limit {
         // the response is NOT 429 (the actual status is 401 Unauthorized for
         // unknown credentials). Use a *different* email here: the per-account
         // login throttle is keyed by email and follows it across IPs, so the
-        // 35 failures above locked `nobody@example.com` regardless of source
+        // 35 failures above locked the first email regardless of source
         // IP — reusing it would conflate the two limiters.
         let other_email_body = json!({
-            "email": "someone-else@example.com",
+            "email": fresh_email,
             "password": "wrong-password",
         });
         let other_ip_status = client
