@@ -2,7 +2,7 @@ use std::{net::TcpListener, str::FromStr, sync::Arc};
 
 use apalis_redis::RedisStorage;
 use rstest::*;
-use sqlx::{Connection, Executor, PgConnection, PgPool};
+use sqlx::PgPool;
 use tokio::sync::RwLock;
 use tracing::info;
 use uuid::Uuid;
@@ -26,6 +26,7 @@ use universal_inbox_api::{
 use crate::common::mailer::MailerStub;
 
 pub mod mailer;
+pub mod test_db;
 
 // ---------------------------------------------------------------------------
 // rstest fixtures (shared between API and browser tests)
@@ -51,33 +52,10 @@ pub fn tracing_setup(settings: Settings) {
     color_backtrace::install();
 }
 
+/// Leases a pristine test database. See [`test_db`] for the isolation model.
 #[fixture]
-pub async fn db_connection(mut settings: Settings) -> Arc<PgPool> {
-    settings.database.database_name = Uuid::new_v4().to_string();
-    let mut server_connection =
-        PgConnection::connect(&settings.database.connection_string_without_db())
-            .await
-            .expect("Failed to connect to Postgres");
-    server_connection
-        .execute(&*format!(
-            r#"CREATE DATABASE "{}";"#,
-            settings.database.database_name
-        ))
-        .await
-        .expect("Failed to create database.");
-
-    let db_connection = settings
-        .database
-        .connect_pool(log::LevelFilter::Info)
-        .await
-        .expect("error");
-
-    sqlx::migrate!("./migrations")
-        .run(&db_connection)
-        .await
-        .expect("Failed to migrate the database");
-
-    Arc::new(db_connection)
+pub async fn db_connection(mut settings: Settings) -> test_db::TestDb {
+    test_db::acquire(&mut settings.database).await
 }
 
 #[fixture]
