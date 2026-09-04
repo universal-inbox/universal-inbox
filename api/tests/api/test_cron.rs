@@ -59,7 +59,7 @@ async fn test_refresh_oauth_tokens_cron_tick_enqueues_job_once(
         minutes_before_expiry: 42,
         ..Default::default()
     };
-    let tick = Utc.with_ymd_and_hms(2026, 7, 5, 12, 0, 0).unwrap();
+    let tick = unique_tick(5);
 
     // Simulate 2 worker processes handling the same cron tick
     for _ in 0..2 {
