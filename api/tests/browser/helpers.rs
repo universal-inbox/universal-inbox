@@ -31,6 +31,7 @@ use universal_inbox_api::{
 use crate::common::{build_and_spawn, setup_test_env};
 
 // Re-export shared fixtures so rstest can resolve them by name in this module's fixtures
+pub use crate::common::test_db::TestDb;
 pub use crate::common::{db_connection, redis_storage, settings, tracing_setup};
 
 pub const DEFAULT_PASSWORD: &str = "test123456";
@@ -53,6 +54,8 @@ pub struct BrowserTestedApp {
     pub _google_drive_mock_server: MockServer,
     pub _slack_mock_server: MockServer,
     pub _todoist_mock_server: MockServer,
+    /// Holds the test database slot for the lifetime of the app.
+    pub _test_db: TestDb,
 }
 
 impl Drop for BrowserTestedApp {
@@ -68,7 +71,7 @@ impl Drop for BrowserTestedApp {
 pub async fn browser_tested_app(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
-    #[future] db_connection: Arc<PgPool>,
+    #[future] db_connection: TestDb,
     #[future] redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> BrowserTestedApp {
     info!("Setting up browser test server");
@@ -100,7 +103,8 @@ pub async fn browser_tested_app(
         env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
 
-    let pool: Arc<PgPool> = db_connection.await;
+    let test_db = db_connection.await;
+    let pool: Arc<PgPool> = test_db.pool.clone();
     let repository = Arc::new(Repository::new(pool.clone()));
     let redis_storage = redis_storage.await;
 
@@ -132,6 +136,7 @@ pub async fn browser_tested_app(
         _google_drive_mock_server: mock_servers.google_drive,
         _slack_mock_server: mock_servers.slack,
         _todoist_mock_server: mock_servers.todoist,
+        _test_db: test_db,
     }
 }
 

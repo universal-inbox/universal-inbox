@@ -168,6 +168,16 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
         with:
           shared-key: ci
+      - name: Tune Postgres for disposable test data
+        run: |
+          PGPASSWORD=password psql -h localhost -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+          ALTER SYSTEM SET fsync = off;
+          ALTER SYSTEM SET synchronous_commit = off;
+          ALTER SYSTEM SET full_page_writes = off;
+          ALTER SYSTEM SET max_wal_size = '4GB';
+          ALTER SYSTEM SET checkpoint_timeout = '3600s';
+          SELECT pg_reload_conf();
+          SQL
       - name: Run API tests (excluding browser tests)
         env:
           RUST_MIN_STACK: 104857600
@@ -230,6 +240,16 @@ jobs:
         run: devbox run -- just api install-tools
       - name: Install web dependencies and build WASM frontend
         run: devbox run -- just web build-ci
+      - name: Tune Postgres for disposable test data
+        run: |
+          PGPASSWORD=password psql -h localhost -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+          ALTER SYSTEM SET fsync = off;
+          ALTER SYSTEM SET synchronous_commit = off;
+          ALTER SYSTEM SET full_page_writes = off;
+          ALTER SYSTEM SET max_wal_size = '4GB';
+          ALTER SYSTEM SET checkpoint_timeout = '3600s';
+          SELECT pg_reload_conf();
+          SQL
       - name: Run browser tests
         env:
           RUST_MIN_STACK: 104857600
