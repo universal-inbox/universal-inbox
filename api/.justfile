@@ -25,6 +25,23 @@ ensure-db:
 migrate-db:
     sqlx database setup
 
+# Drops the test databases. Not part of any workflow: the suite reuses a bounded pool of slot
+# databases (see api/tests/common/test_db.rs), so they no longer accumulate. Use this only to
+# reclaim the ~150 MB they hold, or to force a rebuild from scratch.
+clean-test-db:
+    #!/usr/bin/env bash
+    set -Eeuo pipefail
+
+    server_url=$(echo "$DATABASE_URL" | sed -E 's|/[^/]+$||')/postgres
+    # A template must lose its IS_TEMPLATE flag before Postgres will drop it.
+    psql -tAc "SELECT format('ALTER DATABASE %I IS_TEMPLATE false;', datname) \
+               FROM pg_database WHERE datname LIKE 'ui\_test\_tmpl\_%'" "$server_url" \
+      | psql -q "$server_url"
+    psql -tAc "SELECT format('DROP DATABASE IF EXISTS %I WITH (FORCE);', datname) \
+               FROM pg_database WHERE datname LIKE 'ui\_test\_%'" "$server_url" \
+      | psql -q "$server_url"
+    echo "🧹 Dropped the test databases"
+
 test test-filter="" $RUST_LOG="info":
     cargo nextest run -E 'not binary(browser)' --color always {{test-filter}}
 

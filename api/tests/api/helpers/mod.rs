@@ -30,6 +30,7 @@ use crate::common::mailer::MailerStub;
 use crate::common::{build_and_spawn, setup_test_env};
 
 // Re-export shared fixtures so rstest can resolve them by name in this module's fixtures
+pub use crate::common::test_db::TestDb;
 pub use crate::common::{db_connection, redis_storage, settings, tracing_setup};
 
 pub mod auth;
@@ -67,6 +68,8 @@ pub struct TestedApp {
     pub mailer_stub: Arc<RwLock<MailerStub>>,
     pub redis_storage: RedisStorage<UniversalInboxJob>,
     pub cache: Cache,
+    /// Holds the test database slot for the lifetime of the app.
+    pub _test_db: TestDb,
 }
 
 impl TestedApp {
@@ -95,7 +98,7 @@ impl Drop for TestedApp {
 pub async fn tested_app(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
-    #[future] db_connection: Arc<PgPool>,
+    #[future] db_connection: TestDb,
     #[future] redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> TestedApp {
     info!("Setting up server");
@@ -119,7 +122,8 @@ pub async fn tested_app(
         }
     }
 
-    let pool: Arc<PgPool> = db_connection.await;
+    let test_db = db_connection.await;
+    let pool: Arc<PgPool> = test_db.pool.clone();
     let redis_storage = redis_storage.await;
 
     let (services, mailer_stub, redis_storage) = build_and_spawn(
@@ -160,6 +164,7 @@ pub async fn tested_app(
         mailer_stub,
         redis_storage,
         cache,
+        _test_db: test_db,
     }
 }
 
@@ -167,7 +172,7 @@ pub async fn tested_app(
 pub async fn tested_app_with_local_auth(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
-    #[future] db_connection: Arc<PgPool>,
+    #[future] db_connection: TestDb,
     #[future] redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> TestedApp {
     info!("Setting up server");
@@ -188,7 +193,8 @@ pub async fn tested_app_with_local_auth(
         })];
     settings.application.security.email_domain_blacklist = HashMap::new();
 
-    let pool: Arc<PgPool> = db_connection.await;
+    let test_db = db_connection.await;
+    let pool: Arc<PgPool> = test_db.pool.clone();
     let redis_storage = redis_storage.await;
 
     let (services, mailer_stub, redis_storage) = build_and_spawn(
@@ -229,6 +235,7 @@ pub async fn tested_app_with_local_auth(
         mailer_stub,
         redis_storage,
         cache,
+        _test_db: test_db,
     }
 }
 
@@ -236,7 +243,7 @@ pub async fn tested_app_with_local_auth(
 pub async fn tested_app_with_domain_blacklist(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
-    #[future] db_connection: Arc<PgPool>,
+    #[future] db_connection: TestDb,
     #[future] redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> TestedApp {
     info!("Setting up server with domain blacklist");
@@ -281,7 +288,8 @@ pub async fn tested_app_with_domain_blacklist(
         "Registration is not allowed from this domain".to_string(),
     );
 
-    let pool: Arc<PgPool> = db_connection.await;
+    let test_db = db_connection.await;
+    let pool: Arc<PgPool> = test_db.pool.clone();
     let redis_storage = redis_storage.await;
 
     let (services, mailer_stub, redis_storage) = build_and_spawn(
@@ -322,6 +330,7 @@ pub async fn tested_app_with_domain_blacklist(
         mailer_stub,
         redis_storage,
         cache,
+        _test_db: test_db,
     }
 }
 

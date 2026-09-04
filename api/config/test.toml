@@ -1,3 +1,9 @@
+# Tests run one process per test, each with its own pool, so the cluster sees
+# `test-threads` x `max_connections` backends. Half the production pool is ample for a
+# single test and keeps that product well under the cluster's `max_connections`.
+[database]
+max_connections = 5
+
 [application]
 environment = "test"
 static_path = ""
