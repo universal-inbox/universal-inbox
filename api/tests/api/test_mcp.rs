@@ -414,7 +414,46 @@ mod protocol {
 }
 
 mod scenario {
+    use std::time::Duration;
+
+    use apalis::prelude::Storage;
+    use tokio::time::sleep;
+    use universal_inbox::third_party::integrations::github::GithubNotification;
+    use wiremock::{
+        Mock, ResponseTemplate,
+        matchers::{method, path},
+    };
+
     use super::*;
+
+    /// Each MCP tool call needs a fresh session (sessions close after the SSE
+    /// response), so re-initialize before every `tools/call`.
+    async fn mcp_tool_call(
+        app: &TestedApp,
+        token: &str,
+        tool_name: &str,
+        arguments: Value,
+    ) -> Value {
+        let client = mcp_client();
+        let (session_id, _) = mcp_initialize(&client, app, token).await;
+        let response = mcp_call(
+            &client,
+            app,
+            token,
+            json!({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": tool_name,
+                    "arguments": arguments
+                }
+            }),
+            session_id.as_deref(),
+        )
+        .await;
+        mcp_json(response).await
+    }
 
     #[rstest]
     #[tokio::test]
@@ -489,34 +528,6 @@ mod scenario {
         )
         .await;
 
-        // Helper: each MCP tool call needs a fresh session (sessions close after SSE response)
-        async fn mcp_tool_call(
-            app: &TestedApp,
-            token: &str,
-            tool_name: &str,
-            arguments: Value,
-        ) -> Value {
-            let client = mcp_client();
-            let (session_id, _) = mcp_initialize(&client, app, token).await;
-            let response = mcp_call(
-                &client,
-                app,
-                token,
-                json!({
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": tool_name,
-                        "arguments": arguments
-                    }
-                }),
-                session_id.as_deref(),
-            )
-            .await;
-            mcp_json(response).await
-        }
-
         let body = mcp_tool_call(
             &app.app,
             &token,
@@ -538,6 +549,7 @@ mod scenario {
             &token,
             "bulk_act_notifications",
             json!({
+                "mode": "filter",
                 "statuses": ["Read"],
                 "sources": ["Github"],
                 "action": "unsubscribe"
@@ -618,6 +630,114 @@ mod scenario {
         .await;
         assert_eq!(body["result"]["isError"], false);
         assert_eq!(body["result"]["structuredContent"]["status"], "Done");
+    }
+
+    /// The feature's spine: a mixed triage pass — a different action per
+    /// notification — applied in a single `tools/call`, with one stale ID that
+    /// must be skipped rather than failing the whole pass.
+    #[rstest]
+    #[tokio::test]
+    async fn acts_on_a_chosen_list_of_notifications(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_github_notifications: Vec<GithubNotification>,
+        github_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let mut app = authenticated_app.await;
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+
+        let github_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            github_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+
+        // `mark_read` has no upstream call; `delete` marks the thread as done
+        // and `unsubscribe` marks it as done then ignores it.
+        for thread_id in ["1001", "1002"] {
+            Mock::given(method("DELETE"))
+                .and(path(format!("/notifications/threads/{thread_id}")))
+                .respond_with(ResponseTemplate::new(205))
+                .mount(&app.app.github_mock_server)
+                .await;
+        }
+        Mock::given(method("PUT"))
+            .and(path("/notifications/threads/1002/subscription"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&app.app.github_mock_server)
+            .await;
+
+        let mut notifications = Vec::new();
+        for source_id in ["1000", "1001", "1002"] {
+            let mut source_notification = sync_github_notifications[0].clone();
+            source_notification.id = source_id.to_string();
+            notifications.push(
+                create_notification_from_github_notification(
+                    &app.app,
+                    &source_notification,
+                    app.user.id,
+                    github_connection.id,
+                )
+                .await,
+            );
+        }
+        let stale_notification_id = Uuid::new_v4();
+
+        let body = mcp_tool_call(
+            &app.app,
+            &token,
+            "bulk_act_notifications",
+            json!({
+                "mode": "list",
+                "notifications": [
+                    { "notification_id": notifications[0].id, "action": "mark_read" },
+                    { "notification_id": notifications[1].id, "action": "delete" },
+                    { "notification_id": notifications[2].id, "action": "unsubscribe" },
+                    { "notification_id": stale_notification_id, "action": "mark_read" },
+                ]
+            }),
+        )
+        .await;
+
+        assert_eq!(body["result"]["isError"], false);
+        // The stale ID matched no row and is simply absent from the result.
+        assert_eq!(body["result"]["structuredContent"]["count"], 3);
+
+        let updated_notifications = body["result"]["structuredContent"]["notifications"]
+            .as_array()
+            .expect("Expected updated notifications");
+        assert_eq!(updated_notifications.len(), 3);
+        for (notification, expected_status) in notifications
+            .iter()
+            .zip(["Read", "Deleted", "Unsubscribed"].iter())
+        {
+            let updated = updated_notifications
+                .iter()
+                .find(|updated| updated["id"] == json!(notification.id))
+                .unwrap_or_else(|| panic!("Notification {} was not updated", notification.id));
+            assert_eq!(&updated["status"], expected_status);
+        }
+        assert!(
+            !updated_notifications
+                .iter()
+                .any(|updated| updated["id"] == json!(stale_notification_id))
+        );
+
+        // Draining the queue proves every action group's jobs ran without error.
+        sleep(Duration::from_millis(1000)).await;
+        let job_count = app
+            .app
+            .redis_storage
+            .len()
+            .await
+            .expect("Failed to get job count");
+        assert_eq!(job_count, 0);
     }
 }
 

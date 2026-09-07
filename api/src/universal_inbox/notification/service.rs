@@ -943,8 +943,77 @@ impl NotificationService {
             .update_notifications(executor, status, from_sources, patch, user_id)
             .await?;
 
-        // Queue async side effects processing for each updated notification
-        for notification in &updated_notifications {
+        self.enqueue_notification_side_effects(&updated_notifications, patch, user_id, job_storage)
+            .await?;
+
+        Ok(updated_notifications)
+    }
+
+    /// Apply one patch per named notification, grouping the entries that share
+    /// a patch so each group is a single `UPDATE`.
+    ///
+    /// Selection is best effort: an ID that no longer exists, or that belongs
+    /// to another user, matches no row and is simply absent from the result.
+    /// The caller diffs its input list against the returned notifications to
+    /// see what landed.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_count = patches.len(),
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn patch_notifications_by_ids(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        patches: Vec<(NotificationId, NotificationPatch)>,
+        user_id: UserId,
+        job_storage: &mut RedisStorage<UniversalInboxJob>,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        // The action vocabulary bounds this at 4 groups, and `NotificationPatch`
+        // derives `PartialEq` but not `Hash`, so a linear scan beats a map.
+        let mut groups: Vec<(NotificationPatch, Vec<NotificationId>)> = Vec::new();
+        for (notification_id, patch) in patches {
+            match groups
+                .iter_mut()
+                .find(|(group_patch, _)| *group_patch == patch)
+            {
+                Some((_, notification_ids)) => notification_ids.push(notification_id),
+                None => groups.push((patch, vec![notification_id])),
+            }
+        }
+
+        let mut updated_notifications = Vec::new();
+        for (patch, notification_ids) in groups {
+            let updated = self
+                .repository
+                .update_notifications_by_ids(executor, notification_ids, &patch, user_id)
+                .await?;
+
+            self.enqueue_notification_side_effects(&updated, &patch, user_id, job_storage)
+                .await?;
+
+            updated_notifications.extend(updated);
+        }
+
+        Ok(updated_notifications)
+    }
+
+    /// Queue async side effects processing for each updated notification.
+    ///
+    /// The push runs inside the caller's still-open transaction, so an
+    /// exhausted retry returns `Err` before `commit` and rolls the whole call
+    /// back.
+    async fn enqueue_notification_side_effects(
+        &self,
+        notifications: &[Notification],
+        patch: &NotificationPatch,
+        user_id: UserId,
+        job_storage: &mut RedisStorage<UniversalInboxJob>,
+    ) -> Result<(), UniversalInboxError> {
+        for notification in notifications {
             Retry::spawn(
                 ExponentialBackoff::from_millis(10).map(jitter).take(10),
                 || async {
@@ -962,7 +1031,7 @@ impl NotificationService {
             .context("Failed to enqueue job to process notification side effects")?;
         }
 
-        Ok(updated_notifications)
+        Ok(())
     }
 
     #[tracing::instrument(

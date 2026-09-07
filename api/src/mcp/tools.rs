@@ -103,13 +103,41 @@ pub(crate) struct ActOnNotificationArgs {
     snoozed_until: Option<DateTime<Utc>>,
 }
 
+/// How a `bulk_act_notifications` call says what it acts on. The two modes are
+/// mutually exclusive, and expressing them as an internally tagged enum puts
+/// that exclusivity in the published input schema: a payload mixing a filter
+/// sweep with an explicit list, or naming no mode at all, fails in
+/// `parse_args` before the tool arm runs.
+///
+/// `extend("type" = "object")` is needed because `schemars` emits a bare
+/// `oneOf` for an internally tagged enum, while the MCP spec (and
+/// `registration_tests`) require every `inputSchema` root to be an object
+/// schema.
 #[derive(Deserialize, Serialize, JsonSchema)]
-pub(crate) struct BulkActNotificationsArgs {
-    #[serde(default)]
-    statuses: Vec<NotificationStatus>,
-    #[serde(default)]
-    sources: Vec<NotificationSourceKind>,
-    action: BulkNotificationAction,
+#[serde(tag = "mode", rename_all = "snake_case")]
+#[schemars(extend("type" = "object"))]
+pub(crate) enum BulkActNotificationsArgs {
+    Filter {
+        #[serde(default)]
+        statuses: Vec<NotificationStatus>,
+        #[serde(default)]
+        sources: Vec<NotificationSourceKind>,
+        action: BulkNotificationAction,
+    },
+    List {
+        notifications: Vec<NotificationActionEntry>,
+    },
+}
+
+/// One entry of a `mode: list` batch, shaped exactly like
+/// [`ActOnNotificationArgs`] so a model fills in the form it already knows
+/// from the single-notification tool.
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub(crate) struct NotificationActionEntry {
+    notification_id: NotificationId,
+    action: NotificationAction,
+    #[schemars(description = "Required when `action` is `snooze_until`; ignored otherwise.")]
+    snoozed_until: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize, Serialize, JsonSchema)]
@@ -252,31 +280,31 @@ pub async fn execute_tool(
         }
         "bulk_act_notifications" => {
             let args: BulkActNotificationsArgs = parse_args(arguments)?;
-            let patch = bulk_notification_patch(args.action);
-            let status_filters = if args.statuses.is_empty() {
-                all_notification_statuses()
-            } else {
-                args.statuses
-            };
-            let source_filters = if args.sources.is_empty() {
-                all_notification_sources()
-            } else {
-                args.sources
-            };
+            let selection = bulk_act_selection(args)?;
             let service = services.notification_service.read().await;
             let mut transaction = service.begin().await.map_err(ToolCallError::execution)?;
             let mut storage = services.job_storage.clone();
-            let notifications = service
-                .patch_notifications_bulk(
-                    &mut transaction,
+            let notifications = match selection {
+                BulkActSelection::Filter {
                     status_filters,
                     source_filters,
-                    &patch,
-                    user_id,
-                    &mut storage,
-                )
-                .await
-                .map_err(ToolCallError::execution)?;
+                    patch,
+                } => service
+                    .patch_notifications_bulk(
+                        &mut transaction,
+                        status_filters,
+                        source_filters,
+                        &patch,
+                        user_id,
+                        &mut storage,
+                    )
+                    .await
+                    .map_err(ToolCallError::execution)?,
+                BulkActSelection::List(patches) => service
+                    .patch_notifications_by_ids(&mut transaction, patches, user_id, &mut storage)
+                    .await
+                    .map_err(ToolCallError::execution)?,
+            };
             transaction
                 .commit()
                 .await
@@ -478,6 +506,50 @@ fn notification_patch_from_action(
             ..Default::default()
         },
     })
+}
+
+/// What a `bulk_act_notifications` call resolves to once its arguments have
+/// been understood: either a widened filter sweep sharing one patch, or one
+/// patch per named notification.
+enum BulkActSelection {
+    Filter {
+        status_filters: Vec<NotificationStatus>,
+        source_filters: Vec<NotificationSourceKind>,
+        patch: NotificationPatch,
+    },
+    List(Vec<(NotificationId, NotificationPatch)>),
+}
+
+/// Resolve the tool arguments before any transaction is opened, so a request
+/// that cannot be understood costs nothing.
+fn bulk_act_selection(args: BulkActNotificationsArgs) -> Result<BulkActSelection, ToolCallError> {
+    match args {
+        BulkActNotificationsArgs::Filter {
+            statuses,
+            sources,
+            action,
+        } => Ok(BulkActSelection::Filter {
+            status_filters: if statuses.is_empty() {
+                all_notification_statuses()
+            } else {
+                statuses
+            },
+            source_filters: if sources.is_empty() {
+                all_notification_sources()
+            } else {
+                sources
+            },
+            patch: bulk_notification_patch(action),
+        }),
+        BulkActNotificationsArgs::List { notifications } => notifications
+            .into_iter()
+            .map(|entry| {
+                notification_patch_from_action(entry.action, entry.snoozed_until)
+                    .map(|patch| (entry.notification_id, patch))
+            })
+            .collect::<Result<Vec<_>, ToolCallError>>()
+            .map(BulkActSelection::List),
+    }
 }
 
 fn bulk_notification_patch(action: BulkNotificationAction) -> NotificationPatch {

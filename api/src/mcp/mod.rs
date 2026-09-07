@@ -655,7 +655,6 @@ mod registration_tests {
         let expected_required: std::collections::HashMap<&str, &[&str]> = [
             ("get_notification", &["notification_id"][..]),
             ("act_on_notification", &["notification_id", "action"][..]),
-            ("bulk_act_notifications", &["action"][..]),
             ("create_task_from_notification", &["notification_id"][..]),
             ("get_task", &["task_id"][..]),
             ("search_tasks", &["matches"][..]),
@@ -686,6 +685,62 @@ mod registration_tests {
                         tool.name
                     );
                 }
+            }
+        }
+    }
+
+    /// `bulk_act_notifications` is the one tool whose arguments are a
+    /// discriminated union, so its required keys are declared per `mode`
+    /// variant under `oneOf` rather than flat at the root.
+    #[test]
+    fn bulk_act_notifications_advertises_one_schema_per_mode() {
+        let tools = UniversalInboxMcpServer::tool_router().list_all();
+        let tool = tools
+            .iter()
+            .find(|t| t.name.as_ref() == "bulk_act_notifications")
+            .expect("`bulk_act_notifications` is not registered");
+
+        let variants = tool
+            .input_schema
+            .get("oneOf")
+            .and_then(|v| v.as_array())
+            .expect("`bulk_act_notifications` inputSchema must be a `oneOf` of its modes");
+        assert_eq!(
+            variants.len(),
+            2,
+            "expected exactly the filter and list modes"
+        );
+
+        for (mode, expected_required) in [
+            ("filter", &["mode", "action"][..]),
+            ("list", &["mode", "notifications"][..]),
+        ] {
+            let variant = variants
+                .iter()
+                .find(|variant| {
+                    variant
+                        .pointer("/properties/mode/const")
+                        .and_then(|v| v.as_str())
+                        == Some(mode)
+                })
+                .unwrap_or_else(|| panic!("no `mode: {mode}` variant in inputSchema.oneOf"));
+
+            assert_eq!(
+                variant.get("type").and_then(|v| v.as_str()),
+                Some("object"),
+                "`mode: {mode}` variant must be a JSON object schema"
+            );
+
+            let actual: Vec<&str> = variant
+                .get("required")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+                .unwrap_or_default();
+            for key in expected_required {
+                assert!(
+                    actual.contains(key),
+                    "`mode: {mode}`: expected `{key}` in required, got {actual:?}"
+                );
             }
         }
     }
