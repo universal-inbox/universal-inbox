@@ -1,4 +1,5 @@
 use base64::prelude::*;
+use chrono::{TimeZone, Utc};
 use http::StatusCode;
 use ring::digest;
 use rstest::*;
@@ -674,7 +675,7 @@ mod scenario {
             .await;
 
         let mut notifications = Vec::new();
-        for source_id in ["1000", "1001", "1002"] {
+        for source_id in ["1000", "1001", "1002", "1003"] {
             let mut source_notification = sync_github_notifications[0].clone();
             source_notification.id = source_id.to_string();
             notifications.push(
@@ -688,6 +689,7 @@ mod scenario {
             );
         }
         let stale_notification_id = Uuid::new_v4();
+        let snoozed_time = Utc.with_ymd_and_hms(2050, 1, 1, 1, 2, 3).unwrap();
 
         let body = mcp_tool_call(
             &app.app,
@@ -699,6 +701,11 @@ mod scenario {
                     { "notification_id": notifications[0].id, "action": "mark_read" },
                     { "notification_id": notifications[1].id, "action": "delete" },
                     { "notification_id": notifications[2].id, "action": "unsubscribe" },
+                    {
+                        "notification_id": notifications[3].id,
+                        "action": "snooze_until",
+                        "snoozed_until": snoozed_time,
+                    },
                     { "notification_id": stale_notification_id, "action": "mark_read" },
                 ]
             }),
@@ -707,15 +714,17 @@ mod scenario {
 
         assert_eq!(body["result"]["isError"], false);
         // The stale ID matched no row and is simply absent from the result.
-        assert_eq!(body["result"]["structuredContent"]["count"], 3);
+        assert_eq!(body["result"]["structuredContent"]["count"], 4);
 
         let updated_notifications = body["result"]["structuredContent"]["notifications"]
             .as_array()
             .expect("Expected updated notifications");
-        assert_eq!(updated_notifications.len(), 3);
+        assert_eq!(updated_notifications.len(), 4);
+        // The snoozed entry carries no status, so it stays `Unread` and only
+        // its `snoozed_until` is written.
         for (notification, expected_status) in notifications
             .iter()
-            .zip(["Read", "Deleted", "Unsubscribed"].iter())
+            .zip(["Read", "Deleted", "Unsubscribed", "Unread"].iter())
         {
             let updated = updated_notifications
                 .iter()
@@ -723,6 +732,11 @@ mod scenario {
                 .unwrap_or_else(|| panic!("Notification {} was not updated", notification.id));
             assert_eq!(&updated["status"], expected_status);
         }
+        let snoozed = updated_notifications
+            .iter()
+            .find(|updated| updated["id"] == json!(notifications[3].id))
+            .expect("Snoozed notification was not updated");
+        assert_eq!(snoozed["snoozed_until"], json!(snoozed_time));
         assert!(
             !updated_notifications
                 .iter()

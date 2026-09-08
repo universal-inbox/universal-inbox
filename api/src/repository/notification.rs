@@ -1525,14 +1525,26 @@ impl Repository {
         patch: &NotificationPatch,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
-        let Some(new_status) = patch.status else {
+        // `task_id` is deliberately not writable in bulk: no notification action
+        // maps to it and neither patch builder ever sets it.
+        if patch.status.is_none() && patch.snoozed_until.is_none() {
             return Ok(vec![]);
-        };
+        }
+
         let mut query_builder = QueryBuilder::new("UPDATE notification SET");
-        query_builder
-            .push(" status = ")
-            .push_bind(new_status.to_string())
-            .push("::notification_status");
+        let mut set_clauses = query_builder.separated(", ");
+        if let Some(new_status) = patch.status {
+            set_clauses
+                .push(" status = ")
+                .push_bind_unseparated(new_status.to_string())
+                .push_unseparated("::notification_status");
+        }
+        if let Some(new_snoozed_until) = patch.snoozed_until {
+            set_clauses
+                .push(" snoozed_until = ")
+                .push_bind_unseparated(new_snoozed_until);
+        }
+
         query_builder.push(
             r#"
                 FROM
