@@ -183,7 +183,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal-inbox
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-inbox
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),
@@ -391,7 +391,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal-inbox
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-inbox
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),
@@ -526,7 +526,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal-inbox
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-inbox
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),
@@ -677,7 +677,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com/)@@john.doe@@@admins@#universal-inbox
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-inbox
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),

@@ -751,6 +751,60 @@ mod test_message_details {
         }
     }
 
+    // `attachment_mention` is sent by Slack when a message mentions a file or a third-party app
+    // entity (here a Google Docs document). slack-morphism only knows this element type since
+    // 2.24, where the inline element enum also gained an untagged `Unknown` catch-all: before
+    // that, fetching a whole thread failed with `unknown variant attachment_mention`.
+    pub fn rich_text_block_with_attachment_mention() -> serde_json::Value {
+        serde_json::json!({
+            "type": "rich_text",
+            "elements": [
+                {
+                    "type": "rich_text_section",
+                    "elements": [
+                        { "type": "text", "text": "Process comments in " },
+                        {
+                            "type": "attachment_mention",
+                            "url": "https://docs.google.com/document/d/1FaKeD0cId_example_0123456789/edit?tab=t.0",
+                            "text": "Project plan",
+                            "app_id": "A0123ABCD",
+                            "entity_id": "W:A0123ABCD:1FaKeD0cId_example_0123456789",
+                            "icon_url": "https://a.slack-edge.com/95aff15/img/app-gdrive/icon_document.png",
+                            "full_size_preview_enabled": true,
+                            "icon_name": "brand-google-drive-filled",
+                            "product_name": "Google Docs",
+                            "channel_id": "C0123ABCD",
+                            "ts": "1700000000.000100"
+                        }
+                    ]
+                }
+            ]
+        })
+    }
+
+    // `message_mention`, the other element type added in slack-morphism 2.24.
+    pub fn rich_text_block_with_message_mention() -> serde_json::Value {
+        serde_json::json!({
+            "type": "rich_text",
+            "elements": [
+                {
+                    "type": "rich_text_section",
+                    "elements": [
+                        { "type": "text", "text": "See " },
+                        {
+                            "type": "message_mention",
+                            "url": "https://example.slack.com/archives/C0123ABCD/p1700000000000100",
+                            "text": "this message",
+                            "channel_id": "C0123ABCD",
+                            "author_id": "U0123ABCD",
+                            "message_ts": "1700000000.000100"
+                        }
+                    ]
+                }
+            ]
+        })
+    }
+
     mod test_message_content {
         use super::*;
 
@@ -774,7 +828,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com/)"#
+Here is a [link](https://www.universal-inbox.com)"#
             );
         }
 
@@ -810,7 +864,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com/)"#
+Here is a [link](https://www.universal-inbox.com)"#
             );
         }
 
@@ -859,6 +913,30 @@ Here is a [link](https://www.universal-inbox.com/)"#
             message.message.content.text = Some("Test message".to_string());
             message.message.content.blocks = Some(vec![]);
             assert_eq!(slack_message.render_content(), "Test message".to_string());
+        }
+
+        #[rstest]
+        fn test_render_message_with_attachment_mention(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
+            message.message.content.blocks = Some(vec![SlackBlock::RichText(
+                serde_json::from_value(rich_text_block_with_attachment_mention()).unwrap(),
+            )]);
+            assert_eq!(
+                slack_message.render_content(),
+                "Process comments in [Project plan](https://docs.google.com/document/d/1FaKeD0cId_example_0123456789/edit?tab=t.0)"
+            );
+        }
+
+        #[rstest]
+        fn test_render_message_with_message_mention(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
+            message.message.content.blocks = Some(vec![SlackBlock::RichText(
+                serde_json::from_value(rich_text_block_with_message_mention()).unwrap(),
+            )]);
+            assert_eq!(
+                slack_message.render_content(),
+                "See [this message](https://example.slack.com/archives/C0123ABCD/p1700000000000100)"
+            );
         }
     }
 
@@ -946,6 +1024,36 @@ Here is a [link](https://www.universal-inbox.com/)"#
             message.message.content.blocks = Some(vec![]);
             let html = render_html(&slack_message);
             assert_eq!(html, "<p>Simple &amp; plain</p>\n");
+        }
+
+        #[rstest]
+        fn test_render_message_with_attachment_mention(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
+            message.message.content.blocks = Some(vec![SlackBlock::RichText(
+                serde_json::from_value(rich_text_block_with_attachment_mention()).unwrap(),
+            )]);
+            let html = render_html(&slack_message);
+            assert!(
+                html.contains(
+                    r#"<a target="_blank" rel="noopener noreferrer" href="https://docs.google.com/document/d/1FaKeD0cId_example_0123456789/edit?tab=t.0">Project plan</a>"#
+                ),
+                "Attachment mention should render as HTML anchor: {html}"
+            );
+        }
+
+        #[rstest]
+        fn test_render_message_with_message_mention(mut slack_message: SlackMessageDetails) {
+            let message = &mut slack_message;
+            message.message.content.blocks = Some(vec![SlackBlock::RichText(
+                serde_json::from_value(rich_text_block_with_message_mention()).unwrap(),
+            )]);
+            let html = render_html(&slack_message);
+            assert!(
+                html.contains(
+                    r#"href="https://example.slack.com/archives/C0123ABCD/p1700000000000100">this message</a>"#
+                ),
+                "Message mention should render as HTML anchor: {html}"
+            );
         }
     }
 
@@ -1235,6 +1343,61 @@ mod test_rich_text_list_serde {
         assert!(
             result.is_ok(),
             "backfilled rich_text_list shape must deserialize, got: {:?}",
+            result.err()
+        );
+    }
+}
+
+#[cfg(test)]
+mod test_rich_text_mention_serde {
+    use slack_morphism::prelude::*;
+
+    use super::test_message_details::{
+        rich_text_block_with_attachment_mention, rich_text_block_with_message_mention,
+    };
+
+    // Regression for the production failure "unknown variant `attachment_mention`" while
+    // fetching a Slack thread: slack-morphism <= 2.23 rejected any inline rich text element
+    // type it did not know. 2.24+ knows `message_mention` and keeps every other unknown type
+    // as raw JSON, which the renderers read back by type name.
+
+    #[test]
+    fn test_attachment_mention_element_deserializes() {
+        let result: Result<SlackBlock, _> =
+            serde_json::from_value(rich_text_block_with_attachment_mention());
+        assert!(
+            result.is_ok(),
+            "attachment_mention element must deserialize, got: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_message_mention_element_deserializes() {
+        let result: Result<SlackBlock, _> =
+            serde_json::from_value(rich_text_block_with_message_mention());
+        assert!(
+            result.is_ok(),
+            "message_mention element must deserialize, got: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_unknown_inline_element_type_deserializes() {
+        // Any future element type must be kept as-is instead of failing the whole thread.
+        let result: Result<SlackBlock, _> = serde_json::from_value(serde_json::json!({
+            "type": "rich_text",
+            "elements": [
+                {
+                    "type": "rich_text_section",
+                    "elements": [ { "type": "not_yet_supported_by_slack_morphism" } ]
+                }
+            ]
+        }));
+        assert!(
+            result.is_ok(),
+            "unknown inline element type must deserialize, got: {:?}",
             result.err()
         );
     }
