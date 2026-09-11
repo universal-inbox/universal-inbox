@@ -894,27 +894,58 @@ impl SlackService {
 
         for slack_user_id in slack_user_ids {
             if !sender_profiles.contains_key(slack_user_id.0.as_str()) {
-                let user_profile = self
+                match self
                     .fetch_user_profile(slack_user_id, user_id, slack_api_token)
                     .await
-                    .with_context(|| format!("Failed to fetch user profile {slack_user_id}"))?;
-                sender_profiles.insert(
-                    slack_user_id.to_string(),
-                    SlackMessageSenderDetails::User(Box::new(user_profile)),
-                );
+                {
+                    Ok(user_profile) => {
+                        sender_profiles.insert(
+                            slack_user_id.to_string(),
+                            SlackMessageSenderDetails::User(Box::new(user_profile)),
+                        );
+                    }
+                    // A user Slack will never resolve for this token (deleted account, user from
+                    // another workspace) must not abort the whole thread: its messages are
+                    // rendered without a sender profile.
+                    Err(error) if slack_api_error_code(&error) == Some("user_not_found") => {
+                        warn!(
+                            "Unknown Slack user {slack_user_id}, \
+                             its messages will be rendered without a sender profile"
+                        );
+                    }
+                    Err(error) => {
+                        return Err(error).with_context(|| {
+                            format!("Failed to fetch user profile {slack_user_id}")
+                        })?;
+                    }
+                }
             }
         }
 
         for slack_bot_id in slack_bot_ids {
             if !sender_profiles.contains_key(slack_bot_id.0.as_str()) {
-                let bot = self
-                    .fetch_bot(slack_bot_id, slack_api_token)
-                    .await
-                    .with_context(|| format!("Failed to fetch bot profile {slack_bot_id}"))?;
-                sender_profiles.insert(
-                    slack_bot_id.to_string(),
-                    SlackMessageSenderDetails::Bot(Box::new(bot)),
-                );
+                match self.fetch_bot(slack_bot_id, slack_api_token).await {
+                    Ok(bot) => {
+                        sender_profiles.insert(
+                            slack_bot_id.to_string(),
+                            SlackMessageSenderDetails::Bot(Box::new(bot)),
+                        );
+                    }
+                    // Same as above: Slack answers `bot_not_found` for bots it will never
+                    // resolve for this token (apps from another workspace, org level or workflow
+                    // apps, deleted apps).
+                    Err(error) if slack_api_error_code(&error) == Some("bot_not_found") => {
+                        warn!(
+                            "Unknown Slack bot {slack_bot_id}, \
+                             its messages will be rendered without a sender profile"
+                        );
+                    }
+                    Err(error) => {
+                        return Err(error).with_context(|| {
+                            format!("Failed to fetch bot profile {slack_bot_id}")
+                        })?;
+                    }
+                }
             }
         }
 
@@ -1006,6 +1037,27 @@ impl SlackService {
 
         Ok(())
     }
+}
+
+/// Returns the Slack API error code (eg. `bot_not_found`) when `error` was caused by a Slack
+/// API error, `None` otherwise.
+///
+/// Slack errors reach us wrapped in `anyhow` context (and then in
+/// [`UniversalInboxError::Unexpected`]), so the original [`SlackClientError`] has to be looked
+/// up in the cause chain.
+fn slack_api_error_code(error: &UniversalInboxError) -> Option<&str> {
+    let UniversalInboxError::Unexpected(error) = error else {
+        return None;
+    };
+
+    error
+        .chain()
+        .find_map(|cause| match cause.downcast_ref::<SlackClientError>() {
+            Some(SlackClientError::ApiError(SlackClientApiError { code, .. })) => {
+                Some(code.as_str())
+            }
+            _ => None,
+        })
 }
 
 #[io_cached(

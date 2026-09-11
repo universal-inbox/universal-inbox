@@ -100,6 +100,22 @@ pub async fn mock_slack_fetch_user(
         .await;
 }
 
+pub async fn mock_slack_fetch_bot(
+    slack_mock_server: &MockServer,
+    bot_id: &str,
+    fixture_response_file: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path("/bots.info"))
+        .and(query_param("bot", bot_id))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
+            "application/json",
+        ))
+        .mount(slack_mock_server)
+        .await;
+}
+
 pub async fn mock_slack_fetch_reply(
     slack_mock_server: &MockServer,
     channel_id: &str,
