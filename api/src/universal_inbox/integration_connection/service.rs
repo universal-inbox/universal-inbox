@@ -521,12 +521,16 @@ impl IntegrationConnectionService {
         integration_connection_config: IntegrationConnectionConfig,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnectionConfig>>, UniversalInboxError> {
+        // Updating a configuration writes the configuration and nothing else: no
+        // notification is removed and no notification loses its status,
+        // `last_read_at`, `snoozed_until` or `task_id`. Reconciling the inbox with
+        // the new configuration is the following sync's job.
         let updated_integration_connection_config = self
             .repository
             .update_integration_connection_config(
                 executor,
                 integration_connection_id,
-                integration_connection_config.clone(),
+                integration_connection_config,
                 for_user_id,
             )
             .await?;
@@ -536,23 +540,106 @@ impl IntegrationConnectionService {
                 updated: false,
                 result: None,
             })
-        {
-            if self
+            && self
                 .repository
                 .does_integration_connection_exist(executor, integration_connection_id)
                 .await?
-            {
-                return Err(UniversalInboxError::Forbidden(format!(
-                    "Only the owner of the integration connection {integration_connection_id} can patch it"
-                )));
-            }
-        } else if let Some(kind) = integration_connection_config.notification_source_kind() {
-            self.repository
-                .delete_notifications(executor, kind, for_user_id)
+        {
+            return Err(UniversalInboxError::Forbidden(format!(
+                "Only the owner of the integration connection {integration_connection_id} can patch it"
+            )));
+        }
+
+        // Muting an integration takes its notifications out of the inbox right
+        // away, so the screen matches what the user just asked for. Bringing them
+        // back waits for the sync that reconciles them.
+        if let Some(integration_connection) = self
+            .repository
+            .get_integration_connection(executor, integration_connection_id)
+            .await?
+        {
+            self.reconcile_set_aside_notifications(executor, &integration_connection)
                 .await?;
         }
 
         Ok(updated_integration_connection_config)
+    }
+
+    /// Set aside the notifications of an integration that stopped feeding the
+    /// inbox because of something the user did. Declarative rather than driven by
+    /// transitions: a connection that still feeds the inbox — including one the
+    /// API moved to `Failing` on its own — computes `false` and writes nothing.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection_id = integration_connection.id.to_string(),
+            user.id = integration_connection.user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn reconcile_set_aside_notifications(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection: &IntegrationConnection,
+    ) -> Result<u64, UniversalInboxError> {
+        if !integration_connection.should_set_aside_notifications() {
+            return Ok(0);
+        }
+        let Some(notification_source_kind) = integration_connection
+            .provider
+            .config()
+            .notification_source_kind()
+        else {
+            return Ok(0);
+        };
+
+        self.repository
+            .set_aside_notifications(
+                executor,
+                notification_source_kind,
+                integration_connection.user_id,
+            )
+            .await
+    }
+
+    /// Bring back the notifications of an integration that feeds the inbox
+    /// again. Called on a *successful* sync only, so what comes back is a
+    /// reconciled inbox rather than an archive: the stale pass ignores
+    /// `set_aside_at`, so anything that vanished while the notifications were set
+    /// aside has already been retired by the time they are restored.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection_id = integration_connection.id.to_string(),
+            user.id = integration_connection.user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn restore_set_aside_notifications(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection: &IntegrationConnection,
+    ) -> Result<u64, UniversalInboxError> {
+        if integration_connection.should_set_aside_notifications() {
+            return Ok(0);
+        }
+        let Some(notification_source_kind) = integration_connection
+            .provider
+            .config()
+            .notification_source_kind()
+        else {
+            return Ok(0);
+        };
+
+        self.repository
+            .restore_set_aside_notifications(
+                executor,
+                notification_source_kind,
+                integration_connection.user_id,
+            )
+            .await
     }
 
     /// Null out every sync timestamp on the given integration connection so the
@@ -656,7 +743,7 @@ impl IntegrationConnectionService {
                 .delete_oauth_credential(executor, integration_connection_id)
                 .await?;
 
-            return self
+            let disconnected_integration_connection = self
                 .repository
                 .update_integration_connection_status(
                     executor,
@@ -666,7 +753,23 @@ impl IntegrationConnectionService {
                     None,
                     for_user_id,
                 )
-                .await;
+                .await?;
+
+            // Disconnecting stops feeding the inbox just as muting does, so it
+            // is no more destructive: the notifications leave the inbox and are
+            // set aside, and reconnecting brings them back on the sync that
+            // reconciles them.
+            if let Some(disconnected_integration_connection) =
+                &disconnected_integration_connection.result
+            {
+                self.reconcile_set_aside_notifications(
+                    executor,
+                    disconnected_integration_connection,
+                )
+                .await?;
+            }
+
+            return Ok(disconnected_integration_connection);
         }
 
         Ok(UpdateStatus {
@@ -1105,7 +1208,8 @@ impl IntegrationConnectionService {
         integration_provider_kind: IntegrationProviderKind,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        self.repository
+        let updated_integration_connection = self
+            .repository
             .update_integration_connection_sync_status(
                 executor,
                 Some(for_user_id),
@@ -1113,7 +1217,37 @@ impl IntegrationConnectionService {
                 IntegrationConnectionSyncStatusUpdate::NotificationsSyncCompleted,
                 self.sync_failure_window_in_hours,
             )
-            .await
+            .await?;
+
+        // The integration is feeding the inbox again and this sync has
+        // reconciled it, so whatever was set aside comes back as it was.
+        if let Some(integration_connection) = &updated_integration_connection.result {
+            self.restore_set_aside_notifications(executor, integration_connection)
+                .await?;
+        }
+
+        // Google Calendar notifications are derived during the Google Mail sync,
+        // gated on the Google Calendar connection's own configuration, so this
+        // is the only completion that reconciles them. The predicate evaluated
+        // is that connection's own: a Google Calendar left disconnected keeps
+        // its notifications set aside.
+        if integration_provider_kind == IntegrationProviderKind::GoogleMail
+            && let Some(google_calendar_integration_connection) = self
+                .repository
+                .get_integration_connection_per_provider(
+                    executor,
+                    for_user_id,
+                    IntegrationProviderKind::GoogleCalendar,
+                    None,
+                    None,
+                )
+                .await?
+        {
+            self.restore_set_aside_notifications(executor, &google_calendar_integration_connection)
+                .await?;
+        }
+
+        Ok(updated_integration_connection)
     }
 
     #[tracing::instrument(
@@ -1184,7 +1318,8 @@ impl IntegrationConnectionService {
         integration_provider_kind: IntegrationProviderKind,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        self.repository
+        let updated_integration_connection = self
+            .repository
             .update_integration_connection_sync_status(
                 executor,
                 Some(for_user_id),
@@ -1192,7 +1327,23 @@ impl IntegrationConnectionService {
                 IntegrationConnectionSyncStatusUpdate::TasksSyncCompleted,
                 self.sync_failure_window_in_hours,
             )
-            .await
+            .await?;
+
+        // Todoist and TickTick notifications are a byproduct of their task sync,
+        // which never reaches `complete_notifications_sync_status` — so this is
+        // the completion that reconciles them, and the only one that could bring
+        // back what disconnecting them set aside. A provider whose notifications
+        // have a sync of their own is left to it.
+        if let Some(integration_connection) = &updated_integration_connection.result
+            && integration_connection
+                .provider
+                .are_notifications_reconciled_by_tasks_sync()
+        {
+            self.restore_set_aside_notifications(executor, integration_connection)
+                .await?;
+        }
+
+        Ok(updated_integration_connection)
     }
 
     #[tracing::instrument(

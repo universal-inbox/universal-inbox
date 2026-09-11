@@ -32,6 +32,7 @@ pub mod google_drive;
 pub mod google_mail;
 pub mod linear;
 pub mod slack;
+pub mod ticktick;
 pub mod todoist;
 
 pub async fn list_notifications_response(

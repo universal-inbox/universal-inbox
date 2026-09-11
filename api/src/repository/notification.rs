@@ -108,18 +108,29 @@ pub trait NotificationRepository {
         patch: &NotificationPatch,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError>;
-    async fn delete_notifications(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        kind: NotificationSourceKind,
-        user_id: UserId,
-    ) -> Result<u64, UniversalInboxError>;
     async fn delete_notifications_for_linear_issue_id(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         linear_issue_id: &str,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError>;
+    /// Take every visible notification of that kind out of the inbox, without
+    /// removing it or disturbing its triage state. Returns the number of
+    /// notifications set aside.
+    async fn set_aside_notifications(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        kind: NotificationSourceKind,
+        user_id: UserId,
+    ) -> Result<u64, UniversalInboxError>;
+    /// Bring every set aside notification of that kind back into the inbox,
+    /// exactly as it was. Returns the number of notifications restored.
+    async fn restore_set_aside_notifications(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        kind: NotificationSourceKind,
+        user_id: UserId,
+    ) -> Result<u64, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -422,6 +433,10 @@ impl NotificationRepository for Repository {
             separated
                 .push(" notification.user_id = ")
                 .push_bind_unseparated(user_id.0);
+
+            // Notifications of an integration that stopped feeding the inbox are
+            // set aside: out of the inbox and out of its count, but not removed.
+            separated.push(" notification.set_aside_at IS NULL ");
 
             if only_snoozed_notifications {
                 separated
@@ -1471,38 +1486,89 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            kind = kind.to_string(),
+            notification_kind = kind.to_string(),
             user.id = user_id.to_string()
         ),
         err
     )]
-    async fn delete_notifications(
+    async fn set_aside_notifications(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         kind: NotificationSourceKind,
         user_id: UserId,
     ) -> Result<u64, UniversalInboxError> {
-        let res = sqlx::query!(
-            r#"
-            DELETE FROM notification
-            WHERE notification.kind::TEXT = $1
-            AND notification.user_id = $2
-            "#,
-            kind.to_string(),
-            user_id.0,
-        )
+        update_set_aside_at(executor, kind, user_id, Some(Utc::now())).await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_kind = kind.to_string(),
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
+    async fn restore_set_aside_notifications(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        kind: NotificationSourceKind,
+        user_id: UserId,
+    ) -> Result<u64, UniversalInboxError> {
+        update_set_aside_at(executor, kind, user_id, None).await
+    }
+}
+
+/// Both directions of the set aside reconciliation, written once: the target
+/// value decides which rows are selected.
+///
+/// `(set_aside_at IS NULL) = ($3 IS NOT NULL)` is the idempotence guard and
+/// reads both ways — hiding touches only visible notifications, restoring only
+/// set aside ones. A second save while an integration is muted therefore matches
+/// nothing rather than overwriting an existing `set_aside_at` with a fresher
+/// timestamp.
+async fn update_set_aside_at(
+    executor: &mut Transaction<'_, Postgres>,
+    kind: NotificationSourceKind,
+    user_id: UserId,
+    set_aside_at: Option<DateTime<Utc>>,
+) -> Result<u64, UniversalInboxError> {
+    let mut query_builder = QueryBuilder::new("UPDATE notification SET set_aside_at = ");
+    query_builder
+        .push_bind(set_aside_at)
+        .push(" WHERE notification.kind::TEXT = ")
+        .push_bind(kind.to_string())
+        .push(" AND notification.user_id = ")
+        .push_bind(user_id.0)
+        .push(" AND (notification.set_aside_at IS NULL) = (")
+        .push_bind(set_aside_at)
+        .push("::TIMESTAMPTZ IS NOT NULL)");
+
+    let result = query_builder
+        .build()
         .execute(&mut **executor)
         .await
         .map_err(|err| {
-            let message = format!("Failed to delete notifications for {kind} from storage: {err}");
+            let message = format!(
+                "Failed to update the set aside status of {kind} notifications for user {user_id}: {err}"
+            );
             UniversalInboxError::DatabaseError {
                 source: err,
                 message,
             }
         })?;
 
-        Ok(res.rows_affected())
-    }
+    let updated_notifications_count = result.rows_affected();
+    debug!(
+        "{updated_notifications_count} {kind} notifications for user {user_id} have been {}",
+        if set_aside_at.is_some() {
+            "set aside"
+        } else {
+            "restored"
+        }
+    );
+
+    Ok(updated_notifications_count)
 }
 
 /// How a multi-row notification `UPDATE` chooses the rows it writes. Both ways
@@ -1581,6 +1647,11 @@ impl Repository {
                     separated.push_bind_unseparated(sources);
                     separated.push_unseparated(")");
                 }
+
+                // Set aside notifications are out of the inbox, so bulk actions on
+                // the inbox (mark all as read and friends) leave them alone. A
+                // selection by id is explicit, so it still reaches them.
+                separated.push(" notification.set_aside_at IS NULL ");
             }
             NotificationUpdateSelector::Ids(notification_ids) => {
                 // An ID that no longer exists, or that belongs to another user,
