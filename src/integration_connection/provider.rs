@@ -215,6 +215,56 @@ impl IntegrationProvider {
         }
     }
 
+    /// Whether the user has switched this integration's notifications off.
+    ///
+    /// Scoped to the providers whose configuration actually carries a
+    /// notification sync flag. `is_sync_notifications_enabled()` answers `false`
+    /// for every other provider, so reusing it here would set aside Todoist,
+    /// TickTick, Google Calendar, Notion and API notifications on any
+    /// configuration save, with no notifications sync of their own to ever
+    /// restore them.
+    pub fn are_notifications_muted(&self) -> bool {
+        match self {
+            IntegrationProvider::Github { .. }
+            | IntegrationProvider::Linear { .. }
+            | IntegrationProvider::GoogleDrive { .. }
+            | IntegrationProvider::GoogleMail { .. }
+            | IntegrationProvider::Slack { .. } => !self.is_sync_notifications_enabled(),
+            // Todoist and TickTick notifications are a byproduct of their task
+            // sync, and the already collected ones stay in the inbox. Google
+            // Calendar, Notion and API have no notification mute toggle.
+            _ => false,
+        }
+    }
+
+    /// Whether a synchronization exists that could ever bring this
+    /// integration's notifications back into the inbox.
+    ///
+    /// Notifications are only ever set aside when something can restore them.
+    /// `API` notifications are pushed in by an external client rather than
+    /// collected by a synchronization — `NotificationSyncSourceKind` has no
+    /// `API` variant — so setting them aside would hide them for good.
+    pub fn can_restore_set_aside_notifications(&self) -> bool {
+        !matches!(self, IntegrationProvider::API)
+    }
+
+    /// Whether this integration's notifications are reconciled by its *task*
+    /// synchronization rather than by a notifications synchronization of its
+    /// own.
+    ///
+    /// Todoist and TickTick notifications are a byproduct of their task sync,
+    /// which never reaches `complete_notifications_sync_status`, so that
+    /// completion is the only one that could bring back whatever disconnecting
+    /// them set aside. Linear also synchronizes tasks, but its notifications are
+    /// reconciled by its own notifications sync — revealing them on a task sync
+    /// would show an inbox no stale pass had checked.
+    pub fn are_notifications_reconciled_by_tasks_sync(&self) -> bool {
+        matches!(
+            self,
+            IntegrationProvider::Todoist { .. } | IntegrationProvider::TickTick { .. }
+        )
+    }
+
     pub fn is_sync_tasks_enabled(&self) -> bool {
         match self {
             IntegrationProvider::Todoist { config, .. } => config.sync_tasks_enabled,
