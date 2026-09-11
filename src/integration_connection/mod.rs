@@ -87,6 +87,25 @@ impl IntegrationConnection {
         self.status == IntegrationConnectionStatus::Failing
     }
 
+    /// Whether this integration has stopped feeding the inbox because of
+    /// something the user did, in which case its notifications are set aside
+    /// until it feeds again.
+    ///
+    /// Keying off `Created` rather than `!is_connected()` is deliberate: the API
+    /// moves connections to `Failing` on its own when a refresh token expires,
+    /// so treating `Failing` as set aside would empty a provider's inbox
+    /// overnight with no user action. `Created` is only reachable by the user
+    /// disconnecting, or by a connection that was never authorized and has no
+    /// notifications to begin with.
+    ///
+    /// A provider no synchronization could ever restore is left alone: hiding
+    /// its notifications would hide them for good.
+    pub fn should_set_aside_notifications(&self) -> bool {
+        self.provider.can_restore_set_aside_notifications()
+            && (self.status == IntegrationConnectionStatus::Created
+                || self.provider.are_notifications_muted())
+    }
+
     pub fn is_connected_task_service(&self) -> bool {
         self.is_connected() && self.provider.is_task_service()
     }

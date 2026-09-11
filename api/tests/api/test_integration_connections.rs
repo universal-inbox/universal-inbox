@@ -10,8 +10,11 @@ use universal_inbox::{
         integrations::{github::GithubConfig, google_mail::GoogleMailContext},
         provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
     },
-    notification::Notification,
-    third_party::integrations::google_mail::{GoogleMailLabel, GoogleMailThread},
+    notification::{Notification, NotificationWithTask},
+    third_party::integrations::{
+        github::GithubNotification,
+        google_mail::{GoogleMailLabel, GoogleMailThread},
+    },
 };
 
 use crate::helpers::{
@@ -19,8 +22,12 @@ use crate::helpers::{
     integration_connection::{
         create_integration_connection, get_integration_connection, list_integration_connections,
     },
-    notification::{google_mail::google_mail_thread_get_123, list_notifications},
-    rest::{create_resource, delete_resource},
+    notification::{
+        github::{create_notification_from_github_notification, github_notification},
+        google_mail::google_mail_thread_get_123,
+        list_notifications,
+    },
+    rest::{create_resource, delete_resource, get_resource},
 };
 
 mod list_integration_connections {
@@ -123,6 +130,7 @@ mod disconnect_integration_connections {
     #[tokio::test]
     async fn test_disconnect_validated_integration_connection(
         #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_integration_connection(
@@ -135,6 +143,13 @@ mod disconnect_integration_connections {
             None,
             None,
             None,
+        )
+        .await;
+        let existing_notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            integration_connection.id,
         )
         .await;
 
@@ -151,6 +166,34 @@ mod disconnect_integration_connections {
             IntegrationConnectionStatus::Created
         );
         assert_eq!(disconnected_connection.failure_message, None);
+
+        // A disconnected integration no longer feeds the inbox, so its
+        // notifications are set aside rather than left stranded there — but they
+        // are not removed, and reading one by id still resolves. Reconnecting
+        // brings them back on the sync that reconciles them.
+        let notifications: Vec<Notification> = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![],
+            true,
+            None,
+            None,
+            false,
+        )
+        .await;
+
+        assert!(notifications.is_empty());
+
+        let set_aside_notification: Box<NotificationWithTask> = get_resource(
+            &app.client,
+            &app.app.api_address,
+            "notifications",
+            existing_notification.id.into(),
+        )
+        .await;
+
+        assert_eq!(set_aside_notification.id, existing_notification.id);
+        assert_eq!(set_aside_notification.status, existing_notification.status);
     }
 }
 
@@ -375,7 +418,7 @@ mod update_integration_connection_config {
         )
         .await;
 
-        create_notification_from_google_mail_thread(
+        let existing_notification = create_notification_from_google_mail_thread(
             &app.app,
             &google_mail_thread_get_123,
             app.user.id,
@@ -389,8 +432,12 @@ mod update_integration_connection_config {
                 "{}integration-connections/{}/config",
                 app.app.api_address, integration_connection1.id
             ))
+            // Synchronizing another label narrows what belongs in the inbox.
+            // Switching notifications off is deliberately not exercised here:
+            // muting sets notifications aside, and that round trip has its own
+            // coverage in `test_set_aside_notifications.rs`.
             .json(&IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
-                sync_notifications_enabled: false,
+                sync_notifications_enabled: true,
                 synced_label: GoogleMailLabel {
                     id: "Label_2".to_string(),
                     name: "Label 2".to_string(),
@@ -406,7 +453,7 @@ mod update_integration_connection_config {
         assert_eq!(
             config,
             Box::new(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
-                sync_notifications_enabled: false,
+                sync_notifications_enabled: true,
                 synced_label: GoogleMailLabel {
                     id: "Label_2".to_string(),
                     name: "Label 2".to_string(),
@@ -425,7 +472,7 @@ mod update_integration_connection_config {
             Some(IntegrationConnection {
                 provider: IntegrationProvider::GoogleMail {
                     config: GoogleMailConfig {
-                        sync_notifications_enabled: false,
+                        sync_notifications_enabled: true,
                         synced_label: GoogleMailLabel {
                             id: "Label_2".to_string(),
                             name: "Label 2".to_string(),
@@ -446,7 +493,9 @@ mod update_integration_connection_config {
 
         assert_eq!(other_integration_connection, Some(*integration_connection2));
 
-        // Verify notifications have been cleared
+        // Verify notifications have been preserved: saving a configuration
+        // saves the configuration and nothing else. Reconciling the inbox with
+        // the new configuration is the following sync's job.
         let notifications: Vec<Notification> = list_notifications(
             &app.client,
             &app.app.api_address,
@@ -458,7 +507,15 @@ mod update_integration_connection_config {
         )
         .await;
 
-        assert!(notifications.is_empty());
+        // `Notification`'s `PartialEq` covers the status, `last_read_at` and
+        // `task_id` the user invested in it; `id` and `snoozed_until` are
+        // outside it, so they are asserted on their own.
+        assert_eq!(notifications, vec![*existing_notification.clone()]);
+        assert_eq!(notifications[0].id, existing_notification.id);
+        assert_eq!(
+            notifications[0].snoozed_until,
+            existing_notification.snoozed_until
+        );
     }
 
     /// A connection owned by another user MUST return the same response as a
