@@ -380,6 +380,7 @@ impl UniversalInboxMcpServer {
             .map_err(|_| ErrorData::invalid_request("Invalid authenticated user", None))
     }
 
+    #[tracing::instrument(name = "mcp.call_tool", skip(self, args, context), fields(mcp.tool.name = %tool_name))]
     async fn call_structured_tool<T: serde::Serialize>(
         &self,
         tool_name: &str,
@@ -460,7 +461,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "bulk_act_notifications",
         title = "Bulk act on notifications",
-        description = "Apply the same action to all matching notifications. Empty status/source filters match all notifications.",
+        description = "Act on many notifications at once. Either name the notifications explicitly (mode: list, up to 100 entries, each with its own action, including snooze_until), or sweep by status/source filters (mode: filter, one shared action; empty filters match all notifications). Use mode: list when filter's source/status granularity isn't enough to express the target — e.g. to act only on GitHub pull request notifications (not issues/discussions), first list_notifications(sources: [Github]) and get_notification each one to identify the pull requests, then pass just those ids.",
         output_schema = bulk_act_notifications_output_schema(),
         annotations(destructive_hint = true)
     )]
@@ -600,6 +601,7 @@ impl ServerHandler for UniversalInboxMcpServer {
 #[cfg(test)]
 mod registration_tests {
     use super::*;
+    use crate::mcp::tools::MAX_LIST_MODE_ENTRIES;
 
     #[test]
     fn every_tool_advertises_an_output_schema() {
@@ -740,6 +742,25 @@ mod registration_tests {
                 assert!(
                     actual.contains(key),
                     "`mode: {mode}`: expected `{key}` in required, got {actual:?}"
+                );
+            }
+
+            // The batch cap is part of the published contract: a model must be
+            // able to see it before it calls rather than discover it as an error.
+            if mode == "list" {
+                assert_eq!(
+                    variant
+                        .pointer("/properties/notifications/minItems")
+                        .and_then(|v| v.as_u64()),
+                    Some(1),
+                    "`mode: list` must advertise its minimum batch size"
+                );
+                assert_eq!(
+                    variant
+                        .pointer("/properties/notifications/maxItems")
+                        .and_then(|v| v.as_u64()),
+                    Some(MAX_LIST_MODE_ENTRIES as u64),
+                    "`mode: list` must advertise its maximum batch size"
                 );
             }
         }
