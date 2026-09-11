@@ -209,6 +209,30 @@ async fn mcp_json(mut response: reqwest::Response) -> Value {
     }
 }
 
+/// Each MCP tool call needs a fresh session (sessions close after the SSE
+/// response), so re-initialize before every `tools/call`.
+async fn mcp_tool_call(app: &TestedApp, token: &str, tool_name: &str, arguments: Value) -> Value {
+    let client = mcp_client();
+    let (session_id, _) = mcp_initialize(&client, app, token).await;
+    let response = mcp_call(
+        &client,
+        app,
+        token,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments
+            }
+        }),
+        session_id.as_deref(),
+    )
+    .await;
+    mcp_json(response).await
+}
+
 mod protocol {
     use super::*;
 
@@ -412,6 +436,119 @@ mod protocol {
         let body: Value = mcp_json(invalid_arguments).await;
         assert_eq!(body["error"]["code"], -32602);
     }
+
+    /// Every way a `mode: list` batch can be malformed is a statement about the
+    /// request rather than about the mailbox, so each is a JSON-RPC `-32602`
+    /// with nothing applied.
+    #[rstest]
+    #[tokio::test]
+    async fn bulk_act_notifications_rejects_malformed_list_args(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_github_notifications: Vec<
+            universal_inbox::third_party::integrations::github::GithubNotification,
+        >,
+        github_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+
+        let github_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            github_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        let notification = create_notification_from_github_notification(
+            &app.app,
+            &sync_github_notifications[0],
+            app.user.id,
+            github_connection.id,
+        )
+        .await;
+
+        // One past the advertised cap of 100 entries.
+        let over_limit: Vec<Value> = (0..101)
+            .map(|_| json!({ "notification_id": Uuid::new_v4(), "action": "mark_read" }))
+            .collect();
+
+        for (case, arguments) in [
+            (
+                "both modes at once",
+                json!({
+                    "mode": "filter",
+                    "action": "mark_read",
+                    "notifications": [
+                        { "notification_id": notification.id, "action": "delete" }
+                    ]
+                }),
+            ),
+            (
+                "no mode at all",
+                json!({
+                    "notifications": [
+                        { "notification_id": notification.id, "action": "delete" }
+                    ]
+                }),
+            ),
+            (
+                "an empty list",
+                json!({ "mode": "list", "notifications": [] }),
+            ),
+            (
+                "more than 100 entries",
+                json!({ "mode": "list", "notifications": over_limit }),
+            ),
+            (
+                "a repeated notification",
+                json!({
+                    "mode": "list",
+                    "notifications": [
+                        { "notification_id": notification.id, "action": "mark_read" },
+                        { "notification_id": notification.id, "action": "delete" }
+                    ]
+                }),
+            ),
+            (
+                "a snooze_until with no timestamp",
+                json!({
+                    "mode": "list",
+                    "notifications": [
+                        { "notification_id": notification.id, "action": "snooze_until" }
+                    ]
+                }),
+            ),
+        ] {
+            let body = mcp_tool_call(&app.app, &token, "bulk_act_notifications", arguments).await;
+            assert_eq!(
+                body["error"]["code"], -32602,
+                "`{case}` should be rejected as invalid arguments, got: {body}"
+            );
+
+            // Nothing was applied: the named notification is untouched.
+            let body = mcp_tool_call(
+                &app.app,
+                &token,
+                "get_notification",
+                json!({ "notification_id": notification.id }),
+            )
+            .await;
+            assert_eq!(body["result"]["isError"], false, "case `{case}`");
+            assert_eq!(
+                body["result"]["structuredContent"]["status"], "Unread",
+                "`{case}` must leave the notification untouched"
+            );
+            assert!(
+                body["result"]["structuredContent"]["snoozed_until"].is_null(),
+                "`{case}` must leave the notification unsnoozed"
+            );
+        }
+    }
 }
 
 mod scenario {
@@ -426,35 +563,6 @@ mod scenario {
     };
 
     use super::*;
-
-    /// Each MCP tool call needs a fresh session (sessions close after the SSE
-    /// response), so re-initialize before every `tools/call`.
-    async fn mcp_tool_call(
-        app: &TestedApp,
-        token: &str,
-        tool_name: &str,
-        arguments: Value,
-    ) -> Value {
-        let client = mcp_client();
-        let (session_id, _) = mcp_initialize(&client, app, token).await;
-        let response = mcp_call(
-            &client,
-            app,
-            token,
-            json!({
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "tools/call",
-                "params": {
-                    "name": tool_name,
-                    "arguments": arguments
-                }
-            }),
-            session_id.as_deref(),
-        )
-        .await;
-        mcp_json(response).await
-    }
 
     #[rstest]
     #[tokio::test]

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use anyhow::{Context, anyhow};
 use apalis_redis::RedisStorage;
@@ -103,18 +103,29 @@ pub(crate) struct ActOnNotificationArgs {
     snoozed_until: Option<DateTime<Utc>>,
 }
 
+/// Upper bound on a `mode: list` batch. It belongs to the MCP surface rather
+/// than the domain — a future HTTP list mode would declare its own — and is
+/// advertised in the input schema so a model sees it before it calls.
+///
+/// Keep in sync with the `length(max = …)` on
+/// [`BulkActNotificationsArgs::List::notifications`]: a `schemars` attribute
+/// cannot reference a constant, and `registration_tests` asserts the two agree.
+pub(crate) const MAX_LIST_MODE_ENTRIES: usize = 100;
+
 /// How a `bulk_act_notifications` call says what it acts on. The two modes are
 /// mutually exclusive, and expressing them as an internally tagged enum puts
 /// that exclusivity in the published input schema: a payload mixing a filter
 /// sweep with an explicit list, or naming no mode at all, fails in
-/// `parse_args` before the tool arm runs.
+/// `parse_args` before the tool arm runs. `deny_unknown_fields` is what makes
+/// the mixed payload an error rather than a filter sweep with the list
+/// silently dropped.
 ///
 /// `extend("type" = "object")` is needed because `schemars` emits a bare
 /// `oneOf` for an internally tagged enum, while the MCP spec (and
 /// `registration_tests`) require every `inputSchema` root to be an object
 /// schema.
 #[derive(Deserialize, Serialize, JsonSchema)]
-#[serde(tag = "mode", rename_all = "snake_case")]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
 #[schemars(extend("type" = "object"))]
 pub(crate) enum BulkActNotificationsArgs {
     Filter {
@@ -125,6 +136,7 @@ pub(crate) enum BulkActNotificationsArgs {
         action: BulkNotificationAction,
     },
     List {
+        #[schemars(length(min = 1, max = 100))]
         notifications: Vec<NotificationActionEntry>,
     },
 }
@@ -541,15 +553,62 @@ fn bulk_act_selection(args: BulkActNotificationsArgs) -> Result<BulkActSelection
             },
             patch: bulk_notification_patch(action),
         }),
-        BulkActNotificationsArgs::List { notifications } => notifications
-            .into_iter()
-            .map(|entry| {
-                notification_patch_from_action(entry.action, entry.snoozed_until)
-                    .map(|patch| (entry.notification_id, patch))
-            })
-            .collect::<Result<Vec<_>, ToolCallError>>()
-            .map(BulkActSelection::List),
+        BulkActNotificationsArgs::List { notifications } => {
+            validate_list_mode_entries(&notifications)?;
+            notifications
+                .into_iter()
+                .map(|entry| {
+                    notification_patch_from_action(entry.action, entry.snoozed_until)
+                        .map(|patch| (entry.notification_id, patch))
+                })
+                .collect::<Result<Vec<_>, ToolCallError>>()
+                .map(BulkActSelection::List)
+        }
     }
+}
+
+/// The well-formedness rules `mode: list` adds: between 1 and
+/// [`MAX_LIST_MODE_ENTRIES`] entries, each notification named once. The bounds
+/// are also published in the input schema, but nothing validates an incoming
+/// payload against it, so they are enforced here too; the duplicate rule is
+/// the one a JSON schema cannot express at all.
+///
+/// Nothing is truncated and nothing partially applies: a rejected list never
+/// reaches the service.
+fn validate_list_mode_entries(entries: &[NotificationActionEntry]) -> Result<(), ToolCallError> {
+    if entries.is_empty() {
+        return Err(ToolCallError::invalid_arguments(anyhow!(
+            "`notifications` must name at least one notification"
+        )));
+    }
+
+    if entries.len() > MAX_LIST_MODE_ENTRIES {
+        return Err(ToolCallError::invalid_arguments(anyhow!(
+            "`notifications` is limited to {MAX_LIST_MODE_ENTRIES} entries but {} were given, \
+             nothing was applied: split the batch into several calls",
+            entries.len()
+        )));
+    }
+
+    let mut seen = HashSet::with_capacity(entries.len());
+    let mut duplicates = Vec::new();
+    for entry in entries {
+        if !seen.insert(entry.notification_id) && !duplicates.contains(&entry.notification_id) {
+            duplicates.push(entry.notification_id);
+        }
+    }
+    if !duplicates.is_empty() {
+        return Err(ToolCallError::invalid_arguments(anyhow!(
+            "Each notification must be named once but {} appears more than once",
+            duplicates
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )));
+    }
+
+    Ok(())
 }
 
 fn bulk_notification_patch(action: BulkNotificationAction) -> NotificationPatch {
