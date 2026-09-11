@@ -139,7 +139,7 @@ Tool | Kind | Description
 `get_task` | Read | Fetch a single task by ID.
 `search_tasks` | Read | Full-text search across synchronized tasks.
 `act_on_notification` | Write | Apply a single notification action: `mark_read`, `delete`, `unsubscribe`, or `snooze_until`.
-`bulk_act_notifications` | Write | Apply the same action to all notifications matching the given status/source filters.
+`bulk_act_notifications` | Write | Act on many notifications at once, in either of two mutually exclusive modes: `mode: list` names up to 100 notifications explicitly, each with its own action (`mark_read`, `delete`, `unsubscribe`, `snooze_until`) — unknown IDs are skipped; `mode: filter` applies one shared action to every notification matching the given status/source filters (empty filters match all).
 `create_task_from_notification` | Write | Create a task from a notification and link the two together.
 `update_task` | Write | Patch fields of an existing task.
 `sync_notifications` | Write | Synchronize notification sources immediately and return the resulting notifications.
