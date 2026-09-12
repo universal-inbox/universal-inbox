@@ -25,7 +25,7 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
     );
 
     // Verify notifications page is visible
-    let notifications_page = page.locator("#notifications-page").await;
+    let notifications_page = page.locator("#notifications-page");
     expect(notifications_page)
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -36,7 +36,7 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
     wait_for_notification_rows(&page).await;
 
     // Count notification rows — test user has 8 notifications
-    let notification_rows = page.locator("#notifications-list .ui-nrow").await;
+    let notification_rows = page.locator("#notifications-list .ui-nrow");
     let count = notification_rows
         .count()
         .await
@@ -47,7 +47,7 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
     );
 
     // Check that at least one notification row has text content
-    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0").await;
+    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0");
     let text = first_row
         .text_content()
         .await
@@ -62,7 +62,7 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
         .click(None)
         .await
         .expect("Failed to click first notification row");
-    let active_row = page.locator("#notifications-list .ui-nrow.selected").await;
+    let active_row = page.locator("#notifications-list .ui-nrow.selected");
     expect(active_row)
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -75,14 +75,14 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
     // literal `.nav-item` class — so scope by the sidebar's `<aside>` to
     // disambiguate from the many sync-success notification rows that also
     // link to `/settings`.
-    let settings_link = page.locator("aside.sidebar a[href='/settings']").await;
+    let settings_link = page.locator("aside.sidebar a[href='/settings']");
     settings_link
         .click(None)
         .await
         .expect("Failed to click settings link");
 
     // Verify integration cards are visible (use .first() to satisfy strict mode)
-    let integration_cards = page.locator("div.integration-card").await;
+    let integration_cards = page.locator("div.integration-card");
     expect(integration_cards.first())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -104,9 +104,7 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
     // CSS `:nth-child()` (counts all DOM siblings including non-card dividers).
     let mut all_titles_text = String::new();
     for i in 0..card_count {
-        let card = page
-            .locator(&format!("div.integration-card >> nth={i}"))
-            .await;
+        let card = page.locator(format!("div.integration-card >> nth={i}"));
         if let Ok(Some(text)) = card.text_content().await {
             all_titles_text.push_str(&text);
             all_titles_text.push(' ');
@@ -136,7 +134,7 @@ async fn test_login_fails_with_wrong_password(#[future] browser_tested_app: Brow
     fill_and_submit_credentials(&page, &email, "wrong_password", "login").await;
 
     // An error alert should appear on the login page
-    let error_alert = page.locator("#auth-error").await;
+    let error_alert = page.locator("#auth-error");
     expect(error_alert.clone())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -179,7 +177,7 @@ async fn test_login_lockout_shows_friendly_error(#[future] browser_tested_app: B
     // throttled with 429 once the account is locked.
     for attempt in 1..=6 {
         fill_and_submit_credentials(&page, &email, "definitely-wrong-pw", "login").await;
-        let error_alert = page.locator("#auth-error").await;
+        let error_alert = page.locator("#auth-error");
         expect(error_alert)
             .with_timeout(EXPECT_TIMEOUT)
             .to_be_visible()
@@ -192,7 +190,6 @@ async fn test_login_lockout_shows_friendly_error(#[future] browser_tested_app: B
     for _ in 0..40 {
         error_text = page
             .locator("#auth-error")
-            .await
             .text_content()
             .await
             .ok()
@@ -229,7 +226,7 @@ async fn test_login_fails_with_nonexistent_user(#[future] browser_tested_app: Br
     fill_and_submit_credentials(&page, "nonexistent@test.com", "test123456", "login").await;
 
     // An error alert should appear on the login page
-    let error_alert = page.locator("#auth-error").await;
+    let error_alert = page.locator("#auth-error");
     expect(error_alert.clone())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()

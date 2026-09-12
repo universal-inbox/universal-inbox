@@ -52,7 +52,7 @@ async fn test_registration_fails_with_invalid_email(
     fill_and_submit_credentials(&page, "not-an-email", "test123456", "signup").await;
 
     // An inline validation error should appear for the email field
-    let error_message = page.locator("#email-error").await;
+    let error_message = page.locator("#email-error");
     expect(error_message.clone())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -93,7 +93,7 @@ async fn test_registration_fails_with_short_password(
     fill_and_submit_credentials(&page, &email, "short", "signup").await;
 
     // An inline validation error should appear for the password field
-    let error_message = page.locator("#password-error").await;
+    let error_message = page.locator("#password-error");
     expect(error_message.clone())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
