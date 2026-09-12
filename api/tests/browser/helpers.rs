@@ -207,7 +207,7 @@ pub async fn login(page: &Page, app_url: &str, email: &str) {
     fill_and_submit_credentials(page, email, DEFAULT_PASSWORD, "login").await;
 
     // Wait for redirect away from login by checking that the notifications page is visible
-    let notifications_page = page.locator("#notifications-page").await;
+    let notifications_page = page.locator("#notifications-page");
     expect(notifications_page)
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -242,7 +242,7 @@ pub async fn login(page: &Page, app_url: &str, email: &str) {
 /// schedule a re-render between the value writes and the submit event
 /// (the submit handler runs synchronously inside that same JS turn).
 pub async fn fill_and_submit_credentials(page: &Page, email: &str, password: &str, form: &str) {
-    let email_input = page.locator("input[name='email']").await;
+    let email_input = page.locator("input[name='email']");
     expect(email_input.clone())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -251,7 +251,7 @@ pub async fn fill_and_submit_credentials(page: &Page, email: &str, password: &st
 
     fill_and_verify(&email_input, email, "email").await;
 
-    let password_input = page.locator("input[name='password']").await;
+    let password_input = page.locator("input[name='password']");
     fill_and_verify(&password_input, password, "password").await;
 
     submit_form_atomic(page, email, password).await;
@@ -336,7 +336,7 @@ pub async fn register(page: &Page, app_url: &str, email: &str) {
     // Registration no longer auto-logs-in (email-enumeration hardening): the
     // signup page shows a generic confirmation message instead of redirecting.
     // Callers must explicitly `login` afterwards to reach the app.
-    let confirmation = page.locator("#auth-confirmation").await;
+    let confirmation = page.locator("#auth-confirmation");
     expect(confirmation)
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -387,7 +387,7 @@ pub async fn verify_user_email(app: &BrowserTestedApp, email: &str) {
 /// Wait until at least one notification row is visible in the DOM.
 /// After login the notification list may still be loading from the API.
 pub async fn wait_for_notification_rows(page: &Page) {
-    let first_row = page.locator("#notifications-list .ui-nrow").await;
+    let first_row = page.locator("#notifications-list .ui-nrow");
     expect(first_row.first())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -400,12 +400,12 @@ pub async fn wait_for_notification_rows(page: &Page) {
 /// Using SPA link clicks avoids a full page reload which would re-download
 /// the ~74 MB debug WASM binary (adding ~60 s to each navigation).
 pub async fn navigate_and_assert(page: &Page, path: &str, expected_selector: &str) {
-    let link = page.locator(&format!("a[href='{path}']")).await;
+    let link = page.locator(format!("a[href='{path}']"));
     link.first()
         .click(None)
         .await
         .unwrap_or_else(|_| panic!("Failed to click link to {path}"));
-    let element = page.locator(expected_selector).await;
+    let element = page.locator(expected_selector);
     expect(element.first())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()

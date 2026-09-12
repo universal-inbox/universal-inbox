@@ -76,6 +76,9 @@ jobs:
         with:
           shared-key: ci
       - name: Clippy check
+        env:
+          # Clippy never launches a browser; skip the ~90 MB driver assembly.
+          PLAYWRIGHT_SKIP_DRIVER_DOWNLOAD: "1"
         run: devbox run -- just check-all
 
   test-ui:
