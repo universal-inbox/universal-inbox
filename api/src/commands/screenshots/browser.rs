@@ -57,10 +57,7 @@ async fn new_context(
         .viewport(viewport.clone())
         .device_scale_factor(2.0);
     if let Some(dir) = record_video_dir {
-        builder = builder.record_video(RecordVideo {
-            dir: dir.to_string_lossy().into_owned(),
-            size: Some(viewport),
-        });
+        builder = builder.record_video(RecordVideo::new(dir.to_string_lossy()).size(viewport));
     }
     let opts = builder.build();
     let context = browser
@@ -109,7 +106,7 @@ pub async fn login(page: &Page, base_url: &str, email: &str) -> anyhow::Result<(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to navigate to login page: {e}"))?;
 
-    let email_input = page.locator("input[name='email']").await;
+    let email_input = page.locator("input[name='email']");
     expect(email_input.clone())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -120,19 +117,19 @@ pub async fn login(page: &Page, base_url: &str, email: &str) -> anyhow::Result<(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to fill email: {e}"))?;
 
-    let password_input = page.locator("input[name='password']").await;
+    let password_input = page.locator("input[name='password']");
     password_input
         .fill(DEFAULT_PASSWORD, None)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to fill password: {e}"))?;
 
-    let submit = page.locator("button[type='submit']").await;
+    let submit = page.locator("button[type='submit']");
     submit
         .click(None)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to click submit: {e}"))?;
 
-    let notifications_page = page.locator("#notifications-page").await;
+    let notifications_page = page.locator("#notifications-page");
     expect(notifications_page)
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()

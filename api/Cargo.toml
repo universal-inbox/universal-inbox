@@ -161,7 +161,7 @@ vec1 = { workspace = true }
 wiremock = "0.6.0"
 webauthn-rs = { workspace = true, features = ["danger-allow-state-serialisation"] }
 reqwest-retry = "0.9.0"
-playwright-rs = { version = "0.8.3", optional = true }
+playwright-rs = { version = "0.18.0", optional = true }
 
 [features]
 default = []
@@ -171,7 +171,7 @@ screenshots = ["dep:playwright-rs"]
 
 [dev-dependencies]
 lzma-rust2 = "0.16.3"
-playwright-rs = "0.8.3"
+playwright-rs = "0.18.0"
 pretty_assertions = { workspace = true }
 rrule = { workspace = true }
 rstest = { workspace = true }

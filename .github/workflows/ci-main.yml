@@ -79,6 +79,9 @@ jobs:
         with:
           shared-key: ci
       - name: Clippy check
+        env:
+          # Clippy never launches a browser; skip the ~90 MB driver assembly.
+          PLAYWRIGHT_SKIP_DRIVER_DOWNLOAD: "1"
         run: devbox run -- just check-all
 
   test-ui:
@@ -178,10 +181,16 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: ci
+      - name: Install web dependencies and build WASM frontend
+        run: devbox run -- just web build-ci
       - name: Collect API coverage data
         env:
           RUST_MIN_STACK: 104857600
           RUST_BACKTRACE: "full"
+          # Nix's ldd can't see system libs installed by `install-deps`, causing
+          # Playwright's host validation to falsely report missing libraries.
+          # The system dynamic linker (used by the Chromium binary) finds them fine.
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS: "1"
         run: devbox run -- just api/test-coverage
       - name: API test Report
         uses: dorny/test-reporter@d61b558e8df85cb60d09ca3e5b09653b4477cea7 # v1

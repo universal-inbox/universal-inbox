@@ -365,14 +365,14 @@ async fn apply_state(
 async fn run_action(page: &Page, action: &Action) -> anyhow::Result<()> {
     match action {
         Action::Click(selector) => {
-            let loc = page.locator(selector).await;
+            let loc = page.locator(*selector);
             loc.first()
                 .click(None)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to click `{selector}`: {e}"))?;
         }
         Action::WaitFor(selector) => {
-            let loc = page.locator(selector).await;
+            let loc = page.locator(*selector);
             expect(loc.first())
                 .with_timeout(EXPECT_TIMEOUT)
                 .to_be_visible()
@@ -380,7 +380,7 @@ async fn run_action(page: &Page, action: &Action) -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!("WaitFor `{selector}` timed out: {e}"))?;
         }
         Action::Hover(selector) => {
-            let loc = page.locator(selector).await;
+            let loc = page.locator(*selector);
             loc.first()
                 .hover(None)
                 .await
@@ -413,7 +413,7 @@ async fn capture(page: &Page, capture: &Capture, dest: &std::path::Path) -> anyh
                 })?;
         }
         Capture::Element(selector) => {
-            let loc = page.locator(selector).await;
+            let loc = page.locator(*selector);
             let bytes = loc
                 .first()
                 .screenshot(Some(

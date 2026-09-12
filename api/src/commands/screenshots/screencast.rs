@@ -494,7 +494,7 @@ async fn run_action(
             // Tolerant: the recording's value is the timed visual cadence, not strict
             // selector assertions. If a selector drifts (UI rename, route slow, etc.) we
             // warn and continue rather than abort the whole take.
-            let loc = page.locator(selector).await;
+            let loc = page.locator(*selector);
             if let Err(e) = expect(loc.first())
                 .with_timeout(Duration::from_secs(10))
                 .to_be_visible()
@@ -504,7 +504,7 @@ async fn run_action(
             }
         }
         BeatAction::WaitForGone(selector) => {
-            let loc = page.locator(selector).await;
+            let loc = page.locator(*selector);
             if let Err(e) = expect(loc.first())
                 .with_timeout(Duration::from_secs(10))
                 .to_be_hidden()
@@ -517,14 +517,14 @@ async fn run_action(
             sleep(Duration::from_millis(*ms)).await;
         }
         BeatAction::Hover(selector) => {
-            let loc = page.locator(selector).await;
+            let loc = page.locator(*selector);
             loc.first()
                 .hover(None)
                 .await
                 .map_err(|e| anyhow!("Failed to hover `{selector}`: {e}"))?;
         }
         BeatAction::Click(selector) => {
-            let loc = page.locator(selector).await;
+            let loc = page.locator(*selector);
             loc.first()
                 .click(None)
                 .await
@@ -579,7 +579,7 @@ async fn slow_login(page: &Page, base_url: &str, email: &str) -> anyhow::Result<
         .await
         .map_err(|e| anyhow!("Failed to navigate to login page: {e}"))?;
 
-    let email_input = page.locator("input[name='email']").await;
+    let email_input = page.locator("input[name='email']");
     expect(email_input.clone())
         .with_timeout(Duration::from_secs(30))
         .to_be_visible()
@@ -595,20 +595,20 @@ async fn slow_login(page: &Page, base_url: &str, email: &str) -> anyhow::Result<
         .map_err(|e| anyhow!("Failed to fill email: {e}"))?;
     sleep(Duration::from_millis(600)).await;
 
-    let password_input = page.locator("input[name='password']").await;
+    let password_input = page.locator("input[name='password']");
     password_input
         .fill(DEFAULT_PASSWORD, None)
         .await
         .map_err(|e| anyhow!("Failed to fill password: {e}"))?;
     sleep(Duration::from_millis(700)).await;
 
-    let submit = page.locator("button[type='submit']").await;
+    let submit = page.locator("button[type='submit']");
     submit
         .click(None)
         .await
         .map_err(|e| anyhow!("Failed to click submit: {e}"))?;
 
-    let notifications_page = page.locator("#notifications-page").await;
+    let notifications_page = page.locator("#notifications-page");
     expect(notifications_page)
         .with_timeout(Duration::from_secs(30))
         .to_be_visible()
