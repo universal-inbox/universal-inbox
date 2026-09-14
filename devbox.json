@@ -52,6 +52,7 @@
     },
     "env": {
         "TARGET_CC": "cc",
-        "RUST_TOOLCHAIN_VERSION": "1.96"
+        "RUST_TOOLCHAIN_VERSION": "1.96",
+        "RUSTUP_AUTO_INSTALL": "0"
     }
 }
