@@ -167,6 +167,18 @@ pub trait UserRepository {
         user_id: UserId,
         patch: &UserPatch,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
+
+    /// Take a transaction-scoped Postgres advisory lock keyed on the user id
+    /// (released automatically on commit/rollback). Serializes per-user
+    /// read-decide-write sections so concurrent requests can't race a
+    /// read-then-write under READ COMMITTED (e.g. a double-clicked Upgrade
+    /// minting duplicate Stripe customers, or parallel OAuth callbacks
+    /// overshooting the Free-plan cap).
+    async fn acquire_user_advisory_lock(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError>;
 }
 
 #[async_trait]
@@ -211,6 +223,31 @@ impl UserRepository for Repository {
         })?;
 
         row.map(|user_row| user_row.try_into()).transpose()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    async fn acquire_user_advisory_lock(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0::bigint))")
+            .bind(user_id.0.to_string())
+            .execute(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!("Failed to acquire advisory lock for user {user_id}: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+        Ok(())
     }
 
     #[tracing::instrument(level = "debug", skip_all)]

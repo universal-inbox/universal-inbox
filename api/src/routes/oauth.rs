@@ -82,8 +82,8 @@ pub fn classify_oauth_callback_error(err: &UniversalInboxError) -> OAuthCallback
 
 pub fn authorize_scope() -> Scope {
     web::scope("/oauth").service(
-        web::resource("/authorize/{integration_connection_id}")
-            .route(web::get().to(oauth_authorize)),
+        web::resource("/authorize-url/{integration_connection_id}")
+            .route(web::get().to(oauth_authorize_url)),
     )
 }
 
@@ -94,7 +94,13 @@ pub struct OAuthCallbackQuery {
     error: Option<String>,
 }
 
-pub async fn oauth_authorize(
+/// Start an OAuth authorization and answer with the provider URL as JSON.
+///
+/// The SPA calls this and only then sets `window.location`, so an error reaches
+/// it as a normal API response: a Free-plan 402 pops the upgrade modal through
+/// the shared `call_api` handling instead of navigating the user out of the
+/// app.
+pub async fn oauth_authorize_url(
     path: web::Path<IntegrationConnectionId>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     cache: web::Data<Cache>,
@@ -122,9 +128,9 @@ pub async fn oauth_authorize(
         .await
         .context("Failed to commit OAuth authorization transaction")?;
 
-    Ok(HttpResponse::Found()
-        .insert_header(("Location", authorization_url.as_str()))
-        .finish())
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "authorization_url": authorization_url,
+    })))
 }
 
 pub async fn oauth_callback(

@@ -26,12 +26,13 @@ use actix_web::{
     body::{EitherBody, MessageBody},
     dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
 };
-use anyhow::anyhow;
+use anyhow::{Context, anyhow};
 use futures::{FutureExt, future::LocalBoxFuture};
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use universal_inbox::user::UserId;
 
-use crate::universal_inbox::UniversalInboxError;
+use crate::{universal_inbox::UniversalInboxError, utils::jwt::Claims};
 
 /// A wrapper around a raw JWT string.
 #[derive(Hash, PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
@@ -69,6 +70,24 @@ where
                 .cloned()
                 .ok_or_else(|| UniversalInboxError::Unauthorized(anyhow!("Unauthenticated"))),
         )
+    }
+}
+
+impl Authenticated<Claims> {
+    /// Parse the `sub` claim into a [`UserId`], mapping a malformed value to an
+    /// internal error.
+    pub fn user_id(&self) -> Result<UserId, UniversalInboxError> {
+        self.claims
+            .sub
+            .parse::<UserId>()
+            .context("Wrong user ID format")
+            .map_err(UniversalInboxError::Unexpected)
+    }
+
+    /// Best-effort variant for call sites that only want `Some(user_id)` and
+    /// deliberately ignore a malformed subject (logging / rate-limiting).
+    pub fn user_id_opt(&self) -> Option<UserId> {
+        self.claims.sub.parse::<UserId>().ok()
     }
 }
 

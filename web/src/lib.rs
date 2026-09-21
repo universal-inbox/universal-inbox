@@ -120,6 +120,33 @@ pub fn App() -> Element {
         )
     });
 
+    // Optional billing service. The coroutine itself never fails on
+    // self-hosted instances — a 404 from /api/billing/me is treated as
+    // BillingAvailability::Disabled and every billing UI hides itself.
+    let billing_service_handle = use_coroutine(move |rx| {
+        crate::services::billing_service::billing_service(
+            rx,
+            api_base_url(),
+            crate::services::billing_service::BILLING_STATE.signal(),
+        )
+    });
+
+    // Refresh billing state whenever the user becomes authenticated. Login via
+    // Local password / passkey / signup is pure SPA navigation (no page
+    // reload), so the coroutine's mount-time fetch ran while logged out (401 →
+    // state stays Unknown). Without this, the sidebar plan pill, upgrade
+    // banner, and dunning warnings never render until the user opens the
+    // dedicated billing page. OIDC (full redirect) already remounts and is
+    // covered; the extra refresh there is harmless.
+    use_effect(move || {
+        if crate::services::user_service::CONNECTED_USER
+            .read()
+            .is_some()
+        {
+            billing_service_handle.send(crate::services::billing_service::BillingCommand::Refresh);
+        }
+    });
+
     let _authentication_token_service_handle = use_coroutine(move |rx| {
         authentication_token_service(
             rx,

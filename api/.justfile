@@ -86,6 +86,19 @@ reset-password user-email:
 generate-user:
     cargo run -- test generate-user
 
+# Reconcile Stripe-backed subscription state. Intended for daily cron /
+# systemd-timer / Kubernetes CronJob. No-op when [billing] is absent.
+billing-reconcile *flags="":
+    cargo run -- billing reconcile {{flags}}
+
+# Forward Stripe test-mode webhooks to the local API. Run `stripe login` once first.
+# Without a forwarder nothing reaches /api/billing/stripe/webhook, so a local checkout
+# leaves the user on Free until `just api billing-reconcile` adopts the subscription.
+# On first run, copy the signing secret it prints into `stripe_webhook_signing_secret`
+# in api/config/local.toml, otherwise every delivery fails signature verification.
+stripe-listen *flags="--events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed":
+    stripe listen --forward-to "http://localhost:${API_PORT:-8000}/api/billing/stripe/webhook" {{flags}}
+
 generate-empty-user:
     cargo run -- test generate-empty-user
 

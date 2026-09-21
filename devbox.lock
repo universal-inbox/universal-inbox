@@ -1848,6 +1848,54 @@
         }
       }
     },
+    "stripe-cli@latest": {
+      "last_modified": "2026-06-11T10:33:09Z",
+      "resolved": "github:NixOS/nixpkgs/8c91a71d13451abc40eb9dae8910f972f979852f#stripe-cli",
+      "source": "devbox-search",
+      "version": "1.41.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/6ika9hlb2bqkc69h5id4dxjmr4glrsc9-stripe-cli-1.41.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/6ika9hlb2bqkc69h5id4dxjmr4glrsc9-stripe-cli-1.41.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/jh3pm378yw7gy9m2dyffrwi9mg1g9jrm-stripe-cli-1.41.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/jh3pm378yw7gy9m2dyffrwi9mg1g9jrm-stripe-cli-1.41.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/clbk55wgnlnn9b503f51nbp0i2akgjmf-stripe-cli-1.41.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/clbk55wgnlnn9b503f51nbp0i2akgjmf-stripe-cli-1.41.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/95lyqbpis8z8xm14lsapjp9mjbna9kjj-stripe-cli-1.41.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/95lyqbpis8z8xm14lsapjp9mjbna9kjj-stripe-cli-1.41.2"
+        }
+      }
+    },
     "taplo@latest": {
       "last_modified": "2025-07-28T17:09:23Z",
       "resolved": "github:NixOS/nixpkgs/648f70160c03151bc2121d179291337ad6bc564b#taplo",

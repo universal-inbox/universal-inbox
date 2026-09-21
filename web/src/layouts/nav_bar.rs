@@ -5,8 +5,8 @@ use dioxus_router::hooks::use_route;
 
 use crate::{
     components::{
-        footer::Footer, sidebar::Sidebar, toast_zone::ToastZone,
-        universal_inbox_title::UniversalInboxTitle,
+        banner_strip::BillingBannerStrip, footer::Footer, sidebar::Sidebar, toast_zone::ToastZone,
+        universal_inbox_title::UniversalInboxTitle, upgrade_modal::UpgradeModal,
     },
     icons::UILogo,
     model::VERSION_MISMATCH,
@@ -24,9 +24,9 @@ pub fn NavBarLayout() -> Element {
     );
     // `.app-layout` class hook is kept so child elements can target it from
     // their own Tailwind variants (e.g. `max-md:[.app-layout.show-detail_&]:`
-    // on the list panel, the detail panel root, and the mobile back button).
-    // The mobile column stack (`flex-direction: column`) is expressed inline
-    // via `max-md:flex-col`.
+    // on `.list-panel` / `.detail-panel` / `.detail-back-btn`). The mobile
+    // column stack (`flex-direction: column`) is expressed inline via
+    // `max-md:flex-col`.
     let layout_class = if show_detail {
         "app-layout show-detail flex flex-1 min-h-0 overflow-hidden max-md:flex-col"
     } else {
@@ -49,6 +49,10 @@ pub fn NavBarLayout() -> Element {
                     }
                 }
             }
+            // Billing banners: stacked above the app shell so they're visible
+            // regardless of which page is rendered. Self-hosted instances see
+            // nothing because BILLING_STATE stays Disabled.
+            BillingBannerStrip {}
             div {
                 class: layout_class,
                 div {
@@ -102,6 +106,7 @@ pub fn NavBarLayout() -> Element {
                 }
             }
             ToastZone {}
+            UpgradeModal {}
         }
     }
 }

@@ -43,6 +43,17 @@ pub struct IntegrationConnection {
     pub first_tasks_sync_failed_at: Option<DateTime<Utc>>,
     pub provider: IntegrationProvider,
     pub registered_oauth_scopes: Vec<String>,
+    /// Timestamp set when the billing subsystem auto-paused this connection
+    /// because a Paid → Free downgrade put the user over the integration cap.
+    /// Distinguishes plan-paused from user-paused connections.
+    #[serde(default)]
+    pub auto_paused_by_plan_at: Option<DateTime<Utc>>,
+    /// The connection's config captured the instant it was plan-paused, so an
+    /// upgrade can restore the user's exact pre-pause sync toggles instead of
+    /// blanket-enabling everything. Non-`None` exactly when
+    /// `auto_paused_by_plan_at` is non-`None` (set and cleared together).
+    #[serde(default)]
+    pub auto_paused_config_snapshot: Option<IntegrationConnectionConfig>,
 }
 
 impl IntegrationConnection {
@@ -76,6 +87,8 @@ impl IntegrationConnection {
             // Using unwrap as None cannot mismatch with the provided config
             provider: IntegrationProvider::new(config, None).unwrap(),
             registered_oauth_scopes: Vec::new(),
+            auto_paused_by_plan_at: None,
+            auto_paused_config_snapshot: None,
         }
     }
 

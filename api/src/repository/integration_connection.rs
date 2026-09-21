@@ -151,6 +151,25 @@ pub trait IntegrationConnectionRepository {
         synced_before: Option<DateTime<Utc>>,
     ) -> Result<bool, UniversalInboxError>;
 
+    /// Count a user's *active* `Validated` integration connections without
+    /// loading the rows or their JSON configs. Used by the billing cap check,
+    /// which only ever needs the number. Connections already paused by the
+    /// plan are excluded — see the query for why.
+    async fn count_validated_integration_connections(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: UserId,
+    ) -> Result<u32, UniversalInboxError>;
+
+    /// Counterpart of [`Self::count_validated_integration_connections`]: how
+    /// many of a user's connections the plan has paused. Drives the "N
+    /// integrations are paused by your Free plan" state in the UI.
+    async fn count_plan_paused_integration_connections(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: UserId,
+    ) -> Result<u32, UniversalInboxError>;
+
     async fn create_integration_connection(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -177,6 +196,22 @@ pub trait IntegrationConnectionRepository {
         config: IntegrationConnectionConfig,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnectionConfig>>, UniversalInboxError>;
+
+    /// Set or clear the plan-pause state in a single UPDATE, keeping the
+    /// `auto_paused_by_plan_at IS NOT NULL ⟺ auto_paused_config_snapshot IS NOT NULL`
+    /// invariant atomic. The marker distinguishes plan-initiated pauses from
+    /// user-initiated ones; the snapshot captures the connection's full config
+    /// at pause time so the upgrade restore is byte-for-byte. Passing
+    /// `paused_at = None` clears both (e.g. when the user re-upgrades to Paid);
+    /// callers must pass `snapshot = None` in that case so the pair stays
+    /// consistent.
+    async fn set_integration_connection_plan_pause(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        paused_at: Option<chrono::DateTime<chrono::Utc>>,
+        snapshot: Option<&IntegrationConnectionConfig>,
+    ) -> Result<(), UniversalInboxError>;
 
     async fn update_integration_connection_provider_user_id(
         &self,
@@ -358,7 +393,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
                   integration_connection.context as "context: Json<IntegrationConnectionContext>",
-                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>"
+                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>"
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -423,7 +460,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as config,
                   integration_connection.context,
-                  integration_connection.registered_oauth_scopes
+                  integration_connection.registered_oauth_scopes,
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -517,7 +556,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
                   integration_connection.context as "context: Json<IntegrationConnectionContext>",
-                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>"
+                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>"
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -583,7 +624,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
                   integration_connection.context as "context: Json<IntegrationConnectionContext>",
-                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>"
+                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>"
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -649,7 +692,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
                   integration_connection.context as "context: Json<IntegrationConnectionContext>",
-                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>"
+                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>"
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -749,6 +794,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection_config.config as config,
                   integration_connection.context,
                   integration_connection.registered_oauth_scopes,
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
                   (SELECT
              "#,
         );
@@ -950,6 +997,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection_config.config as config,
                   integration_connection.context,
                   integration_connection.registered_oauth_scopes,
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
                   true as "is_updated"
              "#,
         );
@@ -1033,6 +1082,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection_config.config as config,
                   integration_connection.context,
                   integration_connection.registered_oauth_scopes,
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
                   true as "is_updated"
                "#,
         );
@@ -1109,7 +1160,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config,
                   integration_connection.context,
-                  integration_connection.registered_oauth_scopes
+                  integration_connection.registered_oauth_scopes,
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -1249,6 +1302,29 @@ impl IntegrationConnectionRepository for Repository {
             synced_before,
         )
         .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = for_user_id.to_string()),
+        err
+    )]
+    async fn count_validated_integration_connections(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: UserId,
+    ) -> Result<u32, UniversalInboxError> {
+        count_validated_connections(executor, for_user_id, PlanPauseFilter::Active).await
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = for_user_id.to_string()), err)]
+    async fn count_plan_paused_integration_connections(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: UserId,
+    ) -> Result<u32, UniversalInboxError> {
+        count_validated_connections(executor, for_user_id, PlanPauseFilter::Paused).await
     }
 
     #[tracing::instrument(
@@ -1458,6 +1534,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection_config.config as config,
                   integration_connection.context,
                   integration_connection.registered_oauth_scopes,
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
                   true as "is_updated"
                "#,
         );
@@ -1484,6 +1562,49 @@ impl IntegrationConnectionRepository for Repository {
                 result: None,
             })
         }
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(integration_connection_id = integration_connection_id.to_string()),
+        err
+    )]
+    async fn set_integration_connection_plan_pause(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        paused_at: Option<chrono::DateTime<chrono::Utc>>,
+        snapshot: Option<&IntegrationConnectionConfig>,
+    ) -> Result<(), UniversalInboxError> {
+        // Strip the timezone to match the column's `TIMESTAMP` (without time
+        // zone) type — every other temporal column on this table is naive UTC.
+        let naive = paused_at.map(|dt| dt.naive_utc());
+        // Marker and snapshot are written together so the
+        // `auto_paused_by_plan_at IS NOT NULL ⟺ auto_paused_config_snapshot IS NOT NULL`
+        // invariant can never be observed half-applied. `None` clears both.
+        let snapshot = snapshot.map(Json);
+        sqlx::query!(
+            r#"
+            UPDATE integration_connection
+            SET auto_paused_by_plan_at = $2,
+                auto_paused_config_snapshot = $3,
+                updated_at = (now() at time zone 'utc')
+            WHERE id = $1
+            "#,
+            integration_connection_id.0,
+            naive,
+            snapshot as Option<Json<&IntegrationConnectionConfig>>,
+        )
+        .execute(&mut **executor)
+        .await
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            message: format!(
+                "Failed to set plan-pause state for {integration_connection_id}: {err}"
+            ),
+            source: err,
+        })?;
+        Ok(())
     }
 
     #[tracing::instrument(
@@ -1538,6 +1659,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection_config.config as config,
                   integration_connection.context,
                   integration_connection.registered_oauth_scopes,
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
                   true as "is_updated"
                "#,
         );
@@ -1606,6 +1729,8 @@ pub struct IntegrationConnectionRow {
     config: Json<IntegrationConnectionConfig>,
     context: Option<Json<IntegrationConnectionContext>>,
     registered_oauth_scopes: Json<Vec<String>>,
+    auto_paused_by_plan_at: Option<NaiveDateTime>,
+    auto_paused_config_snapshot: Option<Json<IntegrationConnectionConfig>>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -1691,6 +1816,74 @@ impl TryFrom<&IntegrationConnectionRow> for IntegrationConnection {
                 row.context.as_ref().map(|context| context.0.clone()),
             )?,
             registered_oauth_scopes: row.registered_oauth_scopes.0.clone(),
+            auto_paused_by_plan_at: row
+                .auto_paused_by_plan_at
+                .map(|t| DateTime::from_naive_utc_and_offset(t, Utc)),
+            auto_paused_config_snapshot: row
+                .auto_paused_config_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.0.clone()),
         })
     }
+}
+
+/// Which side of the plan-pause split [`count_validated_connections`] counts.
+#[derive(Clone, Copy)]
+enum PlanPauseFilter {
+    /// Connections holding a Free-plan slot: validated and not plan-paused.
+    Active,
+    /// Connections the plan switched off; they hold no slot and come back on
+    /// upgrade.
+    Paused,
+}
+
+/// Count a user's `Validated` connections on one side of the plan-pause split,
+/// without materialising any row or JSON config.
+///
+/// Excludes the `API` provider kind: that connection is auto-created on first
+/// programmatic API use (`get_or_create_integration_connection`), is never
+/// listed in `settings.integrations`, and so never appears in the front-end
+/// integrations panel. Counting it would inflate billing usage by one and
+/// silently eat a slot of the Free-plan cap. This is the single source of truth
+/// for usage display and the connect-time cap check, so the two stay in
+/// lockstep.
+async fn count_validated_connections(
+    executor: &mut Transaction<'_, Postgres>,
+    for_user_id: UserId,
+    filter: PlanPauseFilter,
+) -> Result<u32, UniversalInboxError> {
+    let mut query_builder = QueryBuilder::new(
+        r#"
+            SELECT COUNT(*)
+            FROM integration_connection
+            INNER JOIN integration_connection_config
+              ON integration_connection.id = integration_connection_config.integration_connection_id
+            WHERE integration_connection.user_id = "#,
+    );
+    query_builder.push_bind(for_user_id.0);
+    query_builder
+        .push(" AND integration_connection.status::TEXT = ")
+        .push_bind(IntegrationConnectionStatus::Validated.to_string());
+    query_builder
+        .push(" AND integration_connection.provider_kind::TEXT != ")
+        .push_bind(IntegrationProviderKind::API.to_string());
+    query_builder.push(match filter {
+        PlanPauseFilter::Active => " AND integration_connection.auto_paused_by_plan_at IS NULL",
+        PlanPauseFilter::Paused => " AND integration_connection.auto_paused_by_plan_at IS NOT NULL",
+    });
+
+    let count: i64 = query_builder
+        .build_query_scalar::<i64>()
+        .fetch_one(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message =
+                format!("Failed to count integration connections for user {for_user_id}: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+    Ok(count.max(0) as u32)
 }
