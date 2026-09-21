@@ -41,7 +41,8 @@
         "prek": "latest",
         "sccache": "latest",
         "zellij": "latest",
-        "beads": "latest"
+        "beads": "latest",
+        "stripe-cli": "latest"
     },
     "shell": {
         "init_hook": [

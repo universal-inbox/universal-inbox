@@ -31,7 +31,9 @@ cd api && just check-db
 `$PROCESS_COMPOSE_PORT` (default 9999): `.devbox/virtenv/redis/process-compose.yaml` (redis) +
 `process-compose-pg.yaml` (postgresql via `pg_ctl`) + `process-compose.yaml` (app services).
 `postgresql` + `redis` start automatically; app services `ui-api` `ui-workers` `ui-web`
-`build-tailwind` `bundle-js` `caddy` are `disabled: true` — start them explicitly.
+`build-tailwind` `bundle-js` `caddy` `stripe-listen` are `disabled: true` — start them
+explicitly. `stripe-listen` (`just api stripe-listen`) forwards Stripe webhooks to the local
+API; it is only useful with `[application.billing]` configured.
 
 ```bash
 just run               # interactive TUI — HUMANS ONLY, errors in a no-TTY/agent shell
@@ -98,5 +100,11 @@ SQLX_OFFLINE=true          # use cached query metadata
 # Don't hardcode 5432 — read $DATABASE_URL / $PGPORT from direnv.
 DATABASE_URL=postgres://postgres:password@127.0.0.1:${PGPORT:-5432}/universal-inbox
 ```
+
+Billing is optional and off unless configured. With no `[application.billing]` block every
+`/api/billing/*` route 404s and the Free-plan caps are not enforced — that is the self-hosting
+default. To work on billing, set `stripe_secret_key`, `stripe_publishable_key`,
+`stripe_webhook_signing_secret` and `stripe_price_id` (plus the `[application.billing.free_plan]`
+limits) in `api/config/local.toml`; see `api/config/default.toml` for the shape.
 
 _Last updated: 2026-05-31_

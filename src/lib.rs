@@ -16,6 +16,7 @@ extern crate macro_attr;
 extern crate enum_derive;
 
 pub mod auth;
+pub mod billing;
 pub mod integration_connection;
 pub mod notification;
 pub mod slack_bridge;

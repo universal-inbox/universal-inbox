@@ -48,6 +48,15 @@ processes:
     disabled: true
     namespace: "universal-inbox"
 
+  stripe-listen:
+    command: "just api stripe-listen"
+    is_tty: true
+    disabled: true
+    availability:
+      restart: on_failure
+      max_restarts: 5
+    namespace: "universal-inbox"
+
   caddy:
     command: "caddy run --config=$CADDY_CONFIG"
     is_tty: true

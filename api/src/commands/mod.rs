@@ -128,6 +128,13 @@ pub enum Commands {
         #[clap(subcommand)]
         command: UserCommands,
     },
+
+    /// Manage Stripe-backed billing state (reconciliation, etc.).
+    /// No-op when `[billing]` is absent from configuration.
+    Billing {
+        #[clap(subcommand)]
+        action: crate::billing::commands::BillingAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -280,6 +287,7 @@ impl Cli {
         slack_service: Arc<SlackService>,
         slack_bridge_service: Arc<SlackBridgeService>,
         oauth2_service: Arc<OAuth2Service>,
+        billing_service: Option<Arc<crate::billing::service::BillingService>>,
     ) -> Result<(), UniversalInboxError> {
         match &self.command {
             Commands::SyncNotifications { source, user_id } => {
@@ -354,6 +362,7 @@ impl Cli {
                     third_party_item_service.clone(),
                     slack_bridge_service,
                     oauth2_service,
+                    billing_service,
                 )
                 .await
                 .expect("Failed to start HTTP server");
@@ -557,6 +566,10 @@ impl Cli {
                     user::generate_jwt_token(user_service, auth_token_service, user_email).await
                 }
             },
+
+            Commands::Billing { action } => {
+                crate::billing::commands::run(action, billing_service).await
+            }
         }
     }
 }

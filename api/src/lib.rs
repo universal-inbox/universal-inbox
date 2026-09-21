@@ -93,6 +93,7 @@ use crate::{
 
 use secrecy::{ExposeSecret, SecretBox};
 
+pub mod billing;
 pub mod commands;
 pub mod configuration;
 pub mod integrations;
@@ -119,6 +120,7 @@ pub async fn run_server(
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     slack_bridge_service: Arc<SlackBridgeService>,
     oauth2_service: Arc<OAuth2Service>,
+    billing_service: Option<Arc<billing::service::BillingService>>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
     let front_base_url = settings
@@ -263,7 +265,7 @@ pub async fn run_server(
         let auth_middleware_factory =
             AuthenticateMiddlewareFactory::<Claims>::new(auth_middleware_settings.clone());
 
-        let api_scope = web::scope(api_path.trim_end_matches('/'))
+        let mut api_scope = web::scope(api_path.trim_end_matches('/'))
             .wrap(
                 middlewares::audience_guard::RejectAudiencedTokens::new()
                     .with_exempt_prefixes(audience_guard_exempt_prefixes.clone()),
@@ -292,6 +294,15 @@ pub async fn run_server(
             .app_data(web::Data::new(slack_bridge_service.clone()))
             .app_data(web::Data::new(oauth2_service.clone()))
             .app_data(slack_signing_secret_data.clone());
+
+        // Billing endpoints only exist when `[billing]` is configured. On a
+        // self-hosted instance without billing, /api/billing/* returns 404 —
+        // the frontend treats that as "billing disabled" and hides plan UI.
+        if let Some(billing) = billing_service.clone() {
+            api_scope = api_scope
+                .service(billing::routes::scope())
+                .app_data(web::Data::new(billing));
+        }
 
         let api_path_for_cors = api_path.clone();
         let mcp_extra_origins_for_cors = mcp_extra_allowed_origins.clone();
@@ -668,6 +679,7 @@ pub async fn build_services(
     Arc<SlackService>,
     Arc<SlackBridgeService>,
     Arc<OAuth2Service>,
+    Option<Arc<billing::service::BillingService>>,
 ) {
     let repository = Arc::new(Repository::new(pool.clone()));
 
@@ -789,6 +801,40 @@ pub async fn build_services(
     let oauth2_flow_service =
         OAuth2FlowService::new(redirect_uri).expect("Failed to create OAuth2FlowService");
 
+    // Optional billing service: wired up only when `[billing]` is configured.
+    // Built BEFORE the services that consult it so it can be passed into their
+    // constructors — "billing is wired" is then a type-enforced invariant
+    // (every construction site must pass it, even as `None`), not a post-hoc
+    // `Arc<RwLock>` mutation a future call site could silently forget.
+    let billing_service = settings
+        .application
+        .billing
+        .as_ref()
+        .map(|billing_settings| {
+            let stripe_client: Arc<dyn crate::billing::stripe::StripeClient> =
+                Arc::new(crate::billing::stripe::client::StripeApiClient::new(
+                    &billing_settings.stripe_secret_key,
+                    SecretBox::new(Box::new(crate::configuration::StripeWebhookSecret(
+                        billing_settings
+                            .stripe_webhook_signing_secret
+                            .expose_secret()
+                            .0
+                            .clone(),
+                    ))),
+                ));
+            let integration_counter =
+                Arc::new(crate::billing::service::RepositoryIntegrationCounter {
+                    repository: repository.clone(),
+                });
+            Arc::new(crate::billing::service::BillingService::new(
+                repository.clone(),
+                stripe_client,
+                &billing_settings.free_plan,
+                billing_settings.stripe_price_id.clone(),
+                integration_counter,
+            ))
+        });
+
     let integration_connection_service = Arc::new(RwLock::new(IntegrationConnectionService::new(
         repository.clone(),
         settings.required_oauth_scopes(),
@@ -802,6 +848,7 @@ pub async fn build_services(
         settings.application.sync_backoff_base_delay_in_seconds,
         settings.application.sync_backoff_max_delay_in_seconds,
         settings.application.sync_failure_window_in_hours,
+        billing_service.clone(),
     )));
 
     let todoist_service = Arc::new(
@@ -920,6 +967,7 @@ pub async fn build_services(
         settings
             .application
             .min_sync_notifications_interval_in_minutes,
+        billing_service.clone(),
     )));
 
     google_mail_service
@@ -942,6 +990,7 @@ pub async fn build_services(
         user_service.clone(),
         Arc::downgrade(&third_party_item_service),
         settings.application.min_sync_tasks_interval_in_minutes,
+        billing_service.clone(),
     )));
 
     notification_service
@@ -969,7 +1018,7 @@ pub async fn build_services(
         settings.application.api_path
     );
     let oauth2_service = Arc::new(OAuth2Service::new(
-        repository,
+        repository.clone(),
         settings.application.http_session.jwt_secret_key.clone(),
         settings.application.http_session.jwt_public_key.clone(),
         resource_url,
@@ -986,6 +1035,7 @@ pub async fn build_services(
         slack_service,
         slack_bridge_service,
         oauth2_service,
+        billing_service,
     )
 }
 

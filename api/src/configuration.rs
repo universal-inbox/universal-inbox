@@ -16,7 +16,8 @@ use serde_with::{DisplayFromStr, serde_as};
 use url::Url;
 
 use universal_inbox::{
-    integration_connection::provider::IntegrationProviderKind, user::UserAuthKind,
+    billing::StripePriceId, integration_connection::provider::IntegrationProviderKind,
+    user::UserAuthKind,
 };
 
 use crate::{
@@ -64,6 +65,11 @@ pub struct ApplicationSettings {
     /// `serde(default)` so the section can be omitted entirely from config files.
     #[serde(default)]
     pub cron: CronSettings,
+    /// Optional Stripe billing configuration. When absent, no billing code runs,
+    /// no billing UI is rendered, and every user has unlimited access (default for
+    /// self-hosted instances). When present, billing enforcement is active.
+    #[serde(default)]
+    pub billing: Option<BillingSettings>,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -526,6 +532,126 @@ pub struct EmailSettings {
 pub struct ChatSupportSettings {
     pub website_id: String,
     pub identity_verification_secret_key: String,
+}
+
+/// Stripe publishable key (e.g. `pk_live_…` / `pk_test_…`). Non-secret: it is
+/// surfaced to the browser so the web UI can identify the right Stripe account.
+/// A newtype (not a bare `String`) so it can't be mixed up with other config
+/// strings, mirroring [`StripePriceId`].
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(transparent)]
+pub struct StripePublishableKey(pub String);
+
+/// Stripe API secret key (e.g. `sk_live_…` / `sk_test_…`). Used to authenticate
+/// outbound calls to the Stripe REST API.
+#[derive(Debug, Clone)]
+pub struct StripeApiKey(pub String);
+
+impl Zeroize for StripeApiKey {
+    fn zeroize(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl CloneableSecret for StripeApiKey {}
+
+impl<'de> serde::Deserialize<'de> for StripeApiKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(StripeApiKey(s))
+    }
+}
+
+/// Webhook signing secret (e.g. `whsec_…`) used to verify the signature on
+/// inbound Stripe webhook deliveries.
+#[derive(Debug, Clone)]
+pub struct StripeWebhookSecret(pub String);
+
+impl Zeroize for StripeWebhookSecret {
+    fn zeroize(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl CloneableSecret for StripeWebhookSecret {}
+
+impl<'de> serde::Deserialize<'de> for StripeWebhookSecret {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(StripeWebhookSecret(s))
+    }
+}
+
+/// Stripe-backed subscription billing configuration. Setting this block enables
+/// the billing subsystem on a public instance. Self-hosters keep this block
+/// absent to run Universal Inbox without ever touching Stripe.
+#[derive(Deserialize, Clone, Debug)]
+pub struct BillingSettings {
+    /// Stripe secret API key (`sk_live_…` or `sk_test_…`).
+    pub stripe_secret_key: SecretBox<StripeApiKey>,
+    /// Stripe publishable key (`pk_live_…` / `pk_test_…`). Surfaced to the
+    /// browser so the web UI can identify the right Stripe account.
+    pub stripe_publishable_key: StripePublishableKey,
+    /// Signing secret used to verify inbound Stripe webhooks
+    /// (`whsec_…`). Retrieved from the Stripe Dashboard → Webhooks endpoint.
+    pub stripe_webhook_signing_secret: SecretBox<StripeWebhookSecret>,
+    /// Recurring Stripe Price ID bound to the Paid plan (`price_…`).
+    pub stripe_price_id: StripePriceId,
+    /// Free-plan caps + grace period.
+    #[serde(default)]
+    pub free_plan: FreePlanSettings,
+}
+
+/// Configurable limits applied to users on the Free plan. Values double as the
+/// rollout policy for users discovered to be over the limit at billing
+/// activation.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct FreePlanSettings {
+    /// Maximum number of validated integration connections a Free user can keep.
+    #[serde(default = "free_plan_default_max_integration_connections")]
+    pub max_integration_connections: u32,
+    /// Minimum interval between notification syncs for a Free user, in minutes.
+    /// The effective interval is `max(application.min_sync_notifications_interval_in_minutes, this)`.
+    #[serde(default = "free_plan_default_sync_interval_in_minutes")]
+    pub notification_sync_interval_in_minutes: i64,
+    /// Minimum interval between task syncs for a Free user, in minutes.
+    /// The effective interval is `max(application.min_sync_tasks_interval_in_minutes, this)`.
+    #[serde(default = "free_plan_default_sync_interval_in_minutes")]
+    pub task_sync_interval_in_minutes: i64,
+    /// Grace window (in days) granted to users discovered to be over
+    /// `max_integration_connections` at rollout / downgrade. After this window
+    /// expires, excess integration connections are auto-paused.
+    #[serde(default = "free_plan_default_rollout_grace_days")]
+    pub rollout_grace_days: u32,
+}
+
+impl Default for FreePlanSettings {
+    fn default() -> Self {
+        Self {
+            max_integration_connections: free_plan_default_max_integration_connections(),
+            notification_sync_interval_in_minutes: free_plan_default_sync_interval_in_minutes(),
+            task_sync_interval_in_minutes: free_plan_default_sync_interval_in_minutes(),
+            rollout_grace_days: free_plan_default_rollout_grace_days(),
+        }
+    }
+}
+
+fn free_plan_default_max_integration_connections() -> u32 {
+    2
+}
+
+fn free_plan_default_sync_interval_in_minutes() -> i64 {
+    1440
+}
+
+fn free_plan_default_rollout_grace_days() -> u32 {
+    30
 }
 
 impl ChatSupportSettings {
@@ -1026,6 +1152,131 @@ mod tests {
                 signature,
                 "cd7cc422ea97c82d844b2373fdcd6259c9ee6e135af65ab6fe6ca85e3f07abb1"
             );
+        }
+    }
+
+    mod billing_settings {
+        use super::*;
+
+        #[test]
+        fn free_plan_defaults_match_spec() {
+            let defaults = FreePlanSettings::default();
+            assert_eq!(defaults.max_integration_connections, 2);
+            assert_eq!(defaults.notification_sync_interval_in_minutes, 1440);
+            assert_eq!(defaults.task_sync_interval_in_minutes, 1440);
+            assert_eq!(defaults.rollout_grace_days, 30);
+        }
+
+        #[test]
+        fn billing_settings_deserialize_with_default_free_plan() {
+            #[derive(Deserialize)]
+            struct Holder {
+                billing: BillingSettings,
+            }
+
+            let toml = r#"
+                [billing]
+                stripe_secret_key = "sk_test_123"
+                stripe_publishable_key = "pk_test_123"
+                stripe_webhook_signing_secret = "whsec_123"
+                stripe_price_id = "price_123"
+            "#;
+
+            let cfg = Config::builder()
+                .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+                .build()
+                .unwrap();
+
+            let holder: Holder = cfg.try_deserialize().unwrap();
+            assert_eq!(
+                holder.billing.stripe_secret_key.expose_secret().0,
+                "sk_test_123"
+            );
+            assert_eq!(holder.billing.stripe_publishable_key.0, "pk_test_123");
+            assert_eq!(
+                holder
+                    .billing
+                    .stripe_webhook_signing_secret
+                    .expose_secret()
+                    .0,
+                "whsec_123"
+            );
+            assert_eq!(holder.billing.stripe_price_id.as_str(), "price_123");
+            assert_eq!(holder.billing.free_plan, FreePlanSettings::default());
+        }
+
+        #[test]
+        fn billing_settings_deserialize_with_explicit_free_plan_overrides() {
+            #[derive(Deserialize)]
+            struct Holder {
+                billing: BillingSettings,
+            }
+
+            let toml = r#"
+                [billing]
+                stripe_secret_key = "sk_test_123"
+                stripe_publishable_key = "pk_test_123"
+                stripe_webhook_signing_secret = "whsec_123"
+                stripe_price_id = "price_123"
+
+                [billing.free_plan]
+                max_integration_connections = 3
+                notification_sync_interval_in_minutes = 720
+                task_sync_interval_in_minutes = 240
+                rollout_grace_days = 14
+            "#;
+
+            let cfg = Config::builder()
+                .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+                .build()
+                .unwrap();
+
+            let holder: Holder = cfg.try_deserialize().unwrap();
+            assert_eq!(holder.billing.free_plan.max_integration_connections, 3);
+            assert_eq!(
+                holder
+                    .billing
+                    .free_plan
+                    .notification_sync_interval_in_minutes,
+                720
+            );
+            assert_eq!(holder.billing.free_plan.task_sync_interval_in_minutes, 240);
+            assert_eq!(holder.billing.free_plan.rollout_grace_days, 14);
+        }
+
+        #[test]
+        fn billing_absent_when_no_billing_section() {
+            #[derive(Deserialize, Default)]
+            struct Holder {
+                #[serde(default)]
+                billing: Option<BillingSettings>,
+            }
+
+            let cfg = Config::builder()
+                .add_source(config::File::from_str("", config::FileFormat::Toml))
+                .build()
+                .unwrap();
+
+            let holder: Holder = cfg.try_deserialize().unwrap();
+            assert!(holder.billing.is_none());
+        }
+
+        /// Stripe secrets must never reach the `Debug` output verbatim.
+        /// Regression guard: confirms `SecretBox` redacts the wrapped value.
+        #[test]
+        fn stripe_secrets_redact_in_debug() {
+            let key = SecretBox::new(Box::new(StripeApiKey("sk_test_supersecret".to_string())));
+            let dbg = format!("{key:?}");
+            assert!(
+                !dbg.contains("sk_test_supersecret"),
+                "secret leaked in {dbg}"
+            );
+
+            let webhook = SecretBox::new(Box::new(StripeWebhookSecret(
+                "whsec_supersecret".to_string(),
+            )));
+            let dbg = format!("{webhook:?}");
+            assert!(!dbg.contains("whsec_supersecret"), "secret leaked in {dbg}");
         }
     }
 }

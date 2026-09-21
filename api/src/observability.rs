@@ -31,8 +31,6 @@ use tracing_subscriber::{
     layer::{Layered, SubscriberExt},
 };
 
-use universal_inbox::user::UserId;
-
 use crate::{
     configuration::{OtlpExporterProtocol, TracingSettings},
     utils::jwt::Claims,
@@ -49,6 +47,34 @@ type SubscriberWithTelemetry = Layered<
     >,
 >;
 
+/// Targets that must stay off whatever the operator configures.
+///
+/// `stripe_webhook`'s `parse_payload` is `#[tracing::instrument]` with the
+/// webhook payload as a recorded argument, so enabling that target exports
+/// whole Stripe event bodies — customer PII and invoice capability links — to
+/// the trace backend. Forced off here rather than in `log_directive`, so
+/// neither a config file nor `RUST_LOG` can turn it on.
+const FORCED_OFF_TARGETS: [&str; 1] = ["stripe_webhook"];
+
+/// Apply [`FORCED_OFF_TARGETS`] on top of an operator-supplied filter. A
+/// directive added last wins over an earlier one for the same target, so this
+/// overrides whatever the configuration said about those targets.
+fn with_forced_off_targets(filter: EnvFilter) -> EnvFilter {
+    FORCED_OFF_TARGETS.iter().fold(filter, |filter, target| {
+        filter.add_directive(
+            format!("{target}=off")
+                .parse()
+                .expect("a forced-off directive must parse"),
+        )
+    })
+}
+
+fn build_env_filter(env_filter_str: &str) -> EnvFilter {
+    with_forced_off_targets(
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str)),
+    )
+}
+
 pub fn get_subscriber_with_telemetry(
     environment: &str,
     env_filter_str: &str,
@@ -56,8 +82,7 @@ pub fn get_subscriber_with_telemetry(
     service_name: &str,
     version: Option<String>,
 ) -> SubscriberWithTelemetry {
-    let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
+    let env_filter = build_env_filter(env_filter_str);
 
     let resource = build_resource(environment, service_name, version);
     let tracer_provider = SdkTracerProvider::builder()
@@ -107,8 +132,7 @@ pub fn get_subscriber_with_telemetry_and_logging(
 }
 
 pub fn get_subscriber(env_filter_str: &str) -> impl Subscriber + Send + Sync {
-    let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
+    let env_filter = build_env_filter(env_filter_str);
     let fmt = tracing_subscriber::fmt::layer().pretty();
 
     Registry::default().with(env_filter).with(fmt)
@@ -130,7 +154,7 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
     fn on_request_start(request: &ServiceRequest) -> Span {
         let authenticated_value = request.extensions().get::<Authenticated<Claims>>().cloned();
         match authenticated_value
-            .and_then(|v| v.claims.sub.parse::<UserId>().ok())
+            .and_then(|v| v.user_id_opt())
             .map(|user_id| user_id.to_string())
         {
             Some(user_id) => {
@@ -284,4 +308,31 @@ fn build_resource(environment: &str, service_name: &str, version: Option<String>
         .with_service_name(service_name.to_string())
         .with_attributes(resource)
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn stripe_webhook_target_stays_off_even_when_configured_on() {
+        // An operator directive naming the target — or a `RUST_LOG` carrying
+        // one — must not bring the payload-bearing span back.
+        let filter = with_forced_off_targets(EnvFilter::new("info,stripe_webhook=trace"));
+        let directives: Vec<String> = filter.to_string().split(',').map(str::to_string).collect();
+
+        assert!(
+            directives.contains(&"stripe_webhook=off".to_string()),
+            "expected the target to be forced off, got {directives:?}"
+        );
+        assert_eq!(
+            directives
+                .iter()
+                .filter(|directive| directive.starts_with("stripe_webhook="))
+                .count(),
+            1,
+            "the forced directive must replace the configured one, got {directives:?}"
+        );
+    }
 }

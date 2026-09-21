@@ -204,6 +204,36 @@ impl IntegrationProvider {
         }
     }
 
+    /// Rebuild this provider's `IntegrationConnectionContext` (the variant-typed
+    /// context that `IntegrationProvider::new` consumes). Used by the billing
+    /// auto-pause restore path: a snapshot only captures the config, so to
+    /// rebuild the provider from a snapshot config we must preserve the
+    /// connection's existing context. Returns `None` for context-less providers.
+    pub fn context(&self) -> Option<IntegrationConnectionContext> {
+        match self {
+            IntegrationProvider::GoogleDrive { context, .. } => context
+                .clone()
+                .map(IntegrationConnectionContext::GoogleDrive),
+            IntegrationProvider::GoogleMail { context, .. } => context
+                .clone()
+                .map(IntegrationConnectionContext::GoogleMail),
+            IntegrationProvider::Slack { context, .. } => {
+                context.clone().map(IntegrationConnectionContext::Slack)
+            }
+            IntegrationProvider::Todoist { context, .. } => {
+                context.clone().map(IntegrationConnectionContext::Todoist)
+            }
+            IntegrationProvider::TickTick { context, .. } => {
+                context.clone().map(IntegrationConnectionContext::TickTick)
+            }
+            IntegrationProvider::Github { .. }
+            | IntegrationProvider::Linear { .. }
+            | IntegrationProvider::GoogleCalendar { .. }
+            | IntegrationProvider::Notion
+            | IntegrationProvider::API => None,
+        }
+    }
+
     pub fn is_sync_notifications_enabled(&self) -> bool {
         match self {
             IntegrationProvider::Github { config } => config.sync_notifications_enabled,
@@ -273,6 +303,90 @@ impl IntegrationProvider {
             IntegrationProvider::Slack { .. } => false, // Slack tasks are not synced but received via the webhook
             _ => false,
         }
+    }
+
+    /// Whether this provider kind carries any sync toggle at all, and so
+    /// whether [`Self::disable_all_syncs`] can restrict it. Google Calendar,
+    /// Notion and `API` carry none.
+    ///
+    /// Asks about the kind, unlike `disable_all_syncs() == false`, which is
+    /// also what an already-disabled config answers. A connection a pause
+    /// cannot restrict must keep counting against the Free-plan cap.
+    pub fn has_sync_toggles(&self) -> bool {
+        !matches!(
+            self,
+            IntegrationProvider::GoogleCalendar { .. }
+                | IntegrationProvider::Notion
+                | IntegrationProvider::API
+        )
+    }
+
+    /// Flip every sync toggle on this provider's config to `false`. Returns
+    /// `true` if any toggle was actually changed. Used by the billing
+    /// subsystem's auto-pause path: when a Paid user is downgraded to Free
+    /// over the integration cap, excess connections are paused (config
+    /// preserved, credentials preserved) rather than deleted, so reactivating
+    /// is a single click.
+    pub fn disable_all_syncs(&mut self) -> bool {
+        let mut changed = false;
+        match self {
+            IntegrationProvider::Github { config } => {
+                if config.sync_notifications_enabled {
+                    config.sync_notifications_enabled = false;
+                    changed = true;
+                }
+            }
+            IntegrationProvider::Linear { config } => {
+                if config.sync_notifications_enabled {
+                    config.sync_notifications_enabled = false;
+                    changed = true;
+                }
+                if config.sync_task_config.enabled {
+                    config.sync_task_config.enabled = false;
+                    changed = true;
+                }
+            }
+            IntegrationProvider::GoogleDrive { config, .. } => {
+                if config.sync_notifications_enabled {
+                    config.sync_notifications_enabled = false;
+                    changed = true;
+                }
+            }
+            IntegrationProvider::GoogleMail { config, .. } => {
+                if config.sync_notifications_enabled {
+                    config.sync_notifications_enabled = false;
+                    changed = true;
+                }
+            }
+            IntegrationProvider::Slack { config, .. } => {
+                if config.message_config.sync_enabled {
+                    config.message_config.sync_enabled = false;
+                    changed = true;
+                }
+                if config.reaction_config.sync_enabled {
+                    config.reaction_config.sync_enabled = false;
+                    changed = true;
+                }
+            }
+            IntegrationProvider::Todoist { config, .. } => {
+                if config.sync_tasks_enabled {
+                    config.sync_tasks_enabled = false;
+                    changed = true;
+                }
+            }
+            IntegrationProvider::TickTick { config, .. } => {
+                if config.sync_tasks_enabled {
+                    config.sync_tasks_enabled = false;
+                    changed = true;
+                }
+            }
+            IntegrationProvider::GoogleCalendar { .. }
+            | IntegrationProvider::Notion
+            | IntegrationProvider::API => {
+                // No sync toggle to flip.
+            }
+        }
+        changed
     }
 
     pub fn is_auto_delete_notifications_on_task_sync_enabled(&self) -> bool {

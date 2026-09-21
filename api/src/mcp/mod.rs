@@ -314,7 +314,7 @@ where
             }
         }
 
-        let user_id = authenticated.claims.sub.parse::<UserId>().ok();
+        let user_id = authenticated.user_id_opt();
 
         if let Some(uid) = user_id
             && self.rate_limiter.check_key(&uid).is_err()

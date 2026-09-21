@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE integration_connection\n            SET auto_paused_by_plan_at = $2,\n                auto_paused_config_snapshot = $3,\n                updated_at = (now() at time zone 'utc')\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamp",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d4ec389cb1bc8160b193f0a605c390a290dd2089dd32917daedd98407ba6e528"
+}

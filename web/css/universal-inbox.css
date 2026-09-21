@@ -1184,6 +1184,23 @@ select:focus-visible:not(.outline-none) {
     border: 1px solid color-mix(in srgb, var(--ui-info) 30%, transparent);
 }
 
+/* ─── Settings integration health strip ─── */
+/* One proportional bar over four buckets (healthy / retrying / failed /
+   paused), a legend that doubles as the hover target, and an optional
+   message. Paused is drawn as hatched, never solid: it is switched off by the
+   plan, not broken. */
+/* The health bar's "paused by plan" fill. Every other part of the strip is
+   Tailwind utilities in `integrations_panel.rs`; a repeating-linear-gradient
+   is the one thing they cannot express. */
+.integration-health-seg-paused {
+    background-color: var(--ui-secondary-subtle);
+    background-image: repeating-linear-gradient(
+        -45deg,
+        var(--ui-base-muted) 0 3px,
+        transparent 3px 6px
+    );
+}
+
 /* Integration card expandable header */
 .integration-card:hover {
     border-color: color-mix(

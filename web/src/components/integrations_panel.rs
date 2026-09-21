@@ -46,6 +46,274 @@ use crate::{
     utils::format_elapsed_time,
 };
 
+/// The four states a connection can be in on the settings page. Ordered by
+/// how much they demand of the user, which is also the order the strip reads
+/// them in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum HealthBucket {
+    /// Connected, authorized, syncing on schedule.
+    Healthy,
+    /// Still connected and still retrying, but recent syncs failed.
+    Retrying,
+    /// Stopped: the provider rejected us, or the token lost its scopes.
+    Failed,
+    /// Switched off by the billing plan, not by a fault. Restored on upgrade.
+    Paused,
+}
+
+impl HealthBucket {
+    fn label(&self) -> &'static str {
+        match self {
+            HealthBucket::Healthy => "healthy",
+            HealthBucket::Retrying => "retrying",
+            HealthBucket::Failed => "needs reconnect",
+            HealthBucket::Paused => "paused by plan",
+        }
+    }
+
+    /// Fill for this bucket's segment of the health bar. `Paused` is the one
+    /// case a utility cannot express: its hatching is a
+    /// `repeating-linear-gradient`, which lives in `universal-inbox.css`.
+    fn bar_fill(&self) -> &'static str {
+        match self {
+            HealthBucket::Healthy => "bg-ui-success",
+            HealthBucket::Retrying => "bg-ui-warning",
+            HealthBucket::Failed => "bg-ui-error",
+            HealthBucket::Paused => "integration-health-seg-paused",
+        }
+    }
+
+    /// The legend and popover dot: filled for a fault state, outlined for a
+    /// pause, which is a choice rather than a problem.
+    fn dot(&self) -> &'static str {
+        match self {
+            HealthBucket::Healthy => "size-[7px] bg-ui-success",
+            HealthBucket::Retrying => "size-[7px] bg-ui-warning",
+            HealthBucket::Failed => "size-[7px] bg-ui-error",
+            HealthBucket::Paused => {
+                "size-[8px] bg-transparent border-[1.5px] border-dashed border-ui-base-muted"
+            }
+        }
+    }
+}
+
+/// Per-bucket counts plus the provider names behind them, computed once for
+/// the settings header. The names are what the hover popover lists.
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct IntegrationHealth {
+    pub buckets: Vec<(HealthBucket, Vec<String>)>,
+}
+
+impl IntegrationHealth {
+    pub fn compute(
+        connections: &[IntegrationConnection],
+        providers: &[(IntegrationProviderKind, IntegrationProviderStaticConfig)],
+    ) -> Self {
+        let mut healthy = vec![];
+        let mut retrying = vec![];
+        let mut failed = vec![];
+        let mut paused = vec![];
+
+        for connection in connections {
+            let kind = connection.provider.kind();
+            // A provider disabled on this instance has no settings card, so it
+            // must not appear in the counts either.
+            let Some((_, provider)) = providers.iter().find(|(k, _)| *k == kind) else {
+                continue;
+            };
+            if !provider.is_enabled {
+                continue;
+            }
+
+            let name = kind.to_string();
+            match connection.status {
+                IntegrationConnectionStatus::Failing => failed.push(name),
+                IntegrationConnectionStatus::Validated => {
+                    if connection.auto_paused_by_plan_at.is_some() {
+                        // Checked before the scope test on purpose: a paused
+                        // connection syncs nothing, so asking the user to
+                        // reconnect it would be busywork until they upgrade.
+                        paused.push(name);
+                    } else if !connection.has_oauth_scopes(&provider.required_oauth_scopes) {
+                        failed.push(name);
+                    } else if connection.is_sync_degraded() {
+                        retrying.push(name);
+                    } else {
+                        healthy.push(name);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Self {
+            buckets: vec![
+                (HealthBucket::Healthy, healthy),
+                (HealthBucket::Retrying, retrying),
+                (HealthBucket::Failed, failed),
+                (HealthBucket::Paused, paused),
+            ],
+        }
+    }
+
+    fn names(&self, bucket: HealthBucket) -> &[String] {
+        self.buckets
+            .iter()
+            .find(|(b, _)| *b == bucket)
+            .map(|(_, names)| names.as_slice())
+            .unwrap_or_default()
+    }
+
+    fn count(&self, bucket: HealthBucket) -> usize {
+        self.names(bucket).len()
+    }
+
+    fn total(&self) -> usize {
+        self.buckets.iter().map(|(_, names)| names.len()).sum()
+    }
+
+    /// The one thing worth saying under the bar, or nothing when every
+    /// connection is healthy. Failures outrank plan pauses: one is broken, the
+    /// other is a plan limit the user already chose.
+    fn message(&self) -> Option<String> {
+        let failed = self.names(HealthBucket::Failed);
+        if let Some(name) = failed.first() {
+            return Some(if failed.len() == 1 {
+                format!("{name} stopped syncing. Reconnect it to resume.")
+            } else {
+                format!(
+                    "{} integrations stopped syncing, including {name}. Reconnect them to resume.",
+                    failed.len()
+                )
+            });
+        }
+
+        let paused = self.count(HealthBucket::Paused);
+        if paused > 0 {
+            let plural = if paused == 1 { "" } else { "s" };
+            return Some(format!(
+                "{paused} integration{plural} paused by your Free plan. Upgrade to bring them back."
+            ));
+        }
+
+        let retrying = self.names(HealthBucket::Retrying);
+        retrying
+            .first()
+            .map(|name| format!("{name} failed its last sync and is retrying."))
+    }
+}
+
+/// Settings-page header strip: one proportional bar over four buckets, a
+/// legend that doubles as the hover target, and an optional message naming the
+/// single thing that needs attention.
+#[component]
+fn IntegrationHealthStrip(
+    health: IntegrationHealth,
+    last_full_sync: Option<DateTime<Utc>>,
+) -> Element {
+    let mut hovered: Signal<Option<HealthBucket>> = use_signal(|| None);
+
+    let total = health.total();
+    let healthy = health.count(HealthBucket::Healthy);
+    let paused = health.count(HealthBucket::Paused);
+    let message = health.message();
+    let non_empty: Vec<(HealthBucket, Vec<String>)> = health
+        .buckets
+        .iter()
+        .filter(|(_, names)| !names.is_empty())
+        .cloned()
+        .collect();
+    let hovered_names = hovered().map(|bucket| (bucket, health.names(bucket).to_vec()));
+
+    rsx! {
+        div {
+            class: "flex flex-col gap-2.5 px-3.5 py-3 mb-[18px] border border-ui-border \
+                    rounded-ui-lg bg-ui-surface-alt text-[12.5px] \
+                    animate-[detail-fade_0.25s_var(--ui-ease-out)]",
+            role: "status",
+
+            div {
+                class: "flex flex-wrap items-baseline justify-between gap-3",
+                div {
+                    strong { class: "font-semibold", "{healthy} of {total} integrations syncing." }
+                    if paused > 0 {
+                        " {paused} paused by your Free plan."
+                    }
+                }
+                if let Some(when) = last_full_sync {
+                    div {
+                        class: "text-[11px] text-ui-base-muted tabular-nums",
+                        "Last full sync {format_elapsed_time(when)} ago"
+                    }
+                }
+            }
+
+            div {
+                class: "relative flex flex-col gap-[9px]",
+                onmouseleave: move |_| hovered.set(None),
+
+                div {
+                    class: "flex gap-[2px] h-[7px] overflow-hidden rounded-full bg-ui-border-light",
+                    for (bucket, names) in non_empty.clone() {
+                        div {
+                            key: "{bucket:?}",
+                            class: "h-full cursor-default {bucket.bar_fill()}",
+                            style: "flex: {names.len()}",
+                            onmouseenter: move |_| hovered.set(Some(bucket)),
+                        }
+                    }
+                }
+
+                div {
+                    class: "flex flex-wrap gap-3.5",
+                    for (bucket, names) in non_empty.clone() {
+                        button {
+                            key: "{bucket:?}",
+                            r#type: "button",
+                            class: "group inline-flex items-center gap-1.5 border-0 bg-transparent p-0 \
+                                    font-[inherit] text-[11.5px] text-ui-base-muted cursor-pointer",
+                            onmouseenter: move |_| hovered.set(Some(bucket)),
+                            onfocus: move |_| hovered.set(Some(bucket)),
+                            onblur: move |_| hovered.set(None),
+
+                            span { class: "shrink-0 rounded-full {bucket.dot()}" }
+                            strong {
+                                class: "font-semibold tabular-nums text-ui-base-content \
+                                        group-hover:text-ui-primary group-focus-visible:text-ui-primary",
+                                "{names.len()}"
+                            }
+                            " {bucket.label()}"
+                        }
+                    }
+                }
+
+                if let Some((bucket, names)) = hovered_names {
+                    div {
+                        class: "absolute left-0 top-[calc(100%+6px)] z-20 min-w-[170px] max-w-[260px] \
+                                px-[11px] py-[9px] border border-ui-border rounded-ui-md \
+                                bg-ui-surface shadow-ui-md text-[11.5px]",
+                        div {
+                            class: "flex items-center gap-1.5 mb-[5px] font-semibold text-ui-base-content",
+                            span { class: "shrink-0 rounded-full {bucket.dot()}" }
+                            "{names.len()} {bucket.label()}"
+                        }
+                        ul {
+                            class: "flex flex-col gap-0.5 m-0 p-0 list-none text-ui-base-muted",
+                            for name in names {
+                                li { key: "{name}", "{name}" }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(message) = message {
+                div { class: "text-[11.5px] text-ui-base-muted", "{message}" }
+            }
+        }
+    }
+}
+
 #[component]
 pub fn IntegrationsPanel(
     ui_model: Signal<UniversalInboxUIModel>,
@@ -74,21 +342,6 @@ pub fn IntegrationsPanel(
         .as_ref()
         .and_then(|p| p.default_task_manager_provider_kind);
 
-    let total_enabled = sorted_integration_providers
-        .iter()
-        .filter(|(_, c)| c.is_enabled)
-        .count();
-    let healthy_count = integration_connections
-        .iter()
-        .filter(|c| {
-            c.status == IntegrationConnectionStatus::Validated
-                && sorted_integration_providers
-                    .iter()
-                    .find(|(k, _)| *k == c.provider.kind())
-                    .map(|(_, p)| p.is_enabled && c.has_oauth_scopes(&p.required_oauth_scopes))
-                    .unwrap_or(false)
-        })
-        .count();
     let last_full_sync = integration_connections
         .iter()
         .filter_map(|c| {
@@ -99,18 +352,8 @@ pub fn IntegrationsPanel(
         })
         .max();
 
-    let failing_connections: Vec<_> = integration_connections
-        .iter()
-        .filter(|c| {
-            c.status == IntegrationConnectionStatus::Failing
-                || (c.status == IntegrationConnectionStatus::Validated
-                    && sorted_integration_providers
-                        .iter()
-                        .find(|(k, _)| *k == c.provider.kind())
-                        .map(|(_, p)| p.is_enabled && !c.has_oauth_scopes(&p.required_oauth_scopes))
-                        .unwrap_or(false))
-        })
-        .collect();
+    let health =
+        IntegrationHealth::compute(&integration_connections, &sorted_integration_providers);
 
     rsx! {
         div {
@@ -127,39 +370,22 @@ pub fn IntegrationsPanel(
                     span { class: "icon-[lucide--plug] size-4" }
                     span { "No integrations connected. Connect an integration to get started." }
                 }
-            } else if !failing_connections.is_empty() {
-                div {
-                    class: "settings-status-bar status-warn",
-                    role: "alert",
+            } else {
+                IntegrationHealthStrip { health: health.clone(), last_full_sync: last_full_sync }
+            }
 
-                    span { class: "icon-[lucide--alert-circle] size-4" }
-                    {
-                        let count = failing_connections.len();
-                        let label = if count > 1 { "integrations need" } else { "integration needs" };
-                        rsx! { span { strong { "{count} {label} attention" } } }
-                    }
-                }
-            } else if !integration_connections.iter().any(|c| c.is_connected_task_service()) {
+            // Kept outside the health strip: a missing task service is a
+            // capability gap, not a connection state, so it must still show
+            // while something else is failing.
+            if integration_connections.iter().any(|c| c.is_connected())
+                && !integration_connections.iter().any(|c| c.is_connected_task_service())
+            {
                 div {
                     class: "settings-status-bar status-info",
                     role: "status",
 
                     span { class: "icon-[lucide--info] size-4" }
                     span { "Connect a task management service to unlock task syncing and planning features." }
-                }
-            } else {
-                div {
-                    class: "settings-status-bar status-ok",
-                    role: "status",
-
-                    span { class: "icon-[lucide--check-circle] size-4" }
-                    span {
-                        strong { "{healthy_count} of {total_enabled} integrations connected and healthy." }
-                        if let Some(when) = last_full_sync {
-                            " Last full sync "
-                            "{format_elapsed_time(when)} ago."
-                        }
-                    }
                 }
             }
 
@@ -500,6 +726,10 @@ pub fn IntegrationSettings(
         Some(Some(ref ic)) if ic.status == IntegrationConnectionStatus::Validated => {
             if !has_all_oauth_scopes {
                 (StatusLeafVariant::Error, "Needs reconnect")
+            } else if ic.auto_paused_by_plan_at.is_some() {
+                // The connection is intact but the plan switched its syncs off.
+                // Without this arm it reads as "Connected" while nothing syncs.
+                (StatusLeafVariant::SyncIssue, "Paused by plan")
             } else if ic.is_sync_degraded() {
                 (StatusLeafVariant::SyncIssue, "Sync issue")
             } else {
@@ -724,8 +954,19 @@ pub fn IntegrationSettings(
                             }
                         }
 
-                        if let Some(ref warning_message) = config().warning_message {
-                            if !warning_message.is_empty() {
+                    }
+                }
+
+                // Outside the expandable body on purpose: the warning says
+                // the integration is not public yet, which the user must see
+                // whether or not they expand the card.
+                if let Some(ref warning_message) = config().warning_message {
+                    if !warning_message.is_empty() {
+                        div {
+                            class: "card-body-expandable",
+                            style: "display: block;",
+                            div {
+                                class: "connections-list",
                                 div {
                                     class: "integration-alert warning",
                                     role: "alert",

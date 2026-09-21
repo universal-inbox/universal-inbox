@@ -126,6 +126,9 @@ max_age_days = 30
 
 [application.observability.logging]
 # See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/struct.EnvFilter.html
+# A few targets are forced off in code whatever is set here — see
+# FORCED_OFF_TARGETS in api/src/observability.rs: they record request bodies
+# carrying customer PII as span attributes.
 log_directive = "info"
 dependencies_log_level = "error"
 
@@ -142,6 +145,22 @@ dependencies_log_level = "error"
 # [application.chat_support]
 # website_id = "CRISP_WEBSITE_ID"
 # identity_verification_secret_key = "CRISP_SECRET_KEY"
+
+# Optional Stripe billing. When this block is absent, no billing code runs and
+# every user has unlimited access (self-hosted default). When present, Free vs
+# Paid plan enforcement is active on this instance.
+#
+# [application.billing]
+# stripe_secret_key = "sk_test_..."
+# stripe_publishable_key = "pk_test_..."
+# stripe_webhook_signing_secret = "whsec_..."
+# stripe_price_id = "price_..."
+#
+# [application.billing.free_plan]
+# max_integration_connections = 2          # default 2
+# notification_sync_interval_in_minutes = 1440  # default 1440 (once a day)
+# task_sync_interval_in_minutes = 1440          # default 1440 (once a day)
+# rollout_grace_days = 30                       # default 30
 
 # Redis-backed MCP session store. Persists each session's `initialize`
 # parameters so a follow-up request landing on a different pod can transparently

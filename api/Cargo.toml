@@ -25,6 +25,12 @@ apalis = { version = "0.7", features = ["limit"] }
 apalis-cron = { version = "0.7" }
 apalis-redis = { version = "0.7" }
 argon2 = { version = "0.5", features = ["std"] }
+async-stripe = { workspace = true }
+async-stripe-billing = { workspace = true }
+async-stripe-checkout = { workspace = true }
+async-stripe-core = { workspace = true }
+async-stripe-shared = { workspace = true }
+async-stripe-webhook = { workspace = true }
 async-trait = "0.1.0"
 base64 = { workspace = true }
 cached = { version = "0.56.0", features = [

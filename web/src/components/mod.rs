@@ -12,6 +12,7 @@ pub mod ai_agents_card;
 pub mod auth_methods_card;
 pub mod auth_widgets;
 pub mod authentication_tokens_card;
+pub mod banner_strip;
 pub mod datepicker;
 pub mod delete_all_confirmation_modal;
 pub mod emoji_search_field;
@@ -45,6 +46,7 @@ pub mod threaded_message;
 pub mod toast_zone;
 pub mod ui;
 pub mod universal_inbox_title;
+pub mod upgrade_modal;
 pub mod user_profile_card;
 pub mod welcome_hero;
 

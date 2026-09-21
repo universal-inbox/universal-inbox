@@ -291,6 +291,12 @@ pub fn Sidebar() -> Element {
                             to: Route::SecurityPage {},
                         }
                     }
+
+                    // Billing entry: only visible when the API exposes
+                    // /api/billing/* (i.e. [billing] is configured). On
+                    // self-hosted instances BILLING_STATE is Disabled and
+                    // this node renders nothing.
+                    PlanNavItem {}
                 }
             }
 
@@ -429,6 +435,56 @@ pub fn Sidebar() -> Element {
                         span { class: "icon-[lucide--log-out] size-4 {NAV_ICON_BASE}" }
                         span { class: "md:[.sidebar.collapsed_&]:hidden", "Logout" }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// Sidebar entry + inline plan badge for billing. Renders nothing when
+/// the billing API is unavailable on this instance (BILLING_STATE
+/// reports `Disabled` / `Unknown`).
+#[component]
+fn PlanNavItem() -> Element {
+    let state = crate::services::billing_service::BILLING_STATE
+        .read()
+        .clone();
+    let billing_state = match state {
+        crate::services::billing_service::BillingAvailability::Enabled(s) => s,
+        _ => return rsx! { Fragment {} },
+    };
+
+    let is_paid = billing_state.plan.is_paid();
+    let plan_label = if is_paid {
+        "Paid".to_string()
+    } else if let Some(limit) = billing_state.integration_usage.limit {
+        format!("Free · {}/{}", billing_state.integration_usage.used, limit)
+    } else {
+        "Free".to_string()
+    };
+    let badge_variant = if is_paid {
+        BadgeVariant::Primary
+    } else {
+        BadgeVariant::Muted
+    };
+
+    rsx! {
+        Tooltip {
+            class: "block",
+            text: "Billing",
+            placement: TooltipPlacement::Right,
+            disabled: !*IS_SIDEBAR_COLLAPSED.read(),
+            Link {
+                class: "{NAV_LINK_BASE} w-full",
+                to: Route::BillingPage {},
+                span { class: "icon-[lucide--credit-card] size-4 {NAV_ICON_BASE}" }
+                span {
+                    class: "flex-1 truncate md:[.sidebar.collapsed_&]:hidden",
+                    "Billing"
+                }
+                span {
+                    class: "md:[.sidebar.collapsed_&]:hidden",
+                    Badge { variant: badge_variant, "{plan_label}" }
                 }
             }
         }

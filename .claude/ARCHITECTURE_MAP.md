@@ -7,7 +7,7 @@
 ```
 universal-inbox/
 ├── src/                      # SHARED domain crate (root) — pure types, no I/O
-│   ├── auth/ integration_connection/ notification/ slack_bridge/
+│   ├── auth/ billing/ integration_connection/ notification/ slack_bridge/
 │   ├── task/ third_party/ user.rs typed_id.rs utils/ lib.rs
 ├── api/                      # Backend — Actix-web 4, SQLx 0.8 (PG), Tokio, Apalis
 │   ├── src/
@@ -16,6 +16,7 @@ universal-inbox/
 │   │   ├── repository/       # DB layer (SQLx, &mut Transaction)
 │   │   ├── integrations/     # Third-party clients (github/ linear/ slack todoist google_* ...)
 │   │   ├── jobs/             # Apalis background job handlers
+│   │   ├── billing/          # Stripe: routes, service, repository, CLI (opt-in)
 │   │   ├── mcp/ middlewares/ mailer/ commands/
 │   │   ├── configuration.rs observability.rs main.rs   # ← API entry point
 │   ├── migrations/           # SQLx: YYYYMMDDHHMMSS_*.{up,down}.sql
@@ -39,7 +40,8 @@ universal-inbox/
 | Third-party API clients | `api/src/integrations/` |
 | Background jobs (Apalis) | `api/src/jobs/` |
 | Shared domain types | `src/` (root crate) |
-| UI pages | `web/src/pages/` |
+| Billing / Stripe / plan caps | `api/src/billing/` + `src/billing/` (types) |
+| UI pages | `web/src/pages/` (billing: `billing_page.rs`) |
 | Frontend API clients | `web/src/services/` |
 | Design-system components | `web/src/components/ui/` |
 | DB migrations | `api/migrations/` |

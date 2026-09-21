@@ -77,6 +77,10 @@ pub struct IntegrationConnectionService {
     sync_backoff_base_delay_in_seconds: u64,
     sync_backoff_max_delay_in_seconds: u64,
     sync_failure_window_in_hours: i64,
+    /// Optional plug-in for plan-based limit checks. `None` on instances
+    /// without `[billing]` configured (self-hosted): all calls short-circuit
+    /// to the unlimited behaviour Universal Inbox has always had.
+    billing_service: Option<Arc<crate::billing::service::BillingService>>,
 }
 
 #[derive(Debug)]
@@ -107,6 +111,10 @@ impl IntegrationConnectionService {
         sync_backoff_base_delay_in_seconds: u64,
         sync_backoff_max_delay_in_seconds: u64,
         sync_failure_window_in_hours: i64,
+        // Plan-based enforcement (Free integration cap). `None` on instances
+        // without `[billing]` configured. Required at construction so "billing
+        // is wired" is a type-enforced invariant, not a post-hoc mutation.
+        billing_service: Option<Arc<crate::billing::service::BillingService>>,
     ) -> IntegrationConnectionService {
         IntegrationConnectionService {
             repository,
@@ -119,7 +127,21 @@ impl IntegrationConnectionService {
             sync_backoff_base_delay_in_seconds,
             sync_backoff_max_delay_in_seconds,
             sync_failure_window_in_hours,
+            billing_service,
         }
+    }
+
+    /// Count *validated* integration connections for a user. Used by the
+    /// billing subsystem (via the [`IntegrationConnectionCounter`] adapter)
+    /// to enforce the Free-plan cap.
+    pub async fn count_validated_integration_connections(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: UserId,
+    ) -> Result<u32, UniversalInboxError> {
+        self.repository
+            .count_validated_integration_connections(executor, for_user_id)
+            .await
     }
 
     pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
@@ -457,6 +479,15 @@ impl IntegrationConnectionService {
         status: IntegrationConnectionStatus,
         for_user_id: UserId,
     ) -> Result<Box<IntegrationConnection>, UniversalInboxError> {
+        // Free-plan integration cap. No-op when [billing] is not configured
+        // (self-hosted) or when the user is on Paid; returns HTTP 402 with
+        // a structured code that the UI uses to surface the upgrade modal.
+        if let Some(billing) = &self.billing_service {
+            billing
+                .assert_can_add_integration(executor, for_user_id, integration_provider_kind)
+                .await?;
+        }
+
         let integration_connection = Box::new(IntegrationConnection::new(
             for_user_id,
             integration_provider_kind.default_integration_connection_config(),
@@ -525,6 +556,37 @@ impl IntegrationConnectionService {
         // notification is removed and no notification loses its status,
         // `last_read_at`, `snoozed_until` or `task_id`. Reconciling the inbox with
         // the new configuration is the following sync's job.
+
+        // A plan-paused connection must not be re-enabled through a config
+        // PATCH: refuse with 402 so the upgrade modal fires, as the
+        // integration-cap path does. Edits that keep syncs off stay allowed.
+        // `disable_all_syncs()` reports whether it had anything left to switch
+        // off, so every toggle the pause covers is covered here too.
+        if let Some(connection) = self
+            .repository
+            .get_integration_connection(executor, integration_connection_id)
+            .await?
+            && connection.user_id == for_user_id
+            && connection.auto_paused_by_plan_at.is_some()
+        {
+            let enables_sync =
+                universal_inbox::integration_connection::provider::IntegrationProvider::new(
+                    integration_connection_config.clone(),
+                    None,
+                )
+                .map(|mut provider| provider.disable_all_syncs())
+                .unwrap_or(false);
+            if enables_sync {
+                return Err(UniversalInboxError::PaymentRequired {
+                    code: "free_plan_connection_paused",
+                    message: "This integration is paused because your Free plan is over its \
+                              connection limit. Upgrade to re-enable it."
+                        .to_string(),
+                    details: serde_json::json!({ "current_plan": "free" }),
+                });
+            }
+        }
+
         let updated_integration_connection_config = self
             .repository
             .update_integration_connection_config(
@@ -1412,6 +1474,22 @@ impl IntegrationConnectionService {
         status: IntegrationConnectionStatus,
         registered_oauth_scopes: Vec<String>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        // OAuth callbacks land here when an integration becomes Validated.
+        // Enforce the Free-plan cap *again* — a user could race the limit by
+        // initiating two OAuth flows in parallel, each of which started below
+        // the cap; only the validated count matters for billing.
+        if status == IntegrationConnectionStatus::Validated
+            && let Some(billing) = &self.billing_service
+            && let Some(connection) = self
+                .repository
+                .get_integration_connection(executor, integration_connection_id)
+                .await?
+        {
+            billing
+                .assert_can_add_integration(executor, user_id, connection.provider.kind())
+                .await?;
+        }
+
         self.repository
             .update_integration_connection_status(
                 executor,
@@ -1620,7 +1698,18 @@ impl IntegrationConnectionService {
             )));
         }
 
+        // Free-plan cap, enforced *before* the provider redirect. Reconnecting
+        // an existing `Created` row skips `create_integration_connection`, so
+        // without this the only check left was the OAuth callback: the user
+        // would approve the app at the provider and be refused on the way back,
+        // having spent a full round trip to learn they are over the cap.
         let provider_kind = integration_connection.provider.kind();
+
+        if let Some(billing) = &self.billing_service {
+            billing
+                .assert_can_add_integration(executor, user_id, provider_kind)
+                .await?;
+        }
 
         // Look up the OAuth2Provider for this provider kind
         let provider = self.get_oauth2_provider(&provider_kind).ok_or_else(|| {
@@ -1847,5 +1936,16 @@ async fn cached_get_integration_connection_config_for_provider_user_id(
         .get_integration_connection_per_provider_user_id(executor, provider_kind, provider_user_id)
         .await?;
 
-    Ok(integration_connection.map(|connection| connection.provider.config()))
+    Ok(integration_connection.map(|connection| {
+        // A plan-paused connection answers with every sync off, whatever its
+        // stored config says, so config state is not the only thing enforcing
+        // a pause.
+        if connection.auto_paused_by_plan_at.is_some() {
+            let mut provider = connection.provider;
+            provider.disable_all_syncs();
+            provider.config()
+        } else {
+            connection.provider.config()
+        }
+    }))
 }

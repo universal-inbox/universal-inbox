@@ -140,6 +140,86 @@ pub async fn browser_tested_app(
     }
 }
 
+/// Same as [`browser_tested_app`] but boots with Stripe billing enabled, wired
+/// to an in-process [`crate::common::FakeStripeClient`]. This mounts the real
+/// `/api/billing/*` routes (the route gate keys on a `Some(BillingService)`),
+/// so the served frontend sees billing as enabled and the upgrade flow can be
+/// exercised end-to-end without a real Stripe account.
+#[fixture]
+pub async fn browser_tested_app_with_billing(
+    mut settings: Settings,
+    #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
+    #[future] db_connection: TestDb,
+    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+) -> BrowserTestedApp {
+    info!("Setting up browser test server (billing enabled)");
+
+    let (listener, port, cache, mock_servers) = setup_test_env(&settings).await;
+
+    settings.application.security.authentication =
+        vec![AuthenticationSettings::Local(LocalAuthenticationSettings {
+            argon2_algorithm: argon2::Algorithm::Argon2id,
+            argon2_version: argon2::Version::V0x13,
+            argon2_memory_size: 20000,
+            argon2_iterations: 2,
+            argon2_parallelism: 1,
+            max_login_attempts: 5,
+            login_attempt_window_seconds: 900,
+            login_lockout_base_seconds: 60,
+            login_lockout_max_seconds: 900,
+        })];
+    settings.application.security.email_domain_blacklist = HashMap::new();
+
+    settings.application.front_base_url = format!("http://localhost:{port}").parse().unwrap();
+    settings.application.static_path = Some("".to_string());
+    settings.application.static_dir = Some(format!(
+        "{}/../web/public",
+        env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+
+    let test_db = db_connection.await;
+    let pool: Arc<PgPool> = test_db.pool.clone();
+    let repository = Arc::new(Repository::new(pool.clone()));
+    let redis_storage = redis_storage.await;
+
+    let billing_service = Some(crate::common::build_fake_billing_service(
+        repository.clone(),
+        &settings.application.front_base_url,
+    ));
+
+    let (services, _mailer_stub, _redis_storage) = crate::common::build_and_spawn_with_billing(
+        listener,
+        pool,
+        settings.clone(),
+        &mock_servers,
+        redis_storage,
+        billing_service,
+    )
+    .await;
+
+    let app_url = format!("http://localhost:{port}");
+
+    BrowserTestedApp {
+        app_url,
+        repository,
+        user_service: services.user_service,
+        task_service: services.task_service,
+        notification_service: services.notification_service,
+        integration_connection_service: services.integration_connection_service,
+        third_party_item_service: services.third_party_item_service,
+        settings,
+        _cache: cache,
+        _github_mock_server: mock_servers.github,
+        _linear_mock_server: mock_servers.linear,
+        _google_calendar_mock_server: mock_servers.google_calendar,
+        _google_mail_mock_server: mock_servers.google_mail,
+        _google_drive_mock_server: mock_servers.google_drive,
+        _slack_mock_server: mock_servers.slack,
+        _todoist_mock_server: mock_servers.todoist,
+        _test_db: test_db,
+    }
+}
+
 /// Shared across all tests to avoid re-launching Playwright + Chromium per test (~5-10s each).
 /// Test isolation is preserved: each test gets a fresh `BrowserContext` + `Page`.
 static SHARED_BROWSER: OnceCell<(Playwright, Browser)> = OnceCell::const_new();
