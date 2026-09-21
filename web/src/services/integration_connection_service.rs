@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use futures_util::StreamExt;
 use log::{debug, error};
 use reqwest::Method;
+use serde::Deserialize;
 use url::Url;
 
 use universal_inbox::integration_connection::{
@@ -17,8 +18,8 @@ use crate::{
     config::AppConfig,
     model::{LoadState, UniversalInboxUIModel},
     services::{
-        api::call_api, notification_service::NotificationCommand, task_service::TaskCommand,
-        toast_service::ToastCommand,
+        api::call_api, billing_service::UPGRADE_TRIGGER, notification_service::NotificationCommand,
+        task_service::TaskCommand, toast_service::ToastCommand,
     },
 };
 
@@ -139,13 +140,23 @@ pub async fn integration_connnection_service(
             Some(IntegrationConnectionCommand::AuthenticateIntegrationConnection(
                 integration_connection,
             )) => {
-                match authenticate_integration_connection(&integration_connection, app_config).await
+                match authenticate_integration_connection(
+                    &integration_connection,
+                    app_config,
+                    ui_model,
+                )
+                .await
                 {
                     Ok(integration_connection) => sync_integration_connection(
                         &integration_connection,
                         &notification_service,
                         &task_service,
                     ),
+                    Err(_) if UPGRADE_TRIGGER.read().is_some() => {
+                        // The Free-plan cap refused this connection and
+                        // `call_api` already opened the upgrade modal, which is
+                        // the whole message — no failure toast on top of it.
+                    }
                     Err(error) => {
                         let provider_kind = integration_connection.provider.kind();
                         error!(
@@ -278,6 +289,9 @@ async fn create_integration_connection(
     let api_base_url = get_api_base_url(app_config)?;
 
     debug!("Creating new integration connection for {integration_provider_kind}");
+
+    // `call_api` centralizes 402 handling (a Free-plan limit pops the global
+    // upgrade modal) along with the version check and auth-state bookkeeping.
     let new_connection: IntegrationConnection = call_api(
         Method::POST,
         &api_base_url,
@@ -298,12 +312,19 @@ async fn create_integration_connection(
         }
     }
 
-    authenticate_integration_connection(&new_connection, app_config).await
+    authenticate_integration_connection(&new_connection, app_config, ui_model).await
+}
+
+/// `GET /oauth/authorize-url/{id}` response: where to send the browser next.
+#[derive(Deserialize)]
+struct AuthorizationUrlResponse {
+    authorization_url: Url,
 }
 
 async fn authenticate_integration_connection(
     integration_connection: &IntegrationConnection,
     app_config: ReadSignal<Option<AppConfig>>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
     let provider_kind = integration_connection.provider.kind();
 
@@ -312,15 +333,22 @@ async fn authenticate_integration_connection(
         integration_connection.id
     );
 
-    let api_base_url = get_api_base_url(app_config)?;
-    let authorize_url = format!(
-        "{api_base_url}oauth/authorize/{}",
-        integration_connection.id
-    );
+    // Ask for the provider URL over the API *before* navigating, so a refusal
+    // stays inside the SPA: `call_api` turns a Free-plan 402 into the upgrade
+    // modal and we never navigate at all.
+    let response: AuthorizationUrlResponse = call_api(
+        Method::GET,
+        &get_api_base_url(app_config)?,
+        &format!("oauth/authorize-url/{}", integration_connection.id),
+        None::<i32>,
+        Some(ui_model),
+    )
+    .await?;
+
     web_sys::window()
         .ok_or_else(|| anyhow!("No window object"))?
         .location()
-        .set_href(&authorize_url)
+        .set_href(response.authorization_url.as_str())
         .map_err(|_| anyhow!("Failed to redirect to OAuth authorization URL"))?;
     // Return the connection as-is; the page will navigate away
     Ok(integration_connection.clone())
@@ -386,7 +414,7 @@ async fn reconnect_integration_connection(
     )
     .await?;
 
-    authenticate_integration_connection(integration_connection, app_config).await
+    authenticate_integration_connection(integration_connection, app_config, ui_model).await
 }
 
 fn update_integration_connection_status(

@@ -72,6 +72,9 @@ pub struct NotificationService {
     pub(super) third_party_item_service: Weak<RwLock<ThirdPartyItemService>>,
     user_service: Arc<UserService>,
     min_sync_notifications_interval_in_minutes: i64,
+    /// Optional plan-aware sync-interval source. `None` on instances without
+    /// `[billing]` configured (today's behaviour preserved for self-hosters).
+    billing_service: Option<Arc<crate::billing::service::BillingService>>,
 }
 
 impl NotificationService {
@@ -89,6 +92,10 @@ impl NotificationService {
         third_party_item_service: Weak<RwLock<ThirdPartyItemService>>,
         user_service: Arc<UserService>,
         min_sync_notifications_interval_in_minutes: i64,
+        // Plan-aware sync-interval source. `None` on instances without
+        // `[billing]` configured. Required at construction so "billing is
+        // wired" is a type-enforced invariant, not a post-hoc mutation.
+        billing_service: Option<Arc<crate::billing::service::BillingService>>,
     ) -> NotificationService {
         NotificationService {
             repository,
@@ -103,6 +110,7 @@ impl NotificationService {
             third_party_item_service,
             user_service,
             min_sync_notifications_interval_in_minutes,
+            billing_service,
         }
     }
 
@@ -1380,12 +1388,6 @@ impl NotificationService {
         let integration_provider_kind =
             third_party_notification_service.get_integration_provider_kind();
         let integration_connection_service = self.integration_connection_service.read().await;
-        let min_sync_interval_in_minutes = if !force_sync {
-            self.min_sync_notifications_interval_in_minutes
-        } else {
-            Default::default()
-        };
-
         // Phase 1 — short transaction: check whether this connection is due, and if so
         // atomically claim the sync start (so an overlapping caller racing this one backs
         // off instead of double-syncing), then commit immediately, well before any
@@ -1394,6 +1396,26 @@ impl NotificationService {
         let mut claim_transaction = self.begin().await.context(format!(
             "Failed to create new transaction while claiming {integration_provider_kind} notifications sync start for user {user_id}"
         ))?;
+        // Resolve the effective floor: plan-aware when billing is active,
+        // otherwise the global config value. Force-sync bypasses the floor
+        // for Paid users; Free users still respect the plan floor (per
+        // goals/stripe-billing/facts.md).
+        let min_sync_interval_in_minutes = match &self.billing_service {
+            Some(billing) => {
+                billing
+                    .min_sync_interval(
+                        &mut claim_transaction,
+                        user_id,
+                        self.min_sync_notifications_interval_in_minutes,
+                        crate::billing::service::SyncKind::Notifications,
+                        force_sync,
+                    )
+                    .await?
+            }
+            None if !force_sync => self.min_sync_notifications_interval_in_minutes,
+            None => Default::default(),
+        };
+
         let Some(integration_connection) = integration_connection_service
             .get_integration_connection_to_sync(
                 &mut claim_transaction,

@@ -82,8 +82,47 @@ pub enum UniversalInboxError {
     Recoverable(#[source] anyhow::Error),
     #[error("OAuth2 refresh token is no longer valid (invalid_grant): {0}")]
     OAuth2InvalidGrant(String),
+    /// Mapped to HTTP 402. Returned when a Free user attempts an action
+    /// gated by their plan (e.g. connecting more integrations than the
+    /// `[billing.free_plan]` limit allows). The `code` is a stable,
+    /// machine-readable string the web UI uses to pick the right upgrade
+    /// modal; `details` (JSON) lets the UI render plan-specific copy
+    /// without a second round-trip.
+    #[error("Payment required: {message}")]
+    PaymentRequired {
+        code: &'static str,
+        message: String,
+        details: serde_json::Value,
+    },
+    /// An upstream/third-party provider (e.g. the payment provider) returned an
+    /// error we want to surface with a faithful HTTP status rather than
+    /// collapsing to 500. `kind` selects the status; `code` is a stable,
+    /// machine-readable string for the web UI; `message` is human-readable.
+    /// Provider-agnostic on purpose so the core error type carries no
+    /// dependency on any optional subsystem.
+    #[error("{message}")]
+    UpstreamServiceError {
+        kind: UpstreamErrorKind,
+        code: &'static str,
+        message: String,
+    },
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
+}
+
+/// HTTP-status class for [`UniversalInboxError::UpstreamServiceError`]. Keeps
+/// the status decision in the producing subsystem while the core type stays
+/// free of `actix` / `http` imports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpstreamErrorKind {
+    /// Caller sent something the provider rejected (400).
+    BadRequest,
+    /// Payment is required / a card error occurred (402).
+    PaymentRequired,
+    /// The provider rate-limited us (429).
+    RateLimited,
+    /// A provider- or transport-side fault (500).
+    Internal,
 }
 
 impl UniversalInboxError {

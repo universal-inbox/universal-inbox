@@ -1,5 +1,8 @@
+use chrono::Utc;
 use http::StatusCode;
 use rstest::*;
+use slack_morphism::prelude::SlackReactionName;
+use universal_inbox_api::repository::integration_connection::IntegrationConnectionRepository;
 
 use universal_inbox::{
     integration_connection::{
@@ -7,6 +10,7 @@ use universal_inbox::{
         config::IntegrationConnectionConfig,
         integrations::google_calendar::GoogleCalendarConfig,
         integrations::google_mail::GoogleMailConfig,
+        integrations::slack::{SlackConfig, SlackReactionConfig},
         integrations::{github::GithubConfig, google_mail::GoogleMailContext},
         provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
     },
@@ -639,5 +643,97 @@ mod update_integration_connection_config {
                 ..integration_connection.clone()
             }
         );
+    }
+
+    /// A plan-paused connection must stay paused whichever toggle the incoming
+    /// config flips. Slack reactions are the case to watch: they carry their
+    /// own `sync_enabled`, which no notification/task accessor reports.
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_config_cannot_re_enable_a_plan_paused_slack_reaction_sync(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let integration_connection = create_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Slack(SlackConfig::default()),
+            IntegrationConnectionStatus::Validated,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await;
+
+        // Pause it the way the billing reconcile job does: marker plus the
+        // pre-pause snapshot, every sync already off.
+        let paused_config = IntegrationConnectionConfig::Slack(SlackConfig::default());
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        app.app
+            .repository
+            .set_integration_connection_plan_pause(
+                &mut transaction,
+                integration_connection.id,
+                Some(Utc::now()),
+                Some(&paused_config),
+            )
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+
+        let reaction_only_config = IntegrationConnectionConfig::Slack(SlackConfig {
+            reaction_config: SlackReactionConfig {
+                sync_enabled: true,
+                ..SlackConfig::default().reaction_config
+            },
+            // Message sync stays off, so a guard reading only the
+            // notification/task accessors sees nothing enabled.
+            ..SlackConfig::default()
+        });
+        let response = app
+            .client
+            .put(format!(
+                "{}integration-connections/{}/config",
+                app.app.api_address, integration_connection.id
+            ))
+            .json(&reaction_only_config)
+            .send()
+            .await
+            .expect("Failed to execute request");
+
+        assert_eq!(response.status(), StatusCode::PAYMENT_REQUIRED);
+
+        let stored: IntegrationConnection =
+            get_integration_connection(&app, integration_connection.id)
+                .await
+                .unwrap();
+        assert_eq!(
+            stored.provider.config(),
+            paused_config,
+            "the refused write must not reach the database"
+        );
+        assert!(stored.auto_paused_by_plan_at.is_some());
+
+        // An edit that keeps every sync off is still allowed while paused.
+        let allowed_response = app
+            .client
+            .put(format!(
+                "{}integration-connections/{}/config",
+                app.app.api_address, integration_connection.id
+            ))
+            .json(&IntegrationConnectionConfig::Slack(SlackConfig {
+                reaction_config: SlackReactionConfig {
+                    reaction_name: SlackReactionName("bookmark".to_string()),
+                    ..SlackConfig::default().reaction_config
+                },
+                ..SlackConfig::default()
+            }))
+            .send()
+            .await
+            .expect("Failed to execute request");
+
+        assert_eq!(allowed_response.status(), StatusCode::OK);
     }
 }

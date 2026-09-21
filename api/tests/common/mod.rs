@@ -1,3 +1,9 @@
+// Shared test-support module included by both the `api` and `browser` test
+// binaries. Some helpers (e.g. the billing/Stripe fakes) are exercised by only
+// one binary, so each binary sees the others' helpers as unused — expected for
+// a shared `common` module.
+#![allow(dead_code)]
+
 use std::{net::TcpListener, str::FromStr, sync::Arc};
 
 use apalis_redis::RedisStorage;
@@ -8,11 +14,23 @@ use tracing::info;
 use uuid::Uuid;
 use wiremock::MockServer;
 
+use universal_inbox::{
+    billing::{StripePriceId, SubscriptionStatus as DomainStatus},
+    user::UserId,
+};
 use universal_inbox_api::{
-    configuration::{CronSettings, Settings},
+    billing::{
+        service::{BillingService, RepositoryIntegrationCounter},
+        stripe::{
+            CheckoutSessionParams, PortalSessionParams, RawSubscription, StripeClient, StripeError,
+            StripeEvent, StripeEventKind,
+        },
+    },
+    configuration::{CronSettings, FreePlanSettings, Settings},
     integrations::slack::SlackService,
     jobs::UniversalInboxJob,
     observability::{get_subscriber, init_subscriber},
+    repository::Repository,
     universal_inbox::{
         auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
@@ -152,6 +170,7 @@ pub async fn build_test_services(
         slack_service,
         slack_bridge_service,
         oauth2_service,
+        _billing_service,
     ) = universal_inbox_api::build_services(
         pool,
         settings,
@@ -206,6 +225,7 @@ pub async fn spawn_test_server(
         services.third_party_item_service.clone(),
         services.slack_bridge_service.clone(),
         services.oauth2_service.clone(),
+        None, // billing service: tests opt in explicitly when they need it
     )
     .await
     .expect("Failed to bind address");
@@ -285,6 +305,233 @@ pub async fn build_and_spawn(
         settings,
         &services,
         auth_token_service,
+    )
+    .await;
+
+    spawn_test_worker(redis_storage.clone(), cron_settings, cache, &services).await;
+
+    (services, mailer_stub, redis_storage)
+}
+
+// ---------------------------------------------------------------------------
+// Billing test harness — fake Stripe client + injectable BillingService
+// ---------------------------------------------------------------------------
+
+/// Query marker distinguishing the fake Checkout / Portal destinations.
+///
+/// The fake Stripe URLs point back at the test server's own unauthenticated
+/// `/api/ping`, because the browser has to actually *land* on them for the
+/// redirect to be observable: a top-level navigation to an off-origin sentinel
+/// host never resolves (and `page.route` does not reliably intercept a
+/// main-frame navigation here), and Chrome flatly blocks top-level `data:`
+/// navigation. `/api/ping` is real, resolvable, and tiny.
+pub const FAKE_CHECKOUT_MARKER: &str = "stripe_checkout=1";
+pub const FAKE_PORTAL_MARKER: &str = "stripe_portal=1";
+pub const FAKE_STRIPE_CUSTOMER_ID: &str = "cus_fake_test";
+
+/// The URL [`FakeStripeClient`] redirects Checkout to, for a given app base URL.
+pub fn fake_checkout_url(app_base_url: &url::Url) -> url::Url {
+    fake_stripe_url(app_base_url, FAKE_CHECKOUT_MARKER)
+}
+
+/// The URL [`FakeStripeClient`] redirects the billing Portal to.
+pub fn fake_portal_url(app_base_url: &url::Url) -> url::Url {
+    fake_stripe_url(app_base_url, FAKE_PORTAL_MARKER)
+}
+
+fn fake_stripe_url(app_base_url: &url::Url, marker: &str) -> url::Url {
+    let mut url = app_base_url
+        .join("/api/ping")
+        .expect("static fake Stripe path joins");
+    url.set_query(Some(marker));
+    url
+}
+
+/// Minimal JSON envelope a test posts to `/api/billing/stripe/webhook`. The
+/// fake client parses it directly (no real signature) so tests can drive
+/// webhook delivery over HTTP exactly as Stripe would.
+#[derive(serde::Deserialize)]
+struct TestWebhookEnvelope {
+    id: String,
+    #[serde(rename = "type")]
+    type_: String,
+    created: i64,
+    customer: Option<String>,
+    subscription: Option<String>,
+    user_id: Option<uuid::Uuid>,
+}
+
+/// In-process `StripeClient` that never touches the network. Lets the running
+/// HTTP server expose the real `/api/billing/*` routes without a Stripe account.
+pub struct FakeStripeClient {
+    checkout_url: url::Url,
+    portal_url: url::Url,
+}
+
+impl FakeStripeClient {
+    /// `app_base_url` is the running test server's base URL; the returned
+    /// Checkout/Portal URLs point back at it so the browser can really land on
+    /// them (see [`fake_checkout_url`]).
+    pub fn new(app_base_url: &url::Url) -> Self {
+        Self {
+            checkout_url: fake_checkout_url(app_base_url),
+            portal_url: fake_portal_url(app_base_url),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl StripeClient for FakeStripeClient {
+    async fn create_customer(
+        &self,
+        _user_id: UserId,
+        _email: Option<&str>,
+    ) -> Result<String, StripeError> {
+        Ok(FAKE_STRIPE_CUSTOMER_ID.to_string())
+    }
+
+    async fn create_checkout_session(
+        &self,
+        _params: CheckoutSessionParams,
+    ) -> Result<url::Url, StripeError> {
+        Ok(self.checkout_url.clone())
+    }
+
+    async fn create_portal_session(
+        &self,
+        _params: PortalSessionParams,
+    ) -> Result<url::Url, StripeError> {
+        Ok(self.portal_url.clone())
+    }
+
+    async fn fetch_subscription(
+        &self,
+        subscription_id: &str,
+    ) -> Result<RawSubscription, StripeError> {
+        Ok(RawSubscription {
+            subscription_id: subscription_id.to_string(),
+            customer_id: FAKE_STRIPE_CUSTOMER_ID.to_string(),
+            price_id: Some("price_test".to_string()),
+            status: DomainStatus::Active,
+            current_period_start: None,
+            current_period_end: None,
+            cancel_at_period_end: false,
+            canceled_at: None,
+        })
+    }
+
+    async fn list_customer_subscriptions(
+        &self,
+        _customer_id: &str,
+    ) -> Result<Vec<RawSubscription>, StripeError> {
+        // Nothing to adopt: these tests drive billing state through webhooks.
+        Ok(vec![])
+    }
+
+    fn verify_webhook_signature(
+        &self,
+        payload: &str,
+        _signature_header: &str,
+    ) -> Result<StripeEvent, StripeError> {
+        let env: TestWebhookEnvelope = serde_json::from_str(payload)
+            .map_err(|err| StripeError::MalformedWebhookPayload(err.to_string()))?;
+        let created = chrono::DateTime::from_timestamp(env.created, 0).ok_or_else(|| {
+            StripeError::MalformedWebhookPayload(format!("bad created timestamp {}", env.created))
+        })?;
+        let kind = match env.type_.as_str() {
+            "checkout.session.completed" => StripeEventKind::CheckoutSessionCompleted {
+                customer_id: env.customer.clone(),
+                subscription_id: env.subscription.clone(),
+                user_id_metadata: env.user_id.map(UserId),
+            },
+            _ => StripeEventKind::Other,
+        };
+        Ok(StripeEvent {
+            id: env.id,
+            type_: env.type_,
+            created,
+            kind,
+        })
+    }
+}
+
+/// Build a `BillingService` wired to [`FakeStripeClient`] so the running server
+/// serves the billing routes against the test database without real Stripe.
+pub fn build_fake_billing_service(
+    repository: Arc<Repository>,
+    app_base_url: &url::Url,
+) -> Arc<BillingService> {
+    let counter = Arc::new(RepositoryIntegrationCounter {
+        repository: repository.clone(),
+    });
+    Arc::new(BillingService::new(
+        repository,
+        Arc::new(FakeStripeClient::new(app_base_url)),
+        &FreePlanSettings::default(),
+        StripePriceId("price_test".to_string()),
+        counter,
+    ))
+}
+
+/// Like [`spawn_test_server`] but passes a `BillingService` so `/api/billing/*`
+/// is mounted (the route gate keys on `Some(billing_service)`).
+pub async fn spawn_test_server_with_billing(
+    listener: TcpListener,
+    redis_storage: RedisStorage<UniversalInboxJob>,
+    settings: Settings,
+    services: &TestServices,
+    auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
+    billing_service: Option<Arc<BillingService>>,
+) {
+    let server = universal_inbox_api::run_server(
+        listener,
+        redis_storage,
+        settings,
+        services.notification_service.clone(),
+        services.task_service.clone(),
+        services.user_service.clone(),
+        services.integration_connection_service.clone(),
+        auth_token_service,
+        services.third_party_item_service.clone(),
+        services.slack_bridge_service.clone(),
+        services.oauth2_service.clone(),
+        billing_service,
+    )
+    .await
+    .expect("Failed to bind address");
+
+    tokio::spawn(server);
+}
+
+/// Like [`build_and_spawn`] but with billing enabled via `billing_service`.
+pub async fn build_and_spawn_with_billing(
+    listener: TcpListener,
+    pool: Arc<PgPool>,
+    settings: Settings,
+    mock_servers: &MockServers,
+    redis_storage: RedisStorage<UniversalInboxJob>,
+    billing_service: Option<Arc<BillingService>>,
+) -> (
+    TestServices,
+    Arc<RwLock<MailerStub>>,
+    RedisStorage<UniversalInboxJob>,
+) {
+    let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
+    let (services, auth_token_service) =
+        build_test_services(pool, &settings, mock_servers, mailer_stub.clone()).await;
+
+    let cron_settings = settings.application.cron.clone();
+    let cache = Cache::new(settings.redis.connection_string())
+        .await
+        .expect("Failed to create cache");
+
+    spawn_test_server_with_billing(
+        listener,
+        redis_storage.clone(),
+        settings,
+        &services,
+        auth_token_service,
+        billing_service,
     )
     .await;
 

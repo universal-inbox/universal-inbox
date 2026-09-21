@@ -12,6 +12,7 @@ use crate::{
         authenticated::AuthenticatedLayout, fullpage::FullpageLayout, nav_bar::NavBarLayout,
     },
     pages::{
+        billing_page::BillingPage,
         email_validation_required_page::EmailValidationRequiredPage,
         email_verification_page::EmailVerificationPage,
         login_page::LoginPage,
@@ -79,6 +80,8 @@ pub enum Route {
         SecurityPage {},
         #[route("/profile")]
         UserProfilePage {},
+        #[route("/billing")]
+        BillingPage {},
       #[end_layout]
     #[end_layout]
     #[route("/:..route")]

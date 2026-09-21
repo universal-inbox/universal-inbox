@@ -14,6 +14,7 @@ use crate::{
     components::toast_zone::{Toast, ToastKind},
     model::{AuthenticationState, UniversalInboxUIModel},
     services::{
+        billing_service::{UPGRADE_TRIGGER, UpgradeTrigger},
         toast_service::{ToastCommand, ToastUpdate},
         version::check_version_mismatch,
     },
@@ -51,6 +52,27 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
         && let Some(mut ui_model) = ui_model
     {
         ui_model.write().authentication_state = AuthenticationState::NotAuthenticated;
+    }
+
+    // Centralized "upgrade required" handling: any 402 from any endpoint pops
+    // the global upgrade modal (via UPGRADE_TRIGGER) before the error bubbles,
+    // so callers don't each have to special-case the Free-plan limit.
+    if status == StatusCode::PAYMENT_REQUIRED {
+        let body: serde_json::Value = response.json().await.unwrap_or(serde_json::Value::Null);
+        let code = body
+            .get("code")
+            .and_then(|value| value.as_str())
+            .unwrap_or("payment_required")
+            .to_string();
+        let message = body
+            .get("message")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string());
+        let error_message = message
+            .clone()
+            .unwrap_or_else(|| "Upgrade required".to_string());
+        *UPGRADE_TRIGGER.write() = Some(UpgradeTrigger { code, message });
+        return Err(anyhow!(error_message));
     }
 
     // Treat every non-success status (except 304, handled below) as a failure

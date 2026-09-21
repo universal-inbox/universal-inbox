@@ -1,3 +1,4 @@
+pub mod billing_page;
 pub mod email_validation_required_page;
 pub mod email_verification_page;
 pub mod login_page;
