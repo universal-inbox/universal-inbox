@@ -14,6 +14,7 @@ pub mod auth_widgets;
 pub mod authentication_tokens_card;
 pub mod banner_strip;
 pub mod datepicker;
+pub mod delete_account_card;
 pub mod delete_all_confirmation_modal;
 pub mod emoji_search_field;
 pub mod field_grid;

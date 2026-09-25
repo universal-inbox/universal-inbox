@@ -202,6 +202,22 @@ pub async fn remove_auth_method_response(
         .unwrap()
 }
 
+pub async fn delete_current_user_response(
+    client: &Client,
+    app: &TestedApp,
+    confirmation: &str,
+) -> reqwest::Response {
+    client
+        .delete(format!("{}users/me", app.api_address))
+        .header(reqwest::header::ORIGIN, front_origin_header(app))
+        .json(&universal_inbox::user::DeleteAccountParameters {
+            confirmation: confirmation.to_string(),
+        })
+        .send()
+        .await
+        .unwrap()
+}
+
 pub async fn create_user(app: &TestedApp, email: EmailAddress, password: &str) -> User {
     let service = app.user_service.clone();
     let mut transaction = app.repository.begin().await.unwrap();
