@@ -23,8 +23,8 @@ use crate::helpers::{
     settings, tested_app_with_local_auth,
     user::{
         get_current_user, get_current_user_response, get_password_reset_token,
-        get_user_email_validation_token, login_user_response, logout_user_response,
-        patch_user_response, register_user, register_user_response,
+        get_pending_email_change_token, get_user_email_validation_token, login_user_response,
+        logout_user_response, patch_user_response, register_user, register_user_response,
     },
 };
 
@@ -983,9 +983,24 @@ mod patch_user {
         assert_eq!(fetched_user.last_name, Some("Doe".to_string()));
     }
 
+    async fn follow_email_verification_link(
+        app: &TestedApp,
+        user_id: UserId,
+        token: &EmailValidationToken,
+    ) -> reqwest::Response {
+        reqwest::Client::new()
+            .get(format!(
+                "{}users/{user_id}/email-verification/{token}",
+                app.api_address
+            ))
+            .send()
+            .await
+            .unwrap()
+    }
+
     #[rstest]
     #[tokio::test]
-    async fn test_patch_user_email_resets_validation(
+    async fn test_patch_user_email_is_applied_once_verified(
         #[future] tested_app_with_local_auth: TestedApp,
     ) {
         let app = tested_app_with_local_auth.await;
@@ -1001,25 +1016,11 @@ mod patch_user {
         let email_validation_token = get_user_email_validation_token(&app, user.id)
             .await
             .unwrap();
-
-        let anonymous_client = reqwest::Client::builder()
-            .cookie_store(true)
-            .build()
-            .unwrap();
-        let api_email_verification_url = format!(
-            "{}users/{}/email-verification/{email_validation_token}",
-            app.api_address, user.id
-        );
-        anonymous_client
-            .get(api_email_verification_url)
-            .send()
-            .await
-            .unwrap();
-
+        follow_email_verification_link(&app, user.id, &email_validation_token).await;
         let verified_user = get_current_user(&client, &app).await;
         assert!(verified_user.email_validated_at.is_some());
 
-        // Now change email
+        // Now request an email change
         let patch = UserPatch {
             first_name: None,
             last_name: None,
@@ -1029,9 +1030,24 @@ mod patch_user {
         let response = patch_user_response(&client, &app, &patch).await;
         assert_eq!(response.status(), http::StatusCode::OK);
         let patched_user: User = response.json().await.unwrap();
-        assert_eq!(patched_user.email, Some("new@email.name".parse().unwrap()));
-        assert!(patched_user.email_validated_at.is_none());
-        assert!(patched_user.email_validation_sent_at.is_some());
+        // The change is pending: the current, verified address is kept
+        assert_eq!(patched_user.email, user.email);
+        assert!(patched_user.email_validated_at.is_some());
+
+        let token = get_pending_email_change_token(&app, user.id)
+            .await
+            .expect("A pending email change should have been recorded");
+        let response = follow_email_verification_link(&app, user.id, &token).await;
+        assert_eq!(response.status(), http::StatusCode::OK);
+
+        let user_after = get_current_user(&client, &app).await;
+        assert_eq!(user_after.email, Some("new@email.name".parse().unwrap()));
+        assert!(user_after.email_validated_at.is_some());
+        assert!(
+            get_pending_email_change_token(&app, user.id)
+                .await
+                .is_none()
+        );
     }
 
     #[rstest]
@@ -1085,7 +1101,7 @@ mod patch_user {
         let app = tested_app_with_local_auth.await;
 
         // Register first user
-        let (client, _user) = register_user(
+        let (client, user) = register_user(
             &app,
             "john@doe.name".parse().unwrap(),
             "Very-harD-pasSword-5",
@@ -1107,8 +1123,23 @@ mod patch_user {
             email: Some("jane@doe.name".parse().unwrap()),
         };
 
+        // Same response as for a free address: whether an email is
+        // registered must not be observable.
         let response = patch_user_response(&client, &app, &patch).await;
-        assert_eq!(response.status(), http::StatusCode::CONFLICT);
+        assert_eq!(response.status(), http::StatusCode::OK);
+        let patched_user: User = response.json().await.unwrap();
+        assert_eq!(patched_user.email, user.email);
+
+        // Only the owner of the target mailbox can try to complete the
+        // change, and it is refused.
+        let token = get_pending_email_change_token(&app, user.id)
+            .await
+            .expect("A pending email change should have been recorded");
+        let response = follow_email_verification_link(&app, user.id, &token).await;
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+
+        let user_after = get_current_user(&client, &app).await;
+        assert_eq!(user_after.email, user.email);
     }
 
     #[rstest]

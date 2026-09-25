@@ -51,6 +51,9 @@ use crate::{
     utils::login_throttle::LoginThrottle,
 };
 
+/// How long the verification link of a pending email change stays valid.
+const EMAIL_CHANGE_VALIDITY_HOURS: i64 = 24;
+
 pub struct UserService {
     repository: Arc<Repository>,
     application_settings: ApplicationSettings,
@@ -576,33 +579,100 @@ impl UserService {
             }
         }
 
-        let update_status = self
-            .repository
-            .update_user_profile(executor, user_id, patch)
-            .await?;
-
-        // If email was changed and update succeeded, send verification email
-        if patch.email.is_some()
-            && let UpdateStatus {
-                updated: true,
-                result: Some(_),
-            } = &update_status
-        {
-            self.send_verification_email(executor, user_id, false)
-                .await?;
-            // Re-fetch user to include the updated email_validation_sent_at
-            let updated_user = self
-                .repository
-                .get_user(executor, user_id)
-                .await
-                .context("Failed to re-fetch user after sending verification email")?;
+        let Some(current_user) = self.repository.get_user(executor, user_id).await? else {
             return Ok(UpdateStatus {
-                updated: true,
-                result: updated_user,
+                updated: false,
+                result: None,
+            });
+        };
+
+        // An email change is never written straight to the user: it is held
+        // as a pending change and applied only once the new address is
+        // verified (see `verify_email`). Writing it immediately surfaced the
+        // unique-email violation to the caller, which made this endpoint an
+        // oracle for "is this address registered?". The response is now the
+        // same whether or not the address is taken.
+        let requested_email = patch
+            .email
+            .as_ref()
+            .filter(|email| current_user.email.as_ref() != Some(*email));
+        if let Some(new_email) = requested_email {
+            self.request_email_change(executor, &current_user, new_email)
+                .await?;
+        }
+
+        if patch.first_name.is_none() && patch.last_name.is_none() {
+            return Ok(match (requested_email, &patch.email) {
+                (Some(_), _) => UpdateStatus {
+                    updated: true,
+                    result: Some(current_user),
+                },
+                (None, Some(_)) => UpdateStatus {
+                    updated: false,
+                    result: Some(current_user),
+                },
+                (None, None) => UpdateStatus {
+                    updated: false,
+                    result: None,
+                },
             });
         }
 
+        let profile_patch = UserPatch {
+            first_name: patch.first_name.clone(),
+            last_name: patch.last_name.clone(),
+            email: None,
+        };
+        let mut update_status = self
+            .repository
+            .update_user_profile(executor, user_id, &profile_patch)
+            .await?;
+        if requested_email.is_some() {
+            update_status.updated = true;
+        }
         Ok(update_status)
+    }
+
+    /// Record `new_email` as the user's pending email address and send the
+    /// verification link to it. Replaces any previous pending change.
+    async fn request_email_change(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user: &User,
+        new_email: &EmailAddress,
+    ) -> Result<(), UniversalInboxError> {
+        let validation_token: EmailValidationToken = Uuid::new_v4().into();
+        self.repository
+            .upsert_pending_email_change(executor, user.id, new_email, &validation_token)
+            .await?;
+
+        if user.is_testing {
+            debug!(
+                "Skipping email change verification email for test account {}",
+                user.id
+            );
+            return Ok(());
+        }
+
+        let email_verification_url = format!(
+            "{}users/{}/email-verification/{validation_token}",
+            self.application_settings.front_base_url, user.id
+        )
+        .parse()
+        .context("Failed to build email change verification URL")?;
+        let template = EmailTemplate::EmailVerification {
+            first_name: user.first_name.clone(),
+            email_verification_url,
+        };
+        let recipient = User {
+            email: Some(new_email.clone()),
+            ..user.clone()
+        };
+        self.mailer
+            .read()
+            .await
+            .send_email(recipient, template, false)
+            .await
     }
 
     /// In an OpenID Connect Authorization code flow, the API has fetched the access token and
@@ -1225,6 +1295,38 @@ impl UserService {
         user_id: UserId,
         email_validation_token: EmailValidationToken,
     ) -> Result<(), UniversalInboxError> {
+        if let Some(pending_change) = self
+            .repository
+            .get_pending_email_change(executor, user_id)
+            .await?
+            && pending_change.validation_token == email_validation_token
+        {
+            self.repository
+                .delete_pending_email_change(executor, user_id)
+                .await?;
+            if pending_change.requested_at + TimeDelta::hours(EMAIL_CHANGE_VALIDITY_HOURS)
+                < Utc::now()
+            {
+                return Err(UniversalInboxError::InvalidInputData {
+                    source: None,
+                    user_error:
+                        "This email change link has expired, please request the change again"
+                            .to_string(),
+                });
+            }
+            if !self
+                .repository
+                .apply_verified_email_change(executor, user_id, &pending_change.new_email)
+                .await?
+            {
+                return Err(UniversalInboxError::InvalidInputData {
+                    source: None,
+                    user_error: "This email address cannot be used for this account".to_string(),
+                });
+            }
+            return Ok(());
+        }
+
         let stored_email_validation_token = self
             .repository
             .get_user_email_validation_token(executor, user_id)
