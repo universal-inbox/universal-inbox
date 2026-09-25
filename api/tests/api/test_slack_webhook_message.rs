@@ -32,8 +32,9 @@ use crate::helpers::{
         slack::{
             create_notification_from_slack_thread, mock_slack_fetch_bot, mock_slack_fetch_channel,
             mock_slack_fetch_team, mock_slack_fetch_thread, mock_slack_fetch_user,
-            mock_slack_get_chat_permalink, mock_slack_list_users_in_usergroup,
-            slack_push_message_event, slack_push_message_in_thread_event, slack_thread,
+            mock_slack_get_chat_permalink, mock_slack_list_usergroups,
+            mock_slack_list_users_in_usergroup, slack_push_message_event,
+            slack_push_message_in_thread_event, slack_thread,
         },
     },
     settings,
@@ -965,6 +966,290 @@ mod job {
 
         assert!(result.is_err());
         assert!(format!("{:?}", result.unwrap_err()).contains("ratelimited"));
+    }
+
+    /// Mount the Slack mocks needed to handle a message pinging the known user `U01` in
+    /// `C05XXX`, with the given thread and team fixtures.
+    async fn mock_slack_message_ping_to_known_user(
+        app: &TestedApp,
+        slack_message_id: &str,
+        thread_fixture: &str,
+        team_fixture: &str,
+    ) {
+        mock_slack_get_chat_permalink(
+            &app.slack_mock_server,
+            "C05XXX",
+            slack_message_id,
+            "slack_get_chat_permalink_response.json",
+        )
+        .await;
+        mock_slack_fetch_user(
+            &app.slack_mock_server,
+            "U01",
+            "slack_fetch_user_response.json",
+        )
+        .await;
+        mock_slack_fetch_user(
+            &app.slack_mock_server,
+            "U02",
+            "slack_fetch_user_response.json",
+        )
+        .await;
+        mock_slack_fetch_thread(
+            &app.slack_mock_server,
+            "C05XXX",
+            slack_message_id,
+            slack_message_id,
+            thread_fixture,
+            true,
+            None,
+            "slack_test_user_access_token",
+        )
+        .await;
+        mock_slack_fetch_channel(
+            &app.slack_mock_server,
+            "C05XXX",
+            "slack_fetch_channel_response.json",
+        )
+        .await;
+        mock_slack_fetch_team(&app.slack_mock_server, "T01", team_fixture).await;
+    }
+
+    async fn create_slack_integration_connection_for_u01(
+        app: &AuthenticatedApp,
+        settings: &Settings,
+        mut slack_oauth_credential: OAuthCredentialFixture,
+    ) {
+        slack_oauth_credential.provider_user_id = Some("U01".to_string());
+        slack_oauth_credential.access_token =
+            AccessToken("slack_test_user_access_token".to_string());
+        create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+            settings,
+            slack_oauth_credential,
+            None,
+            Some(IntegrationConnectionContext::Slack(SlackContext {
+                team_id: SlackTeamId("T01".to_string()),
+                extension_credentials: vec![],
+                last_extension_heartbeat_at: None,
+            })),
+        )
+        .await;
+    }
+
+    /// Slack answers `no_such_subteam` for usergroups it will never resolve for the connected
+    /// token (deleted usergroups, usergroups from another workspace). Pinging one must not abort
+    /// the whole message push event: it simply has no member to notify.
+    #[rstest]
+    #[tokio::test]
+    async fn test_handle_slack_message_in_channel_with_ping_to_unknown_usergroup(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        slack_oauth_credential: OAuthCredentialFixture,
+        mut message_event: Box<SlackPushEventCallback>,
+    ) {
+        let app = authenticated_app.await;
+        let service = app.app.notification_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+        add_usergroup_ref_in_message(&mut message_event, "S06UNKNOWN");
+        mock_slack_list_users_in_usergroup(
+            &app.app.slack_mock_server,
+            "S06UNKNOWN",
+            "slack_list_users_in_usergroup_no_such_subteam_response.json",
+        )
+        .await;
+        create_slack_integration_connection_for_u01(&app, &settings, slack_oauth_credential).await;
+
+        handle_slack_message_push_event(
+            &mut transaction,
+            &message_event,
+            app.app.notification_service.clone(),
+            app.app.integration_connection_service.clone(),
+            app.app.third_party_item_service.clone(),
+            app.app.slack_service.clone(),
+        )
+        .await
+        .unwrap();
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction")
+            .unwrap();
+
+        let notifications = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+        assert!(notifications.is_empty());
+    }
+
+    /// Slack answers `team_not_found` for teams it will never resolve for the connected token.
+    /// The notification must still be created, with the team id only.
+    #[rstest]
+    #[tokio::test]
+    async fn test_handle_slack_message_in_channel_with_unknown_team(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        slack_oauth_credential: OAuthCredentialFixture,
+        mut message_event: Box<SlackPushEventCallback>,
+    ) {
+        let app = authenticated_app.await;
+        let service = app.app.notification_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+        add_user_ref_in_message(&mut message_event, "U01");
+        create_slack_integration_connection_for_u01(&app, &settings, slack_oauth_credential).await;
+        let slack_message_id = "1732535291.911209";
+        mock_slack_message_ping_to_known_user(
+            &app.app,
+            slack_message_id,
+            "slack_fetch_thread_response.json",
+            "slack_fetch_team_not_found_response.json",
+        )
+        .await;
+
+        handle_slack_message_push_event(
+            &mut transaction,
+            &message_event,
+            app.app.notification_service.clone(),
+            app.app.integration_connection_service.clone(),
+            app.app.third_party_item_service.clone(),
+            app.app.slack_service.clone(),
+        )
+        .await
+        .unwrap();
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction")
+            .unwrap();
+
+        let notifications = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+
+        assert_eq!(notifications.len(), 1);
+        let ThirdPartyItemData::SlackThread(slack_thread) = &notifications[0].source_item.data
+        else {
+            unreachable!("Unexpected item data");
+        };
+        assert_eq!(
+            slack_thread.team,
+            SlackTeamInfo::new(SlackTeamId("T01".to_string()))
+        );
+    }
+
+    /// A usergroup that is not listed for the connected token must not prevent the other
+    /// references of the thread from being resolved.
+    #[rstest]
+    #[tokio::test]
+    async fn test_handle_slack_message_in_thread_referencing_unknown_usergroup(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        slack_oauth_credential: OAuthCredentialFixture,
+        mut message_event: Box<SlackPushEventCallback>,
+    ) {
+        let app = authenticated_app.await;
+        let service = app.app.notification_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+        add_user_ref_in_message(&mut message_event, "U01");
+        create_slack_integration_connection_for_u01(&app, &settings, slack_oauth_credential).await;
+        let slack_message_id = "1732535291.911209";
+        mock_slack_message_ping_to_known_user(
+            &app.app,
+            slack_message_id,
+            "slack_fetch_thread_with_unknown_usergroup_response.json",
+            "slack_fetch_team_response.json",
+        )
+        .await;
+        mock_slack_list_usergroups(
+            &app.app.slack_mock_server,
+            "slack_list_usergroups_response.json",
+        )
+        .await;
+        mock_slack_list_users_in_usergroup(
+            &app.app.slack_mock_server,
+            "S05ZZZ",
+            "slack_list_users_in_usergroup_response.json",
+        )
+        .await;
+        mock_slack_list_users_in_usergroup(
+            &app.app.slack_mock_server,
+            "S06UNKNOWN",
+            "slack_list_users_in_usergroup_no_such_subteam_response.json",
+        )
+        .await;
+        mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json").await;
+
+        handle_slack_message_push_event(
+            &mut transaction,
+            &message_event,
+            app.app.notification_service.clone(),
+            app.app.integration_connection_service.clone(),
+            app.app.third_party_item_service.clone(),
+            app.app.slack_service.clone(),
+        )
+        .await
+        .unwrap();
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction")
+            .unwrap();
+
+        let notifications = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+
+        assert_eq!(notifications.len(), 1);
+        let ThirdPartyItemData::SlackThread(slack_thread) = &notifications[0].source_item.data
+        else {
+            unreachable!("Unexpected item data");
+        };
+        let references = slack_thread
+            .references
+            .as_ref()
+            .expect("Slack references must be resolved");
+        assert_eq!(
+            references
+                .usergroups
+                .get(&SlackUserGroupId("S05ZZZ".to_string())),
+            Some(&Some("admins".to_string()))
+        );
+        assert_eq!(
+            references
+                .usergroups
+                .get(&SlackUserGroupId("S06UNKNOWN".to_string())),
+            Some(&None)
+        );
+        assert_eq!(
+            references.usergroup_ids_to_highlight,
+            Some(vec![SlackUserGroupId("S05ZZZ".to_string())])
+        );
     }
 
     #[rstest]
