@@ -51,11 +51,12 @@ pub fn replace_emoji_code_in_string_with_emoji(string: &str) -> String {
 }
 
 pub fn replace_emoji_code_with_emoji(string: &str) -> Option<String> {
-    let replace_from = if string.starts_with(':') && string.ends_with(':') {
-        &string[1..string.len() - 1]
-    } else {
-        string
-    };
+    // `strip_prefix`/`strip_suffix` are total: a lone ":" (a remote-controlled
+    // Linear team/project icon) must not produce a reversed slice range and panic.
+    let replace_from = string
+        .strip_prefix(':')
+        .and_then(|s| s.strip_suffix(':'))
+        .unwrap_or(string);
     emojis::get_by_shortcode(&replace_from.to_lowercase()).map(|emoji| emoji.to_string())
 }
 
@@ -136,6 +137,16 @@ mod tests {
                 replace_emoji_code_with_emoji(":rocket:"),
                 Some("🚀".to_string())
             );
+        }
+
+        #[rstest]
+        #[case::single_colon(":")]
+        #[case::double_colon("::")]
+        #[case::empty("")]
+        #[case::leading_colon_only(":rocket")]
+        #[case::multibyte(":é")]
+        fn test_replace_degenerate_input_does_not_panic(#[case] input: &str) {
+            assert!(replace_emoji_code_with_emoji(input).is_none());
         }
 
         #[rstest]

@@ -1,5 +1,6 @@
 use std::{
     fmt::Debug,
+    panic::AssertUnwindSafe,
     sync::{Arc, Weak},
 };
 
@@ -7,6 +8,7 @@ use anyhow::{Context, anyhow};
 use apalis::prelude::Storage;
 use apalis_redis::RedisStorage;
 use chrono::{DateTime, TimeDelta, Utc};
+use futures::FutureExt;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tokio_retry::{
@@ -56,6 +58,7 @@ use crate::{
         third_party::service::ThirdPartyItemService,
         user::service::UserService,
     },
+    utils::panic::panic_message,
 };
 
 // tag: New notification integration
@@ -784,9 +787,19 @@ impl NotificationService {
         let users = service.fetch_all_users(&mut transaction).await?;
 
         for user in users {
-            let _ = self
-                .sync_notifications_for_user(source, user.id, force_sync)
-                .await;
+            // Panic boundary: a malformed upstream value that panics while syncing
+            // one user must not abort the sync for every other user of the instance.
+            if let Err(panic) =
+                AssertUnwindSafe(self.sync_notifications_for_user(source, user.id, force_sync))
+                    .catch_unwind()
+                    .await
+            {
+                error!(
+                    "Panic while syncing notifications for user {}: {}",
+                    user.id,
+                    panic_message(&panic)
+                );
+            }
         }
 
         Ok(())
