@@ -59,7 +59,7 @@ async fn test_refresh_oauth_tokens_cron_tick_enqueues_job_once(
         minutes_before_expiry: 42,
         ..Default::default()
     };
-    let tick = unique_tick(5);
+    let tick = cron_tick();
 
     // Simulate 2 worker processes handling the same cron tick
     for _ in 0..2 {
@@ -190,10 +190,11 @@ impl JobQueue {
     }
 }
 
-/// The per-tick lock key is not namespaced per test, so each test uses a
-/// distinct tick to avoid stealing another test's (or another run's) lock.
-fn unique_tick(offset_in_hours: i64) -> DateTime<Utc> {
-    Utc::now() + TimeDelta::try_hours(offset_in_hours).unwrap()
+/// The per-tick lock key is scoped to the job queue namespace, and the
+/// `redis_storage` fixture gives each test its own namespace, so every test can
+/// use the same tick without stealing another test's (or another run's) lock.
+fn cron_tick() -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 7, 5, 12, 0, 0).unwrap()
 }
 
 fn vacuum_jobs_settings(batch_size: usize, max_batches_per_tick: usize) -> VacuumJobsCronSettings {
@@ -245,7 +246,7 @@ async fn test_vacuum_jobs_cron_tick_purges_only_jobs_completed_before_the_retent
     vacuum_jobs(
         &redis_storage,
         &cache,
-        unique_tick(1),
+        cron_tick(),
         &vacuum_jobs_settings(1000, 200),
     )
     .await;
@@ -292,7 +293,7 @@ async fn test_vacuum_jobs_cron_tick_purges_every_batch(
     vacuum_jobs(
         &redis_storage,
         &cache,
-        unique_tick(2),
+        cron_tick(),
         &vacuum_jobs_settings(2, 10),
     )
     .await;
@@ -325,7 +326,7 @@ async fn test_vacuum_jobs_cron_tick_stops_at_max_batches_per_tick(
     vacuum_jobs(
         &redis_storage,
         &cache,
-        unique_tick(3),
+        cron_tick(),
         &vacuum_jobs_settings(2, 1),
     )
     .await;
@@ -349,7 +350,7 @@ async fn test_vacuum_jobs_cron_tick_dedupes_same_tick(
         .expect("Failed to create cache");
     let mut queue = JobQueue::new(&redis_storage);
     let completed_at = Utc::now() - TimeDelta::try_hours(7).unwrap();
-    let tick = unique_tick(4);
+    let tick = cron_tick();
     let cron_settings = vacuum_jobs_settings(1000, 200);
     queue.add_completed_job("old-job", completed_at).await;
 
@@ -365,6 +366,76 @@ async fn test_vacuum_jobs_cron_tick_dedupes_same_tick(
         queue.is_stored("another-old-job").await,
         "the same tick handled by 2 processes should vacuum exactly once"
     );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_vacuum_jobs_cron_tick_lock_is_scoped_to_the_job_queue(
+    settings: Settings,
+    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future]
+    #[from(redis_storage)]
+    other_redis_storage: RedisStorage<UniversalInboxJob>,
+) {
+    let (redis_storage, other_redis_storage) = (redis_storage.await, other_redis_storage.await);
+    let cache = Cache::new(settings.redis.connection_string())
+        .await
+        .expect("Failed to create cache");
+    let completed_at = Utc::now() - TimeDelta::try_hours(7).unwrap();
+    let tick = cron_tick();
+    let cron_settings = vacuum_jobs_settings(1000, 200);
+    let mut queue = JobQueue::new(&redis_storage);
+    let mut other_queue = JobQueue::new(&other_redis_storage);
+    queue.add_completed_job("old-job", completed_at).await;
+    other_queue.add_completed_job("old-job", completed_at).await;
+
+    vacuum_jobs(&redis_storage, &cache, tick, &cron_settings).await;
+    vacuum_jobs(&other_redis_storage, &cache, tick, &cron_settings).await;
+
+    assert!(queue.is_purged("old-job").await);
+    assert!(
+        other_queue.is_purged("old-job").await,
+        "the same tick handled on another job queue should not be deduped against the first one"
+    );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_refresh_oauth_tokens_cron_tick_lock_is_scoped_to_the_job_queue(
+    settings: Settings,
+    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future]
+    #[from(redis_storage)]
+    other_redis_storage: RedisStorage<UniversalInboxJob>,
+) {
+    let (redis_storage, other_redis_storage) = (redis_storage.await, other_redis_storage.await);
+    let cache = Cache::new(settings.redis.connection_string())
+        .await
+        .expect("Failed to create cache");
+    let tick = cron_tick();
+
+    for storage in [&redis_storage, &other_redis_storage] {
+        handle_refresh_oauth_tokens_cron_tick(
+            Default::default(),
+            CronContext::new(tick),
+            Data::new(storage.clone()),
+            Data::new(cache.clone()),
+            Data::new(RefreshOAuthTokensCronSettings::default()),
+        )
+        .await
+        .expect("Failed to handle cron tick");
+    }
+
+    for mut storage in [redis_storage, other_redis_storage] {
+        assert_eq!(
+            storage
+                .len()
+                .await
+                .expect("Failed to get Redis storage length"),
+            1,
+            "the same tick handled on 2 job queues should enqueue 1 job on each queue"
+        );
+    }
 }
 
 #[rstest]
