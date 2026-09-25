@@ -123,7 +123,9 @@ pub async fn generate_doc_screenshots(
 
     if !keep_user {
         info!("Deleting test user {user_id}");
-        if let Err(err) = user::delete_user(user_service, user_id).await {
+        // The throwaway screenshot user never starts a Stripe checkout, so
+        // there is no subscription to cancel.
+        if let Err(err) = user::delete_user(user_service, None, user_id).await {
             warn!("Failed to delete test user {user_id}: {err:?}");
         }
     } else {

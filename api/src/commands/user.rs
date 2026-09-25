@@ -16,10 +16,13 @@ use tokio::sync::RwLock;
 
 use universal_inbox::user::{Password, UserAuthKind, UserId};
 
-use crate::universal_inbox::{
-    UniversalInboxError,
-    auth_token::service::AuthenticationTokenService,
-    user::{model::UserAuth, service::UserService},
+use crate::{
+    billing::service::BillingService,
+    universal_inbox::{
+        UniversalInboxError,
+        auth_token::service::AuthenticationTokenService,
+        user::{model::UserAuth, service::UserService},
+    },
 };
 
 #[tracing::instrument(
@@ -223,9 +226,15 @@ pub async fn list_users(user_service: Arc<UserService>) -> Result<(), UniversalI
     Ok(())
 }
 
-#[tracing::instrument(name = "delete-user", level = "info", skip(user_service), err)]
+#[tracing::instrument(
+    name = "delete-user",
+    level = "info",
+    skip(user_service, billing_service),
+    err
+)]
 pub async fn delete_user(
     user_service: Arc<UserService>,
+    billing_service: Option<Arc<BillingService>>,
     user_id: UserId,
 ) -> Result<(), UniversalInboxError> {
     let service = user_service.clone();
@@ -234,7 +243,9 @@ pub async fn delete_user(
         "Failed to create new transaction while deleting user {user_id}"
     ))?;
 
-    service.delete_user(&mut transaction, user_id).await?;
+    service
+        .delete_user(&mut transaction, user_id, billing_service.as_deref())
+        .await?;
 
     transaction.commit().await.context(format!(
         "Failed to commit transaction while deleting user {user_id}"
