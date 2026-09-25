@@ -113,6 +113,12 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
         // but at least we tried to handle 304 specially
     }
 
+    // 204 No Content has no body to decode: callers expecting nothing use `()`.
+    if status == StatusCode::NO_CONTENT {
+        return serde_json::from_str::<R>("null")
+            .map_err(|err| anyhow!("Unexpected 204 No Content response: {err}"));
+    }
+
     Ok(response.json().await?)
 }
 

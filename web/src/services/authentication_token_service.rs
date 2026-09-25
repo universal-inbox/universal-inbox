@@ -6,7 +6,9 @@ use log::error;
 use reqwest::Method;
 use url::Url;
 
-use universal_inbox::auth::auth_token::{AuthenticationToken, TruncatedAuthenticationToken};
+use universal_inbox::auth::auth_token::{
+    AuthenticationToken, AuthenticationTokenId, TruncatedAuthenticationToken,
+};
 
 use crate::{
     model::{LoadState, UniversalInboxUIModel},
@@ -20,6 +22,7 @@ use crate::{
 pub enum AuthenticationTokenCommand {
     Refresh,
     CreateAuthenticationToken,
+    RevokeAuthenticationToken(AuthenticationTokenId),
 }
 
 pub static AUTHENTICATION_TOKENS: GlobalSignal<Option<Vec<TruncatedAuthenticationToken>>> =
@@ -68,6 +71,46 @@ pub async fn authentication_token_service(
                     }
                     Err(error) => {
                         *created_authentication_token.write() = LoadState::Error(error.to_string());
+                    }
+                }
+            }
+            Some(AuthenticationTokenCommand::RevokeAuthenticationToken(
+                authentication_token_id,
+            )) => {
+                let result: Result<()> = call_api_and_notify(
+                    Method::DELETE,
+                    &api_base_url,
+                    &format!("users/me/authentication-tokens/{authentication_token_id}"),
+                    None::<i32>,
+                    Some(ui_model),
+                    &toast_service,
+                    "Revoking API key...",
+                    "API key revoked",
+                )
+                .await;
+
+                if let Err(error) = result {
+                    error!("An error occurred while revoking authentication token: {error:?}");
+                } else {
+                    // The freshly created key is shown from its own signal: drop
+                    // it once revoked so it does not linger with a Copy button.
+                    let revoked_created_token = matches!(
+                        &*created_authentication_token.read(),
+                        LoadState::Loaded(created) if created.id == authentication_token_id
+                    );
+                    if revoked_created_token {
+                        *created_authentication_token.write() = LoadState::None;
+                    }
+                    if let Err(error) = refresh_authentication_tokens(
+                        authentication_tokens,
+                        &api_base_url,
+                        ui_model,
+                    )
+                    .await
+                    {
+                        error!(
+                            "An error occurred while refreshing authentication tokens after revoke: {error:?}"
+                        );
                     }
                 }
             }

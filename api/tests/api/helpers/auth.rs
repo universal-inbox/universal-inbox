@@ -11,7 +11,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use universal_inbox::{
-    auth::{SessionAuthValidationParameters, auth_token::AuthenticationToken},
+    auth::{SessionAuthValidationParameters, auth_token::TruncatedAuthenticationToken},
     user::{User, UserAuthKind, UserId},
 };
 
@@ -214,7 +214,7 @@ pub async fn mock_oidc_user_info(
 pub async fn fetch_auth_tokens_for_user(
     app: &TestedApp,
     user_id: UserId,
-) -> Vec<AuthenticationToken> {
+) -> Vec<TruncatedAuthenticationToken> {
     let mut transaction = app.repository.begin().await.unwrap();
     let auth_tokens = app
         .repository

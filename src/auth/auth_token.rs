@@ -113,10 +113,15 @@ pub struct TruncatedAuthenticationToken {
 }
 
 impl TruncatedAuthenticationToken {
+    /// The last characters of a token, safe to display and to store: enough
+    /// for the user to recognise a token, useless as a credential.
+    pub fn truncate(jwt_token: &JWTToken) -> String {
+        let chars: Vec<char> = jwt_token.0.chars().collect();
+        chars[chars.len().saturating_sub(5)..].iter().collect()
+    }
+
     pub fn new(authentication_token: AuthenticationToken) -> Self {
-        let mut truncated_jwt_token = authentication_token.jwt_token.expose_secret().to_string();
-        let keep = truncated_jwt_token.len() - 5;
-        truncated_jwt_token.drain(..keep);
+        let truncated_jwt_token = Self::truncate(authentication_token.jwt_token.expose_secret());
 
         Self {
             id: authentication_token.id,
