@@ -24,7 +24,7 @@ anyhow = { workspace = true }
 apalis = { version = "0.7", features = ["limit"] }
 apalis-cron = { version = "0.7" }
 apalis-redis = { version = "0.7" }
-argon2 = { version = "0.5", features = ["std"] }
+argon2 = { version = "0.6" }
 async-stripe = { workspace = true }
 async-stripe-billing = { workspace = true }
 async-stripe-checkout = { workspace = true }

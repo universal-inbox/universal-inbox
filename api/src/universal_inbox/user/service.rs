@@ -1,7 +1,7 @@
 use std::{str::FromStr, sync::Arc};
 
 use anyhow::{Context, anyhow};
-use argon2::{Argon2, Params, PasswordHasher, PasswordVerifier, password_hash::SaltString};
+use argon2::{Argon2, Params, PasswordHasher, PasswordVerifier};
 use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
 use openidconnect::{
@@ -1104,7 +1104,6 @@ impl UserService {
         &self,
         password: SecretBox<Password>,
     ) -> Result<SecretBox<PasswordHash>, UniversalInboxError> {
-        let salt = SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
         let Some(AuthenticationSettings::Local(local_auth_settings)) = &self
             .application_settings
             .security
@@ -1128,7 +1127,7 @@ impl UserService {
             )
             .context("Failed to build Argon2 parameters")?,
         )
-        .hash_password(password.expose_secret().0.as_bytes(), &salt)
+        .hash_password(password.expose_secret().0.as_bytes())
         .map(|hash| SecretBox::new(Box::new(PasswordHash(hash.to_string()))))
         .context("Failed to hash password")?)
     }
