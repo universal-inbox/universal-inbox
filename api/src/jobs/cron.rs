@@ -38,7 +38,7 @@ pub async fn handle_refresh_oauth_tokens_cron_tick(
 ) -> Result<(), UniversalInboxError> {
     if !try_acquire_cron_tick_lock(
         &cache,
-        "refresh-oauth-tokens",
+        &queue_scoped_cron_job_name(&storage, "refresh-oauth-tokens"),
         ctx.get_timestamp(),
         settings.lock_ttl_seconds,
     )
@@ -93,7 +93,7 @@ pub async fn handle_vacuum_jobs_cron_tick(
 ) -> Result<(), UniversalInboxError> {
     if !try_acquire_cron_tick_lock(
         &cache,
-        "vacuum-jobs",
+        &queue_scoped_cron_job_name(&storage, "vacuum-jobs"),
         ctx.get_timestamp(),
         settings.lock_ttl_seconds,
     )
@@ -149,6 +149,15 @@ pub async fn handle_vacuum_jobs_cron_tick(
         settings.max_batches_per_tick, settings.retention_hours
     );
     Ok(())
+}
+
+/// Scopes a cron job name to the namespace of the job queue it works on, so the
+/// per-tick lock only dedupes the processes sharing that queue. Every worker
+/// process of a deployment uses the same queue namespace, hence the same lock;
+/// another deployment (or test) sharing the Redis server with its own queue
+/// namespace gets its own lock instead of silently skipping the tick.
+fn queue_scoped_cron_job_name(storage: &RedisStorage<UniversalInboxJob>, job_name: &str) -> String {
+    format!("{}:{job_name}", storage.get_config().get_namespace())
 }
 
 /// Acquires a distributed lock for the given cron job and tick using Redis
