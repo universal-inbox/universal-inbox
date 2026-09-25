@@ -3,6 +3,7 @@ use std::{collections::HashMap, str::FromStr};
 use email_address::EmailAddress;
 use itertools::Itertools;
 use rstest::*;
+use secrecy::ExposeSecret;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -944,6 +945,134 @@ mod create_authentication_token {
         let auth_tokens = fetch_auth_tokens_for_user(&app.app, app.user.id).await;
         assert_eq!(auth_tokens.len(), 1);
         assert_eq!(auth_tokens[0].id, auth_token.id);
+        let raw_token = auth_token.jwt_token.expose_secret().0.clone();
+        assert_eq!(
+            auth_tokens[0].truncated_jwt_token,
+            raw_token[raw_token.len() - 5..]
+        );
+
+        // Only a digest is stored: the raw token appears nowhere in its row.
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        let row_as_text: String = sqlx::query_scalar(
+            "SELECT row_to_json(authentication_token)::text FROM authentication_token WHERE id = $1",
+        )
+        .bind(auth_token.id.0)
+        .fetch_one(&mut *transaction)
+        .await
+        .unwrap();
+        transaction.commit().await.unwrap();
+        assert!(
+            !row_as_text.contains(&raw_token),
+            "the raw token must not be stored: {row_as_text}"
+        );
+    }
+
+    async fn get_me_with_token(app: &AuthenticatedApp, token: &str) -> reqwest::Response {
+        reqwest::Client::new()
+            .get(format!("{}users/me", app.app.api_address))
+            .bearer_auth(token)
+            .send()
+            .await
+            .unwrap()
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_revoked_authentication_token_is_rejected(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let auth_token: AuthenticationToken = app
+            .client
+            .post(format!(
+                "{}users/me/authentication-tokens",
+                app.app.api_address
+            ))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let token = auth_token.jwt_token.expose_secret().0.clone();
+        assert_eq!(
+            get_me_with_token(&app, &token).await.status(),
+            http::StatusCode::OK
+        );
+
+        let response = app
+            .client
+            .delete(format!(
+                "{}users/me/authentication-tokens/{}",
+                app.app.api_address, auth_token.id
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), http::StatusCode::NO_CONTENT);
+
+        assert_eq!(
+            get_me_with_token(&app, &token).await.status(),
+            http::StatusCode::UNAUTHORIZED
+        );
+        let auth_tokens = fetch_auth_tokens_for_user(&app.app, app.user.id).await;
+        assert!(auth_tokens[0].is_revoked);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_expired_stored_authentication_token_is_rejected(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let auth_token: AuthenticationToken = app
+            .client
+            .post(format!(
+                "{}users/me/authentication-tokens",
+                app.app.api_address
+            ))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let token = auth_token.jwt_token.expose_secret().0.clone();
+
+        // The JWT `exp` is still in the future; only the stored row expired.
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        sqlx::query(
+            "UPDATE authentication_token SET expire_at = now() - interval '1 day' WHERE id = $1",
+        )
+        .bind(auth_token.id.0)
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+        transaction.commit().await.unwrap();
+
+        assert_eq!(
+            get_me_with_token(&app, &token).await.status(),
+            http::StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_cannot_revoke_another_users_authentication_token(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let response = app
+            .client
+            .delete(format!(
+                "{}users/me/authentication-tokens/{}",
+                app.app.api_address,
+                uuid::Uuid::new_v4()
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
     }
 }
 

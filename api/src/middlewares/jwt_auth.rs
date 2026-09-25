@@ -8,10 +8,10 @@
 //! extractors, and downstream middlewares ([`super::audience_guard`], MCP) read it directly
 //! from the request extensions.
 //!
-//! Token-level invalidation (a JWT blacklist) is intentionally omitted: logout clears the
-//! session cookie (`session.purge()`) and OAuth2 access is revoked by deleting refresh
-//! tokens in the database. If per-token revocation is ever required, add a Redis-backed
-//! store here that the request path consults.
+//! Tokens read from the `Authorization` header are additionally passed to an optional
+//! [`BearerTokenChecker`], which rejects stored API tokens that were revoked or have
+//! expired. Session JWTs are not stored: logout clears the session cookie
+//! (`session.purge()`), and OAuth2 access is revoked by deleting refresh tokens.
 
 use std::{
     future::{Ready, ready},
@@ -37,6 +37,12 @@ use crate::{universal_inbox::UniversalInboxError, utils::jwt::Claims};
 /// A wrapper around a raw JWT string.
 #[derive(Hash, PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct JWT(pub String);
+
+/// Decides whether a validly signed bearer token is still accepted, typically by
+/// consulting its stored row (revocation, expiry).
+pub trait BearerTokenChecker {
+    fn is_active(&self, jwt: JWT) -> LocalBoxFuture<'static, Result<bool, UniversalInboxError>>;
+}
 
 /// The key under which the JWT is stored in the [`actix_session::Session`] cookie.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -150,6 +156,10 @@ pub struct AuthenticateMiddlewareSettings {
     /// Optional `Authorization` header prefixes (e.g. `"Bearer"`). When `None`, the
     /// `Authorization` header is not consulted.
     pub jwt_authorization_header_prefixes: Option<Vec<String>>,
+
+    /// Optional check applied to tokens read from the `Authorization` header after
+    /// their signature is validated. When `None`, bearer tokens are not checked further.
+    pub bearer_token_checker: Option<Arc<dyn BearerTokenChecker + Send + Sync>>,
 }
 
 /// Factory for [`AuthenticateMiddleware`]. Instantiate once at bootstrap and clone into the
@@ -161,6 +171,7 @@ pub struct AuthenticateMiddlewareFactory<ClaimsType> {
     jwt_session_key: Option<Arc<JWTSessionKey>>,
     /// Header prefixes are pre-suffixed with a space (e.g. `"Bearer "`) for prefix stripping.
     jwt_authorization_header_prefixes: Option<Arc<Vec<String>>>,
+    bearer_token_checker: Option<Arc<dyn BearerTokenChecker + Send + Sync>>,
     _claims_type_marker: PhantomData<ClaimsType>,
 }
 
@@ -175,6 +186,7 @@ impl<ClaimsType> AuthenticateMiddlewareFactory<ClaimsType> {
             jwt_authorization_header_prefixes: settings.jwt_authorization_header_prefixes.map(
                 |prefixes| Arc::new(prefixes.iter().map(|prefix| format!("{prefix} ")).collect()),
             ),
+            bearer_token_checker: settings.bearer_token_checker,
             _claims_type_marker: PhantomData,
         }
     }
@@ -199,6 +211,7 @@ where
             jwt_validator: self.jwt_validator.clone(),
             jwt_session_key: self.jwt_session_key.clone(),
             jwt_authorization_header_prefixes: self.jwt_authorization_header_prefixes.clone(),
+            bearer_token_checker: self.bearer_token_checker.clone(),
             _claims_type_marker: PhantomData,
         }))
     }
@@ -212,6 +225,7 @@ pub struct AuthenticateMiddleware<S, ClaimsType> {
     jwt_validator: Arc<Validation>,
     jwt_session_key: Option<Arc<JWTSessionKey>>,
     jwt_authorization_header_prefixes: Option<Arc<Vec<String>>>,
+    bearer_token_checker: Option<Arc<dyn BearerTokenChecker + Send + Sync>>,
     _claims_type_marker: PhantomData<ClaimsType>,
 }
 
@@ -233,6 +247,7 @@ where
         let jwt_validator = self.jwt_validator.clone();
         let jwt_session_key = self.jwt_session_key.clone();
         let jwt_authorization_header_prefixes = self.jwt_authorization_header_prefixes.clone();
+        let bearer_token_checker = self.bearer_token_checker.clone();
         async move {
             authenticate::<S, B, ClaimsType>(
                 svc,
@@ -240,6 +255,7 @@ where
                 &jwt_decoding_key,
                 jwt_session_key,
                 jwt_authorization_header_prefixes,
+                bearer_token_checker,
                 &jwt_validator,
             )
             .await
@@ -254,19 +270,39 @@ async fn authenticate<S, B, ClaimsType>(
     jwt_decoding_key: &DecodingKey,
     jwt_session_key: Option<Arc<JWTSessionKey>>,
     jwt_authorization_header_prefixes: Option<Arc<Vec<String>>>,
+    bearer_token_checker: Option<Arc<dyn BearerTokenChecker + Send + Sync>>,
     validation: &Validation,
 ) -> Result<ServiceResponse<EitherBody<B>>, actix_web::Error>
 where
     ClaimsType: DeserializeOwned + 'static,
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
 {
-    let maybe_extracted_jwt = jwt_authorization_header_prefixes
-        .and_then(|prefixes| extract_bearer_jwt(&req, &prefixes))
+    let maybe_bearer_jwt =
+        jwt_authorization_header_prefixes.and_then(|prefixes| extract_bearer_jwt(&req, &prefixes));
+    let is_bearer = maybe_bearer_jwt.is_some();
+    let maybe_extracted_jwt = maybe_bearer_jwt
         .or_else(|| jwt_session_key.and_then(|key| extract_session_jwt(&req, &key)));
 
     if let Some(jwt) = maybe_extracted_jwt {
         match decode::<ClaimsType>(jwt.0.as_str(), jwt_decoding_key, validation) {
             Ok(decoded) => {
+                if is_bearer && let Some(checker) = bearer_token_checker {
+                    match checker.is_active(jwt.clone()).await {
+                        Ok(true) => {}
+                        Ok(false) => {
+                            let response = req
+                                .error_response(UniversalInboxError::Unauthorized(anyhow!(
+                                    "Invalid session: token has been revoked or has expired"
+                                )))
+                                .map_into_right_body();
+                            return Ok(response);
+                        }
+                        Err(error) => {
+                            let response = req.error_response(error).map_into_right_body();
+                            return Ok(response);
+                        }
+                    }
+                }
                 req.extensions_mut().insert(Authenticated {
                     jwt,
                     claims: decoded.claims,
@@ -363,6 +399,7 @@ mod tests {
             jwt_validator: validator,
             jwt_session_key: Some(JWTSessionKey(SESSION_KEY.to_string())),
             jwt_authorization_header_prefixes: Some(vec!["Bearer".to_string()]),
+            bearer_token_checker: None,
         }
     }
 

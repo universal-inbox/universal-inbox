@@ -2,22 +2,40 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::{DateTime, TimeDelta, Utc};
+use futures::{FutureExt, future::LocalBoxFuture};
 use jsonwebtoken::{EncodingKey, Header};
 use secrecy::SecretBox;
 use sqlx::{Postgres, Transaction};
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use universal_inbox::{
-    auth::auth_token::{AuthenticationToken, JWTToken, TruncatedAuthenticationToken},
+    auth::auth_token::{
+        AuthenticationToken, AuthenticationTokenId, JWTToken, TruncatedAuthenticationToken,
+    },
     user::UserId,
 };
 
 use crate::{
     configuration::HttpSessionSettings,
-    repository::{Repository, auth_token::AuthenticationTokenRepository},
+    middlewares::jwt_auth::{BearerTokenChecker, JWT},
+    repository::{
+        Repository,
+        auth_token::{AuthenticationTokenRepository, hash_jwt_token},
+    },
     universal_inbox::UniversalInboxError,
     utils::jwt::{Claims, JWT_SIGNING_ALGO, JWTBase64EncodedSigningKeys, JWTSigningKeys},
 };
+
+/// [`BearerTokenChecker`] backed by the stored `authentication_token` rows.
+pub struct StoredBearerTokenChecker(pub Arc<RwLock<AuthenticationTokenService>>);
+
+impl BearerTokenChecker for StoredBearerTokenChecker {
+    fn is_active(&self, jwt: JWT) -> LocalBoxFuture<'static, Result<bool, UniversalInboxError>> {
+        let service = self.0.clone();
+        async move { service.read().await.is_bearer_token_active(&jwt).await }.boxed_local()
+    }
+}
 
 pub struct AuthenticationTokenService {
     repository: Arc<Repository>,
@@ -108,13 +126,51 @@ impl AuthenticationTokenService {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Vec<TruncatedAuthenticationToken>, UniversalInboxError> {
-        let authentication_tokens = self
-            .repository
+        self.repository
             .fetch_auth_tokens_for_user(executor, user_id, true)
+            .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string(), auth_token.id = auth_token_id.to_string()),
+        err
+    )]
+    pub async fn revoke_auth_token(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        auth_token_id: AuthenticationTokenId,
+    ) -> Result<bool, UniversalInboxError> {
+        self.repository
+            .revoke_auth_token(executor, user_id, auth_token_id)
+            .await
+    }
+
+    /// Whether a validly signed bearer token may still authenticate.
+    ///
+    /// Stored tokens (API keys created from the settings page or the CLI) are
+    /// looked up by digest and must be neither revoked nor expired. Tokens
+    /// that were never stored (session JWTs, short-lived OAuth2 access
+    /// tokens) are accepted on their signature and `exp` alone, as before.
+    #[tracing::instrument(level = "debug", skip_all, err)]
+    pub async fn is_bearer_token_active(&self, jwt: &JWT) -> Result<bool, UniversalInboxError> {
+        let mut transaction = self.repository.begin().await?;
+        let status = self
+            .repository
+            .get_auth_token_status_by_hash(&mut transaction, &hash_jwt_token(&jwt.0))
             .await?;
-        Ok(authentication_tokens
-            .into_iter()
-            .map(TruncatedAuthenticationToken::new)
-            .collect())
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit while checking authentication token status")?;
+
+        Ok(match status {
+            None => true,
+            Some((is_revoked, expire_at)) => {
+                !is_revoked && expire_at.is_none_or(|expire_at| expire_at > Utc::now())
+            }
+        })
     }
 }

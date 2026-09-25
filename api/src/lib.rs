@@ -188,6 +188,13 @@ pub async fn run_server(
             jwt_decoding_key: jwt_signing_keys.decoding_key,
             jwt_session_key: Some(JWTSessionKey(JWT_SESSION_KEY.to_string())),
             jwt_authorization_header_prefixes: Some(vec!["Bearer".to_string()]),
+            // Stored API tokens are looked up on every bearer request so a
+            // revoked or expired one stops authenticating.
+            bearer_token_checker: Some(Arc::new(
+                crate::universal_inbox::auth_token::service::StoredBearerTokenChecker(
+                    auth_token_service.clone(),
+                ),
+            )),
             jwt_validator: {
                 let mut validation = Validation::new(Algorithm::EdDSA);
                 // Disable aud validation at the global JWT level because
