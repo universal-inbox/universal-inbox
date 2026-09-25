@@ -15,7 +15,10 @@ use universal_inbox::{
         Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
         service::NotificationPatch,
     },
-    third_party::integrations::{github::GithubNotification, linear::LinearNotification},
+    third_party::{
+        integrations::{github::GithubNotification, linear::LinearNotification},
+        item::ThirdPartyItemKind,
+    },
 };
 
 use wiremock::{
@@ -25,6 +28,7 @@ use wiremock::{
 
 use universal_inbox_api::{
     configuration::Settings, integrations::linear::graphql::notifications_query,
+    repository::third_party::ThirdPartyItemRepository,
 };
 
 use crate::helpers::integration_connection::OAuthCredentialFixture;
@@ -501,6 +505,86 @@ mod list_notifications {
         .await;
 
         assert!(result.is_empty());
+    }
+
+    /// Stored third party data can stop matching the current types (eg. after a serde or
+    /// dependency upgrade). Such a row must be skipped instead of failing the user's whole inbox
+    /// and every sync reading the same rows.
+    #[rstest]
+    #[tokio::test]
+    async fn test_list_notifications_skips_undecodable_third_party_item(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
+        github_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            github_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+
+        let expected_notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+
+        let mut broken_github_notification = github_notification.clone();
+        broken_github_notification.id = "43".to_string();
+        let broken_notification = create_notification_from_github_notification(
+            &app.app,
+            &broken_github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+        sqlx::query(
+            r#"UPDATE third_party_item SET data = '{"type": "GithubNotification", "content": {"unexpected": true}}'::jsonb WHERE id = $1"#,
+        )
+        .bind(broken_notification.source_item.id.0)
+        .execute(&*app.app.repository.pool)
+        .await
+        .expect("Failed to corrupt the third party item data");
+
+        let result = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![NotificationStatus::Unread],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], *expected_notification);
+
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        let items = app
+            .app
+            .repository
+            .find_third_party_items_with_active_notification_for_user_id(
+                &mut transaction,
+                ThirdPartyItemKind::GithubNotification,
+                NotificationStatus::Unread,
+                app.user.id,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, expected_notification.source_item.id);
     }
 }
 

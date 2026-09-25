@@ -21,7 +21,7 @@ use crate::{
     universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus},
 };
 
-use super::{FromRowWithPrefix, third_party::ThirdPartyItemRow};
+use super::{FromRowWithPrefix, decode_rows_skipping_invalid, third_party::ThirdPartyItemRow};
 
 #[async_trait]
 pub trait NotificationRepository {
@@ -626,7 +626,7 @@ impl NotificationRepository for Repository {
         }
 
         let records = query_builder
-            .build_query_as::<NotificationWithTaskRow>()
+            .build()
             .fetch_all(&mut **executor)
             .await
             .map_err(|err| {
@@ -638,10 +638,14 @@ impl NotificationRepository for Repository {
             })?;
 
         let total: usize = count.try_into().unwrap(); // count(*) cannot be negative
-        let mut content = records
-            .iter()
-            .map(|r| r.try_into())
-            .collect::<Result<Vec<NotificationWithTask>, UniversalInboxError>>()?;
+        let mut content = decode_rows_skipping_invalid::<NotificationWithTaskRow>(
+            &records,
+            "notification__id",
+            "notification",
+        )
+        .iter()
+        .map(|r| r.try_into())
+        .collect::<Result<Vec<NotificationWithTask>, UniversalInboxError>>()?;
         if reverse_order {
             content.reverse();
         }

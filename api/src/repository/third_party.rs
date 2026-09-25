@@ -17,7 +17,7 @@ use crate::{
     universal_inbox::{UniversalInboxError, UpsertStatus},
 };
 
-use super::FromRowWithPrefix;
+use super::{FromRowWithPrefix, decode_rows_skipping_invalid};
 
 #[async_trait]
 pub trait ThirdPartyItemRepository {
@@ -313,7 +313,7 @@ impl ThirdPartyItemRepository for Repository {
             .push_bind_unseparated(user_id.0);
 
         let rows = query_builder
-            .build_query_as::<ThirdPartyItemRow>()
+            .build()
             .fetch_all(&mut **executor)
             .await
             .map_err(|err| {
@@ -324,9 +324,14 @@ impl ThirdPartyItemRepository for Repository {
                 }
             })?;
 
-        rows.iter()
-            .map(|r| r.try_into())
-            .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
+        decode_rows_skipping_invalid::<ThirdPartyItemRow>(
+            &rows,
+            "third_party_item__id",
+            "third party item",
+        )
+        .iter()
+        .map(|r| r.try_into())
+        .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
     }
 
     #[tracing::instrument(
@@ -450,7 +455,7 @@ impl ThirdPartyItemRepository for Repository {
         }
 
         let records = query_builder
-            .build_query_as::<ThirdPartyItemRow>()
+            .build()
             .fetch_all(&mut **executor)
             .await
             .map_err(|err| {
@@ -461,10 +466,14 @@ impl ThirdPartyItemRepository for Repository {
                 }
             })?;
 
-        records
-            .iter()
-            .map(|r| r.try_into())
-            .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
+        decode_rows_skipping_invalid::<ThirdPartyItemRow>(
+            &records,
+            "third_party_item__id",
+            "third party item",
+        )
+        .iter()
+        .map(|r| r.try_into())
+        .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
     }
 
     #[tracing::instrument(
@@ -509,7 +518,7 @@ impl ThirdPartyItemRepository for Repository {
         query_builder.push_bind(kind.to_string());
 
         let records = query_builder
-            .build_query_as::<ThirdPartyItemRow>()
+            .build()
             .fetch_all(&mut **executor)
             .await
             .map_err(|err| {
@@ -520,10 +529,14 @@ impl ThirdPartyItemRepository for Repository {
                 }
             })?;
 
-        records
-            .iter()
-            .map(|r| r.try_into())
-            .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
+        decode_rows_skipping_invalid::<ThirdPartyItemRow>(
+            &records,
+            "third_party_item__id",
+            "third party item",
+        )
+        .iter()
+        .map(|r| r.try_into())
+        .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
     }
 
     #[tracing::instrument(
@@ -569,7 +582,7 @@ impl ThirdPartyItemRepository for Repository {
         query_builder.push_bind(notification_status.to_string());
 
         let records = query_builder
-            .build_query_as::<ThirdPartyItemRow>()
+            .build()
             .fetch_all(&mut **executor)
             .await
             .map_err(|err| {
@@ -580,10 +593,14 @@ impl ThirdPartyItemRepository for Repository {
                 }
             })?;
 
-        records
-            .iter()
-            .map(|r| r.try_into())
-            .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
+        decode_rows_skipping_invalid::<ThirdPartyItemRow>(
+            &records,
+            "third_party_item__id",
+            "third party item",
+        )
+        .iter()
+        .map(|r| r.try_into())
+        .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
     }
 }
 

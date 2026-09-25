@@ -17,7 +17,9 @@ use universal_inbox::{
 
 use crate::universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus};
 
-use super::{FromRowWithPrefix, Repository, third_party::ThirdPartyItemRow};
+use super::{
+    FromRowWithPrefix, Repository, decode_rows_skipping_invalid, third_party::ThirdPartyItemRow,
+};
 
 #[async_trait]
 pub trait TaskRepository {
@@ -340,7 +342,7 @@ impl TaskRepository for Repository {
             .push_bind(DEFAULT_PAGE_SIZE as i64);
 
         let rows = query_builder
-            .build_query_as::<TaskRow>()
+            .build()
             .fetch_all(&mut **executor)
             .await
             .map_err(|err| {
@@ -352,7 +354,7 @@ impl TaskRepository for Repository {
             })?;
 
         let total: usize = count.try_into().unwrap(); // count(*) cannot be negative
-        let content = rows
+        let content = decode_rows_skipping_invalid::<TaskRow>(&rows, "task__id", "task")
             .iter()
             .map(|r| r.try_into())
             .collect::<Result<Vec<Task>, UniversalInboxError>>()?;
