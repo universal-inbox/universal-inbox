@@ -256,7 +256,7 @@ impl SlackService {
         user: &SlackUserId,
         user_id: UserId,
         slack_api_token: &SlackApiToken,
-    ) -> Result<SlackUser, UniversalInboxError> {
+    ) -> Result<Option<SlackUser>, UniversalInboxError> {
         let result =
             cached_fetch_user(user_id, &self.slack_base_url, slack_api_token, user).await?;
         if result.was_cached() {
@@ -270,10 +270,12 @@ impl SlackService {
         user: &SlackUserId,
         user_id: UserId,
         slack_api_token: &SlackApiToken,
-    ) -> Result<SlackUserProfile, UniversalInboxError> {
-        let slack_user = self.fetch_user(user, user_id, slack_api_token).await?;
+    ) -> Result<Option<SlackUserProfile>, UniversalInboxError> {
+        let Some(slack_user) = self.fetch_user(user, user_id, slack_api_token).await? else {
+            return Ok(None);
+        };
 
-        Ok(slack_user.profile.unwrap_or_else(|| {
+        Ok(Some(slack_user.profile.unwrap_or_else(|| {
             let mut profile = SlackUserProfile::new().with_id(slack_user.id);
 
             if let Some(name) = slack_user.name {
@@ -287,7 +289,7 @@ impl SlackService {
             }
 
             profile
-        }))
+        })))
     }
 
     /// Returns `None` when the usergroup is not listed for this token (deleted usergroup,
@@ -342,7 +344,7 @@ impl SlackService {
         &self,
         bot: &SlackBotId,
         slack_api_token: &SlackApiToken,
-    ) -> Result<SlackBotInfo, UniversalInboxError> {
+    ) -> Result<Option<SlackBotInfo>, UniversalInboxError> {
         let result = cached_fetch_bot(&self.slack_base_url, slack_api_token, bot).await?;
         if result.was_cached() {
             debug!("`fetch_bot` cache hit");
@@ -614,10 +616,10 @@ impl SlackService {
 
         let slack_user_ids = references.users.keys().cloned().collect::<Vec<_>>();
         for slack_user_id in slack_user_ids {
-            let user_profile = self
+            let user_name = self
                 .fetch_user_profile(&slack_user_id, user_id, slack_api_token)
-                .await?;
-            let user_name = user_profile.display_name.or(user_profile.real_name);
+                .await?
+                .and_then(|user_profile| user_profile.display_name.or(user_profile.real_name));
             references.users.insert(slack_user_id, user_name);
         }
 
@@ -709,10 +711,17 @@ impl SlackService {
                 let url = self
                     .get_chat_permalink(channel, ts, &slack_api_token)
                     .await?;
-                let sender = SlackMessageSenderDetails::User(Box::new(
-                    self.fetch_user_profile(slack_reaction_item_user_id, user_id, &slack_api_token)
-                        .await?,
-                ));
+                let sender_profile = self
+                    .fetch_user_profile(slack_reaction_item_user_id, user_id, &slack_api_token)
+                    .await?
+                    .unwrap_or_else(|| {
+                        warn!(
+                            "Unknown Slack user {slack_reaction_item_user_id}, \
+                             the reacted message will be rendered without its sender details"
+                        );
+                        SlackUserProfile::new().with_id(slack_reaction_item_user_id.clone())
+                    });
+                let sender = SlackMessageSenderDetails::User(Box::new(sender_profile));
                 let message = self
                     .fetch_message(channel, ts, user_id, &slack_api_token)
                     .await?;
@@ -920,7 +929,7 @@ impl SlackService {
                     .fetch_user_profile(slack_user_id, user_id, slack_api_token)
                     .await
                 {
-                    Ok(user_profile) => {
+                    Ok(Some(user_profile)) => {
                         sender_profiles.insert(
                             slack_user_id.to_string(),
                             SlackMessageSenderDetails::User(Box::new(user_profile)),
@@ -929,7 +938,7 @@ impl SlackService {
                     // A user Slack will never resolve for this token (deleted account, user from
                     // another workspace) must not abort the whole thread: its messages are
                     // rendered without a sender profile.
-                    Err(error) if slack_api_error_code(&error) == Some("user_not_found") => {
+                    Ok(None) => {
                         warn!(
                             "Unknown Slack user {slack_user_id}, \
                              its messages will be rendered without a sender profile"
@@ -947,7 +956,7 @@ impl SlackService {
         for slack_bot_id in slack_bot_ids {
             if !sender_profiles.contains_key(slack_bot_id.0.as_str()) {
                 match self.fetch_bot(slack_bot_id, slack_api_token).await {
-                    Ok(bot) => {
+                    Ok(Some(bot)) => {
                         sender_profiles.insert(
                             slack_bot_id.to_string(),
                             SlackMessageSenderDetails::Bot(Box::new(bot)),
@@ -956,7 +965,7 @@ impl SlackService {
                     // Same as above: Slack answers `bot_not_found` for bots it will never
                     // resolve for this token (apps from another workspace, org level or workflow
                     // apps, deleted apps).
-                    Err(error) if slack_api_error_code(&error) == Some("bot_not_found") => {
+                    Ok(None) => {
                         warn!(
                             "Unknown Slack bot {slack_bot_id}, \
                              its messages will be rendered without a sender profile"
@@ -1209,7 +1218,8 @@ async fn cached_fetch_channel(
     key = "String",
     // Use user_id to avoid leaking user details to an unauthorized user
     convert = r#"{ format!("{}__{}__{}", slack_base_url, _user_id, user) }"#,
-    ty = "cached::AsyncRedisCache<String, SlackUser>",
+    // `None` caches that Slack cannot resolve this user, so it is not re-fetched on every sync
+    ty = "cached::AsyncRedisCache<String, Option<SlackUser>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_user`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_user", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
@@ -1219,16 +1229,24 @@ async fn cached_fetch_user(
     slack_base_url: &str,
     slack_api_token: &SlackApiToken,
     user: &SlackUserId,
-) -> Result<Return<SlackUser>, UniversalInboxError> {
+) -> Result<Return<Option<SlackUser>>, UniversalInboxError> {
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    let response = session
+    match session
         .users_info(&SlackApiUsersInfoRequest::new(user.clone()))
         .await
-        .with_context(|| format!("Failed to fetch Slack user {user}"))?;
-
-    Ok(Return::new(response.user))
+    {
+        Ok(response) => Ok(Return::new(Some(response.user))),
+        // Slack will never resolve this user for this token (deleted account, user from
+        // another workspace)
+        Err(SlackClientError::ApiError(SlackClientApiError { ref code, .. }))
+            if code == "user_not_found" =>
+        {
+            Ok(Return::new(None))
+        }
+        Err(error) => Err(error).with_context(|| format!("Failed to fetch Slack user {user}"))?,
+    }
 }
 
 #[concurrent_cached(
@@ -1283,7 +1301,8 @@ async fn cached_list_users_in_usergroup(
 #[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token), bot) }"#,
-    ty = "cached::AsyncRedisCache<String, SlackBotInfo>",
+    // `None` caches that Slack cannot resolve this bot, so it is not re-fetched on every sync
+    ty = "cached::AsyncRedisCache<String, Option<SlackBotInfo>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_bot`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_bot", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
@@ -1292,16 +1311,24 @@ async fn cached_fetch_bot(
     slack_base_url: &str,
     slack_api_token: &SlackApiToken,
     bot: &SlackBotId,
-) -> Result<Return<SlackBotInfo>, UniversalInboxError> {
+) -> Result<Return<Option<SlackBotInfo>>, UniversalInboxError> {
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    let response = session
+    match session
         .bots_info(&SlackApiBotsInfoRequest::new().with_bot(bot.to_string()))
         .await
-        .with_context(|| format!("Failed to fetch Slack bot {bot}"))?;
-
-    Ok(Return::new(response.bot))
+    {
+        Ok(response) => Ok(Return::new(Some(response.bot))),
+        // Slack will never resolve this bot for this token (apps from another workspace, org
+        // level or workflow apps, deleted apps)
+        Err(SlackClientError::ApiError(SlackClientApiError { ref code, .. }))
+            if code == "bot_not_found" =>
+        {
+            Ok(Return::new(None))
+        }
+        Err(error) => Err(error).with_context(|| format!("Failed to fetch Slack bot {bot}"))?,
+    }
 }
 
 #[concurrent_cached(
