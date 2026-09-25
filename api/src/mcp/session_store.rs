@@ -10,12 +10,15 @@
 //! [`LocalSessionManager`]: rmcp::transport::streamable_http_server::session::local::LocalSessionManager
 
 use async_trait::async_trait;
-use redis::{AsyncCommands, aio::ConnectionManager};
+use redis::{AsyncCommands, RedisError, aio::ConnectionManager};
 use rmcp::transport::streamable_http_server::session::{
     SessionState, SessionStore, SessionStoreError,
 };
 
+use universal_inbox::user::UserId;
+
 const NAMESPACE: &str = "universal-inbox:mcp:session:";
+const OWNER_NAMESPACE: &str = "universal-inbox:mcp:session-owner:";
 
 #[derive(Clone)]
 pub struct RedisSessionStore {
@@ -65,5 +68,51 @@ impl SessionStore for RedisSessionStore {
             .await
             .map_err(|e| Box::new(e) as SessionStoreError)?;
         Ok(())
+    }
+}
+
+/// Records which user owns each MCP session, in shared Redis so every pod
+/// agrees.
+///
+/// The `Mcp-Session-Id` header is client-supplied and rmcp's streamable HTTP
+/// transport, which restores unknown sessions from the shared session store,
+/// would otherwise serve any session to any authenticated caller (replaying its
+/// SSE events, closing it, or injecting responses into it). The MCP
+/// middleware records the owner when `initialize` mints a session and
+/// rejects every later request whose authenticated user is not that owner.
+#[derive(Clone)]
+pub struct McpSessionOwnerStore {
+    conn: ConnectionManager,
+    ttl_seconds: u64,
+}
+
+impl McpSessionOwnerStore {
+    pub fn new(conn: ConnectionManager, ttl_seconds: u64) -> Self {
+        Self { conn, ttl_seconds }
+    }
+
+    fn key(id: &str) -> String {
+        format!("{OWNER_NAMESPACE}{id}")
+    }
+
+    pub async fn record_owner(&self, session_id: &str, user_id: UserId) -> Result<(), RedisError> {
+        let mut conn = self.conn.clone();
+        conn.set_ex::<_, _, ()>(Self::key(session_id), user_id.to_string(), self.ttl_seconds)
+            .await
+    }
+
+    /// Whether `user_id` owns `session_id`. A session with no recorded
+    /// owner (unknown, expired, or created before owners were recorded) is
+    /// owned by nobody. On success the owner record's TTL is refreshed so an
+    /// active session keeps its binding.
+    pub async fn is_owned_by(&self, session_id: &str, user_id: UserId) -> Result<bool, RedisError> {
+        let mut conn = self.conn.clone();
+        let key = Self::key(session_id);
+        let owner: Option<String> = conn.get(&key).await?;
+        let is_owner = owner.is_some_and(|owner| owner == user_id.to_string());
+        if is_owner {
+            conn.expire::<_, ()>(&key, self.ttl_seconds as i64).await?;
+        }
+        Ok(is_owner)
     }
 }
