@@ -3,7 +3,8 @@ use apalis::prelude::*;
 use apalis_cron::CronContext;
 use apalis_redis::RedisStorage;
 use chrono::{DateTime, TimeDelta, Utc};
-use redis::{AsyncCommands, ExistenceCheck, Script, SetExpiry, SetOptions};
+use redis::{AsyncCommands, ExistenceCheck, SetExpiry, SetOptions};
+use redis_apalis::Script;
 use tracing::{info, warn};
 
 use crate::{
