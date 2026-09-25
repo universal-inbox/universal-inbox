@@ -278,10 +278,19 @@ pub async fn get_user(
 }
 
 pub async fn patch_user(
+    req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     authenticated: Authenticated<Claims>,
     patch: web::Json<UserPatch>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    // An email change sends a verification email: rate-limit like the other
+    // email-sending endpoints.
+    if patch.email.is_some()
+        && let Err(response) = check_ip_rate_limit(&req, &rate_limiter)
+    {
+        return Ok(*response);
+    }
     let user_id = authenticated
         .claims
         .sub

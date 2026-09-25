@@ -145,6 +145,20 @@ pub async fn get_user_email_validation_token(
     token
 }
 
+pub async fn get_pending_email_change_token(
+    app: &TestedApp,
+    user_id: UserId,
+) -> Option<EmailValidationToken> {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let pending_change = app
+        .repository
+        .get_pending_email_change(&mut transaction, user_id)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    pending_change.map(|change| change.validation_token)
+}
+
 pub async fn get_password_reset_token(
     app: &TestedApp,
     user_id: UserId,

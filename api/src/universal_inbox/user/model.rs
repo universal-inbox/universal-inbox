@@ -1,11 +1,15 @@
 use std::fmt;
 
 use chrono::{DateTime, Utc};
+use email_address::EmailAddress;
 use secrecy::SecretBox;
 use serde::{Deserialize, Serialize};
 use universal_inbox::{
     auth::AuthIdToken,
-    user::{PasswordHash, UserAuthKind, UserAuthMethod, UserAuthMethodDisplayInfo, Username},
+    user::{
+        EmailValidationToken, PasswordHash, UserAuthKind, UserAuthMethod,
+        UserAuthMethodDisplayInfo, Username,
+    },
 };
 use webauthn_rs::prelude::*;
 
@@ -101,4 +105,13 @@ impl From<AuthUserId> for String {
     fn from(auth_user_id: AuthUserId) -> Self {
         auth_user_id.0
     }
+}
+
+/// An email change awaiting verification of the new address (see
+/// `UserService::patch_user`).
+#[derive(Debug, Clone)]
+pub struct PendingEmailChange {
+    pub new_email: EmailAddress,
+    pub validation_token: EmailValidationToken,
+    pub requested_at: DateTime<Utc>,
 }

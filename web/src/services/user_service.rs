@@ -224,6 +224,7 @@ pub async fn user_service(
                 start_passkey_registration(username, &api_base_url, connected_user, ui_model).await;
             }
             Some(UserCommand::UpdateUser(user_patch)) => {
+                let requested_email = user_patch.email.clone();
                 let result: Result<Option<User>> = call_api(
                     Method::PATCH,
                     &api_base_url,
@@ -235,11 +236,21 @@ pub async fn user_service(
 
                 match result {
                     Ok(user) => {
+                        // An email change only takes effect once the new
+                        // address is verified: the API keeps the current one.
+                        let pending_email = requested_email.filter(|email| {
+                            user.as_ref()
+                                .is_some_and(|user| user.email.as_ref() != Some(email))
+                        });
                         if let Some(user) = user {
                             connected_user.write().replace(user);
                         }
-                        ui_model.write().confirmation_message =
-                            Some("Profile updated successfully".to_string());
+                        ui_model.write().confirmation_message = Some(match pending_email {
+                            Some(email) => format!(
+                                "Profile updated. Follow the link sent to {email} to confirm your new email address."
+                            ),
+                            None => "Profile updated successfully".to_string(),
+                        });
                     }
                     Err(err) => {
                         ui_model.write().error_message = Some(err.to_string());
