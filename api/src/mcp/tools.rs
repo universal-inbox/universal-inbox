@@ -86,6 +86,9 @@ pub(crate) struct ListNotificationsArgs {
     )]
     page_token: Option<PageToken>,
     task_id: Option<TaskId>,
+    #[schemars(
+        description = "Queue a background sync of due sources after reading. Does not wait: this response is unaffected."
+    )]
     #[serde(default)]
     trigger_sync: bool,
 }
@@ -176,6 +179,9 @@ pub(crate) struct ListTasksArgs {
     status: Option<TaskStatus>,
     #[serde(default = "default_true")]
     only_synced_tasks: bool,
+    #[schemars(
+        description = "Queue a background sync of due sources after reading. Does not wait: this response is unaffected."
+    )]
     #[serde(default)]
     trigger_sync: bool,
 }
@@ -187,7 +193,10 @@ pub(crate) struct GetTaskArgs {
 
 #[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct SearchTasksArgs {
-    #[schemars(length(min = 1))]
+    #[schemars(
+        length(min = 1),
+        description = "Words to match against task title, body, project, and tags."
+    )]
     matches: String,
 }
 

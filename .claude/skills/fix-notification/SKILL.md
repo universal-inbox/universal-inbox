@@ -11,9 +11,9 @@ disposable local environment for debugging. Stops once the user is logged
 in and the notification preview is visible — the actual fix is your job
 after that.
 
-The canonical reference for the underlying commands is `CLAUDE.md`
-(sections "Worktree Development Workflow" and "Playwright Browser
-Testing"). This skill orchestrates them in the right order plus the few
+The canonical reference for the underlying commands is
+`.claude/QUICK_START.md` (sections "Worktree (worktrunk)" and "Dev
+Servers"). This skill orchestrates them in the right order plus the few
 non-obvious bits (status flip, headless process-compose, password reset
 via stdin).
 
@@ -142,7 +142,7 @@ any destructive testing.
 
 ## Step 7 — Reset the user's password
 
-Use the `reset-password` recipe (lives at `api/.justfile:66-67`, backed
+Use the `reset-password` recipe (in `api/.justfile`, backed
 by `cargo run -- user reset-password <email>` →
 `api/src/commands/user.rs::reset_password`). It reads the new password
 from stdin in non-TTY mode and either updates the existing Local auth
@@ -153,7 +153,7 @@ echo "test123456" | direnv exec . just api reset-password "<email>"
 ```
 
 Use `test123456` as the password by convention — it matches the
-project's seeded test users (`api/tests/browser/helpers.rs:34`) so it's
+project's seeded test users (`DEFAULT_PASSWORD` in `api/tests/browser/helpers.rs`) so it's
 already in everyone's muscle memory.
 
 The recipe does **not** touch `email_validated_at`. If the user's email
@@ -230,11 +230,3 @@ cleanly before deleting the directory.
 - **`just api reset-password` errors with "Unable to find user".**
   Email parsing went wrong in Step 5. Print the raw psql output and
   reparse.
-- **JS changes to `web/js/index.js` don't take effect.** Unrelated to
-  this skill, but a known dev-loop gotcha: `just web bundle-js` only
-  refreshes `web/public/js/index.js`. The wasm-bindgen snippet at
-  `web/public/snippets/<crate-hash>/public/js/index.js` is regenerated
-  only on a Rust rebuild, so JS-only iterations are served stale. Force
-  a fresh wasm-bindgen pass by `rm -rf target/dx/universal-inbox-web`
-  and restarting `ui-web`, or `cp web/public/js/index.js` over the
-  snippet path as a stopgap.
