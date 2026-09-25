@@ -222,6 +222,10 @@ pub async fn run_server(
         .security
         .mcp_extra_allowed_origins
         .clone();
+    let mcp_allowed_hosts = mcp::mcp_allowed_hosts(
+        &settings.application.front_base_url,
+        &settings.application.security.mcp_extra_allowed_hosts,
+    );
     let settings_web_data = web::Data::new(settings);
 
     info!("Listening on {}", listen_address);
@@ -234,6 +238,7 @@ pub async fn run_server(
         integration_connection_service.clone(),
         redis_storage.clone(),
         mcp_session_store,
+        mcp_allowed_hosts,
     );
     let oauth2_rate_limiter = routes::oauth2::build_rate_limiter();
     let mcp_rate_limiter = mcp::build_rate_limiter();
