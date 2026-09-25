@@ -12,6 +12,7 @@ use tracing::warn;
 
 use universal_inbox::{
     Page, PageToken,
+    auth::oauth2::{OAUTH2_SCOPE_READ, OAUTH2_SCOPE_WRITE},
     notification::{
         Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
         NotificationStatus, NotificationSyncSourceKind, NotificationWithTask,
@@ -209,6 +210,21 @@ pub(crate) struct UpdateTaskArgs {
 #[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct SyncTasksArgs {
     source: Option<TaskSyncSourceKind>,
+}
+
+/// OAuth2 scope a tool requires. Read-only tools need `read`; every other
+/// tool — including any tool added later and not listed here — mutates the
+/// user's inbox, their task providers, or triggers syncs, and needs `write`.
+///
+/// `list_notifications` with `trigger_sync: true` stays a `read` call: it only
+/// enqueues the syncs that are already due on their regular schedule.
+pub fn required_scope(tool_name: &str) -> &'static str {
+    match tool_name {
+        "list_notifications" | "get_notification" | "list_tasks" | "get_task" | "search_tasks" => {
+            OAUTH2_SCOPE_READ
+        }
+        _ => OAUTH2_SCOPE_WRITE,
+    }
 }
 
 pub async fn execute_tool(

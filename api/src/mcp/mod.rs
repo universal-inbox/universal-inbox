@@ -42,8 +42,8 @@ use crate::{
         act_on_notification_output_schema, bulk_act_notifications_output_schema,
         create_task_from_notification_output_schema, execute_tool, get_notification_output_schema,
         get_task_output_schema, list_notifications_output_schema, list_tasks_output_schema,
-        search_tasks_output_schema, sync_notifications_output_schema, sync_tasks_output_schema,
-        update_task_output_schema,
+        required_scope, search_tasks_output_schema, sync_notifications_output_schema,
+        sync_tasks_output_schema, update_task_output_schema,
     },
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
@@ -399,8 +399,13 @@ impl UniversalInboxMcpServer {
         }
     }
 
-    fn user_id_from_context(
+    /// Resolve the calling user and check that their token grants the scope
+    /// `tool_name` requires (see [`required_scope`]). OAuth2 access tokens
+    /// only carry the scopes the user consented to; first-party API keys
+    /// carry full authority (see [`Claims::grants_scope`]).
+    fn authorize_tool_call(
         &self,
+        tool_name: &str,
         context: &RequestContext<RoleServer>,
     ) -> Result<UserId, ErrorData> {
         // Values written by the `on_request` hook travel inside the bridged
@@ -409,11 +414,35 @@ impl UniversalInboxMcpServer {
             .and_then(|extensions| extensions.get::<Authenticated<Claims>>())
             .ok_or_else(|| ErrorData::invalid_request("Missing authenticated user", None))?;
 
-        authenticated
+        let user_id = authenticated
             .claims
             .sub
             .parse::<UserId>()
-            .map_err(|_| ErrorData::invalid_request("Invalid authenticated user", None))
+            .map_err(|_| ErrorData::invalid_request("Invalid authenticated user", None))?;
+
+        let scope = required_scope(tool_name);
+        if !authenticated.claims.grants_scope(scope) {
+            warn!(
+                user.id = %user_id,
+                client_id = ?authenticated.claims.client_id,
+                granted_scope = ?authenticated.claims.scope,
+                required_scope = scope,
+                mcp.tool.name = tool_name,
+                "MCP tool call rejected: insufficient scope"
+            );
+            return Err(ErrorData::invalid_request(
+                format!(
+                    "insufficient_scope: the {tool_name} tool requires the '{scope}' scope, \
+                     which this access token was not granted"
+                ),
+                Some(serde_json::json!({
+                    "error": "insufficient_scope",
+                    "required_scope": scope,
+                })),
+            ));
+        }
+
+        Ok(user_id)
     }
 
     #[tracing::instrument(name = "mcp.call_tool", skip(self, args, context), fields(mcp.tool.name = %tool_name))]
@@ -423,7 +452,7 @@ impl UniversalInboxMcpServer {
         args: T,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        let user_id = self.user_id_from_context(&context)?;
+        let user_id = self.authorize_tool_call(tool_name, &context)?;
         let arguments = serde_json::to_value(args).map(Some).map_err(|err| {
             ErrorData::invalid_params(format!("Failed to serialize tool arguments: {err}"), None)
         })?;
