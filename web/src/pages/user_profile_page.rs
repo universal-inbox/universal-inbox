@@ -13,6 +13,7 @@ pub fn UserProfilePage() -> Element {
 
     rsx! {
         div {
+            id: "user-profile-page",
             class: "flex-1 overflow-y-auto bg-ui-base-200",
 
             div {
