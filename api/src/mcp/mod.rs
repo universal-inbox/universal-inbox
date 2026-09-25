@@ -2,6 +2,7 @@ use std::{
     future::{Future, Ready, ready},
     num::NonZeroU32,
     pin::Pin,
+    rc::Rc,
     sync::Arc,
     task::{Context, Poll},
 };
@@ -29,7 +30,7 @@ use rmcp::{
 };
 use rmcp_actix_web::transport::{StreamableHttpService, on_request_extensions};
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use universal_inbox::user::UserId;
 
@@ -55,7 +56,7 @@ use crate::{
 pub mod session_store;
 pub mod tools;
 
-pub use session_store::RedisSessionStore;
+pub use session_store::{McpSessionOwnerStore, RedisSessionStore};
 
 const SERVER_NAME: &str = "universal-inbox";
 const SERVER_TITLE: &str = "Universal Inbox";
@@ -146,6 +147,7 @@ pub fn build_rate_limiter() -> Arc<McpRateLimiter> {
 
 pub fn scope(
     http_service: StreamableHttpService<UniversalInboxMcpServer, LocalSessionManager>,
+    session_owners: McpSessionOwnerStore,
     rate_limiter: Arc<McpRateLimiter>,
     resource_url: String,
     extra_allowed_origins: Vec<String>,
@@ -161,6 +163,7 @@ pub fn scope(
     web::scope("/mcp")
         .wrap(RequireAuthenticated {
             allowed_origins,
+            session_owners,
             rate_limiter,
             resource_metadata_url,
             resource_url,
@@ -170,6 +173,7 @@ pub fn scope(
 
 struct RequireAuthenticated {
     allowed_origins: Vec<String>,
+    session_owners: McpSessionOwnerStore,
     rate_limiter: Arc<McpRateLimiter>,
     resource_metadata_url: String,
     resource_url: String,
@@ -189,8 +193,9 @@ where
 
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(RequireAuthenticatedMiddleware {
-            service,
+            service: Rc::new(service),
             allowed_origins: self.allowed_origins.clone(),
+            session_owners: self.session_owners.clone(),
             rate_limiter: self.rate_limiter.clone(),
             resource_metadata_url: self.resource_metadata_url.clone(),
             resource_url: self.resource_url.clone(),
@@ -199,8 +204,9 @@ where
 }
 
 struct RequireAuthenticatedMiddleware<S> {
-    service: S,
+    service: Rc<S>,
     allowed_origins: Vec<String>,
+    session_owners: McpSessionOwnerStore,
     rate_limiter: Arc<McpRateLimiter>,
     resource_metadata_url: String,
     resource_url: String,
@@ -376,8 +382,70 @@ where
         );
 
         req.headers_mut().remove(header::AUTHORIZATION);
-        let future = self.service.call(req);
-        Box::pin(async move { future.await.map(ServiceResponse::map_into_left_body) })
+
+        // Bind every MCP session to the user that created it. The
+        // `Mcp-Session-Id` header is client-supplied and rmcp's streamable
+        // HTTP transport only checks that the session exists (locally or in
+        // the shared session store), so it would serve it to any authenticated
+        // caller: replaying its SSE events (the owner's tool results), closing
+        // it, or injecting responses into it. A session that is unknown, expired or owned by
+        // someone else gets the MCP-spec 404, which makes clients start a new
+        // session, and does not reveal whether the id exists.
+        let session_id = req
+            .headers()
+            .get("mcp-session-id")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        let session_owners = self.session_owners.clone();
+        let service = self.service.clone();
+        Box::pin(async move {
+            if let Some(session_id) = session_id.as_deref() {
+                let is_owner = match user_id {
+                    Some(uid) => session_owners.is_owned_by(session_id, uid).await,
+                    None => Ok(false),
+                };
+                match is_owner {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        warn!(
+                            user.id = ?user_id,
+                            method = %req.method(),
+                            "MCP request rejected: session is not owned by the authenticated user"
+                        );
+                        return Ok(req
+                            .into_response(HttpResponse::NotFound().body("Session not found"))
+                            .map_into_right_body());
+                    }
+                    Err(err) => {
+                        error!(?err, "MCP request rejected: failed to read session owner");
+                        return Ok(req
+                            .into_response(HttpResponse::InternalServerError().finish())
+                            .map_into_right_body());
+                    }
+                }
+            }
+
+            let response = service.call(req).await?;
+
+            // `initialize` (a request without a session id) mints the session:
+            // record its owner before the client can learn the id.
+            if session_id.is_none()
+                && let Some(uid) = user_id
+                && let Some(new_session_id) = response
+                    .headers()
+                    .get("mcp-session-id")
+                    .and_then(|v| v.to_str().ok())
+                    .map(str::to_string)
+                && let Err(err) = session_owners.record_owner(&new_session_id, uid).await
+            {
+                error!(?err, user.id = %uid, "Failed to record MCP session owner");
+                return Ok(response
+                    .into_response(HttpResponse::InternalServerError().finish())
+                    .map_into_right_body());
+            }
+
+            Ok(response.map_into_left_body())
+        })
     }
 }
 

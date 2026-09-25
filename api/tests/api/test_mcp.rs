@@ -28,7 +28,7 @@ use universal_inbox_api::{
 use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     TestedApp,
-    auth::{AuthenticatedApp, authenticated_app},
+    auth::{AuthenticatedApp, authenticate_user, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, github_oauth_credential, todoist_oauth_credential,
     },
@@ -287,6 +287,96 @@ mod protocol {
         assert!(tool_names.contains(&"create_task_from_notification".to_string()));
         assert!(tool_names.contains(&"list_tasks".to_string()));
         assert!(tool_names.contains(&"update_task".to_string()));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn session_is_bound_to_the_user_who_created_it(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let owner_token = create_api_key(&app)
+            .await
+            .jwt_token
+            .expose_secret()
+            .0
+            .clone();
+        let owner_client = mcp_client();
+        let (session_id, _) = mcp_initialize(&owner_client, &app.app, &owner_token).await;
+        let session_id = session_id.expect("Expected an MCP session id");
+
+        let (other_user_client, _) =
+            authenticate_user(&app.app, "5678", "Jane", "Roe", "jane@example.com").await;
+        let other_api_key: AuthenticationToken = other_user_client
+            .post(format!(
+                "{}users/me/authentication-tokens",
+                app.app.api_address
+            ))
+            .send()
+            .await
+            .expect("Failed to create API key")
+            .json()
+            .await
+            .expect("Failed to deserialize API key response");
+        let other_token = other_api_key.jwt_token.expose_secret().0.clone();
+        let attacker = mcp_client();
+
+        // Replaying the owner's event stream
+        let response = attacker
+            .get(format!("{}mcp", app.app.api_address))
+            .bearer_auth(&other_token)
+            .header("Accept", "text/event-stream")
+            .header("Mcp-Session-Id", &session_id)
+            .header("Last-Event-ID", "0")
+            .send()
+            .await
+            .expect("Failed to execute request");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        // Posting into the owner's session
+        let response = mcp_call(
+            &attacker,
+            &app.app,
+            &other_token,
+            json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} }),
+            Some(&session_id),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        // Closing the owner's session
+        let response = attacker
+            .delete(format!("{}mcp", app.app.api_address))
+            .bearer_auth(&other_token)
+            .header("Mcp-Session-Id", &session_id)
+            .send()
+            .await
+            .expect("Failed to execute request");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        // An unknown session id is treated the same way
+        let response = mcp_call(
+            &attacker,
+            &app.app,
+            &other_token,
+            json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} }),
+            Some(&Uuid::new_v4().to_string()),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        // The owner's session is untouched
+        let response = mcp_call(
+            &owner_client,
+            &app.app,
+            &owner_token,
+            json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list", "params": {} }),
+            Some(&session_id),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = mcp_json(response).await;
+        assert!(body["result"]["tools"].is_array(), "got: {body}");
     }
 
     #[rstest]
