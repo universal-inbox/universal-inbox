@@ -299,6 +299,7 @@ pub fn GoogleCalendarEventPreview(
 
                             if !is_cancelled() {
                                 div {
+                                    id: "google-calendar-rsvp-buttons",
                                     class: "grid grid-flow-col auto-cols-fr mt-2.5 -mx-3 -mb-3 border-t border-ui-border-light overflow-hidden rounded-b-[calc(var(--ui-radius-lg)-1px)]",
                                     button {
                                         r#type: "button",

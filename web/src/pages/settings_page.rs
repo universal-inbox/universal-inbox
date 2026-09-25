@@ -131,6 +131,7 @@ pub fn SettingsPage() -> Element {
     {
         return rsx! {
             div {
+                id: "settings-page",
                 class: "flex-1 overflow-y-auto bg-ui-base-200",
 
                 div {

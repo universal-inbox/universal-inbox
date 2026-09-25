@@ -47,7 +47,9 @@ pub fn FullpageLayout() -> Element {
                 }
             }
 
-            div { class: "auth-frame",
+            div {
+                id: "auth-frame",
+                class: "auth-frame",
                 div { class: "px-12 pt-12 pb-10 flex-1 flex flex-col bg-ui-surface",
                     BrandHeroLockup {}
 
