@@ -14,13 +14,13 @@ use universal_inbox::{
     SuccessResponse,
     auth::{AuthorizeSessionResponse, CloseSessionResponse},
     user::{
-        Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
-        User, UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
+        Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordResetToken,
+        RegisterUserParameters, User, UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
     },
 };
 
 use crate::{
-    model::UniversalInboxUIModel,
+    model::{AuthenticationState, UniversalInboxUIModel},
     services::{api::call_api, crisp::unload_crisp},
     utils::{create_navigator_credentials, get_navigator_credentials, redirect_to},
 };
@@ -42,6 +42,8 @@ pub enum UserCommand {
     AddPasskeyAuthMethod(Username),
     LinkOIDCAuth,
     RemoveAuthMethod(UserAuthKind),
+    /// Delete the connected user's account; carries the typed confirmation.
+    DeleteAccount(String),
 }
 
 pub static CONNECTED_USER: GlobalSignal<Option<User>> = Signal::global(|| None);
@@ -309,6 +311,36 @@ pub async fn user_service(
                     }
                 };
             }
+            Some(UserCommand::DeleteAccount(confirmation)) => {
+                ui_model.write().error_message = None;
+                let result: Result<SuccessResponse> = call_api(
+                    Method::DELETE,
+                    &api_base_url,
+                    "users/me",
+                    Some(DeleteAccountParameters { confirmation }),
+                    Some(ui_model),
+                )
+                .await;
+
+                match result {
+                    Ok(SuccessResponse { message, .. }) => {
+                        // The account and the session are gone server-side:
+                        // drop the chat identity and every piece of user state,
+                        // then let the auth guard send the user to the login
+                        // page, which displays the confirmation.
+                        unload_crisp();
+                        connected_user.write().take();
+                        auth_methods.write().take();
+                        let mut model = ui_model.write();
+                        model.confirmation_message = Some(message);
+                        model.authentication_state = AuthenticationState::NotAuthenticated;
+                    }
+                    Err(err) => {
+                        ui_model.write().error_message = Some(err.to_string());
+                    }
+                }
+            }
+
             Some(UserCommand::RemoveAuthMethod(kind)) => {
                 let result: Result<SuccessResponse> = call_api(
                     Method::DELETE,

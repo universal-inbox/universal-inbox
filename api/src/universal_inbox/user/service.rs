@@ -24,9 +24,9 @@ use webauthn_rs::prelude::*;
 use universal_inbox::{
     auth::openidconnect::OpenidConnectProvider,
     user::{
-        Credentials, EmailValidationToken, Password, PasswordHash, PasswordResetToken, User,
-        UserAuthKind, UserAuthMethod, UserId, UserPatch, UserPreferences, UserPreferencesPatch,
-        Username,
+        Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordHash,
+        PasswordResetToken, User, UserAuthKind, UserAuthMethod, UserId, UserPatch, UserPreferences,
+        UserPreferencesPatch, Username,
     },
 };
 
@@ -455,6 +455,45 @@ impl UserService {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    /// Self-service account deletion: check the user's confirmation, then run
+    /// the same deletion flow as the `user delete` CLI command
+    /// ([`Self::delete_user`]).
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    pub async fn delete_account(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        params: &DeleteAccountParameters,
+        billing_service: Option<&BillingService>,
+    ) -> Result<(), UniversalInboxError> {
+        let user = self
+            .repository
+            .get_user(executor, user_id)
+            .await?
+            .ok_or_else(|| {
+                UniversalInboxError::ItemNotFound(format!("Cannot find user {user_id}"))
+            })?;
+
+        if !user.is_account_deletion_confirmed(&params.confirmation) {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: format!(
+                    "To confirm the deletion of your account, type {}",
+                    user.account_deletion_confirmation()
+                ),
+            });
+        }
+
+        if !self.delete_user(executor, user_id, billing_service).await? {
+            return Err(UniversalInboxError::ItemNotFound(format!(
+                "Cannot find user {user_id}"
+            )));
+        }
+
+        info!("User {user_id} deleted their account");
+        Ok(())
+    }
+
     /// Delete a user account and all its data (the `user` row cascades to every
     /// table owned by the user).
     ///

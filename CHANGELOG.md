@@ -15,6 +15,7 @@
 - Support hosted MCP clients (Claude, ChatGPT, Gemini, Mistral) via Client ID Metadata Document (CIMD) discovery and an allow-listed Dynamic Client Registration flow (MCP 2025-11-25 auth spec)
 - Add per-task scheduled time, duration, and timezone configuration in integration settings and the planning modal
 - Sync per-task time, duration, and timezone to TickTick (duration modeled as a start/due time range)
+- Self-service account deletion: `DELETE /api/users/me` (confirmed by re-typing the email address) and a "Delete my account" card on the Profile page; the `user delete` CLI command runs the same service flow
 
 ### Changed
 
