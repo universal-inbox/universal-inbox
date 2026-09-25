@@ -19,7 +19,7 @@ actix-cors = "0.7.0"
 actix-http = "3.0.0"
 actix-session = { version = "0.11.0", features = ["cookie-session"] }
 actix-web = "4.0.0"
-actix-web-lab = { version = "0.26", features = ["spa"] }
+actix-web-lab = { version = "0.28", features = ["spa"] }
 anyhow = { workspace = true }
 apalis = { version = "0.7", features = ["limit"] }
 apalis-cron = { version = "0.7" }
