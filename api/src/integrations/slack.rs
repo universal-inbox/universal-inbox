@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use anyhow::{Context, anyhow};
 
 use async_trait::async_trait;
-use cached::{Return, proc_macro::io_cached};
+use cached::{Return, proc_macro::concurrent_cached};
 use chrono::{DateTime, Timelike, Utc};
 use slack_blocks_render::{SlackReferences, find_slack_references_in_blocks};
 use slack_morphism::{
@@ -185,10 +185,10 @@ impl SlackService {
         let result =
             cached_get_chat_permalink(&self.slack_base_url, slack_api_token, channel, message)
                 .await?;
-        if result.was_cached {
+        if result.was_cached() {
             debug!("`get_chat_permalink` cache hit");
         }
-        Ok(result.value)
+        Ok(result.into_inner())
     }
 
     pub async fn fetch_message(
@@ -206,10 +206,10 @@ impl SlackService {
             message,
         )
         .await?;
-        if result.was_cached {
+        if result.was_cached() {
             debug!("`fetch_message` cache hit");
         }
-        Ok(result.value)
+        Ok(result.into_inner())
     }
 
     pub async fn fetch_thread(
@@ -229,10 +229,10 @@ impl SlackService {
             current_message.cloned(),
         )
         .await?;
-        if result.was_cached {
+        if result.was_cached() {
             debug!("`fetch_thread` cache hit");
         }
-        result.value.try_into().map_err(|_| {
+        result.into_inner().try_into().map_err(|_| {
             UniversalInboxError::Unexpected(anyhow!(
                 "A Slack thread must have at least one message"
             ))
@@ -245,10 +245,10 @@ impl SlackService {
         slack_api_token: &SlackApiToken,
     ) -> Result<SlackChannelInfo, UniversalInboxError> {
         let result = cached_fetch_channel(&self.slack_base_url, slack_api_token, channel).await?;
-        if result.was_cached {
+        if result.was_cached() {
             debug!("`fetch_channel` cache hit");
         }
-        Ok(result.value)
+        Ok(result.into_inner())
     }
 
     pub async fn fetch_user(
@@ -259,10 +259,10 @@ impl SlackService {
     ) -> Result<SlackUser, UniversalInboxError> {
         let result =
             cached_fetch_user(user_id, &self.slack_base_url, slack_api_token, user).await?;
-        if result.was_cached {
+        if result.was_cached() {
             debug!("`fetch_user` cache hit");
         }
-        Ok(result.value)
+        Ok(result.into_inner())
     }
 
     pub async fn fetch_user_profile(
@@ -297,11 +297,11 @@ impl SlackService {
         slack_api_token: &SlackApiToken,
     ) -> Result<SlackUserGroup, UniversalInboxError> {
         let result = cached_list_usergroups(&self.slack_base_url, slack_api_token).await?;
-        if result.was_cached {
+        if result.was_cached() {
             debug!("`list_usergroups` cache hit");
         }
         result
-            .value
+            .into_inner()
             .iter()
             .find(|u| u.id == *usergroup_id)
             .cloned()
@@ -321,10 +321,10 @@ impl SlackService {
         let result =
             cached_list_users_in_usergroup(&self.slack_base_url, usergroup_id, slack_api_token)
                 .await?;
-        if result.was_cached {
+        if result.was_cached() {
             debug!("`list_users_in_usergroup` cache hit");
         }
-        Ok(result.value)
+        Ok(result.into_inner())
     }
 
     pub async fn fetch_bot(
@@ -333,10 +333,10 @@ impl SlackService {
         slack_api_token: &SlackApiToken,
     ) -> Result<SlackBotInfo, UniversalInboxError> {
         let result = cached_fetch_bot(&self.slack_base_url, slack_api_token, bot).await?;
-        if result.was_cached {
+        if result.was_cached() {
             debug!("`fetch_bot` cache hit");
         }
-        Ok(result.value)
+        Ok(result.into_inner())
     }
 
     pub async fn fetch_team(
@@ -345,10 +345,10 @@ impl SlackService {
         slack_api_token: &SlackApiToken,
     ) -> Result<SlackTeamInfo, UniversalInboxError> {
         let result = cached_fetch_team(&self.slack_base_url, slack_api_token, team).await?;
-        if result.was_cached {
+        if result.was_cached() {
             debug!("`fetch_team` cache hit");
         }
-        Ok(result.value)
+        Ok(result.into_inner())
     }
 
     pub async fn list_emojis(
@@ -356,10 +356,10 @@ impl SlackService {
         slack_api_token: &SlackApiToken,
     ) -> Result<HashMap<SlackEmojiName, SlackEmojiRef>, UniversalInboxError> {
         let result = cached_list_emojis(&self.slack_base_url, slack_api_token).await?;
-        if result.was_cached {
+        if result.was_cached() {
             debug!("`list_emojis` cache hit");
         }
-        Ok(result.value)
+        Ok(result.into_inner())
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(user.id = %user_id, integration_connection.id = %integration_connection_id, query))]
@@ -1060,7 +1060,7 @@ fn slack_api_error_code(error: &UniversalInboxError) -> Option<&str> {
         })
 }
 
-#[io_cached(
+#[concurrent_cached(
     key = "String",
     // Use user_id to avoid leaking a message to an unauthorized user
     convert = r#"{ format!("{}__{}__{}__{}", slack_base_url, _user_id, channel, message) }"#,
@@ -1106,7 +1106,7 @@ async fn cached_fetch_message(
     ))
 }
 
-#[io_cached(
+#[concurrent_cached(
     key = "String",
     // Use user_id to avoid leaking a message to an unauthorized user
     convert = r#"{ format!("{}__{}__{}__{}__{:?}", slack_base_url, _user_id, channel, root_message, current_message) }"#,
@@ -1145,7 +1145,7 @@ async fn cached_fetch_thread(
     Ok(Return::new(messages))
 }
 
-#[io_cached(
+#[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}", slack_base_url, channel) }"#,
     ty = "cached::AsyncRedisCache<String, SlackChannelInfo>",
@@ -1169,7 +1169,7 @@ async fn cached_fetch_channel(
     Ok(Return::new(response.channel))
 }
 
-#[io_cached(
+#[concurrent_cached(
     key = "String",
     // Use user_id to avoid leaking user details to an unauthorized user
     convert = r#"{ format!("{}__{}__{}", slack_base_url, _user_id, user) }"#,
@@ -1195,7 +1195,7 @@ async fn cached_fetch_user(
     Ok(Return::new(response.user))
 }
 
-#[io_cached(
+#[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}", slack_base_url) }"#,
     ty = "cached::AsyncRedisCache<String, Vec<SlackUserGroup>>",
@@ -1218,7 +1218,7 @@ async fn cached_list_usergroups(
     Ok(Return::new(response.usergroups))
 }
 
-#[io_cached(
+#[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}", slack_base_url, usergroup_id) }"#,
     ty = "cached::AsyncRedisCache<String, Vec<SlackUserId>>",
@@ -1244,7 +1244,7 @@ async fn cached_list_users_in_usergroup(
     Ok(Return::new(response.users))
 }
 
-#[io_cached(
+#[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}", slack_base_url, bot) }"#,
     ty = "cached::AsyncRedisCache<String, SlackBotInfo>",
@@ -1268,7 +1268,7 @@ async fn cached_fetch_bot(
     Ok(Return::new(response.bot))
 }
 
-#[io_cached(
+#[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}", slack_base_url, team) }"#,
     ty = "cached::AsyncRedisCache<String, SlackTeamInfo>",
@@ -1292,7 +1292,7 @@ async fn cached_fetch_team(
     Ok(Return::new(response.team))
 }
 
-#[io_cached(
+#[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}", slack_base_url, slack_api_token.team_id.as_ref().map(|t| t.0.as_str()).unwrap_or("no-team")) }"#,
     ty = "cached::AsyncRedisCache<String, HashMap<SlackEmojiName, SlackEmojiRef>>",
@@ -1315,7 +1315,7 @@ async fn cached_list_emojis(
     Ok(Return::new(response.emoji))
 }
 
-#[io_cached(
+#[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}__{}", slack_base_url, channel, message) }"#,
     ty = "cached::AsyncRedisCache<String, Url>",
