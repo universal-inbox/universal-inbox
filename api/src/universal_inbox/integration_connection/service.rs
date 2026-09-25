@@ -324,7 +324,7 @@ impl IntegrationConnectionService {
         )
         .await?;
 
-        Retry::spawn(
+        Retry::start(
             ExponentialBackoff::from_millis(10).map(jitter).take(10),
             || async {
                 job_storage
@@ -368,7 +368,7 @@ impl IntegrationConnectionService {
         )
         .await?;
 
-        Retry::spawn(
+        Retry::start(
             ExponentialBackoff::from_millis(10).map(jitter).take(10),
             || async {
                 job_storage
@@ -408,7 +408,7 @@ impl IntegrationConnectionService {
         notification_sync_source_kind: Option<NotificationSyncSourceKind>,
         for_user_id: Option<UserId>,
     ) -> Result<(), UniversalInboxError> {
-        Retry::spawn(
+        Retry::start(
             ExponentialBackoff::from_millis(10).map(jitter).take(10),
             || async {
                 job_storage
@@ -444,7 +444,7 @@ impl IntegrationConnectionService {
         task_sync_source_kind: Option<TaskSyncSourceKind>,
         for_user_id: Option<UserId>,
     ) -> Result<(), UniversalInboxError> {
-        Retry::spawn(
+        Retry::start(
             ExponentialBackoff::from_millis(10).map(jitter).take(10),
             || async {
                 job_storage

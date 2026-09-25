@@ -438,8 +438,9 @@ mod protocol {
     }
 
     /// Every way a `mode: list` batch can be malformed is a statement about the
-    /// request rather than about the mailbox, so each is a JSON-RPC `-32602`
-    /// with nothing applied.
+    /// request rather than about the mailbox, so each is rejected (JSON-RPC
+    /// `-32602` or, for undeserializable arguments, a tool error) with nothing
+    /// applied.
     #[rstest]
     #[tokio::test]
     async fn bulk_act_notifications_rejects_malformed_list_args(
@@ -525,8 +526,11 @@ mod protocol {
             ),
         ] {
             let body = mcp_tool_call(&app.app, &token, "bulk_act_notifications", arguments).await;
-            assert_eq!(
-                body["error"]["code"], -32602,
+            // Arguments that fail to deserialize are reported by rmcp (>= 1.8) as a
+            // tool execution error (`isError: true`) so the model can self-correct;
+            // semantic validation done by the tool itself stays a JSON-RPC `-32602`.
+            assert!(
+                body["error"]["code"] == -32602 || body["result"]["isError"] == true,
                 "`{case}` should be rejected as invalid arguments, got: {body}"
             );
 
