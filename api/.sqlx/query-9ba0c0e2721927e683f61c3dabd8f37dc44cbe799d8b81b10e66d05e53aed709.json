@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO authentication_token\n                  (\n                    id,\n                    created_at,\n                    updated_at,\n                    user_id,\n                    jwt_token_hash,\n                    truncated_jwt_token,\n                    expire_at,\n                    is_session_token\n                  )\n                VALUES\n                  (\n                    $1,\n                    $2,\n                    $3,\n                    $4,\n                    $5,\n                    $6,\n                    $7,\n                    $8\n                  )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamp",
+        "Timestamp",
+        "Uuid",
+        "Text",
+        "Text",
+        "Timestamp",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9ba0c0e2721927e683f61c3dabd8f37dc44cbe799d8b81b10e66d05e53aed709"
+}

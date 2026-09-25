@@ -43,6 +43,11 @@ pub fn AuthenticationTokensCard() -> Element {
             }
         };
     };
+    // Revoked keys can no longer authenticate: only list the usable ones.
+    let authentication_tokens: Vec<_> = authentication_tokens
+        .into_iter()
+        .filter(|auth_token| !auth_token.is_revoked)
+        .collect();
 
     rsx! {
         section {
@@ -134,6 +139,7 @@ pub fn AuthenticationToken(
     jwt_token: String,
     is_copiable: bool,
 ) -> Element {
+    let authentication_token_service = use_coroutine_handle::<AuthenticationTokenCommand>();
     let mut is_copied = use_signal(|| false);
     let row_class = if is_copiable { "token-new" } else { "" };
 
@@ -157,8 +163,11 @@ pub fn AuthenticationToken(
                     if !is_copiable {
                         Button {
                             variant: ButtonVariant::Danger,
-                            disabled: true,
                             icon_class: "icon-[lucide--trash-2]".to_string(),
+                            onclick: move |_| {
+                                authentication_token_service
+                                    .send(AuthenticationTokenCommand::RevokeAuthenticationToken(id.clone()));
+                            },
                             "Revoke"
                         }
                     } else if is_copied() {

@@ -21,7 +21,7 @@ use webauthn_rs::prelude::*;
 
 use universal_inbox::{
     SuccessResponse,
-    auth::auth_token::{AuthenticationToken, TruncatedAuthenticationToken},
+    auth::auth_token::{AuthenticationToken, AuthenticationTokenId, TruncatedAuthenticationToken},
     user::{
         Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordResetToken,
         RegisterUserParameters, User, UserAuthKind, UserAuthMethod, UserId, UserPatch,
@@ -197,6 +197,10 @@ pub fn scope(auth_rate_limiter: Arc<AuthRateLimiter>) -> Scope {
                     web::resource("/authentication-tokens")
                         .route(web::get().to(list_authentication_tokens))
                         .route(web::post().to(create_authentication_token)),
+                )
+                .service(
+                    web::resource("/authentication-tokens/{authentication_token_id}")
+                        .route(web::delete().to(revoke_authentication_token)),
                 )
                 .service(
                     // `client_id` is passed as a query parameter (not a path
@@ -992,6 +996,39 @@ pub async fn create_authentication_token(
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&result).context("Cannot serialize created authentication token")?,
     ))
+}
+
+pub async fn revoke_authentication_token(
+    path: web::Path<AuthenticationTokenId>,
+    authentication_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let authentication_token_id = path.into_inner();
+    let service = authentication_token_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while revoking authentication token")?;
+    let revoked = service
+        .revoke_auth_token(&mut transaction, user_id, authentication_token_id.clone())
+        .await?;
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while revoking authentication token")?;
+
+    if revoked {
+        Ok(HttpResponse::NoContent().finish())
+    } else {
+        Err(UniversalInboxError::ItemNotFound(format!(
+            "Cannot find authentication token {authentication_token_id}"
+        )))
+    }
 }
 
 pub async fn get_user_preferences(
