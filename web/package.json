@@ -1,20 +1,20 @@
 {
   "devDependencies": {
-    "@iconify-json/logos": "^1.2.11",
+    "@iconify-json/logos": "^1.2.14",
     "@iconify-json/mdi": "^1.2.3",
-    "@iconify-json/tabler": "^1.2.17",
-    "@iconify/tailwind4": "^1.0.6",
-    "@rspack/cli": "^1.1.6",
-    "@rspack/core": "^1.1.6",
-    "@tailwindcss/typography": "^0.5",
+    "@iconify-json/tabler": "^1.2.40",
+    "@iconify/tailwind4": "^1.2.3",
+    "@rspack/cli": "^1.7.12",
+    "@rspack/core": "^1.7.12",
+    "@tailwindcss/typography": "^0.5.20",
     "flatpickr": "^4.6.13",
-    "flyonui": "^2.4.0",
+    "flyonui": "^2.4.1",
     "notyf": "^3.10.0",
-    "tailwindcss": "^4.0.17",
-    "typescript": "5.3.3"
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.9.3"
   },
   "dependencies": {
-    "@iconify-json/lucide": "^1.2.97",
-    "crisp-sdk-web": "^1.0.26"
+    "@iconify-json/lucide": "^1.2.136",
+    "crisp-sdk-web": "^1.2.1"
   }
 }
