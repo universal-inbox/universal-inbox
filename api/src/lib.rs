@@ -216,6 +216,10 @@ pub async fn run_server(
             cache.connection_manager.clone(),
             settings.application.mcp_session_store.ttl_seconds,
         ));
+    let mcp_session_owners = mcp::McpSessionOwnerStore::new(
+        cache.connection_manager.clone(),
+        settings.application.mcp_session_store.ttl_seconds,
+    );
     let cache_data = web::Data::new(cache);
     let mcp_extra_allowed_origins = settings
         .application
@@ -287,6 +291,7 @@ pub async fn run_server(
             .service(routes::slack_bridge::scope())
             .service(mcp::scope(
                 mcp_http_service.clone(),
+                mcp_session_owners.clone(),
                 mcp_rate_limiter.clone(),
                 format!("{front_base_url}{api_path}mcp"),
                 mcp_extra_allowed_origins.clone(),
