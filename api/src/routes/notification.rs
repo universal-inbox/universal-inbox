@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::middlewares::jwt_auth::{Authenticated, MaybeAuthenticated};
+use crate::middlewares::jwt_auth::Authenticated;
 use actix_http::body::BoxBody;
 use actix_web::{HttpResponse, Scope, web};
 use anyhow::Context;
@@ -197,74 +197,58 @@ pub async fn sync_notifications(
     params: web::Json<SyncNotificationsParameters>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
-    maybe_authenticated: MaybeAuthenticated<Claims>,
+    authenticated: Authenticated<Claims>,
     storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let source = params.source;
     let mut storage = storage.as_ref().clone();
 
-    if let Some(authenticated) = maybe_authenticated.into_option() {
-        let user_id = authenticated
-            .claims
-            .sub
-            .parse::<UserId>()
-            .context("Wrong user ID format")?;
-
-        if params.asynchronous.unwrap_or(true) {
-            let service = integration_connection_service.read().await;
-            let mut transaction = service
-                .begin()
-                .await
-                .context("Failed to create new transaction while triggering notifications sync")?;
-            service
-                .schedule_notifications_sync_status(
-                    &mut transaction,
-                    source.map(Into::into),
-                    Some(user_id),
-                )
-                .await?;
-            transaction
-                .commit()
-                .await
-                .context("Failed to commit while triggering notifications sync")?;
-            // Push the job only after the scheduling transaction has committed and
-            // released its row lock(s) — the Redis push retries with backoff and must
-            // never hold a Postgres lock open for that long.
-            service
-                .push_sync_notifications_job(&mut storage, source, Some(user_id))
-                .await?;
-            Ok(HttpResponse::Created().finish())
-        } else {
-            let service = notification_service.read().await;
-
-            let notifications = if let Some(source) = source {
-                service
-                    .sync_notifications_with_transaction(source, user_id, false)
-                    .await?
-            } else {
-                service.sync_all_notifications(user_id, false).await?
-            };
-            Ok(HttpResponse::Ok().content_type("application/json").body(
-                serde_json::to_string(&notifications).context("Cannot serialize notifications")?,
-            ))
-        }
-    } else {
+    // Authentication is mandatory: this route used to accept anonymous
+    // requests and then scheduled a sync of every user's connections. The
+    // all-users sync stays available to operators through the CLI
+    // (`sync-notifications` / `sync-tasks` commands).
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    if params.asynchronous.unwrap_or(true) {
         let service = integration_connection_service.read().await;
         let mut transaction = service
             .begin()
             .await
             .context("Failed to create new transaction while triggering notifications sync")?;
         service
-            .schedule_notifications_sync_status(&mut transaction, source.map(Into::into), None)
+            .schedule_notifications_sync_status(
+                &mut transaction,
+                source.map(Into::into),
+                Some(user_id),
+            )
             .await?;
         transaction
             .commit()
             .await
             .context("Failed to commit while triggering notifications sync")?;
+        // Push the job only after the scheduling transaction has committed and
+        // released its row lock(s) — the Redis push retries with backoff and must
+        // never hold a Postgres lock open for that long.
         service
-            .push_sync_notifications_job(&mut storage, source, None)
+            .push_sync_notifications_job(&mut storage, source, Some(user_id))
             .await?;
         Ok(HttpResponse::Created().finish())
+    } else {
+        let service = notification_service.read().await;
+
+        let notifications = if let Some(source) = source {
+            service
+                .sync_notifications_with_transaction(source, user_id, false)
+                .await?
+        } else {
+            service.sync_all_notifications(user_id, false).await?
+        };
+        Ok(HttpResponse::Ok()
+            .content_type("application/json")
+            .body(serde_json::to_string(&notifications).context("Cannot serialize notifications")?))
     }
 }
 
