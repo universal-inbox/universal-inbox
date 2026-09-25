@@ -20,6 +20,7 @@
 
 - Full redesign of the user interface
 - Switch Slack preview rendering to direct HTML via `slack-blocks-render` v0.5.0, replacing the Markdown→comrak→regex pipeline
+- Load the Crisp support chat only when the user clicks "Support": no Crisp request, websocket or cookie before that, and none on the login/signup pages
 
 ### Security
 
