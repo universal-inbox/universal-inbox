@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::middlewares::jwt_auth::Authenticated;
+use crate::middlewares::jwt_auth::{Authenticated, MaybeAuthenticated};
 use actix_web::{HttpResponse, Scope, web};
 use anyhow::Context;
 use secrecy::SecretBox;
@@ -133,11 +133,20 @@ pub async fn oauth_authorize_url(
     })))
 }
 
+/// Provider redirect target of the integration OAuth flow.
+///
+/// Mounted outside the `/api` scope (the provider redirects the browser
+/// here), but it still requires the user's Universal Inbox session: the
+/// SameSite=Lax session cookie is sent on this top-level navigation. The
+/// state is only honoured for the user who started the flow and owns the
+/// connection, so a provider authorization response obtained from another
+/// person cannot be bound to the caller's connection (and vice versa).
 pub async fn oauth_callback(
     query: web::Query<OAuthCallbackQuery>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     cache: web::Data<Cache>,
     settings: web::Data<Settings>,
+    maybe_authenticated: MaybeAuthenticated<Claims>,
 ) -> HttpResponse {
     let front_base_url = settings
         .application
@@ -163,6 +172,17 @@ pub async fn oauth_callback(
         return build_error_redirect(front_base_url, OAuthCallbackErrorCode::InvalidState);
     };
 
+    // Only first-party session credentials may complete the flow: OAuth2
+    // access tokens issued to third-party clients carry an audience.
+    let Some(user_id) = maybe_authenticated
+        .into_option()
+        .filter(|authenticated| authenticated.claims.aud.is_none())
+        .and_then(|authenticated| authenticated.claims.sub.parse::<UserId>().ok())
+    else {
+        error!("OAuth callback received without an authenticated Universal Inbox session");
+        return build_error_redirect(front_base_url, OAuthCallbackErrorCode::InvalidState);
+    };
+
     let service = integration_connection_service.read().await;
     let transaction = service.begin().await;
     let mut transaction = match transaction {
@@ -179,6 +199,7 @@ pub async fn oauth_callback(
             &SecretBox::new(Box::new(AuthorizationCode(code.to_string()))),
             state,
             &cache,
+            user_id,
         )
         .await
     {

@@ -1,8 +1,175 @@
 use rstest::*;
+use secrecy::ExposeSecret;
+use serde_json::Value;
 
-use crate::helpers::{TestedApp, tested_app};
+use universal_inbox::{
+    auth::auth_token::AuthenticationToken,
+    integration_connection::{
+        IntegrationConnectionId, IntegrationConnectionStatus, config::IntegrationConnectionConfig,
+        integrations::ticktick::TickTickConfig,
+    },
+};
 
-/// `/api/oauth/callback` is unauthenticated by design. It used to inline the
+use crate::helpers::{
+    TestedApp,
+    auth::{AuthenticatedApp, authenticate_user, authenticated_app},
+    integration_connection::{create_integration_connection, get_integration_connection},
+    tested_app,
+};
+
+fn no_redirect_client_builder() -> reqwest::ClientBuilder {
+    reqwest::Client::builder().redirect(reqwest::redirect::Policy::none())
+}
+
+/// Start a TickTick OAuth flow as the authenticated user and return the
+/// `state` carried by the provider authorize URL.
+async fn start_oauth_flow(app: &AuthenticatedApp) -> (IntegrationConnectionId, String) {
+    let integration_connection = create_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+        IntegrationConnectionStatus::Created,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await;
+
+    let body: Value = app
+        .client
+        .get(format!(
+            "{}oauth/authorize-url/{}",
+            app.app.api_address, integration_connection.id
+        ))
+        .send()
+        .await
+        .expect("Failed to start OAuth authorization")
+        .json()
+        .await
+        .expect("Failed to parse authorize-url response");
+    let authorization_url = url::Url::parse(
+        body["authorization_url"]
+            .as_str()
+            .expect("authorization_url"),
+    )
+    .expect("Invalid authorization URL");
+    let state = authorization_url
+        .query_pairs()
+        .find(|(key, _)| key == "state")
+        .expect("Missing state in authorization URL")
+        .1
+        .to_string();
+    (integration_connection.id, state)
+}
+
+fn callback_location(response: &reqwest::Response) -> String {
+    response
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .expect("expected Location header on redirect")
+        .to_str()
+        .expect("Location header must be ASCII")
+        .to_string()
+}
+
+/// A callback carrying a state issued to another user must be refused before
+/// the authorization code is exchanged: otherwise a victim following the
+/// attacker's provider link would bind their provider account to the
+/// attacker's connection.
+#[rstest]
+#[tokio::test]
+async fn test_oauth_callback_rejects_state_issued_to_another_user(
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    let (integration_connection_id, state) = start_oauth_flow(&app).await;
+
+    // The victim is signed in to Universal Inbox with their own account.
+    let (victim_client, _) =
+        authenticate_user(&app.app, "5678", "Jane", "Roe", "jane@example.com").await;
+    let victim_api_key: AuthenticationToken = victim_client
+        .post(format!(
+            "{}users/me/authentication-tokens",
+            app.app.api_address
+        ))
+        .send()
+        .await
+        .expect("Failed to create API key")
+        .json()
+        .await
+        .expect("Failed to deserialize API key response");
+
+    let response = no_redirect_client_builder()
+        .build()
+        .unwrap()
+        .get(format!(
+            "{}/api/oauth/callback?state={}&code=victim-code",
+            app.app.app_address.trim_end_matches('/'),
+            urlencoding::encode(&state)
+        ))
+        .bearer_auth(&victim_api_key.jwt_token.expose_secret().0)
+        .send()
+        .await
+        .expect("Failed to execute /api/oauth/callback request");
+
+    assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+    let front_base_url = app.app.front_base_url.as_str().trim_end_matches('/');
+    // `invalid-state`, not `provider-error`: the code was never exchanged.
+    assert_eq!(
+        callback_location(&response),
+        format!("{front_base_url}/settings?oauth_error=invalid-state")
+    );
+
+    let integration_connection = get_integration_connection(&app, integration_connection_id)
+        .await
+        .expect("Integration connection must still exist");
+    assert_eq!(
+        integration_connection.status,
+        IntegrationConnectionStatus::Created
+    );
+}
+
+/// An anonymous callback (no Universal Inbox session) is refused without
+/// consuming the state.
+#[rstest]
+#[tokio::test]
+async fn test_oauth_callback_requires_a_session(#[future] authenticated_app: AuthenticatedApp) {
+    let app = authenticated_app.await;
+    let (_, state) = start_oauth_flow(&app).await;
+
+    let response = no_redirect_client_builder()
+        .build()
+        .unwrap()
+        .get(format!(
+            "{}/api/oauth/callback?state={}&code=some-code",
+            app.app.app_address.trim_end_matches('/'),
+            urlencoding::encode(&state)
+        ))
+        .send()
+        .await
+        .expect("Failed to execute /api/oauth/callback request");
+
+    assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+    let front_base_url = app.app.front_base_url.as_str().trim_end_matches('/');
+    assert_eq!(
+        callback_location(&response),
+        format!("{front_base_url}/settings?oauth_error=invalid-state")
+    );
+
+    let state_key = format!("universal-inbox::oauth-state::{state}");
+    let mut conn = app.app.cache.connection_manager.clone();
+    let still_stored: Option<String> = redis::AsyncCommands::get(&mut conn, &state_key)
+        .await
+        .expect("Failed to read OAuth state");
+    assert!(
+        still_stored.is_some(),
+        "an anonymous callback must not consume the state"
+    );
+}
+
+/// `/api/oauth/callback` used to inline the
 /// `format!("{err}")` chain into the `oauth_error` query parameter of the
 /// redirect, leaking internal context (Redis lookup failures, integration
 /// connection IDs, provider error blobs) into the user-visible URL.

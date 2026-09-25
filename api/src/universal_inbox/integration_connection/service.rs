@@ -64,6 +64,13 @@ struct OAuthStateData {
     integration_connection_id: IntegrationConnectionId,
     pkce_verifier: Option<SecretBox<PkceVerifier>>,
     provider_kind: IntegrationProviderKind,
+    /// User who started the flow. The callback is only honoured for this
+    /// user's session, so an authorization response obtained from someone
+    /// else (login CSRF / account linking) cannot land in this connection.
+    /// Optional only so a state stored before this field existed still
+    /// deserializes; such a state is rejected.
+    #[serde(default)]
+    user_id: Option<UserId>,
 }
 
 pub struct IntegrationConnectionService {
@@ -1874,6 +1881,7 @@ impl IntegrationConnectionService {
             integration_connection_id,
             pkce_verifier,
             provider_kind,
+            user_id: Some(user_id),
         };
         let state_json =
             serde_json::to_string(&state_data).context("Failed to serialize OAuth state data")?;
@@ -1887,12 +1895,17 @@ impl IntegrationConnectionService {
         Ok(authorization_url)
     }
 
+    /// Finish an integration OAuth flow for `user_id`, the user whose session
+    /// delivered the callback. The state must have been issued to that user
+    /// and name a connection they own; otherwise the authorization code is
+    /// not exchanged and nothing is stored.
     pub async fn complete_oauth_callback(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         authorization_code: &SecretBox<AuthorizationCode>,
         state: &str,
         cache: &Cache,
+        user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         // Look up and delete state from Redis (single-use)
         let redis_key = format!("{OAUTH_STATE_PREFIX}{state}");
@@ -1908,6 +1921,42 @@ impl IntegrationConnectionService {
 
         let state_data: OAuthStateData =
             serde_json::from_str(&state_json).context("Failed to deserialize OAuth state data")?;
+
+        if state_data.user_id != Some(user_id) {
+            return Err(UniversalInboxError::Unauthorized(anyhow::anyhow!(
+                "OAuth state for integration connection {} was not issued to user {user_id}",
+                state_data.integration_connection_id
+            )));
+        }
+
+        // Get the integration connection and verify it belongs to the caller
+        // and is still in Created status, before exchanging the code. The
+        // status check prevents a late callback from a duplicate authorize
+        // flow from overwriting credentials stored by an earlier successful
+        // callback.
+        let integration_connection = self
+            .get_integration_connection(executor, state_data.integration_connection_id)
+            .await?
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow::anyhow!(
+                    "Integration connection {} not found",
+                    state_data.integration_connection_id
+                ))
+            })?;
+
+        if integration_connection.user_id != user_id {
+            return Err(UniversalInboxError::Unauthorized(anyhow::anyhow!(
+                "Integration connection {} does not belong to user {user_id}",
+                state_data.integration_connection_id
+            )));
+        }
+
+        if integration_connection.status != IntegrationConnectionStatus::Created {
+            return Err(UniversalInboxError::UnsupportedAction(format!(
+                "Integration connection {} is no longer in Created status (current: {:?}), ignoring stale OAuth callback",
+                state_data.integration_connection_id, integration_connection.status
+            )));
+        }
 
         let provider = self
             .get_oauth2_provider(&state_data.provider_kind)
@@ -1953,26 +2002,6 @@ impl IntegrationConnectionService {
         let raw_response = serde_json::to_value(token_response.as_safe_token_response())
             .context("Failed to serialize token response to Value")?;
         let registered_scopes = provider.extract_registered_scopes(&raw_response)?;
-
-        // Get the integration connection and verify it is still in Created status.
-        // This prevents a late callback from a duplicate authorize flow from overwriting
-        // credentials stored by an earlier successful callback.
-        let integration_connection = self
-            .get_integration_connection(executor, state_data.integration_connection_id)
-            .await?
-            .ok_or_else(|| {
-                UniversalInboxError::Unexpected(anyhow::anyhow!(
-                    "Integration connection {} not found",
-                    state_data.integration_connection_id
-                ))
-            })?;
-
-        if integration_connection.status != IntegrationConnectionStatus::Created {
-            return Err(UniversalInboxError::UnsupportedAction(format!(
-                "Integration connection {} is no longer in Created status (current: {:?}), ignoring stale OAuth callback",
-                state_data.integration_connection_id, integration_connection.status
-            )));
-        }
 
         let stored_raw_response = provider.sanitize_raw_response(&raw_response);
         self.repository
