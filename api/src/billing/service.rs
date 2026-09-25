@@ -362,6 +362,83 @@ impl BillingService {
         Ok(url)
     }
 
+    /// Stop billing a user whose account is being deleted. Must run *before*
+    /// the local `user_subscription` row is deleted, so a Stripe failure
+    /// aborts the account deletion instead of leaving an orphaned subscription
+    /// that keeps charging the (deleted) user.
+    ///
+    /// - Every non-final subscription of the user's customer is cancelled
+    ///   immediately: the one the local row knows, plus any Stripe holds for
+    ///   the customer that never reached us (missed webhook). A cancel that
+    ///   fails is re-read from Stripe and only tolerated if the subscription is
+    ///   already canceled (e.g. cancelled from the portal, webhook in flight).
+    /// - The Stripe Customer is kept, with its invoices (10-year accounting
+    ///   retention), but its `metadata.user_id` link is removed. That part is
+    ///   best effort: it does not charge anyone, so a failure is only logged.
+    ///
+    /// No-op for a user without a `user_subscription` row (Free user who never
+    /// started a checkout).
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    pub async fn cancel_billing_for_account_deletion(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        let Some(subscription) = self
+            .repository
+            .get_user_subscription(executor, user_id)
+            .await?
+        else {
+            return Ok(());
+        };
+
+        let mut subscription_ids: Vec<String> = Vec::new();
+        if let Some(subscription_id) = &subscription.stripe_subscription_id
+            && still_billable(subscription.status)
+        {
+            subscription_ids.push(subscription_id.0.clone());
+        }
+        if let Some(customer_id) = &subscription.stripe_customer_id {
+            let remote = self
+                .stripe
+                .list_customer_subscriptions(&customer_id.0)
+                .await?;
+            for raw in remote {
+                if still_billable(raw.status) && !subscription_ids.contains(&raw.subscription_id) {
+                    subscription_ids.push(raw.subscription_id);
+                }
+            }
+        }
+
+        for subscription_id in subscription_ids {
+            match self.stripe.cancel_subscription(&subscription_id).await {
+                Ok(raw) => info!(
+                    "Cancelled Stripe subscription {subscription_id} ({}) of deleted user {user_id}",
+                    raw.status
+                ),
+                Err(cancel_err) => match self.stripe.fetch_subscription(&subscription_id).await {
+                    Ok(raw) if !still_billable(raw.status) => info!(
+                        "Stripe subscription {subscription_id} of deleted user {user_id} is already {}",
+                        raw.status
+                    ),
+                    _ => {
+                        return Err(UniversalInboxError::from(cancel_err));
+                    }
+                },
+            }
+        }
+
+        if let Some(customer_id) = &subscription.stripe_customer_id
+            && let Err(err) = self.stripe.clear_customer_user_id(&customer_id.0).await
+        {
+            warn!(
+                "Failed to remove the user_id metadata from Stripe customer {customer_id} of deleted user {user_id}: {err}"
+            );
+        }
+
+        Ok(())
+    }
+
     /// Apply an incoming, already-verified webhook event to the persisted
     /// subscription. Idempotency is enforced by the caller via
     /// `BillingRepository::record_stripe_event` before invoking this.
@@ -1051,6 +1128,18 @@ impl BillingService {
 pub enum SyncKind {
     Notifications,
     Tasks,
+}
+
+/// Whether Stripe could still invoice a subscription in this status, i.e.
+/// whether account deletion must cancel it. Stricter than
+/// `SubscriptionStatus::is_terminal`: an `unpaid` subscription is terminal
+/// for entitlements but Stripe still retries / invoices it until cancelled.
+fn still_billable(status: universal_inbox::billing::SubscriptionStatus) -> bool {
+    use universal_inbox::billing::SubscriptionStatus;
+    !matches!(
+        status,
+        SubscriptionStatus::Canceled | SubscriptionStatus::IncompleteExpired
+    )
 }
 
 /// Paid users see the global floor unchanged; Free users get

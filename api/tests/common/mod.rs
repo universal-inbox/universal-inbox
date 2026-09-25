@@ -428,6 +428,26 @@ impl StripeClient for FakeStripeClient {
         Ok(vec![])
     }
 
+    async fn cancel_subscription(
+        &self,
+        subscription_id: &str,
+    ) -> Result<RawSubscription, StripeError> {
+        Ok(RawSubscription {
+            subscription_id: subscription_id.to_string(),
+            customer_id: FAKE_STRIPE_CUSTOMER_ID.to_string(),
+            price_id: Some("price_test".to_string()),
+            status: DomainStatus::Canceled,
+            current_period_start: None,
+            current_period_end: None,
+            cancel_at_period_end: false,
+            canceled_at: None,
+        })
+    }
+
+    async fn clear_customer_user_id(&self, _customer_id: &str) -> Result<(), StripeError> {
+        Ok(())
+    }
+
     fn verify_webhook_signature(
         &self,
         payload: &str,

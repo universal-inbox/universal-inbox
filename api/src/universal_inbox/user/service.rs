@@ -31,6 +31,7 @@ use universal_inbox::{
 };
 
 use crate::{
+    billing::service::BillingService,
     configuration::{
         ApplicationSettings, AuthenticationSettings, OIDCAuthorizationCodePKCEFlowSettings,
         OIDCFlowSettings, OpenIDConnectSettings,
@@ -454,11 +455,25 @@ impl UserService {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    /// Delete a user account and all its data (the `user` row cascades to every
+    /// table owned by the user).
+    ///
+    /// When billing is enabled (`billing_service` is `Some`), the user's Stripe
+    /// subscription is cancelled first; a Stripe failure aborts the deletion
+    /// so a deleted user can never keep being charged. With billing disabled
+    /// (self-hosted default) no Stripe code runs.
     pub async fn delete_user(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
+        billing_service: Option<&BillingService>,
     ) -> Result<bool, UniversalInboxError> {
+        if let Some(billing_service) = billing_service {
+            billing_service
+                .cancel_billing_for_account_deletion(executor, user_id)
+                .await?;
+        }
+
         self.repository.delete_user(executor, user_id).await
     }
 

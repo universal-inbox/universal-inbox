@@ -546,7 +546,9 @@ impl Cli {
             Commands::User { command } => match command {
                 UserCommands::List => user::list_users(user_service).await,
 
-                UserCommands::Delete { user_id } => user::delete_user(user_service, *user_id).await,
+                UserCommands::Delete { user_id } => {
+                    user::delete_user(user_service, billing_service, *user_id).await
+                }
 
                 UserCommands::SendVerificationEmail {
                     user_email,

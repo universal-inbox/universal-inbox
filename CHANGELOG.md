@@ -35,6 +35,7 @@
 
 ### Fixed
 
+- Deleting a user now cancels their Stripe subscription immediately (and unlinks the Stripe customer, kept for invoices) before deleting local data; a Stripe failure aborts the deletion instead of leaving the user charged
 - Deleting a user or a notification no longer fails with a foreign-key violation when Slack bridge pending actions reference it
 - Persist MCP sessions to Redis so they survive multi-pod restarts
 - Mark an integration connection as Failing when its OAuth refresh token is missing or rejected (`invalid_grant`)

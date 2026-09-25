@@ -301,7 +301,9 @@ pub async fn record_landing_screencast(
 
     if !keep_user {
         info!("Deleting recording user {user_id}");
-        if let Err(err) = user::delete_user(user_service, user_id).await {
+        // The throwaway screenshot user never starts a Stripe checkout, so
+        // there is no subscription to cancel.
+        if let Err(err) = user::delete_user(user_service, None, user_id).await {
             warn!("Failed to delete recording user {user_id}: {err:?}");
         }
     } else {

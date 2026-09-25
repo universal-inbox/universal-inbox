@@ -14,13 +14,13 @@ use secrecy::{ExposeSecret, SecretBox};
 use stripe::{Client as AsyncStripeClient, StripeError as SdkError};
 use stripe_billing::billing_portal_session::CreateBillingPortalSession;
 use stripe_billing::subscription::{
-    ListSubscription, ListSubscriptionStatus, RetrieveSubscription,
+    CancelSubscription, ListSubscription, ListSubscriptionStatus, RetrieveSubscription,
 };
 use stripe_checkout::checkout_session::{
     CreateCheckoutSession, CreateCheckoutSessionAutomaticTax, CreateCheckoutSessionCustomerUpdate,
     CreateCheckoutSessionCustomerUpdateAddress, CreateCheckoutSessionLineItems,
 };
-use stripe_core::customer::CreateCustomer;
+use stripe_core::customer::{CreateCustomer, UpdateCustomer};
 use stripe_shared::{ApiErrorsType, CheckoutSessionMode, Subscription, SubscriptionStatus};
 use stripe_webhook::{Event, EventObject, Webhook, WebhookError};
 use thiserror::Error;
@@ -217,6 +217,19 @@ pub trait StripeClient: Send + Sync {
         customer_id: &str,
     ) -> Result<Vec<RawSubscription>, StripeError>;
 
+    /// Cancel a subscription immediately (not at period end), so no further
+    /// invoice is issued. Used when the user deletes their account. Past
+    /// invoices are kept by Stripe.
+    async fn cancel_subscription(
+        &self,
+        subscription_id: &str,
+    ) -> Result<RawSubscription, StripeError>;
+
+    /// Remove the `metadata.user_id` link from a Stripe Customer, so the
+    /// customer (kept for invoices / accounting retention) no longer points to
+    /// a deleted Universal Inbox user.
+    async fn clear_customer_user_id(&self, customer_id: &str) -> Result<(), StripeError>;
+
     /// Verify the signature on an inbound webhook delivery and parse the
     /// event into a [`StripeEvent`].
     fn verify_webhook_signature(
@@ -268,7 +281,8 @@ impl StripeApiClient {
     /// Stripe API — used by tests to point the *real* request-construction
     /// path at a wiremock instance and assert on the outgoing request body.
     /// async-stripe 1.0's `ClientBuilder::url` overrides the API base.
-    #[cfg(test)]
+    /// Not gated on `cfg(test)` so the API integration tests (a separate
+    /// crate) can use it too.
     pub fn new_with_base_url(
         secret_key: &SecretBox<StripeApiKey>,
         webhook_secret: SecretBox<StripeWebhookSecret>,
@@ -376,6 +390,27 @@ impl StripeClient for StripeApiClient {
             .send(&self.inner)
             .await?;
         Ok(list.data.iter().map(RawSubscription::from).collect())
+    }
+
+    async fn cancel_subscription(
+        &self,
+        subscription_id: &str,
+    ) -> Result<RawSubscription, StripeError> {
+        let sub = CancelSubscription::new(subscription_id)
+            .send(&self.inner)
+            .await?;
+        Ok(RawSubscription::from(&sub))
+    }
+
+    async fn clear_customer_user_id(&self, customer_id: &str) -> Result<(), StripeError> {
+        // Setting a metadata key to an empty string removes it on Stripe's side.
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("user_id".to_string(), String::new());
+        UpdateCustomer::new(customer_id)
+            .metadata(metadata)
+            .send(&self.inner)
+            .await?;
+        Ok(())
     }
 
     fn verify_webhook_signature(
