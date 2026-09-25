@@ -182,7 +182,7 @@ pretty_assertions = { workspace = true }
 rrule = { workspace = true }
 rstest = { workspace = true }
 serde_urlencoded = { workspace = true }
-sha2 = "0.10.9"
+sha2 = "0.11"
 webauthn-authenticator-rs = { version = "0.5.4", features = ["softpasskey"] }
 
 [[test]]
