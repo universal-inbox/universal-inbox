@@ -7,7 +7,8 @@
 //!   user's several integration connections, locking rows in different orders.
 //! - Candidate B: the *unauthenticated* global sync-trigger endpoint (`for_user_id: None`),
 //!   whose sync-status UPDATE could match every connection for every user, racing against
-//!   any authenticated request touching one of those same rows.
+//!   any authenticated request touching one of those same rows. That endpoint now requires
+//!   authentication and only ever schedules the caller's own connections.
 //!
 //! These tests fire real concurrent HTTP requests against the in-process test server and
 //! assert nothing 500s — the strongest available proof against a race that, by construction,
@@ -31,6 +32,7 @@ use crate::helpers::{
     },
     notification::{list_notifications_response, sync_notifications_response},
     settings,
+    task::sync_tasks_response,
 };
 use universal_inbox_api::configuration::Settings;
 
@@ -128,75 +130,28 @@ async fn test_concurrent_list_notifications_never_deadlocks(
     }
 }
 
+/// Candidate B's counterparty — the anonymous, all-users sync trigger — no longer exists:
+/// both sync routes require authentication, so an anonymous request can neither schedule
+/// nor enqueue a sync of anybody's connections.
 #[rstest]
 #[tokio::test]
-async fn test_unauthenticated_global_sync_does_not_deadlock_with_list(
-    settings: Settings,
-    #[future] authenticated_app: AuthenticatedApp,
-    github_oauth_credential: OAuthCredentialFixture,
-    linear_oauth_credential: OAuthCredentialFixture,
-    todoist_oauth_credential: OAuthCredentialFixture,
-) {
+async fn test_anonymous_sync_trigger_is_rejected(#[future] authenticated_app: AuthenticatedApp) {
     let app = authenticated_app.await;
-    setup_user_with_several_connections(
-        &app,
-        &settings,
-        github_oauth_credential,
-        linear_oauth_credential,
-        todoist_oauth_credential,
+    let anonymous_client = reqwest::Client::new();
+
+    let response = sync_notifications_response(
+        &anonymous_client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::Github),
+        true,
     )
     .await;
+    assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
 
-    // The unauthenticated branch of `POST /api/notifications/sync` schedules a sync across
-    // every user's connections for the given (or every) source — candidate B. Firing it
-    // concurrently with authenticated reads on the same rows must not deadlock either.
-    let unauthenticated_client = reqwest::Client::new();
+    let response =
+        sync_notifications_response(&anonymous_client, &app.app.api_address, None, true).await;
+    assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
 
-    let mut sync_statuses = Vec::new();
-    let mut list_statuses = Vec::new();
-
-    for _ in 0..5 {
-        let sync_requests = (0..8).map(|_| {
-            sync_notifications_response(
-                &unauthenticated_client,
-                &app.app.api_address,
-                Some(NotificationSourceKind::Github),
-                true, // asynchronous
-            )
-        });
-        let list_requests = (0..8).map(|_| {
-            list_notifications_response(
-                &app.client,
-                &app.app.api_address,
-                vec![NotificationStatus::Unread, NotificationStatus::Read],
-                false,
-                None,
-                None,
-                true, // trigger_sync
-            )
-        });
-
-        let (sync_responses, list_responses) = tokio::join!(
-            futures::future::join_all(sync_requests),
-            futures::future::join_all(list_requests),
-        );
-
-        sync_statuses.extend(sync_responses.into_iter().map(|response| response.status()));
-        list_statuses.extend(list_responses.into_iter().map(|response| response.status()));
-    }
-
-    for status in sync_statuses {
-        assert_eq!(
-            status,
-            reqwest::StatusCode::CREATED,
-            "unauthenticated POST /api/notifications/sync must never 500 under concurrent load"
-        );
-    }
-    for status in list_statuses {
-        assert_eq!(
-            status,
-            reqwest::StatusCode::OK,
-            "GET /api/notifications must never 500 while the unauthenticated global sync trigger is running concurrently"
-        );
-    }
+    let response = sync_tasks_response(&anonymous_client, &app.app.api_address, None, true).await;
+    assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
 }

@@ -545,9 +545,8 @@ async fn test_sync_all_notifications_asynchronously(
         // The existing notification's status should not have been updated to Read yet
         assert_eq!(result.len(), 0);
     } else {
-        let unauthenticated_client = reqwest::Client::new();
         let response = sync_notifications_response(
-            &unauthenticated_client,
+            &app.client,
             &app.app.api_address,
             Some(NotificationSourceKind::Github),
             true, // asynchronously
@@ -591,10 +590,8 @@ async fn test_sync_all_notifications_asynchronously(
         .respond_with(ResponseTemplate::new(200))
         .mount(&app.app.github_mock_server)
         .await;
-
-    let unauthenticated_client = reqwest::Client::new();
     let response = sync_notifications_response(
-        &unauthenticated_client,
+        &app.client,
         &app.app.api_address,
         Some(NotificationSourceKind::Github),
         true, // asynchronously
@@ -717,10 +714,8 @@ async fn test_sync_all_notifications_asynchronously_in_error(
         .respond_with(ResponseTemplate::new(400))
         .mount(&app.app.github_mock_server)
         .await;
-
-    let unauthenticated_client = reqwest::Client::new();
     let response = sync_notifications_response(
-        &unauthenticated_client,
+        &app.client,
         &app.app.api_address,
         Some(NotificationSourceKind::Github),
         true, // asynchronously

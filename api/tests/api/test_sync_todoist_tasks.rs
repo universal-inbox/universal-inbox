@@ -852,9 +852,8 @@ async fn test_sync_all_tasks_asynchronously(
         // The existing task's status should not have been updated to Deleted yet
         assert_eq!(result.len(), 1);
     } else {
-        let unauthenticated_client = reqwest::Client::new();
         let response = sync_tasks_response(
-            &unauthenticated_client,
+            &app.client,
             &app.app.api_address,
             Some(TaskSourceKind::Todoist),
             true, // asynchronously
@@ -887,10 +886,8 @@ async fn test_sync_all_tasks_asynchronously(
         .respond_with(ResponseTemplate::new(200))
         .mount(&app.app.todoist_mock_server)
         .await;
-
-    let unauthenticated_client = reqwest::Client::new();
     let response = sync_tasks_response(
-        &unauthenticated_client,
+        &app.client,
         &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         true, // asynchronously
@@ -931,10 +928,8 @@ async fn test_sync_all_tasks_asynchronously_in_error(
         .respond_with(ResponseTemplate::new(400))
         .mount(&app.app.todoist_mock_server)
         .await;
-
-    let unauthenticated_client = reqwest::Client::new();
     let response = sync_tasks_response(
-        &unauthenticated_client,
+        &app.client,
         &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         true, // asynchronously
