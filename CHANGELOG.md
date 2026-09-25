@@ -35,6 +35,7 @@
 
 ### Fixed
 
+- Deleting a user or a notification no longer fails with a foreign-key violation when Slack bridge pending actions reference it
 - Persist MCP sessions to Redis so they survive multi-pod restarts
 - Mark an integration connection as Failing when its OAuth refresh token is missing or rejected (`invalid_grant`)
 - Preserve integration-connection context when updating its configuration
