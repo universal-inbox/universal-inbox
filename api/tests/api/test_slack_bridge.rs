@@ -6,15 +6,30 @@ use slack_morphism::prelude::*;
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use universal_inbox::slack_bridge::{
-    SlackBridgeActionStatus, SlackBridgeActionType, SlackBridgePendingAction,
-    SlackBridgePendingActionId,
+use universal_inbox::{
+    integration_connection::{
+        config::IntegrationConnectionConfig, integrations::github::GithubConfig,
+    },
+    notification::NotificationId,
+    slack_bridge::{
+        SlackBridgeActionStatus, SlackBridgeActionType, SlackBridgePendingAction,
+        SlackBridgePendingActionId,
+    },
+    third_party::integrations::github::GithubNotification,
 };
-use universal_inbox_api::repository::slack_bridge::SlackBridgeRepository;
+use universal_inbox_api::{
+    configuration::Settings,
+    repository::{slack_bridge::SlackBridgeRepository, user::UserRepository},
+};
 
 use crate::helpers::{
     TestedApp,
     auth::{AuthenticatedApp, authenticated_app},
+    integration_connection::{
+        OAuthCredentialFixture, create_and_mock_integration_connection, github_oauth_credential,
+    },
+    notification::github::{create_notification_from_github_notification, github_notification},
+    settings,
 };
 
 #[derive(Debug, FromRow)]
@@ -43,11 +58,19 @@ async fn seed_action(
     app: &AuthenticatedApp,
     status: SlackBridgeActionStatus,
 ) -> SlackBridgePendingActionId {
+    seed_action_for_notification(app, status, None).await
+}
+
+async fn seed_action_for_notification(
+    app: &AuthenticatedApp,
+    status: SlackBridgeActionStatus,
+    notification_id: Option<NotificationId>,
+) -> SlackBridgePendingActionId {
     let now = Utc::now();
     let action = SlackBridgePendingAction {
         id: Uuid::new_v4().into(),
         user_id: app.user.id,
-        notification_id: None,
+        notification_id,
         action_type: SlackBridgeActionType::MarkAsRead,
         slack_team_id: SlackTeamId::new("T1234".to_string()),
         slack_channel_id: SlackChannelId::new("C1234".to_string()),
@@ -181,4 +204,104 @@ async fn test_fail_transitions_to_permanently_failed_after_max_retries(
     assert_eq!(state.status, "PermanentlyFailed");
     assert_eq!(state.retry_count, 5);
     assert_eq!(state.failure_message.as_deref(), Some("terminal"));
+}
+
+async fn count_actions(app: &TestedApp, id: SlackBridgePendingActionId) -> i64 {
+    sqlx::query_scalar::<_, i64>("SELECT count(*) FROM slack_bridge_pending_action WHERE id = $1")
+        .bind(id.0)
+        .fetch_one(&*app.repository.pool)
+        .await
+        .expect("Failed to count slack_bridge_pending_action rows")
+}
+
+async fn seed_notification(
+    app: &AuthenticatedApp,
+    settings: &Settings,
+    github_notification: &GithubNotification,
+    github_oauth_credential: OAuthCredentialFixture,
+) -> NotificationId {
+    let github_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        settings,
+        github_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    create_notification_from_github_notification(
+        &app.app,
+        github_notification,
+        app.user.id,
+        github_integration_connection.id,
+    )
+    .await
+    .id
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_delete_user_with_pending_actions_succeeds(
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    let action_id = seed_action(&app, SlackBridgeActionStatus::Pending).await;
+
+    let mut transaction = app.app.repository.begin().await.unwrap();
+    let deleted = app
+        .app
+        .repository
+        .delete_user(&mut transaction, app.user.id)
+        .await
+        .expect("Deleting a user with pending Slack bridge actions must succeed");
+    transaction.commit().await.unwrap();
+
+    assert!(deleted);
+    assert_eq!(count_actions(&app.app, action_id).await, 0);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_delete_notification_referenced_by_pending_action_succeeds(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    github_notification: Box<GithubNotification>,
+    github_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+    let notification_id = seed_notification(
+        &app,
+        &settings,
+        &github_notification,
+        github_oauth_credential,
+    )
+    .await;
+    let action_id = seed_action_for_notification(
+        &app,
+        SlackBridgeActionStatus::Pending,
+        Some(notification_id),
+    )
+    .await;
+
+    sqlx::query("DELETE FROM notification WHERE id = $1")
+        .bind(notification_id.0)
+        .execute(&*app.app.repository.pool)
+        .await
+        .expect("Deleting a notification referenced by a pending action must succeed");
+
+    // The action is kept (the extension replays it from its Slack coordinates),
+    // only the reference to the deleted notification is dropped.
+    let notification_ref: Option<Uuid> =
+        sqlx::query_scalar("SELECT notification_id FROM slack_bridge_pending_action WHERE id = $1")
+            .bind(action_id.0)
+            .fetch_one(&*app.app.repository.pool)
+            .await
+            .expect("The pending action should still exist");
+    assert_eq!(notification_ref, None);
+    assert_eq!(
+        read_action_state(&app.app, action_id).await.status,
+        "Pending"
+    );
 }
