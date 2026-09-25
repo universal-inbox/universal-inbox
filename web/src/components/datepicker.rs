@@ -47,7 +47,7 @@ where
         async move {
             // Initialize datepicker element
             let Ok(element) = wait_for_element_by_id(&name, 300).await else {
-                error!("Element `{}` not found", &name);
+                error!("Element `{}` not found", name);
                 return;
             };
             let element = element.dyn_into::<HtmlInputElement>().unwrap();
