@@ -1,10 +1,12 @@
 use std::{
     fmt::Debug,
+    panic::AssertUnwindSafe,
     sync::{Arc, Weak},
 };
 
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, TimeDelta, Utc};
+use futures::FutureExt;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
@@ -49,6 +51,7 @@ use crate::{
         third_party::service::ThirdPartyItemService,
         user::service::UserService,
     },
+    utils::panic::panic_message,
 };
 
 pub struct TaskService {
@@ -1184,7 +1187,19 @@ impl TaskService {
         let users = service.fetch_all_users(&mut transaction).await?;
 
         for user in users {
-            let _ = self.sync_tasks_for_user(source, user.id, force_sync).await;
+            // Panic boundary: a malformed upstream value that panics while syncing
+            // one user must not abort the sync for every other user of the instance.
+            if let Err(panic) =
+                AssertUnwindSafe(self.sync_tasks_for_user(source, user.id, force_sync))
+                    .catch_unwind()
+                    .await
+            {
+                error!(
+                    "Panic while syncing tasks for user {}: {}",
+                    user.id,
+                    panic_message(&panic)
+                );
+            }
         }
 
         Ok(())

@@ -5,5 +5,6 @@ pub mod graphql;
 pub mod jwt;
 pub mod login_throttle;
 pub mod origin;
+pub mod panic;
 pub mod passkey;
 pub mod rate_limit;
