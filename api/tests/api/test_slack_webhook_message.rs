@@ -20,9 +20,15 @@ use universal_inbox_api::{
 
 use universal_inbox_api::integrations::oauth2::AccessToken;
 
+use wiremock::{
+    Mock, ResponseTemplate,
+    matchers::{method, path, query_param},
+};
+
 use crate::helpers::{
     TestedApp,
     auth::{AuthenticatedApp, authenticated_app},
+    fixture_path,
     integration_connection::{
         OAuthCredentialFixture, create_and_mock_integration_connection,
         create_integration_connection, slack_context, slack_oauth_credential,
@@ -966,6 +972,72 @@ mod job {
 
         assert!(result.is_err());
         assert!(format!("{:?}", result.unwrap_err()).contains("ratelimited"));
+    }
+
+    /// A not-found answer is cached like a regular one: an id Slack will never resolve must not
+    /// be re-fetched (`bots.info` / `users.info`) on every thread fetch.
+    #[rstest]
+    #[tokio::test]
+    async fn test_unresolvable_slack_bot_and_user_are_negatively_cached(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let slack_api_token = SlackApiToken::new(SlackApiTokenValue(
+            "slack_test_user_access_token".to_string(),
+        ));
+        Mock::given(method("GET"))
+            .and(path("/bots.info"))
+            .and(query_param("bot", "B05UNKNOWN"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(
+                    std::fs::read_to_string(fixture_path(
+                        "slack_fetch_bot_not_found_response.json",
+                    ))
+                    .unwrap(),
+                    "application/json",
+                ),
+            )
+            .expect(1)
+            .mount(&app.app.slack_mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/users.info"))
+            .and(query_param("user", "U05UNKNOWN"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(
+                    std::fs::read_to_string(fixture_path(
+                        "slack_fetch_user_not_found_response.json",
+                    ))
+                    .unwrap(),
+                    "application/json",
+                ),
+            )
+            .expect(1)
+            .mount(&app.app.slack_mock_server)
+            .await;
+
+        for _ in 0..2 {
+            let bot = app
+                .app
+                .slack_service
+                .fetch_bot(&SlackBotId("B05UNKNOWN".to_string()), &slack_api_token)
+                .await
+                .unwrap();
+            assert!(bot.is_none());
+            let user = app
+                .app
+                .slack_service
+                .fetch_user(
+                    &SlackUserId("U05UNKNOWN".to_string()),
+                    app.user.id,
+                    &slack_api_token,
+                )
+                .await
+                .unwrap();
+            assert!(user.is_none());
+        }
+
+        app.app.slack_mock_server.verify().await;
     }
 
     /// Mount the Slack mocks needed to handle a message pinging the known user `U01` in
