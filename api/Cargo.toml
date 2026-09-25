@@ -102,11 +102,14 @@ opentelemetry-otlp = { version = "0.32", features = [
 ] }
 rand = { version = "0.10" }
 ring = { version = "0.17.0", features = ["std"] }
-redis = { version = "0.32.7", features = [
+redis = { version = "1.7", features = [
   "tokio-comp",
   "tokio-native-tls-comp",
   "connection-manager",
 ] }
+# apalis-redis 0.7 still pins redis 0.32: scripts run on its storage connection
+# (see jobs/cron.rs) must use the matching redis version.
+redis_apalis = { package = "redis", version = "0.32.7", default-features = false, features = ["script", "aio", "connection-manager"] }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["rustls", "gzip", "stream"] }
 reqwest-middleware = { version = "0.5.0", features = ["json", "form"] }

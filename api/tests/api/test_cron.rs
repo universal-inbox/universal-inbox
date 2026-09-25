@@ -2,7 +2,7 @@ use apalis::prelude::{Data, Storage};
 use apalis_cron::CronContext;
 use apalis_redis::RedisStorage;
 use chrono::{DateTime, TimeDelta, TimeZone, Timelike, Utc};
-use redis::{AsyncCommands, aio::ConnectionManager};
+use redis_apalis::{AsyncCommands, aio::ConnectionManager};
 use rstest::*;
 use uuid::Uuid;
 
