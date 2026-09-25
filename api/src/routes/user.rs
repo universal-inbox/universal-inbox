@@ -23,13 +23,14 @@ use universal_inbox::{
     SuccessResponse,
     auth::auth_token::{AuthenticationToken, TruncatedAuthenticationToken},
     user::{
-        Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
-        User, UserAuthKind, UserAuthMethod, UserId, UserPatch, UserPreferences,
-        UserPreferencesPatch, Username,
+        Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordResetToken,
+        RegisterUserParameters, User, UserAuthKind, UserAuthMethod, UserId, UserPatch,
+        UserPreferences, UserPreferencesPatch, Username,
     },
 };
 
 use crate::{
+    billing::service::BillingService,
     configuration::Settings,
     routes::auth::USER_AUTH_KIND_SESSION_KEY,
     universal_inbox::{
@@ -164,7 +165,8 @@ pub fn scope(auth_rate_limiter: Arc<AuthRateLimiter>) -> Scope {
                     web::resource("")
                         .route(web::get().to(get_user))
                         .route(web::patch().to(patch_user))
-                        .route(web::post().to(login_user)),
+                        .route(web::post().to(login_user))
+                        .route(web::delete().to(delete_user)),
                 )
                 .service(
                     web::resource("/email-verification")
@@ -317,6 +319,60 @@ pub async fn patch_user(
                 json!({ "message": format!("Cannot find user {user_id}") }).to_string(),
             ))),
     }
+}
+
+/// Self-service account deletion (GDPR right to erasure). The user confirms by
+/// re-typing their email address (see `User::is_account_deletion_confirmed`).
+/// On success the account and all its data are gone and the session is
+/// cleared.
+pub async fn delete_user(
+    req: HttpRequest,
+    user_service: web::Data<Arc<UserService>>,
+    billing_service: Option<web::Data<Arc<BillingService>>>,
+    settings: web::Data<Settings>,
+    authenticated: Authenticated<Claims>,
+    session: Session,
+    params: web::Json<DeleteAccountParameters>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(response);
+    }
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while deleting user account")?;
+
+    service
+        .delete_account(
+            &mut transaction,
+            user_id,
+            &params.into_inner(),
+            billing_service
+                .as_ref()
+                .map(|billing| billing.as_ref().as_ref()),
+        )
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while deleting user account")?;
+
+    session.purge();
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&SuccessResponse {
+            success: true,
+            message: "Your account and all its data have been deleted".to_string(),
+        })
+        .context("Cannot serialize response")?,
+    ))
 }
 
 pub async fn list_auth_methods(

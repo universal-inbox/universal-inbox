@@ -99,6 +99,36 @@ impl RegisterUserParameters {
     }
 }
 
+/// Keyword a user without an email address types to confirm the deletion of
+/// their account (users with an email type their email address instead).
+pub const ACCOUNT_DELETION_CONFIRMATION_KEYWORD: &str = "DELETE";
+
+/// Body of `DELETE /api/users/me`: the user re-types their email address (or
+/// [`ACCOUNT_DELETION_CONFIRMATION_KEYWORD`] when they have none) to confirm
+/// that they want their account and all its data deleted.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct DeleteAccountParameters {
+    pub confirmation: String,
+}
+
+impl User {
+    /// The text the user must type to confirm the deletion of their account.
+    pub fn account_deletion_confirmation(&self) -> String {
+        self.email
+            .as_ref()
+            .map(|email| email.to_string())
+            .unwrap_or_else(|| ACCOUNT_DELETION_CONFIRMATION_KEYWORD.to_string())
+    }
+
+    /// Whether `confirmation` confirms the deletion of this user's account
+    /// (surrounding whitespace and case are ignored).
+    pub fn is_account_deletion_confirmed(&self, confirmation: &str) -> bool {
+        confirmation
+            .trim()
+            .eq_ignore_ascii_case(&self.account_deletion_confirmation())
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
 pub struct UserPatch {
     pub first_name: Option<String>,
@@ -314,4 +344,30 @@ pub struct UserPreferences {
 pub struct UserPreferencesPatch {
     pub default_task_manager_provider_kind: Option<Option<IntegrationProviderKind>>,
     pub open_links_in_background: Option<bool>,
+}
+
+#[cfg(test)]
+mod account_deletion_confirmation_tests {
+    use super::*;
+
+    #[test]
+    fn a_user_with_an_email_confirms_with_their_email() {
+        let user = User::new(None, None, "John.Doe@example.com".parse().unwrap());
+
+        assert!(user.is_account_deletion_confirmed("John.Doe@example.com"));
+        assert!(user.is_account_deletion_confirmed("  john.doe@EXAMPLE.com "));
+        assert!(!user.is_account_deletion_confirmed("DELETE"));
+        assert!(!user.is_account_deletion_confirmed("other@example.com"));
+        assert!(!user.is_account_deletion_confirmed(""));
+    }
+
+    #[test]
+    fn a_user_without_an_email_confirms_with_the_keyword() {
+        let mut user = User::new(None, None, "john@example.com".parse().unwrap());
+        user.email = None;
+
+        assert!(user.is_account_deletion_confirmed("DELETE"));
+        assert!(user.is_account_deletion_confirmed("delete"));
+        assert!(!user.is_account_deletion_confirmed(""));
+    }
 }

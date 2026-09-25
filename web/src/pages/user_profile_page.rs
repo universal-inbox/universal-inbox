@@ -4,7 +4,8 @@ use dioxus::prelude::*;
 use log::debug;
 
 use crate::components::{
-    auth_methods_card::AuthMethodsCard, ui::PageHeader, user_profile_card::UserProfileCard,
+    auth_methods_card::AuthMethodsCard, delete_account_card::DeleteAccountCard, ui::PageHeader,
+    user_profile_card::UserProfileCard,
 };
 
 pub fn UserProfilePage() -> Element {
@@ -25,6 +26,8 @@ pub fn UserProfilePage() -> Element {
                 UserProfileCard {}
 
                 AuthMethodsCard {}
+
+                DeleteAccountCard {}
             }
         }
     }
