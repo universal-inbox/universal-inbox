@@ -22,7 +22,8 @@ use crate::{
     universal_inbox::{
         UniversalInboxError, UpdateStatus,
         user::model::{
-            AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
+            AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, PendingEmailChange,
+            UserAuth,
         },
     },
 };
@@ -113,6 +114,36 @@ pub trait UserRepository {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         validated_at: DateTime<Utc>,
+    ) -> Result<bool, UniversalInboxError>;
+
+    /// Record (or replace) the user's pending email change.
+    async fn upsert_pending_email_change(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        new_email: &EmailAddress,
+        validation_token: &EmailValidationToken,
+    ) -> Result<(), UniversalInboxError>;
+
+    async fn get_pending_email_change(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Option<PendingEmailChange>, UniversalInboxError>;
+
+    async fn delete_pending_email_change(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError>;
+
+    /// Set a verified new email address on the user. Returns `false` when the
+    /// address is already used by another account.
+    async fn apply_verified_email_change(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        new_email: &EmailAddress,
     ) -> Result<bool, UniversalInboxError>;
 
     async fn update_password_reset_parameters(
@@ -907,6 +938,145 @@ impl UserRepository for Repository {
         })?;
 
         Ok(row.and_then(|row| row.map(|token| token.into())))
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    async fn upsert_pending_email_change(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        new_email: &EmailAddress,
+        validation_token: &EmailValidationToken,
+    ) -> Result<(), UniversalInboxError> {
+        sqlx::query!(
+            r#"
+                INSERT INTO user_email_change (user_id, new_email, validation_token, requested_at)
+                VALUES ($1, $2, $3, now())
+                ON CONFLICT (user_id) DO UPDATE
+                SET new_email = EXCLUDED.new_email,
+                  validation_token = EXCLUDED.validation_token,
+                  requested_at = EXCLUDED.requested_at
+            "#,
+            user_id.0,
+            new_email.as_str(),
+            validation_token.0
+        )
+        .execute(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!("Failed to store pending email change for user {user_id}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    async fn get_pending_email_change(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Option<PendingEmailChange>, UniversalInboxError> {
+        let row = sqlx::query!(
+            r#"
+                SELECT new_email, validation_token, requested_at
+                FROM user_email_change
+                WHERE user_id = $1
+            "#,
+            user_id.0
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!("Failed to fetch pending email change for user {user_id}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        row.map(|row| {
+            Ok(PendingEmailChange {
+                new_email: row
+                    .new_email
+                    .parse()
+                    .context("Invalid email address stored in pending email change")?,
+                validation_token: row.validation_token.into(),
+                requested_at: row.requested_at,
+            })
+        })
+        .transpose()
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    async fn delete_pending_email_change(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        sqlx::query!(
+            r#"DELETE FROM user_email_change WHERE user_id = $1"#,
+            user_id.0
+        )
+        .execute(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!("Failed to delete pending email change for user {user_id}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    async fn apply_verified_email_change(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        new_email: &EmailAddress,
+    ) -> Result<bool, UniversalInboxError> {
+        let result = sqlx::query!(
+            r#"
+                UPDATE "user"
+                SET email = $2,
+                  email_validated_at = $3,
+                  email_validation_sent_at = NULL,
+                  email_validation_token = NULL,
+                  updated_at = $3
+                WHERE id = $1
+            "#,
+            user_id.0,
+            new_email.as_str(),
+            Utc::now().naive_utc()
+        )
+        .execute(&mut **executor)
+        .await;
+
+        // A unique violation aborts the transaction: the caller must not
+        // issue further statements on it and returns an error instead.
+        match result {
+            Ok(_) => Ok(true),
+            Err(err)
+                if err
+                    .as_database_error()
+                    .and_then(|db_error| db_error.code())
+                    .as_deref()
+                    == Some("23505") =>
+            {
+                Ok(false)
+            }
+            Err(err) => {
+                let message = format!("Failed to apply email change for user {user_id}");
+                Err(UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                })
+            }
+        }
     }
 
     #[tracing::instrument(
