@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use anyhow::{Context, anyhow};
 use apalis::prelude::*;
 use apalis_redis::RedisStorage;
-use cached::proc_macro::io_cached;
+use cached::proc_macro::concurrent_cached;
 use chrono::{DateTime, TimeDelta, Utc};
 use clap::ValueEnum;
 use oauth2::{CsrfToken, PkceCodeChallenge};
@@ -2019,7 +2019,7 @@ impl IntegrationConnectionService {
     }
 }
 
-#[io_cached(
+#[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}{}", provider_kind, provider_user_id) }"#,
     ty = "cached::AsyncRedisCache<String, Option<IntegrationConnectionConfig>>",
