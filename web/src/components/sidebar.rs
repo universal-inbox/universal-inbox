@@ -18,7 +18,7 @@ use crate::{
     model::DEFAULT_USER_AVATAR,
     route::Route,
     services::{
-        crisp::{init_crisp, open_crisp_chat},
+        crisp::{configure_crisp, open_crisp_chat},
         headway::{init_headway, show_headway},
         notification_service::{
             CURRENT_NOTIFICATION_SECTION, INBOX_COUNT, NotificationSection, SNOOZED_COUNT,
@@ -107,9 +107,11 @@ pub fn Sidebar() -> Element {
         .as_ref()
         .is_some_and(|config| config.chat_support_website_id.is_some());
 
-    // Re-init the Crisp chat bubble and the Headway changelog widget inside the
-    // authenticated shell (the redesign dropped this when it removed NavBar; Crisp
-    // otherwise only inits on the unauthenticated pages via FullpageLayout).
+    // Init the Headway changelog widget and record the Crisp chat identity inside
+    // the authenticated shell. `configure_crisp` makes no network call: Crisp is
+    // only loaded (script, websocket, cookies) when the user clicks the
+    // "Support" button below (see `open_crisp_chat`). Crisp is never configured
+    // on the unauthenticated pages (FullpageLayout).
     // `init_headway` runs here so the `#ui-changelog` anchor below already exists
     // when Headway binds its unread badge + click handler to it.
     use_effect(move || {
@@ -132,7 +134,7 @@ pub fn Sidebar() -> Element {
             let user_full_name = CONNECTED_USER().as_ref().and_then(|user| user.full_name());
             let user_id = CONNECTED_USER().as_ref().map(|user| user.id.to_string());
 
-            init_crisp(
+            configure_crisp(
                 chat_support_website_id,
                 user_email.as_deref(),
                 user_email_signature.as_deref(),
@@ -357,7 +359,8 @@ pub fn Sidebar() -> Element {
                             button {
                                 class: "flex items-center justify-center w-8 h-8 rounded-ui-md text-sidebar-text-muted hover:bg-sidebar-hover-bg hover:text-sidebar-text-bright transition-colors duration-[120ms] bg-transparent border-0 cursor-pointer",
                                 "aria-label": "Contact support",
-                                // Crisp's floating launcher is hidden (see init_crisp); this opens the chat.
+                                // Loads Crisp on first click (no Crisp request before that), then
+                                // opens the chat. Crisp's floating launcher stays hidden.
                                 onclick: move |_| open_crisp_chat(),
                                 span { class: "icon-[lucide--life-buoy] size-4" }
                             }

@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(module = "/public/js/index.js")]
 extern "C" {
-    pub fn init_crisp(
+    pub fn configure_crisp(
         website_id: &str,
         user_email: Option<&str>,
         user_email_signature: Option<&str>,
