@@ -91,10 +91,16 @@ where
         &namespace,
         &prefix
     );
-    AsyncRedisCache::new(prefix, ttl_in_seconds)
-        .set_refresh(refresh)
-        .set_namespace(&namespace)
-        .set_connection_string(&settings.redis.connection_string())
+    AsyncRedisCache::builder(prefix)
+        .ttl(ttl_in_seconds)
+        .refresh_on_hit(refresh)
+        .namespace(&namespace)
+        .connection_string(&settings.redis.connection_string())
+        // Preserve the pre-4.0 behavior: with the `redis_connection_manager`
+        // feature enabled, `cached` 0.56 always used the auto-reconnecting
+        // `redis::aio::ConnectionManager`. In 4.0 this is an explicit per-cache
+        // opt-in (the feature only makes it available), so opt in here.
+        .connection_manager(true)
         .build()
         .await
         .expect("error building Redis cache")

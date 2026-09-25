@@ -594,10 +594,9 @@ impl TickTickService {
 }
 
 #[cached(
-    result = true,
     sync_writes = "by_key",
-    size = 1,
-    time = 600,
+    max_size = 1,
+    ttl_secs = 600,
     key = "String",
     convert = r#"{ format!("{}{}{}", _user_id, service.projects_cache_index.load(Ordering::Relaxed), service.ticktick_base_url.clone()) }"#
 )]
