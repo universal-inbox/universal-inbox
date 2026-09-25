@@ -749,14 +749,13 @@ impl DatabaseSettings {
                     use sqlx::Executor;
                     conn.execute("SET default_transaction_isolation TO 'read committed'")
                         .await?;
-                    conn.execute(
-                        format!("SET lock_timeout TO '{lock_timeout_in_milliseconds}ms'").as_str(),
-                    )
+                    conn.execute(sqlx::AssertSqlSafe(format!(
+                        "SET lock_timeout TO '{lock_timeout_in_milliseconds}ms'"
+                    )))
                     .await?;
-                    conn.execute(
-                        format!("SET statement_timeout TO '{statement_timeout_in_milliseconds}ms'")
-                            .as_str(),
-                    )
+                    conn.execute(sqlx::AssertSqlSafe(format!(
+                        "SET statement_timeout TO '{statement_timeout_in_milliseconds}ms'"
+                    )))
                     .await?;
                     Ok(())
                 })
