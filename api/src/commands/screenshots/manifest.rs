@@ -125,7 +125,7 @@ const TICKTICK_CARD_HEADER: &str = "[aria-label=\"Toggle Tick Tick settings\"]";
 /// The full screenshot manifest used by `cargo run -- test generate-doc-screenshots`.
 pub const MANIFEST: &[ScreenshotSpec] = &[
     // ---------- quick_start/images ----------
-    // Crop the auth pages to the `.auth-canvas` card so the surrounding
+    // Crop the auth pages to the `#auth-frame` card so the surrounding
     // viewport whitespace is dropped from the doc embed.
     ScreenshotSpec {
         name: "login-page",
@@ -135,10 +135,10 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         state: SeedState::LoggedOut,
         pre: &[
             Action::WaitFor("input[name='email']"),
-            Action::WaitFor(".auth-canvas"),
+            Action::WaitFor("#auth-frame"),
             Action::Sleep(200),
         ],
-        capture: Capture::Element(".auth-canvas"),
+        capture: Capture::Element("#auth-frame"),
     },
     ScreenshotSpec {
         name: "signup-page",
@@ -148,10 +148,10 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         state: SeedState::LoggedOut,
         pre: &[
             Action::WaitFor("input[name='email']"),
-            Action::WaitFor(".auth-canvas"),
+            Action::WaitFor("#auth-frame"),
             Action::Sleep(200),
         ],
-        capture: Capture::Element(".auth-canvas"),
+        capture: Capture::Element("#auth-frame"),
     },
     ScreenshotSpec {
         name: "passkey-signup-page",
@@ -161,10 +161,10 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         state: SeedState::LoggedOut,
         pre: &[
             Action::WaitFor("input[name='username']"),
-            Action::WaitFor(".auth-canvas"),
+            Action::WaitFor("#auth-frame"),
             Action::Sleep(200),
         ],
-        capture: Capture::Element(".auth-canvas"),
+        capture: Capture::Element("#auth-frame"),
     },
     ScreenshotSpec {
         name: "inbox-screen",
@@ -190,7 +190,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         path: Some("/settings"),
         viewport: WIDE,
         state: SeedState::Default,
-        pre: &[Action::WaitFor(".settings-container"), Action::Sleep(500)],
+        pre: &[Action::WaitFor("#settings-page"), Action::Sleep(500)],
         capture: Capture::Viewport,
     },
     ScreenshotSpec {
@@ -356,7 +356,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
         path: Some("/profile"),
         viewport: WIDE,
         state: SeedState::Default,
-        pre: &[Action::WaitFor(".profile-container"), Action::Sleep(300)],
+        pre: &[Action::WaitFor("#user-profile-page"), Action::Sleep(300)],
         capture: Capture::Viewport,
     },
     // /security page has two cards rendered as `<section role="region" aria-label=...>`
@@ -539,7 +539,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
     },
     // ---------- Google Calendar action buttons ----------
     // The Google Calendar event preview renders a row of yes/no/maybe RSVP
-    // buttons inside `.preview-rsvp-inline`. We clip just that row so the doc
+    // buttons inside `#google-calendar-rsvp-buttons`. We clip just that row so the doc
     // embed can sit on a single line next to its explanation (see inbox_screen.md
     // — the image is sized `=x30`, so anything larger than the button strip
     // would render as an unreadable squashed block).
@@ -553,10 +553,10 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
             Action::WaitFor(GCAL_ROW),
             Action::Click(GCAL_ROW),
             Action::WaitFor("#detail-panel"),
-            Action::WaitFor(".preview-rsvp-inline"),
+            Action::WaitFor("#google-calendar-rsvp-buttons"),
             Action::Sleep(500),
         ],
-        capture: Capture::Element(".preview-rsvp-inline"),
+        capture: Capture::Element("#google-calendar-rsvp-buttons"),
     },
     // RSVP buttons have no aria-label; they're identified by the iconify class
     // on their inner span (user-check / user-x / user-minus).
@@ -573,7 +573,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
             Action::Sleep(500),
         ],
         capture: Capture::Element(
-            ".preview-rsvp-inline button:has(.icon-\\[lucide--user-check\\])",
+            "#google-calendar-rsvp-buttons button:has(.icon-\\[lucide--user-check\\])",
         ),
     },
     ScreenshotSpec {
@@ -588,7 +588,9 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
             Action::WaitFor("#detail-panel"),
             Action::Sleep(500),
         ],
-        capture: Capture::Element(".preview-rsvp-inline button:has(.icon-\\[lucide--user-x\\])"),
+        capture: Capture::Element(
+            "#google-calendar-rsvp-buttons button:has(.icon-\\[lucide--user-x\\])",
+        ),
     },
     ScreenshotSpec {
         name: "maybe-button",
@@ -603,7 +605,7 @@ pub const MANIFEST: &[ScreenshotSpec] = &[
             Action::Sleep(500),
         ],
         capture: Capture::Element(
-            ".preview-rsvp-inline button:has(.icon-\\[lucide--user-minus\\])",
+            "#google-calendar-rsvp-buttons button:has(.icon-\\[lucide--user-minus\\])",
         ),
     },
     // ---------- Task priority indicators ----------
