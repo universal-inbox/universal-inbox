@@ -2,7 +2,6 @@
 
 use dioxus::prelude::*;
 use dioxus_router::hooks::use_route;
-use gravatar_rs::Generator;
 
 use crate::{
     components::{
@@ -10,13 +9,9 @@ use crate::{
         ui::{Button, ButtonSize, ButtonVariant},
         universal_inbox_title::BrandHeroLockup,
     },
-    config::APP_CONFIG,
-    model::{DEFAULT_USER_AVATAR, UI_MODEL},
+    model::UI_MODEL,
     route::Route,
-    services::{
-        crisp::init_crisp,
-        user_service::{CONNECTED_USER, UserCommand},
-    },
+    services::user_service::{CONNECTED_USER, UserCommand},
 };
 
 #[component]
@@ -35,50 +30,6 @@ pub fn FullpageLayout() -> Element {
         model.error_message = None;
         model.confirmation_message = None;
     }
-
-    use_effect(move || {
-        if let Some(chat_support_website_id) = &APP_CONFIG
-            .read()
-            .as_ref()
-            .and_then(|config| config.chat_support_website_id.clone())
-        {
-            let user_avatar = Some(
-                CONNECTED_USER()
-                    .as_ref()
-                    .map(|user| {
-                        if let Some(ref email) = user.email {
-                            Generator::default()
-                                .set_image_size(150)
-                                .set_rating("g")
-                                .set_default_image("mp")
-                                .generate(email.as_str())
-                        } else {
-                            DEFAULT_USER_AVATAR.to_string()
-                        }
-                    })
-                    .unwrap_or_else(|| DEFAULT_USER_AVATAR.to_string()),
-            );
-            let user_email = CONNECTED_USER()
-                .as_ref()
-                .and_then(|user| user.email.as_ref().map(|email| email.to_string()));
-            let user_email_signature = CONNECTED_USER().as_ref().and_then(|user| {
-                user.chat_support_email_signature
-                    .as_ref()
-                    .map(|signature| signature.to_string())
-            });
-            let user_full_name = CONNECTED_USER().as_ref().and_then(|user| user.full_name());
-            let user_id = CONNECTED_USER().as_ref().map(|user| user.id.to_string());
-
-            init_crisp(
-                chat_support_website_id,
-                user_email.as_deref(),
-                user_email_signature.as_deref(),
-                user_full_name.as_deref(),
-                user_avatar.as_deref(),
-                user_id.as_deref(),
-            );
-        }
-    });
 
     rsx! {
         div {

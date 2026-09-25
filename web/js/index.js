@@ -464,7 +464,18 @@ export function show_headway() {
     }
 }
 
-export function init_crisp(
+// Crisp chat is loaded lazily: nothing is sent to *.crisp.chat (no script, no
+// websocket, no cookie) until the user explicitly asks for support by clicking
+// our own "Support" button. This keeps the chat widget within the CNIL
+// "strictly necessary for a service explicitly requested by the user"
+// exemption, so no consent banner is needed.
+//
+// `configure_crisp` only records the website id and the user identity; it makes
+// no Crisp call. `open_crisp_chat` loads and initialises Crisp on first use.
+let crispConfig = null;
+let crispLoaded = false;
+
+export function configure_crisp(
     website_id,
     user_email,
     user_email_signature,
@@ -472,6 +483,31 @@ export function init_crisp(
     user_avatar,
     user_id,
 ) {
+    crispConfig = {
+        website_id,
+        user_email,
+        user_email_signature,
+        user_nickname,
+        user_avatar,
+        user_id,
+    };
+}
+
+function load_crisp() {
+    if (crispLoaded) {
+        return true;
+    }
+    if (!crispConfig || !crispConfig.website_id) {
+        return false;
+    }
+    const {
+        website_id,
+        user_email,
+        user_email_signature,
+        user_nickname,
+        user_avatar,
+        user_id,
+    } = crispConfig;
     try {
         Crisp.configure(website_id, {
             autoload: false,
@@ -491,6 +527,7 @@ export function init_crisp(
         }
 
         Crisp.load();
+        crispLoaded = true;
 
         if (!!user_id) {
             Crisp.session.setData({
@@ -506,22 +543,24 @@ export function init_crisp(
         Crisp.chat.onChatClosed(() => {
             Crisp.chat.hide();
         });
+        return true;
     } catch (e) {
         console.warn("Failed to initialize Crisp chat:", e);
+        return false;
     }
 }
 
 export function open_crisp_chat() {
-    if (typeof Crisp === "undefined") {
-        return;
-    }
     // Defer to the next tick so the click that triggered this finishes bubbling
     // first. Crisp closes the chat on outside clicks; opening synchronously from
     // a click handler races that handler, which closes the chat we just opened
     // (it flashes open then shut on the first click). By the time this timeout
     // fires, the click has settled. The default launcher is hidden (see
-    // `init_crisp`), so show the widget then open the conversation window.
+    // `load_crisp`), so show the widget then open the conversation window.
     setTimeout(() => {
+        if (!load_crisp()) {
+            return;
+        }
         try {
             Crisp.chat.show();
             Crisp.chat.open();
@@ -532,6 +571,12 @@ export function open_crisp_chat() {
 }
 
 export function unload_crisp() {
+    crispConfig = null;
+    // Never touch the SDK if it was not loaded: most Crisp calls auto-inject the
+    // Crisp script, which is exactly what we want to avoid.
+    if (!crispLoaded) {
+        return;
+    }
     try {
         Crisp.setTokenId();
         Crisp.session.reset();
@@ -541,6 +586,9 @@ export function unload_crisp() {
 }
 
 export function is_crisp_chat_opened() {
+    if (!crispLoaded) {
+        return false;
+    }
     try {
         return Crisp.chat.isChatOpened();
     } catch (e) {
