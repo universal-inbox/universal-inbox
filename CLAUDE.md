@@ -1,7 +1,6 @@
 # Universal Inbox — Claude Code Guide
 
-> Slim navigation hub. Detail lives in the `.claude/` docs and [`AGENTS.md`](AGENTS.md)
-> (comprehensive, on-demand). Load only what the task needs. Keep this file under 200 lines —
+> Slim navigation hub. Detail lives in the `.claude/` docs. Load only what the task needs. Keep this file under 200 lines —
 > link to the dedicated docs, don't duplicate them.
 
 Universal Inbox centralizes notifications and tasks from many sources (GitHub, Linear, Slack,
@@ -11,12 +10,11 @@ a Dioxus WASM frontend (`web/`).
 
 ## Session Start Protocol
 
-**MANDATORY at the start of each session — load these 4 files (~1,500 tokens):**
+At the start of each session, read these 3 files:
 
-- ✓ `CLAUDE.md` (this file, ~500)
-- ✓ `.claude/COMMON_MISTAKES.md` ⚠️ CRITICAL (~400)
-- ✓ `.claude/QUICK_START.md` — build/test/DB/service commands + required env (~250)
-- ✓ `.claude/ARCHITECTURE_MAP.md` — directory map + "where to find X" (~350)
+- `.claude/COMMON_MISTAKES.md` — the five failures that recur on this stack
+- `.claude/QUICK_START.md` — build/test/DB/service commands + required env
+- `.claude/ARCHITECTURE_MAP.md` — directory map + "where to find X"
 
 **Then load task-specific docs (~500–800 each) — see [`.claude/docs/INDEX.md`](.claude/docs/INDEX.md):**
 
@@ -27,11 +25,8 @@ a Dioxus WASM frontend (`web/`).
 - Stuck / error → [`common-pitfalls.md`](.claude/docs/learnings/common-pitfalls.md) + `COMMON_MISTAKES.md`
 - Fast lookups / code patterns / style → [`QUICK_REFERENCE.md`](.claude/docs/QUICK_REFERENCE.md)
 
-**Deep reference (load only when needed):** [`AGENTS.md`](AGENTS.md) (~9,000) — full code
-conventions, worktree, Playwright, and styling playbooks.
-
-**⚠️ NEVER auto-load (zero token cost — explicit request only):**
-`.claude/completions/**` · `.claude/sessions/**` · `.claude/docs/archive/**`
+Read `.claude/completions/**`, `.claude/sessions/**`, and `.claude/docs/archive/**` only when
+asked: they are historical records, not current guidance.
 
 ## Documentation Navigation
 
@@ -45,7 +40,6 @@ conventions, worktree, Playwright, and styling playbooks.
 | [`.claude/docs/QUICK_REFERENCE.md`](.claude/docs/QUICK_REFERENCE.md) | Fast lookups, code patterns, code style |
 | [`.claude/docs/learnings/`](.claude/docs/learnings) | testing · database · api-design · frontend-dioxus · integrations · common-pitfalls |
 | [`.claude/DOCUMENTATION_MAINTENANCE.md`](.claude/DOCUMENTATION_MAINTENANCE.md) | When to update/archive docs |
-| [`AGENTS.md`](AGENTS.md) | Comprehensive: code conventions, worktree, Playwright, styling |
 
 ## Issue Tracking & Session Close
 

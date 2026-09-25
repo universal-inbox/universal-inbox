@@ -56,6 +56,6 @@ Each learnings doc stays ~500-800 tokens. Loaded only when the task touches that
 
 ## 6. Keep `CLAUDE.md` under 200 lines
 
-It's a slim hub. Push detail **down** into the docs above and link — never duplicate. If a section grows past a paragraph, move it to a learnings doc and leave a one-line pointer. For deep specifics, link to [the comprehensive guide](../AGENTS.md).
+It's a slim hub. Push detail **down** into the docs above and link — never duplicate. If a section grows past a paragraph, move it to a learnings doc and leave a one-line pointer.
 
 _Last updated: 2026-05-30_

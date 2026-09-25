@@ -25,6 +25,4 @@ For full navigation, see [docs/INDEX.md](docs/INDEX.md).
 | Adding/editing a GitHub/Linear/Slack/Google/Todoist source | integrations + database-patterns + api-design |
 | Debugging a build/test/runtime surprise | common-pitfalls |
 
-For deep reference beyond these, use [AGENTS.md](../AGENTS.md).
-
 _Last updated: 2026-05-30_

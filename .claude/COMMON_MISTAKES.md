@@ -29,7 +29,7 @@
 
 ## Before you finish
 - Run `just check` and `just test` from the project you touched (api/web/root).
-- Session close is MANDATORY: `git pull --rebase` -> `bd dolt push` -> `git push` -> confirm `up to date with origin`. Work isn't done until pushed.
+- Then file follow-up issues and run `bd dolt push`. Push git branches only when the user asks.
 
 For the longer list, see [common pitfalls](docs/learnings/common-pitfalls.md).
 
