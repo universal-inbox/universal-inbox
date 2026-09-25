@@ -1110,6 +1110,25 @@ mod oauth2 {
         client_id: &str,
         code_challenge: &str,
     ) -> String {
+        oauth2_authorize_with_scope(
+            auth_client,
+            app,
+            user_id,
+            client_id,
+            code_challenge,
+            Some("read write"),
+        )
+        .await
+    }
+
+    async fn oauth2_authorize_with_scope(
+        auth_client: &reqwest::Client,
+        app: &TestedApp,
+        user_id: UserId,
+        client_id: &str,
+        code_challenge: &str,
+        scope: Option<&str>,
+    ) -> String {
         // Pre-seed the consent so the /authorize call takes the
         // "already consented" path and issues a code directly. The consent
         // flow itself is exercised by dedicated tests below.
@@ -1136,11 +1155,14 @@ mod oauth2 {
 
         let response = no_redirect
             .get(format!(
-                "{}oauth2/authorize?response_type=code&client_id={}&redirect_uri={}&code_challenge={}&code_challenge_method=S256&scope=read+write&state=test_state&resource={}",
+                "{}oauth2/authorize?response_type=code&client_id={}&redirect_uri={}&code_challenge={}&code_challenge_method=S256{}&state=test_state&resource={}",
                 app.api_address,
                 client_id,
                 urlencoding::encode("http://localhost:12345/callback"),
                 code_challenge,
+                scope
+                    .map(|scope| format!("&scope={}", urlencoding::encode(scope)))
+                    .unwrap_or_default(),
                 urlencoding::encode(&resource_url),
             ))
             .bearer_auth(&token)
@@ -1420,6 +1442,144 @@ mod oauth2 {
         let mcp2 = mcp_client();
         let (session_id, _) = mcp_initialize(&mcp2, &app.app, new_access_token).await;
         assert!(session_id.is_some());
+    }
+
+    /// Run the full authorize + token exchange with `scope` and return the
+    /// token response.
+    async fn oauth2_access_token_with_scope(app: &AuthenticatedApp, scope: Option<&str>) -> Value {
+        let registered = register_oauth2_client(&app.app).await;
+        let client_id = registered["client_id"].as_str().unwrap();
+        let code_verifier = "scope-test-verifier-0123456789-abcdefghijklmnop";
+        let code_challenge = pkce_challenge(code_verifier);
+        let code = oauth2_authorize_with_scope(
+            &app.client,
+            &app.app,
+            app.user.id,
+            client_id,
+            &code_challenge,
+            scope,
+        )
+        .await;
+        oauth2_token_exchange(
+            &reqwest::Client::new(),
+            &app.app,
+            client_id,
+            &code,
+            code_verifier,
+        )
+        .await
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn read_scoped_oauth2_token_cannot_call_write_tools(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let token_response = oauth2_access_token_with_scope(&app, Some("read")).await;
+        assert_eq!(token_response["scope"], "read");
+        let access_token = token_response["access_token"].as_str().unwrap();
+
+        // Read tools are allowed.
+        let body = mcp_tool_call(
+            &app.app,
+            access_token,
+            "list_notifications",
+            json!({ "trigger_sync": false }),
+        )
+        .await;
+        assert_eq!(body["result"]["isError"], false, "got: {body}");
+
+        // Every mutating tool is rejected before it runs.
+        for (tool_name, arguments) in [
+            (
+                "bulk_act_notifications",
+                json!({ "mode": "filter", "action": "delete" }),
+            ),
+            (
+                "act_on_notification",
+                json!({ "notification_id": Uuid::new_v4(), "action": "delete" }),
+            ),
+            (
+                "update_task",
+                json!({ "task_id": Uuid::new_v4(), "patch": { "status": "Done" } }),
+            ),
+            ("sync_notifications", json!({})),
+            ("sync_tasks", json!({})),
+        ] {
+            let body = mcp_tool_call(&app.app, access_token, tool_name, arguments).await;
+            assert_eq!(
+                body["error"]["code"], -32600,
+                "{tool_name} must be rejected for a read-scoped token, got: {body}"
+            );
+            assert_eq!(
+                body["error"]["data"]["error"], "insufficient_scope",
+                "{tool_name}: {body}"
+            );
+        }
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn read_write_scoped_oauth2_token_can_call_write_tools(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let token_response = oauth2_access_token_with_scope(&app, Some("read write")).await;
+        let access_token = token_response["access_token"].as_str().unwrap();
+
+        let body = mcp_tool_call(
+            &app.app,
+            access_token,
+            "bulk_act_notifications",
+            json!({ "mode": "filter", "statuses": ["Read"], "action": "delete" }),
+        )
+        .await;
+        assert_eq!(body["result"]["isError"], false, "got: {body}");
+    }
+
+    #[rstest]
+    #[case::absent(None, "read write")]
+    #[case::unknown_tokens_dropped(Some("read admin offline_access"), "read")]
+    #[case::canonical_order(Some("write read"), "read write")]
+    #[tokio::test]
+    async fn authorize_normalizes_requested_scope(
+        #[future] authenticated_app: AuthenticatedApp,
+        #[case] requested: Option<&str>,
+        #[case] expected: &str,
+    ) {
+        let app = authenticated_app.await;
+        let token_response = oauth2_access_token_with_scope(&app, requested).await;
+        assert_eq!(token_response["scope"], expected);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn authorize_rejects_only_unsupported_scopes(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let registered = register_oauth2_client(&app.app).await;
+        let client_id = registered["client_id"].as_str().unwrap();
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+
+        let response = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap()
+            .get(format!(
+                "{}oauth2/authorize?response_type=code&client_id={}&redirect_uri={}&code_challenge={}&code_challenge_method=S256&scope=admin&state=test_state",
+                app.app.api_address,
+                client_id,
+                urlencoding::encode("http://localhost:12345/callback"),
+                pkce_challenge("verifier"),
+            ))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .expect("Failed to call /authorize");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[rstest]

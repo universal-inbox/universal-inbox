@@ -10,7 +10,10 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use universal_inbox::{
-    auth::oauth2::{AuthorizedOAuth2Client, OAuth2Client, OAuth2UserConsent, TokenResponse},
+    auth::oauth2::{
+        AuthorizedOAuth2Client, OAUTH2_DEFAULT_SCOPE, OAUTH2_SUPPORTED_SCOPES, OAuth2Client,
+        OAuth2UserConsent, TokenResponse,
+    },
     user::UserId,
 };
 
@@ -219,6 +222,10 @@ impl OAuth2Service {
             });
         }
 
+        // Only ever persist scope tokens from the advertised vocabulary: the
+        // scope lands in the access token and is enforced by the MCP gate.
+        let scope = Self::normalize_requested_scope(scope)?;
+
         let code = generate_random_token();
 
         let expires_at = Utc::now()
@@ -233,7 +240,7 @@ impl OAuth2Service {
                 client_id,
                 user_id,
                 redirect_uri,
-                scope,
+                Some(&scope),
                 code_challenge,
                 resource,
                 expires_at,
@@ -530,6 +537,40 @@ impl OAuth2Service {
         self.repository
             .upsert_user_consent(transaction, user_id, client_id, scope)
             .await
+    }
+
+    /// Reduce a client-requested scope to the supported vocabulary
+    /// ([`OAUTH2_SUPPORTED_SCOPES`]), in canonical order.
+    ///
+    /// - No scope (absent or blank) → [`OAUTH2_DEFAULT_SCOPE`] (RFC 6749 §3.3).
+    ///   The consent screen displays it, so the user approves it explicitly.
+    /// - Unknown scope tokens are ignored (RFC 6749 §3.3 lets the server
+    ///   issue a narrower scope than requested; the token response echoes the
+    ///   granted scope).
+    /// - A non-empty request made only of unknown tokens is rejected as
+    ///   `invalid_scope` rather than silently widened to the default.
+    pub fn normalize_requested_scope(
+        requested_scope: Option<&str>,
+    ) -> Result<String, UniversalInboxError> {
+        let requested: Vec<&str> = requested_scope.unwrap_or("").split_whitespace().collect();
+        if requested.is_empty() {
+            return Ok(OAUTH2_DEFAULT_SCOPE.to_string());
+        }
+        let granted: Vec<&str> = OAUTH2_SUPPORTED_SCOPES
+            .iter()
+            .copied()
+            .filter(|supported| requested.contains(supported))
+            .collect();
+        if granted.is_empty() {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: format!(
+                    "invalid_scope: none of the requested scopes are supported (supported: {})",
+                    OAUTH2_SUPPORTED_SCOPES.join(" ")
+                ),
+            });
+        }
+        Ok(granted.join(" "))
     }
 
     /// Returns true when `stored_scope` covers every space-separated token in
