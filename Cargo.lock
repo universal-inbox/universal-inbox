@@ -8754,7 +8754,6 @@ dependencies = [
  "email_address",
  "emojis",
  "futures-util",
- "getrandom 0.3.4",
  "getrandom 0.4.3",
  "gloo-timers 0.4.0",
  "gloo-utils 0.3.0",
