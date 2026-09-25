@@ -29,7 +29,7 @@ use url::Url;
 /// Returns `Ok(())` if the origin matches, or `Err(HttpResponse)` with a
 /// 400 envelope ready to be returned. Missing both headers, an
 /// unparseable header, or a mismatch all yield `Err`.
-pub fn check_request_origin(req: &HttpRequest, expected: &Url) -> Result<(), HttpResponse> {
+pub fn check_request_origin(req: &HttpRequest, expected: &Url) -> Result<(), Box<HttpResponse>> {
     let raw = req
         .headers()
         .get(header::ORIGIN)
@@ -37,18 +37,20 @@ pub fn check_request_origin(req: &HttpRequest, expected: &Url) -> Result<(), Htt
         .and_then(|v| v.to_str().ok());
 
     let Some(raw) = raw else {
-        return Err(reject("Missing Origin/Referer header"));
+        return Err(Box::new(reject("Missing Origin/Referer header")));
     };
 
     let actual = match Url::parse(raw) {
         Ok(url) => url,
-        Err(_) => return Err(reject("Unparseable Origin/Referer header")),
+        Err(_) => return Err(Box::new(reject("Unparseable Origin/Referer header"))),
     };
 
     if origin_matches(&actual, expected) {
         Ok(())
     } else {
-        Err(reject("Origin/Referer does not match expected origin"))
+        Err(Box::new(reject(
+            "Origin/Referer does not match expected origin",
+        )))
     }
 }
 

@@ -55,34 +55,34 @@ anyhow = { version = "1.0" }
 # subscription period fields live on `items.data[]` (Stripe API 2025-03-31+),
 # which fixes the `customer.subscription.*` webhook deserialization that 0.41
 # could not parse.
-async-stripe = { version = "1.0.0-rc.6", default-features = false, features = [
+async-stripe = { version = "=1.0.0-rc.6", default-features = false, features = [
   "rustls-tls-webpki-roots",
   # reqwest (the app's main TLS client) already selects the `ring` rustls
   # provider; match it so rustls sees a single process-level CryptoProvider
   # (mixing in aws-lc-rs makes provider auto-selection ambiguous at runtime).
   "rustls-ring",
 ] }
-async-stripe-core = { version = "1.0.0-rc.6", default-features = false, features = [
+async-stripe-core = { version = "=1.0.0-rc.6", default-features = false, features = [
   "customer",
   "serialize",
   "deserialize",
 ] }
-async-stripe-billing = { version = "1.0.0-rc.6", default-features = false, features = [
+async-stripe-billing = { version = "=1.0.0-rc.6", default-features = false, features = [
   "subscription",
   "billing_portal_session",
   "serialize",
   "deserialize",
 ] }
-async-stripe-checkout = { version = "1.0.0-rc.6", default-features = false, features = [
+async-stripe-checkout = { version = "=1.0.0-rc.6", default-features = false, features = [
   "checkout_session",
   "serialize",
   "deserialize",
 ] }
-async-stripe-shared = { version = "1.0.0-rc.6", default-features = false, features = [
+async-stripe-shared = { version = "=1.0.0-rc.6", default-features = false, features = [
   "serialize",
   "deserialize",
 ] }
-async-stripe-webhook = { version = "1.0.0-rc.6", default-features = false }
+async-stripe-webhook = { version = "=1.0.0-rc.6", default-features = false }
 base64 = { version = "0.22" }
 chrono = { version = "0.4.0", default-features = false, features = [
   "clock",

@@ -117,7 +117,7 @@ pub async fn register(
     authenticated: Option<Authenticated<Claims>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = crate::utils::rate_limit::check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
 
     // Validate redirect_uri schemes (https://, or http:// loopback only).
@@ -441,7 +441,7 @@ pub async fn token(
     rate_limiter: web::Data<Arc<OAuth2RateLimiter>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = crate::utils::rate_limit::check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let service = oauth2_service.clone();
     let mut transaction = service

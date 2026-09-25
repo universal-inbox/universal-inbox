@@ -168,7 +168,7 @@ where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = Result<T, UniversalInboxError>>,
 {
-    tokio_retry::RetryIf::spawn(
+    tokio_retry::RetryIf::start(
         tokio_retry::strategy::ExponentialBackoff::from_millis(20)
             .map(tokio_retry::strategy::jitter)
             .take(3),

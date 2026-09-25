@@ -161,7 +161,7 @@ pub async fn list_notifications_until(
     notification_status: Vec<NotificationStatus>,
     expected_notifications_count: usize,
 ) -> Vec<Notification> {
-    Retry::spawn(FixedInterval::from_millis(500).take(10), || async {
+    Retry::start(FixedInterval::from_millis(500).take(10), || async {
         let notifications = list_notifications(
             client,
             api_address,

@@ -269,7 +269,7 @@ async fn send_slack_push_event_callback_job(
     storage: &RedisStorage<UniversalInboxJob>,
     event: SlackPushEventCallback,
 ) -> Result<(), UniversalInboxError> {
-    let job = Retry::spawn(
+    let job = Retry::start(
         ExponentialBackoff::from_millis(10).map(jitter).take(10),
         || async {
             storage

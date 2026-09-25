@@ -335,7 +335,7 @@ pub async fn delete_user(
     params: web::Json<DeleteAccountParameters>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
-        return Ok(response);
+        return Ok(*response);
     }
     let user_id = authenticated
         .claims
@@ -410,7 +410,7 @@ pub async fn add_local_auth_method(
     password: web::Json<SecretBox<Password>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
-        return Ok(response);
+        return Ok(*response);
     }
     let user_id = authenticated
         .claims
@@ -449,10 +449,10 @@ pub async fn start_add_passkey_registration(
     username: web::Json<Username>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
-        return Ok(response);
+        return Ok(*response);
     }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let user_id = authenticated
         .claims
@@ -533,10 +533,10 @@ pub async fn finish_add_passkey_registration(
     body: web::Json<PasskeyFinishRequest<RegisterPublicKeyCredential>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
-        return Ok(response);
+        return Ok(*response);
     }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let user_id = authenticated
         .claims
@@ -612,7 +612,7 @@ pub async fn remove_auth_method(
     path_info: web::Path<UserAuthKind>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
-        return Ok(response);
+        return Ok(*response);
     }
     let user_id = authenticated
         .claims
@@ -652,7 +652,7 @@ pub async fn register_user(
     register_user_parameters: web::Json<RegisterUserParameters>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let user_service = user_service.clone();
     let mut transaction = user_service
@@ -744,7 +744,7 @@ pub async fn login_user(
     session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let service = user_service.clone();
     let mut transaction = service
@@ -791,7 +791,7 @@ pub async fn send_verification_email(
     authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let user_id = authenticated
         .claims
@@ -829,7 +829,7 @@ pub async fn verify_email(
     path_info: web::Path<(UserId, EmailValidationToken)>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let (user_id, email_validation_token) = path_info.into_inner();
     let service = user_service.clone();
@@ -863,7 +863,7 @@ pub async fn send_password_reset_email(
     email_address: web::Json<EmailAddress>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let service = user_service.clone();
     let mut transaction = service
@@ -897,7 +897,7 @@ pub async fn reset_password(
     password: web::Json<SecretBox<Password>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let (user_id, password_reset_token) = path_info.into_inner();
     let service = user_service.clone();
@@ -1055,10 +1055,10 @@ pub async fn start_passkey_registration(
     username: web::Json<Username>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
-        return Ok(response);
+        return Ok(*response);
     }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let service = user_service.clone();
     let mut transaction = service
@@ -1127,10 +1127,10 @@ pub async fn finish_passkey_registration(
     body: web::Json<PasskeyFinishRequest<RegisterPublicKeyCredential>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
-        return Ok(response);
+        return Ok(*response);
     }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let service = user_service.clone();
     let mut transaction = service
@@ -1210,10 +1210,10 @@ pub async fn start_passkey_authentication(
     username: web::Json<Username>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
-        return Ok(response);
+        return Ok(*response);
     }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let service = user_service.clone();
     let mut transaction = service
@@ -1346,10 +1346,10 @@ pub async fn finish_passkey_authentication(
     body: web::Json<PasskeyFinishRequest<PublicKeyCredential>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
-        return Ok(response);
+        return Ok(*response);
     }
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
     let service = user_service.clone();
     let mut transaction = service

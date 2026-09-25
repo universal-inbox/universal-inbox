@@ -57,7 +57,7 @@ pub async fn ping(
     rate_limiter: web::Data<Arc<PingRateLimiter>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = crate::utils::rate_limit::check_ip_rate_limit(&req, &rate_limiter) {
-        return Ok(response);
+        return Ok(*response);
     }
 
     let cache_result: Result<String, anyhow::Error> = cache

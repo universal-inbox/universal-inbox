@@ -1022,7 +1022,7 @@ impl NotificationService {
         job_storage: &mut RedisStorage<UniversalInboxJob>,
     ) -> Result<(), UniversalInboxError> {
         for notification in notifications {
-            Retry::spawn(
+            Retry::start(
                 ExponentialBackoff::from_millis(10).map(jitter).take(10),
                 || async {
                     job_storage
