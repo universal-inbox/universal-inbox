@@ -176,7 +176,7 @@ default = []
 screenshots = ["dep:playwright-rs"]
 
 [dev-dependencies]
-lzma-rust2 = "0.16.3"
+lzma-rust2 = "0.21"
 playwright-rs = "0.18.0"
 pretty_assertions = { workspace = true }
 rrule = { workspace = true }
