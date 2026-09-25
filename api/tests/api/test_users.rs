@@ -1968,11 +1968,13 @@ mod delete_user {
     }
 
     async fn count_rows(app: &TestedApp, table: &str, column: &str, id: Uuid) -> i64 {
-        sqlx::query_scalar::<_, i64>(&format!("SELECT count(*) FROM {table} WHERE {column} = $1"))
-            .bind(id)
-            .fetch_one(&*app.repository.pool)
-            .await
-            .unwrap()
+        sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
+            "SELECT count(*) FROM {table} WHERE {column} = $1"
+        )))
+        .bind(id)
+        .fetch_one(&*app.repository.pool)
+        .await
+        .unwrap()
     }
 
     async fn rows_owned_by(app: &TestedApp, user_id: UserId) -> HashMap<String, i64> {

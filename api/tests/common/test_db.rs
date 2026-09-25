@@ -136,7 +136,9 @@ async fn build_template(
     let building = format!("{template}_building");
     drop_database(connection, &building).await;
     connection
-        .execute(&*format!(r#"CREATE DATABASE "{building}";"#))
+        .execute(sqlx::AssertSqlSafe(format!(
+            r#"CREATE DATABASE "{building}";"#
+        )))
         .await
         .expect("Failed to create the template database");
 
@@ -169,21 +171,21 @@ async fn build_template(
         .expect("Failed to close the template build connection");
 
     connection
-        .execute(&*format!(
+        .execute(sqlx::AssertSqlSafe(format!(
             r#"ALTER DATABASE "{building}" RENAME TO "{template}";"#
-        ))
+        )))
         .await
         .expect("Failed to rename the template database");
     connection
-        .execute(&*format!(
+        .execute(sqlx::AssertSqlSafe(format!(
             r#"ALTER DATABASE "{template}" IS_TEMPLATE true;"#
-        ))
+        )))
         .await
         .expect("Failed to flag the template database");
     connection
-        .execute(&*format!(
+        .execute(sqlx::AssertSqlSafe(format!(
             r#"ALTER DATABASE "{template}" ALLOW_CONNECTIONS false;"#
-        ))
+        )))
         .await
         .expect("Failed to seal the template database");
 }
@@ -203,9 +205,9 @@ async fn sweep_stale_templates(connection: &mut PgConnection, keep: &str) {
     for database in stale {
         // Postgres refuses to drop a database still flagged as a template.
         let _ = connection
-            .execute(&*format!(
+            .execute(sqlx::AssertSqlSafe(format!(
                 r#"ALTER DATABASE "{database}" IS_TEMPLATE false;"#
-            ))
+            )))
             .await;
         drop_database(connection, &database).await;
     }
@@ -297,7 +299,10 @@ async fn create_from_template(connection: &mut PgConnection, database: &str, tem
     let statement = format!(r#"CREATE DATABASE "{database}" TEMPLATE "{template}";"#);
 
     for attempt in 1..=CREATE_ATTEMPTS {
-        match connection.execute(&*statement).await {
+        match connection
+            .execute(sqlx::AssertSqlSafe(statement.as_str()))
+            .await
+        {
             Ok(_) => return,
             // 55006 object_in_use: an autovacuum worker beat us to the template.
             Err(error) if attempt < CREATE_ATTEMPTS && is_object_in_use(&error) => {
@@ -319,9 +324,9 @@ async fn stamp_database(settings: &DatabaseSettings, database: &str, template: &
         .await
         .expect("Failed to connect to the slot database");
     connection
-        .execute(&*format!(
+        .execute(sqlx::AssertSqlSafe(format!(
             r#"COMMENT ON DATABASE "{database}" IS '{template}';"#
-        ))
+        )))
         .await
         .expect("Failed to stamp the slot database");
     let _ = connection.close().await;
@@ -380,9 +385,9 @@ async fn database_exists(connection: &mut PgConnection, database: &str) -> bool 
 
 async fn drop_database(connection: &mut PgConnection, database: &str) {
     connection
-        .execute(&*format!(
+        .execute(sqlx::AssertSqlSafe(format!(
             r#"DROP DATABASE IF EXISTS "{database}" WITH (FORCE);"#
-        ))
+        )))
         .await
         .unwrap_or_else(|error| panic!("Failed to drop database {database}: {error}"));
 }
