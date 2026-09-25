@@ -35,18 +35,20 @@ pub type IpRateLimiter = RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, Def
 pub fn check_ip_rate_limit(
     req: &HttpRequest,
     rate_limiter: &IpRateLimiter,
-) -> Result<(), HttpResponse> {
+) -> Result<(), Box<HttpResponse>> {
     let Some(ip) = resolve_client_ip(req) else {
         // 400 Bad Request per RFC 6585 reasoning: 429 means "too many
         // requests"; here we cannot even identify the caller, so reuse the
         // OAuth2 limiter's behaviour and refuse with a generic 400 JSON
         // envelope.
-        return Err(HttpResponse::BadRequest()
-            .content_type("application/json")
-            .body(r#"{"message":"Unable to determine client IP for rate limiting"}"#));
+        return Err(Box::new(
+            HttpResponse::BadRequest()
+                .content_type("application/json")
+                .body(r#"{"message":"Unable to determine client IP for rate limiting"}"#),
+        ));
     };
     if rate_limiter.check_key(&ip).is_err() {
-        return Err(HttpResponse::TooManyRequests().finish());
+        return Err(Box::new(HttpResponse::TooManyRequests().finish()));
     }
     Ok(())
 }

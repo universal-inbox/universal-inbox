@@ -71,7 +71,7 @@ pub async fn list_tasks_until(
     status_filter: TaskStatus,
     expected_tasks_count: usize,
 ) -> Vec<Task> {
-    Retry::spawn(FixedInterval::from_millis(500).take(10), || async {
+    Retry::start(FixedInterval::from_millis(500).take(10), || async {
         let tasks = list_tasks(client, api_address, status_filter, false).await;
 
         if tasks.len() == expected_tasks_count {

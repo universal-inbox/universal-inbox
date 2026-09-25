@@ -864,7 +864,7 @@ async fn test_sync_all_tasks_asynchronously(
         assert_eq!(response.status(), StatusCode::CREATED);
     }
 
-    Retry::spawn(FixedInterval::from_millis(100).take(10), || async {
+    Retry::start(FixedInterval::from_millis(100).take(10), || async {
         let result = list_tasks(
             &app.client,
             &app.app.api_address,
