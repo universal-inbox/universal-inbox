@@ -1,6 +1,8 @@
 use actix_web::{HttpResponse, web};
 use serde_json::json;
 
+use universal_inbox::auth::oauth2::OAUTH2_SUPPORTED_SCOPES;
+
 use crate::configuration::Settings;
 
 /// RFC 9728: OAuth 2.0 Protected Resource Metadata
@@ -18,7 +20,7 @@ pub async fn protected_resource_metadata(settings: web::Data<Settings>) -> HttpR
         "resource": resource,
         "authorization_servers": [base_url],
         "bearer_methods_supported": ["header"],
-        "scopes_supported": ["read", "write"],
+        "scopes_supported": OAUTH2_SUPPORTED_SCOPES,
         "resource_documentation": "https://doc.universal-inbox.com"
     }))
 }
@@ -42,7 +44,7 @@ pub async fn authorization_server_metadata(settings: web::Data<Settings>) -> Htt
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["none"],
-        "scopes_supported": ["read", "write"],
+        "scopes_supported": OAUTH2_SUPPORTED_SCOPES,
         "resource_indicators_supported": true,
         // draft-ietf-oauth-client-id-metadata-document / MCP 2025-11-25
         // §"Discovery". Signals that this AS accepts `client_id` values of

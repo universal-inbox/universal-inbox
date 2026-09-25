@@ -4,6 +4,19 @@ use uuid::Uuid;
 
 use crate::user::UserId;
 
+/// OAuth2 scope granting read access to notifications and tasks.
+pub const OAUTH2_SCOPE_READ: &str = "read";
+/// OAuth2 scope granting write access (acting on notifications, creating and
+/// updating tasks, triggering syncs). `write` implies `read`.
+pub const OAUTH2_SCOPE_WRITE: &str = "write";
+/// Scope vocabulary advertised in the discovery documents and accepted by
+/// `/oauth2/authorize`. Any other requested scope token is ignored.
+pub const OAUTH2_SUPPORTED_SCOPES: [&str; 2] = [OAUTH2_SCOPE_READ, OAUTH2_SCOPE_WRITE];
+/// Scope granted when a client does not request one (RFC 6749 §3.3 lets the
+/// authorization server pick a documented default). The consent screen shows
+/// it explicitly, so the user always approves what the token will carry.
+pub const OAUTH2_DEFAULT_SCOPE: &str = "read write";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OAuth2Client {
     pub id: Uuid,

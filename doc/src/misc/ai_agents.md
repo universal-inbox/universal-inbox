@@ -30,7 +30,12 @@ The OAuth flow uses:
 - **Authorization Code with PKCE (S256)** at `GET /api/oauth2/authorize`
 - **Token exchange and refresh** at `POST /api/oauth2/token`
 
-Access tokens are scoped with `read` and `write` permissions. Refresh tokens are rotated on each use for security.
+Access tokens carry the scopes you approve on the consent screen, and the MCP server enforces them on every tool call:
+
+- `read` allows the read-only tools (`list_notifications`, `get_notification`, `list_tasks`, `get_task`, `search_tasks`).
+- `write` additionally allows the tools that change your inbox or your task providers, or trigger a sync (`act_on_notification`, `bulk_act_notifications`, `create_task_from_notification`, `update_task`, `sync_notifications`, `sync_tasks`).
+
+A client that does not request a scope is offered `read write`. Refresh tokens are rotated on each use for security.
 
 MCP clients that support the MCP authorization spec will handle this flow automatically, no manual configuration is needed beyond providing the MCP server URL.
 

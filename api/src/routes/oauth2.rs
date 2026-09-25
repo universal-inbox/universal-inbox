@@ -215,6 +215,11 @@ pub async fn authorize(
         .parse::<UserId>()
         .context("Wrong user ID format")?;
 
+    // Reduce the requested scope to the supported vocabulary up front so the
+    // consent screen, the stored consent and the issued code all carry the
+    // exact scope the access token will be enforced against.
+    let requested_scope = OAuth2Service::normalize_requested_scope(params.scope.as_deref())?;
+
     let service = oauth2_service.clone();
     let mut transaction = service
         .begin()
@@ -244,7 +249,7 @@ pub async fn authorize(
         .get_user_consent(&mut transaction, user_id, &params.client_id)
         .await?;
     let consent_covers = existing_consent.as_ref().is_some_and(|consent| {
-        OAuth2Service::consent_covers_scope(&consent.scope, params.scope.as_deref())
+        OAuth2Service::consent_covers_scope(&consent.scope, Some(&requested_scope))
     });
 
     if consent_covers {
@@ -254,7 +259,7 @@ pub async fn authorize(
                 &params.client_id,
                 user_id,
                 &params.redirect_uri,
-                params.scope.as_deref(),
+                Some(&requested_scope),
                 &params.code_challenge,
                 &params.code_challenge_method,
                 params.resource.as_deref(),
@@ -285,7 +290,7 @@ pub async fn authorize(
         user_id,
         client_id: params.client_id.clone(),
         redirect_uri: params.redirect_uri.clone(),
-        scope: params.scope.clone(),
+        scope: Some(requested_scope),
         state: params.state.clone(),
         code_challenge: params.code_challenge.clone(),
         code_challenge_method: params.code_challenge_method.clone(),
