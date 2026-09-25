@@ -290,27 +290,28 @@ impl SlackService {
         }))
     }
 
+    /// Returns `None` when the usergroup is not listed for this token (deleted usergroup,
+    /// usergroup from another workspace): a reference Slack will never resolve must not fail
+    /// the caller.
     pub async fn fetch_usergroup(
         &self,
         usergroup_id: &SlackUserGroupId,
         _user_id: UserId,
         slack_api_token: &SlackApiToken,
-    ) -> Result<SlackUserGroup, UniversalInboxError> {
+    ) -> Result<Option<SlackUserGroup>, UniversalInboxError> {
         let result = cached_list_usergroups(&self.slack_base_url, slack_api_token).await?;
         if result.was_cached() {
             debug!("`list_usergroups` cache hit");
         }
-        result
+        let usergroup = result
             .into_inner()
             .iter()
             .find(|u| u.id == *usergroup_id)
-            .cloned()
-            .ok_or_else(|| {
-                UniversalInboxError::Unexpected(anyhow!(
-                    "Usergroup with id {} not found",
-                    usergroup_id
-                ))
-            })
+            .cloned();
+        if usergroup.is_none() {
+            warn!("Unknown Slack usergroup {usergroup_id}, it will be rendered without a handle");
+        }
+        Ok(usergroup)
     }
 
     pub async fn list_users_in_usergroup(
@@ -318,13 +319,23 @@ impl SlackService {
         usergroup_id: &SlackUserGroupId,
         slack_api_token: &SlackApiToken,
     ) -> Result<Vec<SlackUserId>, UniversalInboxError> {
-        let result =
-            cached_list_users_in_usergroup(&self.slack_base_url, usergroup_id, slack_api_token)
-                .await?;
-        if result.was_cached() {
-            debug!("`list_users_in_usergroup` cache hit");
+        match cached_list_users_in_usergroup(&self.slack_base_url, usergroup_id, slack_api_token)
+            .await
+        {
+            Ok(result) => {
+                if result.was_cached() {
+                    debug!("`list_users_in_usergroup` cache hit");
+                }
+                Ok(result.into_inner())
+            }
+            // A usergroup Slack will never resolve for this token (deleted usergroup, usergroup
+            // from another workspace) has no member to notify: it must not abort the whole job.
+            Err(error) if slack_api_error_code(&error) == Some("no_such_subteam") => {
+                warn!("Unknown Slack usergroup {usergroup_id}, considering it has no member");
+                Ok(vec![])
+            }
+            Err(error) => Err(error),
         }
-        Ok(result.into_inner())
     }
 
     pub async fn fetch_bot(
@@ -344,11 +355,21 @@ impl SlackService {
         team: &SlackTeamId,
         slack_api_token: &SlackApiToken,
     ) -> Result<SlackTeamInfo, UniversalInboxError> {
-        let result = cached_fetch_team(&self.slack_base_url, slack_api_token, team).await?;
-        if result.was_cached() {
-            debug!("`fetch_team` cache hit");
+        match cached_fetch_team(&self.slack_base_url, slack_api_token, team).await {
+            Ok(result) => {
+                if result.was_cached() {
+                    debug!("`fetch_team` cache hit");
+                }
+                Ok(result.into_inner())
+            }
+            // A team Slack will never resolve for this token must not abort the whole job: the
+            // item is rendered with the team id only (no name, domain or icon).
+            Err(error) if slack_api_error_code(&error) == Some("team_not_found") => {
+                warn!("Unknown Slack team {team}, it will be rendered without its details");
+                Ok(SlackTeamInfo::new(team.clone()))
+            }
+            Err(error) => Err(error),
         }
-        Ok(result.into_inner())
     }
 
     pub async fn list_emojis(
@@ -605,9 +626,10 @@ impl SlackService {
             let usergroup = self
                 .fetch_usergroup(slack_usergroup_id, user_id, slack_api_token)
                 .await?;
-            references
-                .usergroups
-                .insert(slack_usergroup_id.clone(), Some(usergroup.handle));
+            references.usergroups.insert(
+                slack_usergroup_id.clone(),
+                usergroup.map(|usergroup| usergroup.handle),
+            );
         }
 
         if let Some(user_slack_id) = provider_user_id {
