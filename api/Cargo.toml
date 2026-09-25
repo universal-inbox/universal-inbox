@@ -115,11 +115,11 @@ reqwest = { workspace = true, features = ["rustls", "gzip", "stream"] }
 reqwest-middleware = { version = "0.5.0", features = ["json", "form"] }
 reqwest-tracing = { version = "0.7.1", features = ["opentelemetry_0_32"] }
 rpassword = "7"
-rmcp = { version = "1.6", features = [
+rmcp = { version = "3", features = [
   "transport-streamable-http-server",
   "transport-streamable-http-server-session",
 ] }
-rmcp-actix-web = { version = "0.12.3", default-features = false, features = [
+rmcp-actix-web = { version = "0.13.0", default-features = false, features = [
   "transport-streamable-http",
 ] }
 rustls = { version = "0.23.0" } # Used to initialize lettre

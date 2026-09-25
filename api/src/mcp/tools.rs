@@ -739,53 +739,48 @@ fn serialize_result<T: Serialize>(value: T) -> Result<Value, ToolCallError> {
         .map_err(ToolCallError::execution)
 }
 
-fn output_schema_for<T: JsonSchema + 'static>(tool: &'static str) -> Arc<JsonObject> {
-    schema_for_output::<T>()
-        .unwrap_or_else(|err| panic!("`{tool}` outputSchema does not have an object root: {err}"))
-}
-
 pub(crate) fn list_notifications_output_schema() -> Arc<JsonObject> {
-    output_schema_for::<Page<NotificationWithTaskSummary>>("list_notifications")
+    schema_for_output::<Page<NotificationWithTaskSummary>>()
 }
 
 pub(crate) fn get_notification_output_schema() -> Arc<JsonObject> {
-    output_schema_for::<Notification>("get_notification")
+    schema_for_output::<Notification>()
 }
 
 pub(crate) fn act_on_notification_output_schema() -> Arc<JsonObject> {
-    output_schema_for::<Notification>("act_on_notification")
+    schema_for_output::<Notification>()
 }
 
 pub(crate) fn bulk_act_notifications_output_schema() -> Arc<JsonObject> {
-    output_schema_for::<BulkActResult>("bulk_act_notifications")
+    schema_for_output::<BulkActResult>()
 }
 
 pub(crate) fn create_task_from_notification_output_schema() -> Arc<JsonObject> {
-    output_schema_for::<CreateTaskFromNotificationResult>("create_task_from_notification")
+    schema_for_output::<CreateTaskFromNotificationResult>()
 }
 
 pub(crate) fn sync_notifications_output_schema() -> Arc<JsonObject> {
-    output_schema_for::<SyncNotificationsResult>("sync_notifications")
+    schema_for_output::<SyncNotificationsResult>()
 }
 
 pub(crate) fn list_tasks_output_schema() -> Arc<JsonObject> {
-    output_schema_for::<Page<TaskSummaryWithStatus>>("list_tasks")
+    schema_for_output::<Page<TaskSummaryWithStatus>>()
 }
 
 pub(crate) fn get_task_output_schema() -> Arc<JsonObject> {
-    output_schema_for::<Task>("get_task")
+    schema_for_output::<Task>()
 }
 
 pub(crate) fn search_tasks_output_schema() -> Arc<JsonObject> {
-    output_schema_for::<SearchTasksResult>("search_tasks")
+    schema_for_output::<SearchTasksResult>()
 }
 
 pub(crate) fn update_task_output_schema() -> Arc<JsonObject> {
-    output_schema_for::<Task>("update_task")
+    schema_for_output::<Task>()
 }
 
 pub(crate) fn sync_tasks_output_schema() -> Arc<JsonObject> {
-    output_schema_for::<SyncTasksResult>("sync_tasks")
+    schema_for_output::<SyncTasksResult>()
 }
 
 #[cfg(test)]
