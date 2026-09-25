@@ -239,6 +239,11 @@ pub struct SecuritySettings {
     /// The server's own origin is always allowed.
     #[serde(default)]
     pub mcp_extra_allowed_origins: Vec<String>,
+    /// Extra `Host` header values accepted by the MCP endpoint (e.g. an alias
+    /// domain). The host of `front_base_url` and loopback hosts are always
+    /// allowed; any other host is rejected with 403 (DNS-rebinding protection).
+    #[serde(default)]
+    pub mcp_extra_allowed_hosts: Vec<String>,
     pub authentication: Vec<AuthenticationSettings>,
     /// Map of email domains to rejection messages.
     /// If a user tries to register/authenticate with an email from a blacklisted domain,
@@ -939,6 +944,7 @@ mod tests {
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
             mcp_extra_allowed_origins: vec![],
+            mcp_extra_allowed_hosts: vec![],
             authentication: vec![local_auth_settings],
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,
@@ -974,6 +980,7 @@ mod tests {
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
             mcp_extra_allowed_origins: vec![],
+            mcp_extra_allowed_hosts: vec![],
             authentication: vec![oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,
@@ -1001,6 +1008,7 @@ mod tests {
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
             mcp_extra_allowed_origins: vec![],
+            mcp_extra_allowed_hosts: vec![],
             authentication: vec![oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,
@@ -1048,6 +1056,7 @@ mod tests {
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
             mcp_extra_allowed_origins: vec![],
+            mcp_extra_allowed_hosts: vec![],
             authentication: vec![local_auth_settings, oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,

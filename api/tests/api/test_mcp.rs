@@ -2,6 +2,10 @@ use base64::prelude::*;
 use chrono::{TimeZone, Utc};
 use http::StatusCode;
 use ring::digest;
+use rmcp::{
+    model::InitializeRequestParams,
+    transport::streamable_http_server::session::{SessionState, SessionStore},
+};
 use rstest::*;
 use secrecy::ExposeSecret;
 use serde_json::{Value, json};
@@ -17,7 +21,9 @@ use universal_inbox::{
     notification::{NotificationStatus, service::NotificationPatch},
     third_party::integrations::todoist::TodoistItem,
 };
-use universal_inbox_api::{configuration::Settings, integrations::todoist::TodoistSyncResponse};
+use universal_inbox_api::{
+    configuration::Settings, integrations::todoist::TodoistSyncResponse, mcp::RedisSessionStore,
+};
 
 use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
@@ -552,6 +558,163 @@ mod protocol {
                 "`{case}` must leave the notification unsnoozed"
             );
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Cross-instance session restore (multi-pod deployments)
+    // ------------------------------------------------------------------
+
+    fn initialize_params() -> Value {
+        json!({
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": { "name": "test-client", "version": "1.0.0" }
+        })
+    }
+
+    /// A session initialised on another pod is unknown to this pod's
+    /// `LocalSessionManager` but present in the shared Redis store: the
+    /// transport must restore it transparently instead of rejecting it.
+    #[rstest]
+    #[tokio::test]
+    async fn restores_session_unknown_in_memory_from_store(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+        let client = mcp_client();
+
+        let session_id = format!("other-pod-session-{}", Uuid::new_v4());
+        let store = RedisSessionStore::new(app.app.cache.connection_manager.clone(), 60);
+        store
+            .store(
+                &session_id,
+                &SessionState::new(
+                    serde_json::from_value::<InitializeRequestParams>(initialize_params())
+                        .expect("valid initialize params"),
+                ),
+            )
+            .await
+            .expect("Failed to seed session store");
+
+        let response = mcp_call(
+            &client,
+            &app.app,
+            &token,
+            json!({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "list_notifications",
+                    "arguments": { "trigger_sync": false }
+                }
+            }),
+            Some(&session_id),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = mcp_json(response).await;
+        assert_eq!(
+            body["result"]["isError"], false,
+            "restored session must carry the authenticated user: {body}"
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn session_unknown_in_memory_and_in_store_returns_404(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+
+        let response = mcp_call(
+            &mcp_client(),
+            &app.app,
+            &token,
+            json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} }),
+            Some(&format!("unknown-session-{}", Uuid::new_v4())),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn initialize_persists_session_to_store(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+
+        let (session_id, _) = mcp_initialize(&mcp_client(), &app.app, &token).await;
+        let session_id = session_id.expect("stateful mode must return a session id");
+
+        let store = RedisSessionStore::new(app.app.cache.connection_manager.clone(), 60);
+        let state = store
+            .load(&session_id)
+            .await
+            .expect("Failed to load session")
+            .expect("initialize must persist the session to the store");
+        assert_eq!(state.initialize_params.client_info.name, "test-client");
+    }
+
+    // ------------------------------------------------------------------
+    // Host header allow-list (DNS-rebinding protection)
+    // ------------------------------------------------------------------
+
+    async fn initialize_with_host(app: &AuthenticatedApp, token: &str, host: &str) -> StatusCode {
+        reqwest::Client::new()
+            .post(format!("{}mcp", app.app.api_address))
+            .bearer_auth(token)
+            .header("Accept", "application/json, text/event-stream")
+            .header("Host", host)
+            .json(&json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": initialize_params()
+            }))
+            .send()
+            .await
+            .expect("Failed to execute request")
+            .status()
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn accepts_front_base_url_host(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+        let host = app
+            .app
+            .front_base_url
+            .host_str()
+            .expect("front_base_url has a host")
+            .to_string();
+
+        assert_eq!(
+            initialize_with_host(&app, &token, &host).await,
+            StatusCode::OK
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn rejects_unknown_host(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+
+        assert_eq!(
+            initialize_with_host(&app, &token, "evil.example.com").await,
+            StatusCode::FORBIDDEN
+        );
     }
 }
 

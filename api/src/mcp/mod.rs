@@ -20,13 +20,14 @@ use rmcp::{
     ErrorData, ServerHandler,
     handler::server::{tool::ToolRouter, wrapper::Parameters},
     model::{
-        CallToolResult, Content, Implementation, ProtocolVersion, ServerCapabilities, ServerInfo,
+        CallToolResult, ContentBlock, Implementation, ProtocolVersion, ServerCapabilities,
+        ServerConfig,
     },
     service::{RequestContext, RoleServer},
     tool, tool_handler, tool_router,
     transport::streamable_http_server::session::{SessionStore, local::LocalSessionManager},
 };
-use rmcp_actix_web::transport::StreamableHttpService;
+use rmcp_actix_web::transport::{StreamableHttpService, on_request_extensions};
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
@@ -71,15 +72,25 @@ pub type McpRateLimiter = RateLimiter<UserId, DefaultKeyedStateStore<UserId>, De
 /// and clone the returned service into each worker via `scope()`.
 ///
 /// The `session_store` is the cross-pod shared state: when a request lands on
-/// a pod whose `LocalSessionManager` does not know the session, the patched
-/// `rmcp-actix-web` consults the store and replays the `initialize` handshake.
+/// a pod whose `LocalSessionManager` does not know the session, rmcp's
+/// streamable HTTP transport consults the store and replays the `initialize`
+/// handshake.
+///
+/// `allowed_hosts` is the `Host` header allow-list rmcp enforces against DNS
+/// rebinding (see [`mcp_allowed_hosts`]); it must not be empty.
 pub fn build_http_service(
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     job_storage: RedisStorage<UniversalInboxJob>,
     session_store: Arc<dyn SessionStore>,
+    allowed_hosts: Vec<String>,
 ) -> StreamableHttpService<UniversalInboxMcpServer, LocalSessionManager> {
+    // An empty list would disable rmcp's Host validation entirely.
+    assert!(
+        !allowed_hosts.is_empty(),
+        "MCP allowed_hosts must not be empty"
+    );
     let services = McpServices {
         notification_service,
         task_service,
@@ -94,12 +105,36 @@ pub fn build_http_service(
         .session_manager(Arc::new(LocalSessionManager::default()))
         .stateful_mode(true)
         .session_store(session_store)
+        .allowed_hosts(allowed_hosts)
         .on_request_fn(|http_req, extensions| {
             if let Some(authenticated) = http_req.extensions().get::<Authenticated<Claims>>() {
                 extensions.insert(authenticated.clone());
             }
         })
         .build()
+}
+
+/// `Host` header values accepted by the MCP transport.
+///
+/// rmcp only accepts loopback hosts by default (DNS-rebinding protection), so
+/// the public host MCP clients reach us on must be listed explicitly. That is
+/// the host of `front_base_url`, the origin the MCP resource URL
+/// (`{front_base_url}{api_path}mcp`) is advertised under. Loopback names stay
+/// allowed for local development and tests, and `extra_allowed_hosts` covers
+/// any additional public hostname (e.g. an alias domain). Entries without a
+/// port match any port.
+pub fn mcp_allowed_hosts(front_base_url: &url::Url, extra_allowed_hosts: &[String]) -> Vec<String> {
+    let mut hosts: Vec<String> = Vec::new();
+    let candidates = ["localhost", "127.0.0.1", "::1"]
+        .into_iter()
+        .chain(front_base_url.host_str())
+        .chain(extra_allowed_hosts.iter().map(String::as_str));
+    for host in candidates {
+        if !hosts.iter().any(|h| h == host) {
+            hosts.push(host.to_string());
+        }
+    }
+    hosts
 }
 
 pub fn build_rate_limiter() -> Arc<McpRateLimiter> {
@@ -206,9 +241,9 @@ where
         }
 
         // Per the MCP spec, GET without a session ID must return 400 (not 401).
-        // The rmcp library incorrectly returns 401 for this case, which causes
-        // MCP clients (e.g. Claude Code) to misinterpret it as an auth failure
-        // and enter a token-refresh loop instead of proceeding to POST initialize.
+        // Answer before the auth checks below so MCP clients (e.g. Claude Code)
+        // never see a 401 here, which they misinterpret as an auth failure and
+        // enter a token-refresh loop instead of proceeding to POST initialize.
         if req.method() == Method::GET && req.headers().get("mcp-session-id").is_none() {
             debug!("MCP auth rejected: GET request without Mcp-Session-Id header");
             let response = req
@@ -368,9 +403,10 @@ impl UniversalInboxMcpServer {
         &self,
         context: &RequestContext<RoleServer>,
     ) -> Result<UserId, ErrorData> {
-        let authenticated = context
-            .extensions
-            .get::<Authenticated<Claims>>()
+        // Values written by the `on_request` hook travel inside the bridged
+        // HTTP request's `Parts`, not directly in `context.extensions`.
+        let authenticated = on_request_extensions(&context.extensions)
+            .and_then(|extensions| extensions.get::<Authenticated<Claims>>())
             .ok_or_else(|| ErrorData::invalid_request("Missing authenticated user", None))?;
 
         authenticated
@@ -398,7 +434,9 @@ impl UniversalInboxMcpServer {
                 Err(ErrorData::invalid_params(err.to_string(), None))
             }
             Err(ToolCallError::Execution(err)) => {
-                Ok(CallToolResult::error(vec![Content::text(err.to_string())]))
+                Ok(CallToolResult::error(vec![ContentBlock::text(
+                    err.to_string(),
+                )]))
             }
             Err(ToolCallError::UnknownTool(tool_name)) => Err(ErrorData::invalid_params(
                 format!("Unknown tool: {tool_name}"),
@@ -586,8 +624,8 @@ impl UniversalInboxMcpServer {
 
 #[tool_handler]
 impl ServerHandler for UniversalInboxMcpServer {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_protocol_version(ProtocolVersion::V_2025_06_18)
             .with_server_info(
                 Implementation::new(SERVER_NAME, env!("CARGO_PKG_VERSION"))
@@ -595,6 +633,38 @@ impl ServerHandler for UniversalInboxMcpServer {
                     .with_description(SERVER_INSTRUCTIONS.to_string()),
             )
             .with_instructions(SERVER_INSTRUCTIONS)
+    }
+}
+
+#[cfg(test)]
+mod allowed_hosts_tests {
+    use super::*;
+
+    #[test]
+    fn mcp_allowed_hosts_includes_loopback_front_host_and_extras() {
+        let front_base_url = url::Url::parse("https://www.universal-inbox.com/").unwrap();
+
+        let hosts = mcp_allowed_hosts(&front_base_url, &["universal-inbox.com".to_string()]);
+
+        assert_eq!(
+            hosts,
+            vec![
+                "localhost",
+                "127.0.0.1",
+                "::1",
+                "www.universal-inbox.com",
+                "universal-inbox.com"
+            ]
+        );
+    }
+
+    #[test]
+    fn mcp_allowed_hosts_deduplicates_loopback_front_host() {
+        let front_base_url = url::Url::parse("http://localhost:8080").unwrap();
+
+        let hosts = mcp_allowed_hosts(&front_base_url, &[]);
+
+        assert_eq!(hosts, vec!["localhost", "127.0.0.1", "::1"]);
     }
 }
 
