@@ -413,7 +413,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "list_notifications",
         title = "List notifications",
-        description = "List Universal Inbox notifications (summaries without third-party details). Use get_notification for full details. Does not trigger synchronization unless trigger_sync is true.",
+        description = "List Universal Inbox notifications as summaries, newest-updated first by default, filtered by status, source kind, and linked task. Summaries omit the third-party source item; call get_notification for it. The result is one page; pass the returned page token as page_token to get the next one. trigger_sync: true queues a background sync of the sources that are due and does not wait for it, so this response still reflects the state before that sync. Use sync_notifications when fresh results are needed now.",
         output_schema = list_notifications_output_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
@@ -429,7 +429,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "get_notification",
         title = "Get notification",
-        description = "Fetch a single Universal Inbox notification.",
+        description = "Fetch one notification by id, including its full third-party source item (for example the GitHub pull request, Linear issue, Slack thread, or email). Use it after list_notifications when the summary is not enough to decide what to do. Returns an error if the notification does not exist.",
         output_schema = get_notification_output_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
@@ -445,7 +445,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "act_on_notification",
         title = "Act on notification",
-        description = "Apply a single notification action. Write operations execute immediately.",
+        description = "Apply one action to one notification. mark_read marks it read; delete removes it from the inbox and deletes or archives it in the source provider where the provider supports that; unsubscribe removes it and stops further updates for that thread in the source; snooze_until hides it until snoozed_until. Changes execute immediately and are applied to the source provider, so a delete or unsubscribe cannot be undone through this server. For several notifications, use bulk_act_notifications.",
         output_schema = act_on_notification_output_schema(),
         annotations(destructive_hint = true)
     )]
@@ -461,7 +461,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "bulk_act_notifications",
         title = "Bulk act on notifications",
-        description = "Act on many notifications at once. Either name the notifications explicitly (mode: list, up to 100 entries, each with its own action, including snooze_until), or sweep by status/source filters (mode: filter, one shared action; empty filters match all notifications). Use mode: list when filter's source/status granularity isn't enough to express the target — e.g. to act only on GitHub pull request notifications (not issues/discussions), first list_notifications(sources: [Github]) and get_notification each one to identify the pull requests, then pass just those ids.",
+        description = "Act on many notifications at once. Either name the notifications explicitly (mode: list, up to 100 entries, each with its own action, including snooze_until), or sweep by status/source filters (mode: filter, one shared action; empty filters match all notifications). mode: filter selects only by status and source kind; it cannot tell apart item types within one source (such as GitHub pull requests and issues), so use mode: list with ids you identified through list_notifications and get_notification for that. Changes execute immediately and are applied to the source providers.",
         output_schema = bulk_act_notifications_output_schema(),
         annotations(destructive_hint = true)
     )]
@@ -477,7 +477,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "create_task_from_notification",
         title = "Create task from notification",
-        description = "Create a task from a notification and link the two together.",
+        description = "Create a task in a task provider from a notification, and link the task to the notification. The provider is task_creation.task_provider_kind when given, else the user's default task manager. Omit task_creation to use the defaults from that provider's integration settings. The task is created immediately in the provider. Returns the updated notification.",
         output_schema = create_task_from_notification_output_schema(),
         annotations(destructive_hint = true)
     )]
@@ -493,7 +493,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "sync_notifications",
         title = "Synchronize notifications",
-        description = "Synchronize notification sources immediately and return the resulting notifications.",
+        description = "Synchronize notification sources now and wait for the result. Pass source to sync one provider; omit it to sync every connected notification source. Returns the notifications created or updated by this sync.",
         output_schema = sync_notifications_output_schema(),
         annotations(destructive_hint = true)
     )]
@@ -509,7 +509,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "list_tasks",
         title = "List tasks",
-        description = "List tasks synchronized through Universal Inbox (summaries without third-party details). Use get_task for full details. Does not trigger synchronization unless trigger_sync is true.",
+        description = "List tasks as summaries, filtered by status (default: Active). Summaries omit the third-party source item; call get_task for it. only_synced_tasks (default true) limits the list to tasks synchronized through Universal Inbox. trigger_sync: true queues a background sync of the sources that are due and does not wait for it, so this response still reflects the state before that sync. Use sync_tasks when fresh results are needed now.",
         output_schema = list_tasks_output_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
@@ -524,7 +524,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "get_task",
         title = "Get task",
-        description = "Fetch a single task synchronized through Universal Inbox.",
+        description = "Fetch one task by id, including its full third-party source item from the task provider (for example Todoist or Linear). Use it after list_tasks or search_tasks when the summary is not enough. Returns an error if the task does not exist.",
         output_schema = get_task_output_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
@@ -539,7 +539,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "search_tasks",
         title = "Search tasks",
-        description = "Search tasks synchronized through Universal Inbox by text.",
+        description = "Full-text search over the title, body, project, and tags of tasks synchronized through Universal Inbox. Returns at most the 10 best-ranked task summaries, so use a specific query. Does not search the task provider directly, so tasks Universal Inbox does not track are never returned.",
         output_schema = search_tasks_output_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
@@ -555,7 +555,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "update_task",
         title = "Update task",
-        description = "Patch an existing task synchronized through Universal Inbox. Write operations execute immediately.",
+        description = "Change fields of one task synchronized through Universal Inbox (see the patch schema for the fields you can set; omitted fields stay unchanged). Changes execute immediately and are applied to the task provider.",
         output_schema = update_task_output_schema(),
         annotations(destructive_hint = true)
     )]
@@ -571,7 +571,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "sync_tasks",
         title = "Synchronize tasks",
-        description = "Synchronize task sources immediately and return the resulting tasks. Only synchronizes tasks tracked by Universal Inbox, not all tasks from the provider.",
+        description = "Synchronize task sources now and wait for the result. Pass source to sync one provider; omit it to sync every connected task source. Only synchronizes tasks tracked by Universal Inbox, not all tasks from the provider. Returns the resulting tasks.",
         output_schema = sync_tasks_output_schema(),
         annotations(destructive_hint = true)
     )]

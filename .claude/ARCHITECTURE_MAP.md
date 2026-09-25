@@ -1,6 +1,6 @@
 # Architecture Map
 
-> Auto-loaded. Compact workspace map + "where to find X". For deep dives see [learnings](docs/learnings/) and the [comprehensive guide](../AGENTS.md).
+> Auto-loaded. Compact workspace map + "where to find X". For deep dives see [learnings](docs/learnings/).
 
 ## Workspace tree (cargo workspace, all Rust, edition 2024)
 
