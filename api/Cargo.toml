@@ -63,7 +63,7 @@ http = { workspace = true }
 hyper-rustls = { version = "0.27.0", features = ["rustls-native-certs", "http2"] } # synced with slack-morphism
 ical = "0.11.0"
 itertools = { workspace = true }
-jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
+jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
 lettre = { version = "0.11.0", default-features = false, features = [
   "tokio1",
   "tokio1-rustls-tls",
