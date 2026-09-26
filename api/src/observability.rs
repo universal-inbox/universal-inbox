@@ -17,8 +17,8 @@ use opentelemetry_otlp::{
 };
 use opentelemetry_sdk::{
     Resource,
-    logs::SdkLoggerProvider,
-    trace::{RandomIdGenerator, Sampler, SdkTracerProvider},
+    logs::{BatchLogProcessor, SdkLoggerProvider},
+    trace::{BatchSpanProcessor, RandomIdGenerator, Sampler, SdkTracerProvider},
 };
 use tokio::task::JoinHandle;
 use tonic::metadata::AsciiMetadataKey;
@@ -35,6 +35,10 @@ use crate::{
     configuration::{OtlpExporterProtocol, TracingSettings},
     utils::jwt::Claims,
 };
+
+pub mod redaction;
+
+use redaction::{RedactingLogProcessor, RedactingSpanProcessor};
 
 type SubscriberWithTelemetry = Layered<
     OpenTelemetryTracingBridge<
@@ -91,10 +95,15 @@ pub fn get_subscriber_with_telemetry(
         .with_max_events_per_span(256)
         .with_max_attributes_per_span(64)
         .with_resource(resource.clone())
-        .with_batch_exporter(build_span_exporter(
-            config.otlp_exporter_protocol,
-            config.otlp_exporter_endpoint.to_string(),
-            config.otlp_exporter_headers.clone(),
+        // Email addresses and client IPs are stripped before export (see
+        // `redaction`): traces go to a third-party backend.
+        .with_span_processor(RedactingSpanProcessor::new(
+            BatchSpanProcessor::builder(build_span_exporter(
+                config.otlp_exporter_protocol,
+                config.otlp_exporter_endpoint.to_string(),
+                config.otlp_exporter_headers.clone(),
+            ))
+            .build(),
         ))
         .build();
     let tracer = tracer_provider.tracer("universal-inbox");
@@ -102,10 +111,13 @@ pub fn get_subscriber_with_telemetry(
 
     let logger = SdkLoggerProvider::builder()
         .with_resource(resource)
-        .with_batch_exporter(build_log_exporter(
-            config.otlp_exporter_protocol,
-            config.otlp_exporter_endpoint.to_string(),
-            config.otlp_exporter_headers.clone(),
+        .with_log_processor(RedactingLogProcessor::new(
+            BatchLogProcessor::builder(build_log_exporter(
+                config.otlp_exporter_protocol,
+                config.otlp_exporter_endpoint.to_string(),
+                config.otlp_exporter_headers.clone(),
+            ))
+            .build(),
         ))
         .build();
 

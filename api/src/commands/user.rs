@@ -28,7 +28,7 @@ use crate::{
 #[tracing::instrument(
     name = "send-verification-email-command",
     level = "info",
-    skip(user_service),
+    skip(user_service, user_email),
     err
 )]
 pub async fn send_verification_email(
@@ -81,7 +81,7 @@ pub async fn send_verification_email(
 #[tracing::instrument(
     name = "send-password-reset-email-command",
     level = "info",
-    skip(user_service),
+    skip(user_service, user_email),
     err
 )]
 pub async fn send_password_reset_email(
@@ -126,7 +126,7 @@ pub async fn send_password_reset_email(
 #[tracing::instrument(
     name = "generate-jwt-token",
     level = "info",
-    skip(user_service, auth_token_service),
+    skip(user_service, auth_token_service, user_email),
     err
 )]
 pub async fn generate_jwt_token(
@@ -259,7 +259,7 @@ pub async fn delete_user(
 #[tracing::instrument(
     name = "reset-password-command",
     level = "info",
-    skip(user_service),
+    skip(user_service, user_email),
     err
 )]
 pub async fn reset_password(
