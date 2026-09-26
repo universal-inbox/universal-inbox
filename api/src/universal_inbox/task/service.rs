@@ -39,7 +39,7 @@ use crate::{
         ticktick::TickTickService,
         todoist::TodoistService,
     },
-    repository::{Repository, task::TaskRepository},
+    repository::{Repository, task::TaskRepository, third_party::ThirdPartyItemRepository},
     universal_inbox::{
         UniversalInboxError, UpdateStatus, UpsertStatus,
         integration_connection::service::{
@@ -1232,6 +1232,20 @@ impl TaskService {
         patch: &TaskPatch,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Task>>, UniversalInboxError> {
+        // `sink_item_id` can arrive from the HTTP / MCP patch body: only let a
+        // task point at a third-party item its owner owns, otherwise reading
+        // the task back would return another user's item.
+        if let Some(sink_item_id) = patch.sink_item_id
+            && !self
+                .repository
+                .is_third_party_item_owned_by(executor, sink_item_id, for_user_id)
+                .await?
+        {
+            return Err(UniversalInboxError::Forbidden(format!(
+                "Third party item {sink_item_id} does not belong to user {for_user_id}"
+            )));
+        }
+
         let updated_task = self
             .repository
             .update_task(executor, task_id, patch, for_user_id)

@@ -321,6 +321,101 @@ mod patch_task {
 
     #[rstest]
     #[tokio::test]
+    async fn test_patch_task_cannot_point_at_another_users_sink_item(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        )
+        .await;
+        create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            todoist_oauth_credential.clone(),
+            None,
+            None,
+        )
+        .await;
+        let attacker_task = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                project_id: "1111".to_string(),
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            })),
+            app.user.id,
+        )
+        .await
+        .task
+        .unwrap();
+
+        let (_victim_client, victim) =
+            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
+        create_and_mock_integration_connection(
+            &app.app,
+            victim.id,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            todoist_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        let victim_task = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                id: "victim-item".to_string(),
+                project_id: "1111".to_string(),
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            })),
+            victim.id,
+        )
+        .await
+        .task
+        .unwrap();
+
+        // The attacker's own session client (the fixture's user)
+        let response = patch_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            attacker_task.id.into(),
+            &TaskPatch {
+                sink_item_id: Some(victim_task.source_item.id),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // Pointing at one of the caller's own items is still allowed
+        let response = patch_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            attacker_task.id.into(),
+            &TaskPatch {
+                sink_item_id: Some(attacker_task.source_item.id),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_ne!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[rstest]
+    #[tokio::test]
     async fn test_patch_task_without_values_to_update(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,

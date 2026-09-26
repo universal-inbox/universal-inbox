@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT EXISTS(\n                  SELECT 1 FROM third_party_item WHERE id = $1 AND user_id = $2\n                ) AS \"owned!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "owned!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3d6deff6897ddb560d4f1d1b36f3d6a96111c1b66283ecee57d5f86dfc5fc273"
+}
