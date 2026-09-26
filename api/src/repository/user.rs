@@ -1512,7 +1512,9 @@ impl UserRepository for Repository {
                   "user".updated_at,
                   (SELECT"#,
             )
-            .push(" passkey != ")
+            // `passkey` is a `json` column and the bind a `jsonb` value:
+            // compare as jsonb (`json` has no `<>` operator).
+            .push(" passkey::jsonb IS DISTINCT FROM ")
             .push_bind(Json(passkey))
             .push(" FROM user_auth WHERE user_id = ")
             .push_bind(user_id.0)
