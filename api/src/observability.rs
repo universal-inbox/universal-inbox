@@ -160,11 +160,90 @@ pub fn init_subscriber(
 
 pub struct AuthenticatedRootSpanBuilder;
 
+/// Query parameters whose values are credentials (OAuth/OIDC authorization
+/// codes and their CSRF state, tokens, PKCE verifiers) and must never reach
+/// logs or exported traces.
+const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
+    "code",
+    "state",
+    "token",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "code_verifier",
+    "client_secret",
+    "password",
+];
+
+/// `path_and_query` with the value of every [`SENSITIVE_QUERY_PARAMETERS`]
+/// entry replaced by `REDACTED` (parameter names and other values are kept
+/// for debugging).
+pub fn redact_path_and_query(path_and_query: &str) -> String {
+    let Some((path, query)) = path_and_query.split_once('?') else {
+        return path_and_query.to_string();
+    };
+    let redacted_query = query
+        .split('&')
+        .map(|pair| match pair.split_once('=') {
+            Some((key, _))
+                if SENSITIVE_QUERY_PARAMETERS
+                    .iter()
+                    .any(|sensitive| key.eq_ignore_ascii_case(sensitive)) =>
+            {
+                format!("{key}=REDACTED")
+            }
+            _ => pair.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("{path}?{redacted_query}")
+}
+
+/// A [`ServiceRequest`] view whose `uri()` has its credentials redacted.
+///
+/// `tracing_actix_web::root_span!` records `http.target` from
+/// `request.uri().path_and_query()`, i.e. with the raw query string, which for
+/// `/api/oauth/callback` and `/api/auth/session/authenticated` carries OAuth
+/// authorization codes. Handing the macro this wrapper (every other method
+/// derefs to the real request) keeps the default span fields while recording
+/// a redacted target.
+struct RedactedRequest<'a> {
+    request: &'a ServiceRequest,
+    uri: actix_web::http::Uri,
+}
+
+impl<'a> RedactedRequest<'a> {
+    fn new(request: &'a ServiceRequest) -> Self {
+        let original = request.uri();
+        let uri = original
+            .path_and_query()
+            .and_then(|path_and_query| {
+                actix_web::http::Uri::try_from(redact_path_and_query(path_and_query.as_str())).ok()
+            })
+            .unwrap_or_else(|| actix_web::http::Uri::from_static("/"));
+        Self { request, uri }
+    }
+
+    fn uri(&self) -> &actix_web::http::Uri {
+        &self.uri
+    }
+}
+
+impl std::ops::Deref for RedactedRequest<'_> {
+    type Target = ServiceRequest;
+
+    fn deref(&self) -> &Self::Target {
+        self.request
+    }
+}
+
 /// This is a custom root span builder that will add the user id to the root
 /// span if the user is connected
 impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
     fn on_request_start(request: &ServiceRequest) -> Span {
         let authenticated_value = request.extensions().get::<Authenticated<Claims>>().cloned();
+        let redacted_request = RedactedRequest::new(request);
+        let request = &redacted_request;
         match authenticated_value
             .and_then(|v| v.user_id_opt())
             .map(|user_id| user_id.to_string())
@@ -346,5 +425,26 @@ mod tests {
             1,
             "the forced directive must replace the configured one, got {directives:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod redaction_tests {
+    use super::*;
+    use rstest::*;
+
+    #[rstest]
+    #[case::no_query("/api/notifications", "/api/notifications")]
+    #[case::harmless_query("/api/notifications?status=Unread", "/api/notifications?status=Unread")]
+    #[case::oauth_callback(
+        "/api/oauth/callback?code=ghu_secret&state=csrf123",
+        "/api/oauth/callback?code=REDACTED&state=REDACTED"
+    )]
+    #[case::mixed(
+        "/api/auth/session/authenticated?foo=bar&CODE=x&token=y",
+        "/api/auth/session/authenticated?foo=bar&CODE=REDACTED&token=REDACTED"
+    )]
+    fn test_redact_path_and_query(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(redact_path_and_query(input), expected);
     }
 }
