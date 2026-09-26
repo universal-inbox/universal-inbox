@@ -138,6 +138,11 @@ pub(crate) enum BulkActNotificationsArgs {
         #[serde(default)]
         sources: Vec<NotificationSourceKind>,
         action: BulkNotificationAction,
+        #[serde(default)]
+        #[schemars(
+            description = "Must be true to sweep every notification, i.e. when both statuses and sources are empty; rejected otherwise."
+        )]
+        confirm_all: bool,
     },
     List {
         #[schemars(length(min = 1, max = 100))]
@@ -564,7 +569,24 @@ fn bulk_act_selection(args: BulkActNotificationsArgs) -> Result<BulkActSelection
         BulkActNotificationsArgs::Filter {
             statuses,
             sources,
+            action: _,
+            confirm_all,
+        } if statuses.is_empty() && sources.is_empty() && !confirm_all => {
+            // An unfiltered sweep touches the whole inbox and every connected
+            // provider. It is the payload a prompt injection hidden in some
+            // third-party content would ask for, so it needs an explicit,
+            // deliberate opt-in rather than being the default of an empty
+            // filter.
+            Err(ToolCallError::InvalidArguments(anyhow!(
+                "mode: filter with no statuses and no sources would act on every notification; \
+                 pass confirm_all: true only if the user explicitly asked for that"
+            )))
+        }
+        BulkActNotificationsArgs::Filter {
+            statuses,
+            sources,
             action,
+            confirm_all: _,
         } => Ok(BulkActSelection::Filter {
             status_filters: if statuses.is_empty() {
                 all_notification_statuses()
