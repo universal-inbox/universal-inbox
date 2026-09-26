@@ -21,6 +21,7 @@ export UNIVERSAL_INBOX__DATABASE__PORT={{ ('db-' ~ branch) | hash_port }}
 export UNIVERSAL_INBOX__REDIS__PORT={{ ('redis-' ~ branch) | hash_port }}
 export UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL=http://localhost:{{ ('web-' ~ branch) | hash_port }}
 export UNIVERSAL_INBOX__APPLICATION__LISTEN_PORT={{ ('api-' ~ branch) | hash_port }}
+export UNIVERSAL_INBOX__APPLICATION__WORKER_LISTEN_PORT={{ ('worker-' ~ branch) | hash_port }}
 
 # default PGHOST can became too long
 export PGHOST=/tmp
