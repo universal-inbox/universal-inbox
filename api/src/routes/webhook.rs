@@ -329,6 +329,12 @@ fn verify_slack_signature_parts(
     signing_secret: &str,
     now_unix: i64,
 ) -> Result<(), &'static str> {
+    // An empty secret is a key anyone can reproduce: `default.toml` ships
+    // `signing_secret = ""`, and the boot guard only rejects it while the
+    // Slack integration is enabled. Never verify against it.
+    if signing_secret.is_empty() {
+        return Err("no signing secret configured");
+    }
     let timestamp = timestamp_header.ok_or("missing timestamp header")?;
     let signature = signature_header.ok_or("missing signature header")?;
 
@@ -384,6 +390,26 @@ mod tests {
         assert_eq!(
             verify_slack_signature_parts(Some(&ts), Some(&sig), body, SECRET, NOW),
             Ok(())
+        );
+    }
+
+    #[test]
+    fn rejects_any_signature_when_the_secret_is_empty() {
+        let body = b"{\"type\":\"event_callback\"}";
+        let ts = NOW.to_string();
+        let mut basestring = Vec::new();
+        basestring.extend_from_slice(b"v0:");
+        basestring.extend_from_slice(ts.as_bytes());
+        basestring.push(b':');
+        basestring.extend_from_slice(body);
+        let empty_key = hmac::Key::new(hmac::HMAC_SHA256, b"");
+        let forged = format!(
+            "v0={}",
+            hex::encode(hmac::sign(&empty_key, &basestring).as_ref())
+        );
+        assert_eq!(
+            verify_slack_signature_parts(Some(&ts), Some(&forged), body, "", NOW),
+            Err("no signing secret configured")
         );
     }
 

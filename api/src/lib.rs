@@ -168,7 +168,10 @@ pub async fn run_server(
     let slack_signing_secret: Option<routes::webhook::SlackSigningSecret> = settings
         .integrations
         .get("slack")
-        .and_then(|s| s.signing_secret.clone());
+        .and_then(|s| s.signing_secret.clone())
+        // An empty secret is no secret: treat it as unset so the webhook
+        // rejects every event instead of verifying against an empty HMAC key.
+        .filter(|secret| !secret.expose_secret().0.is_empty());
     let slack_signing_secret_data = web::Data::new(slack_signing_secret);
 
     // Setup HTTP session + JWT auth
