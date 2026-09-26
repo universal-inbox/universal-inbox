@@ -1060,6 +1060,18 @@ fn slack_api_error_code(error: &UniversalInboxError) -> Option<&str> {
         })
 }
 
+/// Cache-key component identifying the Slack credential that authorized an
+/// upstream call (a truncated SHA-256 of the token, never the token itself).
+/// Keying caches on it means a response fetched with one user's token is
+/// never served to another user, whose own token may not be allowed to see it.
+fn slack_token_cache_scope(slack_api_token: &SlackApiToken) -> String {
+    let digest = ring::digest::digest(
+        &ring::digest::SHA256,
+        slack_api_token.token_value.0.as_bytes(),
+    );
+    hex::encode(&digest.as_ref()[..16])
+}
+
 #[concurrent_cached(
     key = "String",
     // Use user_id to avoid leaking a message to an unauthorized user
@@ -1147,7 +1159,9 @@ async fn cached_fetch_thread(
 
 #[concurrent_cached(
     key = "String",
-    convert = r#"{ format!("{}__{}", slack_base_url, channel) }"#,
+    // Scope to the token that authorized the upstream call: Slack's per-token
+    // ACL is the only authorization applying to this data.
+    convert = r#"{ format!("{}__{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token), channel) }"#,
     ty = "cached::AsyncRedisCache<String, SlackChannelInfo>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_channel`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_channel", Duration::from_secs(24 * 60 * 60), false).await }"##,
@@ -1197,7 +1211,7 @@ async fn cached_fetch_user(
 
 #[concurrent_cached(
     key = "String",
-    convert = r#"{ format!("{}", slack_base_url) }"#,
+    convert = r#"{ format!("{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token)) }"#,
     ty = "cached::AsyncRedisCache<String, Vec<SlackUserGroup>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_usergroups`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:list_usergroups", Duration::from_secs(12 * 60 * 60), false).await }"##,
@@ -1220,7 +1234,7 @@ async fn cached_list_usergroups(
 
 #[concurrent_cached(
     key = "String",
-    convert = r#"{ format!("{}__{}", slack_base_url, usergroup_id) }"#,
+    convert = r#"{ format!("{}__{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token), usergroup_id) }"#,
     ty = "cached::AsyncRedisCache<String, Vec<SlackUserId>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_users_in_usergroup`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:list_users_in_usergroup", Duration::from_secs(12 * 60 * 60), false).await }"##,
@@ -1246,7 +1260,7 @@ async fn cached_list_users_in_usergroup(
 
 #[concurrent_cached(
     key = "String",
-    convert = r#"{ format!("{}__{}", slack_base_url, bot) }"#,
+    convert = r#"{ format!("{}__{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token), bot) }"#,
     ty = "cached::AsyncRedisCache<String, SlackBotInfo>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_bot`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_bot", Duration::from_secs(24 * 60 * 60), false).await }"##,
@@ -1270,7 +1284,7 @@ async fn cached_fetch_bot(
 
 #[concurrent_cached(
     key = "String",
-    convert = r#"{ format!("{}__{}", slack_base_url, team) }"#,
+    convert = r#"{ format!("{}__{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token), team) }"#,
     ty = "cached::AsyncRedisCache<String, SlackTeamInfo>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_team`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_team", Duration::from_secs(24 * 60 * 60), false).await }"##,
@@ -1317,7 +1331,7 @@ async fn cached_list_emojis(
 
 #[concurrent_cached(
     key = "String",
-    convert = r#"{ format!("{}__{}__{}", slack_base_url, channel, message) }"#,
+    convert = r#"{ format!("{}__{}__{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token), channel, message) }"#,
     ty = "cached::AsyncRedisCache<String, Url>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `get_chat_permalink`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:get_chat_permalink", Duration::from_secs(7 * 24 * 60 * 60), true).await }"##,
@@ -1949,4 +1963,23 @@ pub fn find_slack_references_in_message(message_content: &SlackMessageContent) -
 
 pub fn has_slack_references_in_message(message_content: &SlackMessageContent) -> bool {
     !find_slack_references_in_message(message_content).is_empty()
+}
+
+#[cfg(test)]
+mod token_cache_scope_tests {
+    use super::*;
+
+    fn token(value: &str) -> SlackApiToken {
+        SlackApiToken::new(SlackApiTokenValue(value.to_string()))
+    }
+
+    #[test]
+    fn test_cache_scope_differs_per_token_and_hides_the_token() {
+        let scope_a = slack_token_cache_scope(&token("xoxp-user-a"));
+        let scope_b = slack_token_cache_scope(&token("xoxp-user-b"));
+
+        assert_ne!(scope_a, scope_b);
+        assert_eq!(scope_a, slack_token_cache_scope(&token("xoxp-user-a")));
+        assert!(!scope_a.contains("xoxp"));
+    }
 }
