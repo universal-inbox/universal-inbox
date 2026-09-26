@@ -154,13 +154,37 @@ impl Zeroize for Password {
 impl CloneableSecret for Password {}
 impl SerializableSecret for Password {}
 
+/// Bounds of the password policy applied to every new password.
+pub const PASSWORD_MIN_LENGTH: usize = 6;
+/// Upper bound keeping Argon2 hashing cost bounded for attacker-sized input.
+pub const PASSWORD_MAX_LENGTH: usize = 1024;
+
+impl Password {
+    /// Check a new password against the password policy. `Password` is
+    /// deserialized straight from JSON (`serde(transparent)`), so the API
+    /// must call this explicitly before hashing a new password; it is not
+    /// applied when checking a login attempt against an existing password.
+    pub fn check_policy(password: &str) -> Result<(), anyhow::Error> {
+        let length = password.chars().count();
+        if length < PASSWORD_MIN_LENGTH {
+            return Err(anyhow!(
+                "Password must be at least {PASSWORD_MIN_LENGTH} characters long"
+            ));
+        }
+        if length > PASSWORD_MAX_LENGTH {
+            return Err(anyhow!(
+                "Password must be at most {PASSWORD_MAX_LENGTH} characters long"
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl FromStr for Password {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.len() < 6 {
-            return Err(anyhow!("Password must be at least 6 characters long"));
-        }
+        Self::check_policy(s)?;
 
         Ok(Self(s.to_string()))
     }
