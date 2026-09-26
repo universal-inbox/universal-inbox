@@ -68,6 +68,9 @@ mcp_extra_allowed_origins = [
     "https://chat.mistral.ai",
     "https://callback.mistral.ai",
 ]
+# How long an email-verification link stays valid (older links are rejected and
+# the user must request a new verification email).
+email_verification_token_validity_in_hours = 24
 # Optional: block registration/authentication from specific email domains with custom messages
 # email_domain_blacklist = { "blocked-domain.com" = "Registration is not allowed from this domain", "example.org" = "Please use your company email address" }
 

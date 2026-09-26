@@ -25,6 +25,7 @@
 
 ### Security
 
+- Email-verification links now expire (`application.security.email_verification_token_validity_in_hours`, 24 h by default) and can only be used once
 - Verify Slack webhook signatures and require explicit user consent in the OAuth2 authorization code flow
 - Close IDOR / cross-tenant access paths: uniform 404 on integration-connection probes and blocked cross-tenant writes through the task third-party-item endpoint
 - Harden authentication — IP-based rate limiting on auth/OAuth2 endpoints, atomic refresh-token rotation with reuse detection, and nonce/origin-bound, non-enumerable passkey ceremonies
