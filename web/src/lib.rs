@@ -7,9 +7,10 @@ use cfg_if::cfg_if;
 use dioxus::prelude::dioxus_core::Runtime;
 use dioxus::prelude::dioxus_router::RouterConfig;
 use dioxus::prelude::*;
+use gloo_timers::future::TimeoutFuture;
 use gloo_utils::errors::JsError;
 use keyboard_manager::{KeyboardHandler, KeyboardManager};
-use log::debug;
+use log::{debug, warn};
 use wasm_bindgen::{JsCast, prelude::Closure};
 use web_sys::KeyboardEvent;
 
@@ -56,6 +57,8 @@ mod services;
 mod settings;
 mod theme;
 mod utils;
+
+const APP_CONFIG_RETRY_DELAY_MS: u32 = 2_000;
 
 pub fn App() -> Element {
     let api_base_url = use_memo(move || get_api_base_url().unwrap());
@@ -205,7 +208,21 @@ pub fn App() -> Element {
 
         setup_key_bindings(KEYBOARD_MANAGER.signal().into());
 
-        let app_config = get_app_config().await.unwrap();
+        // Retry instead of panicking: a panic here poisons every pending wasm
+        // closure ("closure invoked recursively or after being dropped") and
+        // leaves a blank page when the API is briefly unreachable (e.g. still
+        // starting). The app keeps showing its loading screen until it answers.
+        let app_config = loop {
+            match get_app_config().await {
+                Ok(app_config) => break app_config,
+                Err(error) => {
+                    warn!(
+                        "Failed to load the app configuration, retrying in {APP_CONFIG_RETRY_DELAY_MS}ms: {error:?}"
+                    );
+                    TimeoutFuture::new(APP_CONFIG_RETRY_DELAY_MS).await;
+                }
+            }
+        };
         APP_CONFIG.write().replace(app_config);
 
         // Load user preferences app-wide so behaviors that read them outside the
