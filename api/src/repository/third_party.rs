@@ -42,6 +42,14 @@ pub trait ThirdPartyItemRepository {
         source_id: &str,
     ) -> Result<bool, UniversalInboxError>;
 
+    /// Whether the third-party item `id` exists and belongs to `user_id`.
+    async fn is_third_party_item_owned_by(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        id: ThirdPartyItemId,
+        user_id: UserId,
+    ) -> Result<bool, UniversalInboxError>;
+
     async fn find_third_party_items_for_source_id(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -319,6 +327,39 @@ impl ThirdPartyItemRepository for Repository {
         rows.iter()
             .map(|r| r.try_into())
             .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(third_party_item.id = id.to_string(), user.id = user_id.to_string()),
+        err
+    )]
+    async fn is_third_party_item_owned_by(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        id: ThirdPartyItemId,
+        user_id: UserId,
+    ) -> Result<bool, UniversalInboxError> {
+        let owned = sqlx::query_scalar!(
+            r#"
+                SELECT EXISTS(
+                  SELECT 1 FROM third_party_item WHERE id = $1 AND user_id = $2
+                ) AS "owned!"
+            "#,
+            id.0,
+            user_id.0
+        )
+        .fetch_one(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!("Failed to check owner of third party item {id}: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+        Ok(owned)
     }
 
     #[tracing::instrument(
