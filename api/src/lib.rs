@@ -148,6 +148,14 @@ pub async fn run_server(
     let csp_header_value = build_csp_header(&settings, &script_hashes);
     let api_version = settings.application.version.clone();
 
+    // Refuse to sign sessions and JWTs with an empty key or one of the
+    // development keys committed to the repository (outside dev/test).
+    settings
+        .application
+        .http_session
+        .check_signing_keys(&settings.application.environment)
+        .map_err(|message| anyhow!(message))?;
+
     // Slack webhook signing secret: required when the Slack integration is enabled.
     // Without it, `POST /api/hooks/slack/events` would accept forged payloads and queue
     // jobs that later run with victims' OAuth credentials.

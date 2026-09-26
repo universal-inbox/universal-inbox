@@ -380,6 +380,58 @@ pub struct HttpSessionSettings {
     pub max_age_days: i64,
 }
 
+/// Signing keys committed to this repository (`api/config/dev.toml`,
+/// `api/config/test.toml`, and the historical `docker/universal-inbox.env`
+/// defaults). Anyone can read them, so they are only acceptable in the `dev`
+/// and `test` environments.
+const COMMITTED_SIGNING_KEYS: &[&str] = &[
+    // cookie signing key: dev.toml / test.toml
+    "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF",
+    // cookie signing key: docker/universal-inbox.env (until this change)
+    "nu8d0s1AH1Sf06KkIrDVuQR4VFKvhNsPugfK/2xPKZ2CdFPFeaeu3ZE7zSAAmLwJi34ObKQhBpOh21QSX2rgmg==",
+    // JWT private key: dev.toml and docker/universal-inbox.env
+    "MFECAQEwBQYDK2VwBCIEIEjXs1FUT0f7vB/A0R4Sq8iK/PUv3qlVtbgTkOrCyzL7gSEASdnznKQYGbMZytQAlOQ0WEYvk8AWsb0KzEbYQp99nhA=",
+    // JWT private key: test.toml
+    "MFECAQEwBQYDK2VwBCIEIJre1+y6O3ENLgP53GgxG5OYptX2FsnxnKTfepdW2U9JgSEAX3oq4VhLrIerpUyWqHG8GjBqUTB5RC07Pf0XaacoEAA=",
+];
+
+/// Environments allowed to run with the committed development keys.
+const ENVIRONMENTS_ALLOWING_COMMITTED_KEYS: &[&str] = &["dev", "test"];
+
+impl HttpSessionSettings {
+    /// Refuse signing keys that are empty or were committed to the
+    /// repository, outside the `dev` / `test` environments. A server signing
+    /// session cookies or JWTs with a public key lets anyone forge a session
+    /// for any user.
+    pub fn check_signing_keys(&self, environment: &str) -> Result<(), String> {
+        for (name, value) in [
+            ("application.http_session.secret_key", &self.secret_key),
+            (
+                "application.http_session.jwt_secret_key",
+                &self.jwt_secret_key,
+            ),
+        ] {
+            if value.trim().is_empty() {
+                return Err(format!(
+                    "`{name}` is empty. Generate one (see docker/universal-inbox.env for the \
+                     commands) before booting."
+                ));
+            }
+            if COMMITTED_SIGNING_KEYS.contains(&value.as_str())
+                && !ENVIRONMENTS_ALLOWING_COMMITTED_KEYS.contains(&environment)
+            {
+                return Err(format!(
+                    "`{name}` is a development key committed to the Universal Inbox repository \
+                     and cannot be used in the `{environment}` environment. Generate your own \
+                     (`openssl rand -base64 64` for secret_key, `universal-inbox-api \
+                     generate-jwt-key-pair` for the JWT keys)."
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 fn default_lock_timeout_in_milliseconds() -> u64 {
     3_000
 }
@@ -1321,5 +1373,43 @@ mod tests {
             let dbg = format!("{webhook:?}");
             assert!(!dbg.contains("whsec_supersecret"), "secret leaked in {dbg}");
         }
+    }
+}
+
+#[cfg(test)]
+mod signing_key_tests {
+    use super::*;
+    use rstest::*;
+
+    fn http_session(secret_key: &str, jwt_secret_key: &str) -> HttpSessionSettings {
+        HttpSessionSettings {
+            secret_key: secret_key.to_string(),
+            jwt_secret_key: jwt_secret_key.to_string(),
+            jwt_public_key: "public".to_string(),
+            jwt_token_expiration_in_days: 1,
+            max_age_days: 1,
+        }
+    }
+
+    #[rstest]
+    #[case::own_keys_in_prod("prod", "my-own-secret", "my-own-jwt-key", true)]
+    #[case::committed_keys_in_dev("dev", COMMITTED_SIGNING_KEYS[0], COMMITTED_SIGNING_KEYS[2], true)]
+    #[case::committed_keys_in_test("test", COMMITTED_SIGNING_KEYS[0], COMMITTED_SIGNING_KEYS[3], true)]
+    #[case::committed_cookie_key_in_prod("prod", COMMITTED_SIGNING_KEYS[1], "my-own-jwt-key", false)]
+    #[case::committed_jwt_key_in_prod("prod", "my-own-secret", COMMITTED_SIGNING_KEYS[2], false)]
+    #[case::committed_keys_in_default("default", COMMITTED_SIGNING_KEYS[0], "my-own-jwt-key", false)]
+    #[case::empty_key_in_dev("dev", "", COMMITTED_SIGNING_KEYS[2], false)]
+    fn test_check_signing_keys(
+        #[case] environment: &str,
+        #[case] secret_key: &str,
+        #[case] jwt_secret_key: &str,
+        #[case] accepted: bool,
+    ) {
+        assert_eq!(
+            http_session(secret_key, jwt_secret_key)
+                .check_signing_keys(environment)
+                .is_ok(),
+            accepted
+        );
     }
 }
