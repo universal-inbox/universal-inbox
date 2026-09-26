@@ -1,0 +1,12 @@
+# Link macOS binaries with lld (shipped by devbox) instead of ld64.
+#
+# ld64 stores the offset of a function's DWARF unwind entry in a 24-bit field
+# of the compact unwind info. Once the debug API binary's __eh_frame grows past
+# 16 MiB, those offsets are truncated and libunwind reads a bogus entry: the
+# process segfaults as soon as a backtrace is captured (every anyhow error
+# under RUST_BACKTRACE=full) or a panic unwinds. lld does not have this limit.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
