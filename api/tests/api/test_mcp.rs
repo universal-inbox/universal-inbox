@@ -594,6 +594,14 @@ mod protocol {
                 }),
             ),
             (
+                "an unfiltered sweep without confirm_all",
+                json!({ "mode": "filter", "action": "delete" }),
+            ),
+            (
+                "an unfiltered sweep with confirm_all: false",
+                json!({ "mode": "filter", "action": "delete", "confirm_all": false }),
+            ),
+            (
                 "an empty list",
                 json!({ "mode": "list", "notifications": [] }),
             ),
@@ -648,6 +656,17 @@ mod protocol {
                 "`{case}` must leave the notification unsnoozed"
             );
         }
+
+        // An explicit confirm_all: true sweeps every notification.
+        let body = mcp_tool_call(
+            &app.app,
+            &token,
+            "bulk_act_notifications",
+            json!({ "mode": "filter", "action": "mark_read", "confirm_all": true }),
+        )
+        .await;
+        assert_eq!(body["result"]["isError"], false, "got: {body}");
+        assert_eq!(body["result"]["structuredContent"]["count"], 1);
     }
 
     // ------------------------------------------------------------------
