@@ -174,6 +174,60 @@ mod register_user {
     }
 }
 
+mod password_policy {
+    use super::*;
+
+    #[rstest]
+    #[case::empty("")]
+    #[case::too_short("abc")]
+    #[tokio::test]
+    async fn test_register_user_rejects_weak_password(
+        #[future] tested_app_with_local_auth: TestedApp,
+        #[case] password: &str,
+    ) {
+        let app = tested_app_with_local_auth.await;
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let response =
+            register_user_response(&client, &app, "weak@doe.name".parse().unwrap(), password).await;
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_reset_password_rejects_weak_password(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+        let email: EmailAddress = "john@doe.name".parse().unwrap();
+        let (_, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
+
+        let anonymous_client = reqwest::Client::new();
+        let response = anonymous_client
+            .post(format!("{}users/password-reset", app.api_address))
+            .json(&email)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), http::StatusCode::OK);
+        let password_reset_token = get_password_reset_token(&app, user.id).await.unwrap();
+
+        let response = anonymous_client
+            .post(format!(
+                "{}users/{}/password-reset/{password_reset_token}",
+                app.api_address, user.id
+            ))
+            .json(&Password("".to_string()))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+    }
+}
+
 mod email_domain_blacklist {
     use super::*;
     use crate::helpers::{
