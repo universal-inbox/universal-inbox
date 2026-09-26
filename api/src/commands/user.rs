@@ -194,9 +194,9 @@ pub async fn list_users(user_service: Arc<UserService>) -> Result<(), UniversalI
             let usernames: Vec<String> = user_auths
                 .iter()
                 .filter_map(|ua| match ua {
-                    UserAuth::Passkey(passkey_user_auth) => {
-                        Some(passkey_user_auth.username.to_string())
-                    }
+                    UserAuth::Passkey(passkey_user_auth) => Some(sanitize_for_terminal(
+                        &passkey_user_auth.username.to_string(),
+                    )),
                     _ => None,
                 })
                 .collect();
@@ -205,7 +205,7 @@ pub async fn list_users(user_service: Arc<UserService>) -> Result<(), UniversalI
                 user.id.to_string(),
                 user.email
                     .as_ref()
-                    .map(|email| email.to_string())
+                    .map(|email| sanitize_for_terminal(email.as_ref()))
                     .unwrap_or_default(),
                 usernames.join(", "),
                 auth_kinds.join(", "),
@@ -229,6 +229,23 @@ pub async fn list_users(user_service: Arc<UserService>) -> Result<(), UniversalI
     println!("{}", user_table);
 
     Ok(())
+}
+
+/// Escape control characters (C0, DEL, C1, which covers the ESC/CSI/OSC
+/// introducers of terminal escape sequences) in user-supplied values before
+/// they are written to the operator's terminal, so a crafted username or
+/// email display name cannot erase, overwrite or recolour other rows.
+fn sanitize_for_terminal(value: &str) -> String {
+    value
+        .chars()
+        .map(|c| {
+            if c.is_control() {
+                c.escape_unicode().to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
 }
 
 #[tracing::instrument(
@@ -332,4 +349,23 @@ pub async fn reset_password(
     ))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_for_terminal_escapes_control_sequences() {
+        assert_eq!(sanitize_for_terminal("john@doe.name"), "john@doe.name");
+        assert_eq!(
+            sanitize_for_terminal("\ralex@corp.example"),
+            "\\u{d}alex@corp.example"
+        );
+        assert_eq!(
+            sanitize_for_terminal("\u{1b}[2Kroot\u{9b}31m"),
+            "\\u{1b}[2Kroot\\u{9b}31m"
+        );
+        assert_eq!(sanitize_for_terminal("Zoë"), "Zoë");
+    }
 }
