@@ -21,6 +21,7 @@ pub struct GoogleOAuth2Provider {
     client_id: String,
     client_secret: SecretBox<ClientSecret>,
     required_scopes: Vec<String>,
+    revocation_url: Url,
 }
 
 impl std::fmt::Debug for GoogleOAuth2Provider {
@@ -51,11 +52,22 @@ impl GoogleOAuth2Provider {
             client_id,
             client_secret,
             required_scopes,
+            revocation_url: Url::parse("https://oauth2.googleapis.com/revoke")
+                .expect("Invalid Google revocation URL"),
         }
+    }
+
+    /// Override the grant revocation endpoint (tests point it at a mock).
+    pub fn with_revocation_url(mut self, revocation_url: Url) -> Self {
+        self.revocation_url = revocation_url;
+        self
     }
 }
 
 impl OAuth2Provider for GoogleOAuth2Provider {
+    fn revocation_url(&self) -> &Url {
+        &self.revocation_url
+    }
     fn provider_kind(&self) -> IntegrationProviderKind {
         self.provider_kind
     }

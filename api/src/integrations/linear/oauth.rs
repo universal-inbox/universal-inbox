@@ -16,6 +16,7 @@ pub struct LinearOAuth2Provider {
     client_id: String,
     client_secret: SecretBox<ClientSecret>,
     required_scopes: Vec<String>,
+    revocation_url: Url,
 }
 
 impl std::fmt::Debug for LinearOAuth2Provider {
@@ -43,11 +44,22 @@ impl LinearOAuth2Provider {
             client_id,
             client_secret,
             required_scopes,
+            revocation_url: Url::parse("https://api.linear.app/oauth/revoke")
+                .expect("Invalid Linear revocation URL"),
         }
+    }
+
+    /// Override the grant revocation endpoint (tests point it at a mock).
+    pub fn with_revocation_url(mut self, revocation_url: Url) -> Self {
+        self.revocation_url = revocation_url;
+        self
     }
 }
 
 impl OAuth2Provider for LinearOAuth2Provider {
+    fn revocation_url(&self) -> &Url {
+        &self.revocation_url
+    }
     fn provider_kind(&self) -> IntegrationProviderKind {
         IntegrationProviderKind::Linear
     }

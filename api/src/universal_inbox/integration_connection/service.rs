@@ -775,6 +775,100 @@ impl IntegrationConnectionService {
             .await
     }
 
+    /// Revoke, at the provider, the OAuth grant behind an integration
+    /// connection, using its stored credential. Best effort: failures (no
+    /// credential, undecryptable token, provider error) are logged and
+    /// swallowed.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection_id = integration_connection.id.to_string(),
+            provider_kind = integration_connection.provider.kind().to_string()
+        )
+    )]
+    pub async fn revoke_provider_grant(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection: &IntegrationConnection,
+    ) {
+        let provider_kind = integration_connection.provider.kind();
+        let Some(provider) = self.get_oauth2_provider(&provider_kind) else {
+            return;
+        };
+        let credential = match self
+            .repository
+            .get_oauth_credential(executor, integration_connection.id)
+            .await
+        {
+            Ok(Some(credential)) => credential,
+            Ok(None) => return,
+            Err(err) => {
+                warn!(
+                    "Failed to read the OAuth credential of integration connection {} to revoke it: {err:?}",
+                    integration_connection.id
+                );
+                return;
+            }
+        };
+
+        let token_encryption_key = self.token_encryption_key.expose_secret();
+        let aad_context = integration_connection.id.0.as_bytes();
+        let access_token = match decrypt_token(
+            &credential.encrypted_access_token,
+            aad_context,
+            token_encryption_key,
+        ) {
+            Ok(token) => AccessToken(token),
+            Err(err) => {
+                warn!(
+                    "Failed to decrypt the access token of integration connection {} to revoke it: {err:?}",
+                    integration_connection.id
+                );
+                return;
+            }
+        };
+        let refresh_token = credential
+            .encrypted_refresh_token
+            .as_ref()
+            .and_then(|encrypted| decrypt_token(encrypted, aad_context, token_encryption_key).ok())
+            .map(RefreshToken);
+
+        match self
+            .oauth2_flow_service
+            .revoke_token(provider, &access_token, refresh_token.as_ref())
+            .await
+        {
+            Ok(()) => info!(
+                "Revoked the {provider_kind} OAuth grant of integration connection {}",
+                integration_connection.id
+            ),
+            Err(err) => warn!(
+                "Failed to revoke the {provider_kind} OAuth grant of integration connection {}: {err:?}",
+                integration_connection.id
+            ),
+        }
+    }
+
+    /// Revoke, at the providers, every OAuth grant of a user (account
+    /// deletion). Best effort, see [`Self::revoke_provider_grant`].
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    pub async fn revoke_all_provider_grants(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        let integration_connections = self
+            .repository
+            .fetch_all_integration_connections(executor, user_id, None, false)
+            .await?;
+        for integration_connection in &integration_connections {
+            self.revoke_provider_grant(executor, integration_connection)
+                .await;
+        }
+        Ok(())
+    }
+
     #[tracing::instrument(
         level = "debug",
         skip_all,
@@ -800,6 +894,12 @@ impl IntegrationConnectionService {
                     "Only the owner of the integration connection {integration_connection_id} can disconnect it"
                 )));
             }
+
+            // Best effort: tell the provider to drop the grant too, so it no
+            // longer lists Universal Inbox as authorized and the refresh
+            // token dies on its side. A failure never blocks the disconnect.
+            self.revoke_provider_grant(executor, &integration_connection)
+                .await;
 
             self.repository
                 .delete_oauth_credential(executor, integration_connection_id)
