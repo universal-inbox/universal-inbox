@@ -737,3 +737,278 @@ mod update_integration_connection_config {
         assert_eq!(allowed_response.status(), StatusCode::OK);
     }
 }
+
+/// Disconnecting an integration (or deleting the account) revokes the OAuth
+/// grant at the provider. The revocation endpoints point at the per-test mock
+/// servers (see `with_mocked_oauth_revocation_urls`).
+mod revoke_provider_grants {
+    use pretty_assertions::assert_eq;
+    use serde_json::json;
+    use universal_inbox::integration_connection::integrations::{
+        linear::LinearConfig, ticktick::TickTickConfig,
+    };
+    use universal_inbox_api::configuration::Settings;
+    use wiremock::{
+        Mock, MockGuard, MockServer, ResponseTemplate,
+        matchers::{basic_auth, body_json, body_string_contains, header, method, path},
+    };
+
+    use super::*;
+    use crate::helpers::{
+        integration_connection::{
+            OAuthCredentialFixture, create_and_mock_integration_connection,
+            github_oauth_credential, google_mail_oauth_credential, linear_oauth_credential,
+            slack_oauth_credential, ticktick_oauth_credential,
+        },
+        settings,
+        user::delete_current_user_response,
+    };
+
+    async fn connect(
+        app: &AuthenticatedApp,
+        settings: &Settings,
+        config: IntegrationConnectionConfig,
+        credential: OAuthCredentialFixture,
+    ) -> Box<IntegrationConnection> {
+        create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            config,
+            settings,
+            credential,
+            None,
+            None,
+        )
+        .await
+    }
+
+    async fn disconnect(app: &AuthenticatedApp, integration_connection: &IntegrationConnection) {
+        let disconnected: Box<IntegrationConnection> = delete_resource(
+            &app.client,
+            &app.app.api_address,
+            "integration-connections",
+            integration_connection.id.into(),
+        )
+        .await;
+        assert_eq!(disconnected.status, IntegrationConnectionStatus::Created);
+    }
+
+    async fn github_revocation(server: &MockServer, settings: &Settings) -> MockGuard {
+        let client_id = &settings.integrations["github"].oauth_client_id;
+        Mock::given(method("DELETE"))
+            .and(path(format!("/applications/{client_id}/grant")))
+            .and(header("accept", "application/vnd.github+json"))
+            .and(body_json(
+                json!({ "access_token": "github_test_access_token" }),
+            ))
+            .respond_with(ResponseTemplate::new(204))
+            .mount_as_scoped(server)
+            .await
+    }
+
+    async fn google_mail_revocation(server: &MockServer) -> MockGuard {
+        Mock::given(method("POST"))
+            .and(path("/revoke"))
+            .and(body_string_contains("token=google_mail_test_refresh_token"))
+            .and(body_string_contains("token_type_hint=refresh_token"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount_as_scoped(server)
+            .await
+    }
+
+    async fn assert_called_once(guard: &MockGuard, provider: &str) {
+        assert_eq!(
+            guard.received_requests().await.len(),
+            1,
+            "the {provider} grant should have been revoked"
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_disconnecting_github_revokes_the_grant(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            github_oauth_credential(),
+        )
+        .await;
+        let guard = github_revocation(&app.app.github_mock_server, &settings).await;
+
+        disconnect(&app, &connection).await;
+
+        assert_called_once(&guard, "GitHub").await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_disconnecting_google_revokes_the_grant(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
+            google_mail_oauth_credential(),
+        )
+        .await;
+        let guard = google_mail_revocation(&app.app.google_mail_mock_server).await;
+
+        disconnect(&app, &connection).await;
+
+        assert_called_once(&guard, "Google").await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_disconnecting_slack_revokes_the_token(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Slack(SlackConfig::default()),
+            slack_oauth_credential(),
+        )
+        .await;
+        let guard = Mock::given(method("POST"))
+            .and(path("/auth.revoke"))
+            .and(header(
+                "authorization",
+                "Bearer slack_test_user_access_token",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "ok": true, "revoked": true
+            })))
+            .mount_as_scoped(&app.app.slack_mock_server)
+            .await;
+
+        disconnect(&app, &connection).await;
+
+        assert_called_once(&guard, "Slack").await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_disconnecting_linear_revokes_the_grant(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
+            linear_oauth_credential(),
+        )
+        .await;
+        let guard = Mock::given(method("POST"))
+            .and(path("/oauth/revoke"))
+            .and(body_string_contains("token=linear_test_refresh_token"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount_as_scoped(&app.app.linear_mock_server)
+            .await;
+
+        disconnect(&app, &connection).await;
+
+        assert_called_once(&guard, "Linear").await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_disconnecting_ticktick_revokes_the_token(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+            ticktick_oauth_credential(),
+        )
+        .await;
+        let ticktick_settings = &settings.integrations["ticktick"];
+        let guard = Mock::given(method("POST"))
+            .and(path("/oauth/revoke"))
+            .and(basic_auth(
+                &ticktick_settings.oauth_client_id,
+                ticktick_settings.oauth_client_secret.as_str(),
+            ))
+            .and(body_string_contains("token=ticktick_test_access_token"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount_as_scoped(&app.app.ticktick_mock_server)
+            .await;
+
+        disconnect(&app, &connection).await;
+
+        assert_called_once(&guard, "TickTick").await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_failed_revocation_does_not_block_the_disconnect(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            github_oauth_credential(),
+        )
+        .await;
+        let client_id = &settings.integrations["github"].oauth_client_id;
+        let guard = Mock::given(method("DELETE"))
+            .and(path(format!("/applications/{client_id}/grant")))
+            .respond_with(ResponseTemplate::new(500))
+            .mount_as_scoped(&app.app.github_mock_server)
+            .await;
+
+        disconnect(&app, &connection).await;
+
+        assert_called_once(&guard, "GitHub").await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_account_deletion_revokes_every_grant(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            github_oauth_credential(),
+        )
+        .await;
+        connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
+            google_mail_oauth_credential(),
+        )
+        .await;
+        let github_guard = github_revocation(&app.app.github_mock_server, &settings).await;
+        let google_guard = google_mail_revocation(&app.app.google_mail_mock_server).await;
+
+        let email = app.user.email.as_ref().unwrap().to_string();
+        let response = delete_current_user_response(&app.client, &app.app, &email).await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        assert_called_once(&github_guard, "GitHub").await;
+        assert_called_once(&google_guard, "Google").await;
+    }
+}

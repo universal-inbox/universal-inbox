@@ -654,6 +654,20 @@ pub enum ExecutionContext {
     Worker,
 }
 
+/// Apply the optional `oauth_revocation_url` setting of an integration to its
+/// OAuth2 provider (tests point it at a mock server; production uses the
+/// provider's default endpoint).
+fn with_revocation_url_override<P>(
+    provider: P,
+    integration_settings: &configuration::IntegrationSettings,
+    with_revocation_url: fn(P, url::Url) -> P,
+) -> P {
+    match &integration_settings.oauth_revocation_url {
+        Some(revocation_url) => with_revocation_url(provider, revocation_url.clone()),
+        None => provider,
+    }
+}
+
 #[allow(clippy::too_many_arguments)] // ignore for now, to revisit later
 pub async fn build_services(
     pool: Arc<PgPool>,
@@ -709,14 +723,6 @@ pub async fn build_services(
         }
     };
 
-    let user_service = Arc::new(UserService::new(
-        repository.clone(),
-        settings.application.clone(),
-        mailer.clone(),
-        webauthn.clone(),
-        login_throttle,
-    ));
-
     // Build the map of internal OAuth2 providers
     use ::universal_inbox::integration_connection::provider::IntegrationProviderKind;
     let mut oauth2_providers: HashMap<IntegrationProviderKind, Arc<dyn OAuth2Provider>> =
@@ -724,40 +730,56 @@ pub async fn build_services(
     if let Some(linear_settings) = settings.integrations.get("linear") {
         oauth2_providers.insert(
             IntegrationProviderKind::Linear,
-            Arc::new(LinearOAuth2Provider::new(
-                linear_settings.oauth_client_id.clone(),
-                SecretBox::new(Box::new(linear_settings.oauth_client_secret.clone())),
-                linear_settings.required_oauth_scopes.clone(),
+            Arc::new(with_revocation_url_override(
+                LinearOAuth2Provider::new(
+                    linear_settings.oauth_client_id.clone(),
+                    SecretBox::new(Box::new(linear_settings.oauth_client_secret.clone())),
+                    linear_settings.required_oauth_scopes.clone(),
+                ),
+                linear_settings,
+                LinearOAuth2Provider::with_revocation_url,
             )),
         );
     }
     if let Some(github_settings) = settings.integrations.get("github") {
         oauth2_providers.insert(
             IntegrationProviderKind::Github,
-            Arc::new(GithubOAuth2Provider::new(
-                github_settings.oauth_client_id.clone(),
-                SecretBox::new(Box::new(github_settings.oauth_client_secret.clone())),
-                github_settings.required_oauth_scopes.clone(),
+            Arc::new(with_revocation_url_override(
+                GithubOAuth2Provider::new(
+                    github_settings.oauth_client_id.clone(),
+                    SecretBox::new(Box::new(github_settings.oauth_client_secret.clone())),
+                    github_settings.required_oauth_scopes.clone(),
+                ),
+                github_settings,
+                GithubOAuth2Provider::with_revocation_url,
             )),
         );
     }
     if let Some(slack_settings) = settings.integrations.get("slack") {
         oauth2_providers.insert(
             IntegrationProviderKind::Slack,
-            Arc::new(SlackOAuth2Provider::new(
-                slack_settings.oauth_client_id.clone(),
-                SecretBox::new(Box::new(slack_settings.oauth_client_secret.clone())),
-                slack_settings.required_oauth_scopes.clone(),
+            Arc::new(with_revocation_url_override(
+                SlackOAuth2Provider::new(
+                    slack_settings.oauth_client_id.clone(),
+                    SecretBox::new(Box::new(slack_settings.oauth_client_secret.clone())),
+                    slack_settings.required_oauth_scopes.clone(),
+                ),
+                slack_settings,
+                SlackOAuth2Provider::with_revocation_url,
             )),
         );
     }
     if let Some(todoist_settings) = settings.integrations.get("todoist") {
         oauth2_providers.insert(
             IntegrationProviderKind::Todoist,
-            Arc::new(TodoistOAuth2Provider::new(
-                todoist_settings.oauth_client_id.clone(),
-                SecretBox::new(Box::new(todoist_settings.oauth_client_secret.clone())),
-                todoist_settings.required_oauth_scopes.clone(),
+            Arc::new(with_revocation_url_override(
+                TodoistOAuth2Provider::new(
+                    todoist_settings.oauth_client_id.clone(),
+                    SecretBox::new(Box::new(todoist_settings.oauth_client_secret.clone())),
+                    todoist_settings.required_oauth_scopes.clone(),
+                ),
+                todoist_settings,
+                TodoistOAuth2Provider::with_revocation_url,
             )),
         );
     }
@@ -769,11 +791,15 @@ pub async fn build_services(
         if let Some(google_settings) = settings.integrations.get(settings_key) {
             oauth2_providers.insert(
                 provider_kind,
-                Arc::new(GoogleOAuth2Provider::new(
-                    provider_kind,
-                    google_settings.oauth_client_id.clone(),
-                    SecretBox::new(Box::new(google_settings.oauth_client_secret.clone())),
-                    google_settings.required_oauth_scopes.clone(),
+                Arc::new(with_revocation_url_override(
+                    GoogleOAuth2Provider::new(
+                        provider_kind,
+                        google_settings.oauth_client_id.clone(),
+                        SecretBox::new(Box::new(google_settings.oauth_client_secret.clone())),
+                        google_settings.required_oauth_scopes.clone(),
+                    ),
+                    google_settings,
+                    GoogleOAuth2Provider::with_revocation_url,
                 )),
             );
         }
@@ -781,10 +807,14 @@ pub async fn build_services(
     if let Some(ticktick_settings) = settings.integrations.get("ticktick") {
         oauth2_providers.insert(
             IntegrationProviderKind::TickTick,
-            Arc::new(TickTickOAuth2Provider::new(
-                ticktick_settings.oauth_client_id.clone(),
-                SecretBox::new(Box::new(ticktick_settings.oauth_client_secret.clone())),
-                ticktick_settings.required_oauth_scopes.clone(),
+            Arc::new(with_revocation_url_override(
+                TickTickOAuth2Provider::new(
+                    ticktick_settings.oauth_client_id.clone(),
+                    SecretBox::new(Box::new(ticktick_settings.oauth_client_secret.clone())),
+                    ticktick_settings.required_oauth_scopes.clone(),
+                ),
+                ticktick_settings,
+                TickTickOAuth2Provider::with_revocation_url,
             )),
         );
     }
@@ -850,6 +880,17 @@ pub async fn build_services(
         settings.application.sync_failure_window_in_hours,
         billing_service.clone(),
     )));
+
+    // Built after the integration connection service: account deletion
+    // revokes the user's provider grants through it.
+    let user_service = Arc::new(UserService::new(
+        repository.clone(),
+        settings.application.clone(),
+        mailer.clone(),
+        webauthn.clone(),
+        login_throttle,
+        integration_connection_service.clone(),
+    ));
 
     let todoist_service = Arc::new(
         TodoistService::new(
