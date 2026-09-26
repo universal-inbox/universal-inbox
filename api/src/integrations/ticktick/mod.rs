@@ -212,6 +212,14 @@ fn enrich_ticktick_item_tags(tasks: &mut [TickTickItem], tag_details: &[TickTick
 }
 
 impl TickTickService {
+    /// URL of a TickTick API endpoint below the base URL. Each segment is
+    /// percent-encoded, so an id containing `/`, `..`, `?` or `#` (item ids
+    /// can be client-supplied) stays one path segment instead of retargeting
+    /// the request made with the user's TickTick token.
+    fn endpoint(&self, segments: &[&str]) -> Result<String, UniversalInboxError> {
+        build_endpoint(&self.ticktick_base_url, segments)
+    }
+
     pub fn new(
         ticktick_base_url: Option<String>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -381,10 +389,7 @@ impl TickTickService {
     ) -> Result<Option<TickTickItem>, UniversalInboxError> {
         match self
             .build_ticktick_client(access_token)?
-            .get::<TickTickItem, _>(format!(
-                "{}/project/{}/task/{}",
-                self.ticktick_base_url, project_id, task_id
-            ))
+            .get::<TickTickItem, _>(self.endpoint(&["project", project_id, "task", task_id])?)
             .await
         {
             Ok(item) => Ok(Some(item)),
@@ -434,10 +439,7 @@ impl TickTickService {
         // for user-created projects; /project/{id}/data is the stable shape.
         for project in &projects {
             let project_data: TickTickProjectData = client
-                .get(format!(
-                    "{}/project/{}/data",
-                    self.ticktick_base_url, project.id
-                ))
+                .get(self.endpoint(&["project", &project.id, "data"])?)
                 .await
                 .with_context(|| {
                     format!("Failed to list tasks for TickTick project {}", project.id)
@@ -478,10 +480,7 @@ impl TickTickService {
     ) -> Result<TickTickItem, UniversalInboxError> {
         Ok(self
             .build_ticktick_client(access_token)?
-            .post(
-                format!("{}/task/{}", self.ticktick_base_url, task_id),
-                Some(request),
-            )
+            .post(self.endpoint(&["task", task_id])?, Some(request))
             .await
             .context("Failed to update TickTick task")?)
     }
@@ -495,10 +494,7 @@ impl TickTickService {
     ) -> Result<(), UniversalInboxError> {
         self.build_ticktick_client(access_token)?
             .post_no_response(
-                format!(
-                    "{}/project/{}/task/{}/complete",
-                    self.ticktick_base_url, project_id, task_id
-                ),
+                self.endpoint(&["project", project_id, "task", task_id, "complete"])?,
                 Option::<&()>::None,
             )
             .await
@@ -514,10 +510,7 @@ impl TickTickService {
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
         self.build_ticktick_client(access_token)?
-            .delete_no_response(format!(
-                "{}/project/{}/task/{}",
-                self.ticktick_base_url, project_id, task_id
-            ))
+            .delete_no_response(self.endpoint(&["project", project_id, "task", task_id])?)
             .await
             .context("Failed to delete TickTick task")?;
         Ok(())
@@ -1263,5 +1256,50 @@ mod tests {
         let mut tasks = vec![make_item("task_a", Some(vec![TickTickTag::new("Food")]))];
         enrich_ticktick_item_tags(&mut tasks, &[]);
         assert_eq!(tasks[0].tags.as_ref().unwrap()[0].color, None);
+    }
+}
+
+/// See [`TickTickService::endpoint`].
+fn build_endpoint(base_url: &str, segments: &[&str]) -> Result<String, UniversalInboxError> {
+    let mut url = Url::parse(base_url).context("Cannot parse TickTick base URL")?;
+    url.path_segments_mut()
+        .map_err(|_| anyhow!("TickTick base URL cannot be a base"))?
+        .pop_if_empty()
+        .extend(segments);
+    Ok(url.to_string())
+}
+
+#[cfg(test)]
+mod endpoint_tests {
+    use super::*;
+
+    fn endpoint(base: &str, segments: &[&str]) -> String {
+        build_endpoint(base, segments).unwrap()
+    }
+
+    #[test]
+    fn test_endpoint_segments_are_percent_encoded() {
+        assert_eq!(
+            endpoint(
+                "https://api.ticktick.com/open/v1",
+                &["project", "p1", "task", "t1"]
+            ),
+            "https://api.ticktick.com/open/v1/project/p1/task/t1"
+        );
+        assert_eq!(
+            endpoint(
+                "https://api.ticktick.com/open/v1/",
+                &["project", "../../..", "task", "x?foo=1#frag"]
+            ),
+            "https://api.ticktick.com/open/v1/project/..%2F..%2F../task/x%3Ffoo=1%23frag"
+        );
+        // A bare dot segment cannot climb out of the API path either
+        assert!(
+            endpoint(
+                "https://api.ticktick.com/open/v1",
+                &["project", "..", "task", "t1"]
+            )
+            .starts_with("https://api.ticktick.com/open/v1/project/")
+        );
     }
 }
