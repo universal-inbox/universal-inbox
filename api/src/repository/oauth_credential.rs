@@ -75,8 +75,11 @@ impl OAuthCredentialRepository for Repository {
         encrypted_access_token: Vec<u8>,
         encrypted_refresh_token: Option<Vec<u8>>,
         access_token_expires_at: Option<DateTime<Utc>>,
-        raw_token_response: serde_json::Value,
+        mut raw_token_response: serde_json::Value,
     ) -> Result<StoredOAuthCredential, UniversalInboxError> {
+        // Last line of defence: whatever the caller passed, never persist a
+        // cleartext credential next to its encrypted copy.
+        strip_credential_fields(&mut raw_token_response);
         let now = Utc::now();
         let row = sqlx::query!(
             r#"
@@ -265,5 +268,52 @@ impl OAuthCredentialRepository for Repository {
                 })
             })
             .collect()
+    }
+}
+
+/// Keys whose values are provider credentials. They are stored encrypted in
+/// their own columns and must never appear in `raw_token_response`.
+const CREDENTIAL_FIELDS: [&str; 3] = ["access_token", "refresh_token", "id_token"];
+
+/// Remove every [`CREDENTIAL_FIELDS`] key from `value`, at any depth.
+pub fn strip_credential_fields(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.retain(|key, _| !CREDENTIAL_FIELDS.contains(&key.as_str()));
+            map.values_mut().for_each(strip_credential_fields);
+        }
+        serde_json::Value::Array(values) => values.iter_mut().for_each(strip_credential_fields),
+        _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn test_strip_credential_fields_at_any_depth() {
+        let mut raw = json!({
+            "ok": true,
+            "access_token": "xoxe.xoxp-secret",
+            "refresh_token": "xoxe-1-secret",
+            "scope": "channels:read",
+            "authed_user": { "id": "U1", "access_token": "xoxp-user-secret" },
+            "extra": [{ "id_token": "eyJ-secret", "kept": 1 }]
+        });
+
+        strip_credential_fields(&mut raw);
+
+        assert_eq!(
+            raw,
+            json!({
+                "ok": true,
+                "scope": "channels:read",
+                "authed_user": { "id": "U1" },
+                "extra": [{ "kept": 1 }]
+            })
+        );
     }
 }
