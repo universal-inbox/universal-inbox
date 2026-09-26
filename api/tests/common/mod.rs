@@ -149,6 +149,35 @@ pub struct TestServices {
     pub oauth2_service: Arc<OAuth2Service>,
 }
 
+/// Point every provider's OAuth grant revocation endpoint at its mock server
+/// so disconnect / account deletion never calls a real provider.
+pub fn with_mocked_oauth_revocation_urls(
+    settings: &Settings,
+    mock_servers: &MockServers,
+) -> Settings {
+    let mut settings = settings.clone();
+    for (name, integration) in settings.integrations.iter_mut() {
+        let revocation_url = match name.as_str() {
+            "github" => format!(
+                "{}/applications/{}/grant",
+                mock_servers.github.uri(),
+                integration.oauth_client_id
+            ),
+            "linear" => format!("{}/oauth/revoke", mock_servers.linear.uri()),
+            "slack" => format!("{}/auth.revoke", mock_servers.slack.uri()),
+            "todoist" => format!("{}/api/v1/revoke", mock_servers.todoist.uri()),
+            "ticktick" => format!("{}/oauth/revoke", mock_servers.ticktick.uri()),
+            "google_mail" => format!("{}/revoke", mock_servers.google_mail.uri()),
+            "google_calendar" => format!("{}/revoke", mock_servers.google_calendar.uri()),
+            "google_drive" => format!("{}/revoke", mock_servers.google_drive.uri()),
+            _ => continue,
+        };
+        integration.oauth_revocation_url =
+            Some(revocation_url.parse().expect("valid mock revocation URL"));
+    }
+    settings
+}
+
 pub async fn build_test_services(
     pool: Arc<PgPool>,
     settings: &Settings,
@@ -173,7 +202,7 @@ pub async fn build_test_services(
         _billing_service,
     ) = universal_inbox_api::build_services(
         pool,
-        settings,
+        &with_mocked_oauth_revocation_urls(settings, mock_servers),
         Some(mock_servers.github.uri()),
         Some(mock_servers.linear.uri()),
         Some(mock_servers.google_mail.uri()),

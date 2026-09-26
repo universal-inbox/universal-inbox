@@ -503,6 +503,11 @@ pub struct IntegrationSettings {
     pub oauth_client_secret: ClientSecret,
     #[serde(default)]
     pub signing_secret: Option<SecretBox<WebhookSigningSecret>>,
+    /// Override of the provider's OAuth grant revocation endpoint (used on
+    /// disconnect and account deletion). Leave unset to use the provider's
+    /// default endpoint; tests point it at a mock server.
+    #[serde(default)]
+    pub oauth_revocation_url: Option<Url>,
 }
 
 #[derive(Debug, Clone)]

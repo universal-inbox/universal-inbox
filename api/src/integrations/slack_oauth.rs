@@ -1,3 +1,4 @@
+use reqwest_middleware::ClientWithMiddleware;
 use secrecy::SecretBox;
 use serde_json::Value;
 use slack_morphism::SlackTeamId;
@@ -21,6 +22,7 @@ pub struct SlackOAuth2Provider {
     client_id: String,
     client_secret: SecretBox<ClientSecret>,
     required_scopes: Vec<String>,
+    revocation_url: Url,
 }
 
 impl std::fmt::Debug for SlackOAuth2Provider {
@@ -48,11 +50,55 @@ impl SlackOAuth2Provider {
             client_id,
             client_secret,
             required_scopes,
+            revocation_url: Url::parse("https://slack.com/api/auth.revoke")
+                .expect("Invalid Slack revocation URL"),
         }
+    }
+
+    /// Override the grant revocation endpoint (tests point it at a mock).
+    pub fn with_revocation_url(mut self, revocation_url: Url) -> Self {
+        self.revocation_url = revocation_url;
+        self
     }
 }
 
 impl OAuth2Provider for SlackOAuth2Provider {
+    fn revocation_url(&self) -> &Url {
+        &self.revocation_url
+    }
+
+    /// `auth.revoke` revokes the token it is called with.
+    fn build_revocation_request(
+        &self,
+        client: &ClientWithMiddleware,
+        revocation_url: &Url,
+        access_token: &AccessToken,
+        _refresh_token: Option<&RefreshToken>,
+    ) -> reqwest_middleware::RequestBuilder {
+        client
+            .post(revocation_url.as_str())
+            .bearer_auth(access_token.as_str())
+    }
+
+    /// Slack answers errors with a 200 and `{"ok": false, "error": "..."}`.
+    fn check_revocation_response(
+        &self,
+        status: http::StatusCode,
+        body: &str,
+    ) -> Result<(), UniversalInboxError> {
+        let ok = status.is_success()
+            && serde_json::from_str::<Value>(body)
+                .ok()
+                .and_then(|response| response.get("ok").and_then(Value::as_bool))
+                .unwrap_or(false);
+        if ok {
+            Ok(())
+        } else {
+            Err(UniversalInboxError::Unexpected(anyhow::anyhow!(
+                "Slack token revocation failed with status {status}: {body}"
+            )))
+        }
+    }
     fn provider_kind(&self) -> IntegrationProviderKind {
         IntegrationProviderKind::Slack
     }

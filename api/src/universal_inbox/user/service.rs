@@ -41,6 +41,7 @@ use crate::{
     repository::Repository,
     repository::user::UserRepository,
     repository::user_preferences::UserPreferencesRepository,
+    universal_inbox::integration_connection::service::IntegrationConnectionService,
     universal_inbox::{
         UniversalInboxError, UpdateStatus,
         user::model::{
@@ -58,6 +59,8 @@ pub struct UserService {
     /// Per-account login throttle. `None` when local password auth is not
     /// configured (nothing to throttle) or when Redis is unavailable at startup.
     login_throttle: Option<LoginThrottle>,
+    /// Used on account deletion to revoke the user's provider OAuth grants.
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
 }
 
 impl UserService {
@@ -67,6 +70,7 @@ impl UserService {
         mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
         webauthn: Arc<Webauthn>,
         login_throttle: Option<LoginThrottle>,
+        integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     ) -> UserService {
         UserService {
             repository,
@@ -74,6 +78,7 @@ impl UserService {
             mailer,
             webauthn,
             login_throttle,
+            integration_connection_service,
         }
     }
 
@@ -500,7 +505,9 @@ impl UserService {
     /// When billing is enabled (`billing_service` is `Some`), the user's Stripe
     /// subscription is cancelled first; a Stripe failure aborts the deletion
     /// so a deleted user can never keep being charged. With billing disabled
-    /// (self-hosted default) no Stripe code runs.
+    /// (self-hosted default) no Stripe code runs. The OAuth grants of the
+    /// user's integration connections are then revoked at the providers
+    /// (best effort).
     pub async fn delete_user(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -512,6 +519,14 @@ impl UserService {
                 .cancel_billing_for_account_deletion(executor, user_id)
                 .await?;
         }
+
+        // Best effort (never blocks the deletion): drop the OAuth grants at
+        // the providers so they stop listing Universal Inbox as authorized.
+        self.integration_connection_service
+            .read()
+            .await
+            .revoke_all_provider_grants(executor, user_id)
+            .await?;
 
         self.repository.delete_user(executor, user_id).await
     }

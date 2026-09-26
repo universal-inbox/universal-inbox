@@ -116,6 +116,46 @@ pub trait OAuth2Provider: Send + Sync + std::fmt::Debug {
             .map_err(|err| UniversalInboxError::from_json_serde_error(err, body.to_string()))
     }
 
+    /// Endpoint revoking a grant at the provider, called (best effort) when a
+    /// user disconnects the integration or deletes their account.
+    fn revocation_url(&self) -> &Url;
+
+    /// Build the revocation request sent to [`Self::revocation_url`].
+    ///
+    /// Default: RFC 7009 — form POST of the refresh token when there is one
+    /// (revoking it revokes the whole grant), otherwise the access token.
+    fn build_revocation_request(
+        &self,
+        client: &ClientWithMiddleware,
+        revocation_url: &Url,
+        access_token: &AccessToken,
+        refresh_token: Option<&RefreshToken>,
+    ) -> reqwest_middleware::RequestBuilder {
+        let (token, token_type_hint) = match refresh_token {
+            Some(refresh_token) => (refresh_token.as_str(), "refresh_token"),
+            None => (access_token.as_str(), "access_token"),
+        };
+        client
+            .post(revocation_url.as_str())
+            .form(&[("token", token), ("token_type_hint", token_type_hint)])
+    }
+
+    /// Whether the provider accepted the revocation. Default: any 2xx status.
+    /// Providers answering errors with a 200 (e.g. Slack) override.
+    fn check_revocation_response(
+        &self,
+        status: http::StatusCode,
+        body: &str,
+    ) -> Result<(), UniversalInboxError> {
+        if status.is_success() {
+            Ok(())
+        } else {
+            Err(UniversalInboxError::Unexpected(anyhow::anyhow!(
+                "Token revocation failed with status {status}: {body}"
+            )))
+        }
+    }
+
     /// Return a copy of the raw provider response with secret material stripped
     /// (access tokens, refresh tokens, id tokens). The result is what gets
     /// persisted to `oauth_credential.raw_response`.
@@ -214,6 +254,34 @@ impl OAuth2FlowService {
         provider.parse_token_response(&body)
     }
 
+    /// Revoke a grant at the provider.
+    pub async fn revoke_token(
+        &self,
+        provider: &dyn OAuth2Provider,
+        access_token: &AccessToken,
+        refresh_token: Option<&RefreshToken>,
+    ) -> Result<(), UniversalInboxError> {
+        let revocation_url = provider.revocation_url();
+
+        debug!(
+            "Revoking OAuth grant at {revocation_url} for {:?}",
+            provider.provider_kind()
+        );
+
+        let response = provider
+            .build_revocation_request(&self.client, revocation_url, access_token, refresh_token)
+            .send()
+            .await
+            .context("Failed to send the token revocation request")?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .context("Failed to read token revocation response body")?;
+
+        provider.check_revocation_response(status, &body)
+    }
+
     pub async fn refresh_access_token(
         &self,
         provider: &dyn OAuth2Provider,
@@ -305,6 +373,9 @@ mod tests {
             &self.token_url
         }
         fn token_url(&self) -> &Url {
+            &self.token_url
+        }
+        fn revocation_url(&self) -> &Url {
             &self.token_url
         }
         fn client_id(&self) -> &str {

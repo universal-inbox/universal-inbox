@@ -1,4 +1,5 @@
-use secrecy::SecretBox;
+use reqwest_middleware::ClientWithMiddleware;
+use secrecy::{ExposeSecret, SecretBox};
 use serde_json::Value;
 use universal_inbox::integration_connection::provider::{
     IntegrationConnectionContext, IntegrationProviderKind,
@@ -6,7 +7,7 @@ use universal_inbox::integration_connection::provider::{
 use url::Url;
 
 use crate::{
-    integrations::oauth2::{ClientSecret, provider::OAuth2Provider},
+    integrations::oauth2::{AccessToken, ClientSecret, RefreshToken, provider::OAuth2Provider},
     universal_inbox::UniversalInboxError,
 };
 
@@ -16,6 +17,7 @@ pub struct TodoistOAuth2Provider {
     client_id: String,
     client_secret: SecretBox<ClientSecret>,
     required_scopes: Vec<String>,
+    revocation_url: Url,
 }
 
 impl std::fmt::Debug for TodoistOAuth2Provider {
@@ -43,11 +45,43 @@ impl TodoistOAuth2Provider {
             client_id,
             client_secret,
             required_scopes,
+            revocation_url: Url::parse("https://api.todoist.com/api/v1/revoke")
+                .expect("Invalid Todoist revocation URL"),
         }
+    }
+
+    /// Override the grant revocation endpoint (tests point it at a mock).
+    pub fn with_revocation_url(mut self, revocation_url: Url) -> Self {
+        self.revocation_url = revocation_url;
+        self
     }
 }
 
 impl OAuth2Provider for TodoistOAuth2Provider {
+    fn revocation_url(&self) -> &Url {
+        &self.revocation_url
+    }
+
+    /// Todoist's RFC 7009 endpoint takes a JSON body and client credentials
+    /// as HTTP Basic auth.
+    fn build_revocation_request(
+        &self,
+        client: &ClientWithMiddleware,
+        revocation_url: &Url,
+        access_token: &AccessToken,
+        _refresh_token: Option<&RefreshToken>,
+    ) -> reqwest_middleware::RequestBuilder {
+        client
+            .post(revocation_url.as_str())
+            .basic_auth(
+                &self.client_id,
+                Some(self.client_secret.expose_secret().as_str()),
+            )
+            .json(&serde_json::json!({
+                "token": access_token.as_str(),
+                "token_type_hint": "access_token",
+            }))
+    }
     fn provider_kind(&self) -> IntegrationProviderKind {
         IntegrationProviderKind::Todoist
     }
