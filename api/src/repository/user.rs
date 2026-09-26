@@ -159,7 +159,9 @@ pub trait UserRepository {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         password_hash: SecretBox<PasswordHash>,
-        password_reset_token: Option<PasswordResetToken>,
+        // `(token, not_sent_before)`: when set, only a reset whose stored token
+        // matches and whose email was sent at or after `not_sent_before` applies.
+        password_reset: Option<(PasswordResetToken, DateTime<Utc>)>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
 
     async fn get_password_reset_token(
@@ -1174,7 +1176,7 @@ impl UserRepository for Repository {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         password_hash: SecretBox<PasswordHash>,
-        password_reset_token: Option<PasswordResetToken>,
+        password_reset: Option<(PasswordResetToken, DateTime<Utc>)>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new("UPDATE user_auth SET");
         let mut separated = query_builder.separated(", ");
@@ -1194,10 +1196,14 @@ impl UserRepository for Repository {
 
         // If a password reset token was provided, we need to ensure that it matches the one in the database
         // If no token is provider, it means that the user is changing their password without having requested a reset
-        if let Some(password_reset_token) = &password_reset_token {
+        // The token must also be fresh: a reset link is a credential, and one
+        // that was never used must not stay valid for the lifetime of the account.
+        if let Some((password_reset_token, not_sent_before)) = &password_reset {
             separated
                 .push("user_auth.password_reset_token = ")
-                .push_bind_unseparated(password_reset_token.0);
+                .push_bind_unseparated(password_reset_token.0)
+                .push("user_auth.password_reset_sent_at >= ")
+                .push_bind_unseparated(not_sent_before.naive_utc());
         }
 
         query_builder.push(
