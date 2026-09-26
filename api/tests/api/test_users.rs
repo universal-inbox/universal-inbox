@@ -1713,6 +1713,94 @@ mod passkey_start_non_enumerable {
     }
 }
 
+/// The passkey authentication start endpoint is unauthenticated. Its Redis
+/// state used to be keyed on the resolved user id, so a second start for
+/// the same username (from anyone) replaced the state of the victim's
+/// in-flight ceremony and their finish call failed. The state is now keyed
+/// on a per-ceremony id held in the caller's session.
+mod passkey_authentication_ceremony_isolation {
+    use super::*;
+    use serde_json::Value;
+    use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
+    use webauthn_rs::prelude::RequestChallengeResponse;
+
+    use crate::helpers::user::{
+        finish_body_with_nonce, finish_passkey_registration_response_unauthenticated,
+        front_origin_header, split_creation_challenge, start_passkey_authentication_response,
+        start_passkey_registration_response,
+    };
+
+    fn split_request_challenge(body: &str) -> (RequestChallengeResponse, String) {
+        let value: Value = serde_json::from_str(body).unwrap();
+        let nonce = value["nonce"].as_str().unwrap().to_string();
+        (serde_json::from_str(body).unwrap(), nonce)
+    }
+
+    fn cookie_client() -> reqwest::Client {
+        reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap()
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_concurrent_start_does_not_clobber_an_in_flight_ceremony(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+        let username = "dave_passkey_victim";
+        let origin = app.front_base_url.clone();
+        let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+
+        // Register the victim's passkey
+        let registration_client = cookie_client();
+        let start_response =
+            start_passkey_registration_response(&registration_client, &app, username).await;
+        let (creation_challenge, nonce) =
+            split_creation_challenge(&start_response.text().await.unwrap());
+        let register_credential = authenticator
+            .do_registration(origin.clone(), creation_challenge)
+            .unwrap();
+        let finish_response = finish_passkey_registration_response_unauthenticated(
+            &registration_client,
+            &app,
+            &register_credential,
+            &nonce,
+        )
+        .await;
+        assert_eq!(finish_response.status(), reqwest::StatusCode::OK);
+
+        // The victim starts logging in...
+        let victim = cookie_client();
+        let start_response = start_passkey_authentication_response(&victim, &app, username).await;
+        assert_eq!(start_response.status(), reqwest::StatusCode::OK);
+        let (request_challenge, victim_nonce) =
+            split_request_challenge(&start_response.text().await.unwrap());
+
+        // ...while an attacker starts a ceremony for the same username.
+        let attacker = cookie_client();
+        let attacker_start = start_passkey_authentication_response(&attacker, &app, username).await;
+        assert_eq!(attacker_start.status(), reqwest::StatusCode::OK);
+
+        // The victim's ceremony still completes.
+        let credential = authenticator
+            .do_authentication(origin, request_challenge)
+            .unwrap();
+        let response = victim
+            .post(format!(
+                "{}users/passkeys/authentication/finish",
+                app.api_address
+            ))
+            .header(reqwest::header::ORIGIN, front_origin_header(&app))
+            .json(&finish_body_with_nonce(&credential, &victim_nonce))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+    }
+}
+
 /// `POST /users/passkeys/registration/finish` previously surfaced the
 /// `user_auth_username_key` unique-constraint violation as a raw
 /// `DatabaseError`. The HTTP body was:

@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use subtle::ConstantTimeEq;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 use validator::Validate;
 use webauthn_rs::prelude::*;
 
@@ -57,6 +58,20 @@ const PASSKEY_AUTHENTICATION_STATE_SESSION_KEY: &str = "passkey-authentication-s
 /// is well over the WebAuthn challenge entropy (16 bytes is the spec
 /// minimum) and makes a guess by a network attacker infeasible.
 const PASSKEY_NONCE_BYTES: usize = 16;
+/// Lifetime of a passkey ceremony's state in Redis: a ceremony left
+/// unfinished (or abandoned) must not linger forever.
+const PASSKEY_CEREMONY_TTL_SECONDS: u64 = 300;
+
+/// Session record of an in-flight passkey authentication ceremony. The
+/// Redis state is keyed on the random ceremony `id`, not on the user id:
+/// the start endpoint is unauthenticated, so keying on the user let anyone
+/// who knew a username overwrite that user's in-flight ceremony and deny
+/// them passkey login.
+#[derive(Serialize, Deserialize)]
+struct PasskeyAuthenticationCeremony {
+    id: String,
+    user_id: UserId,
+}
 
 /// State blob persisted to Redis for a passkey ceremony, paired with a
 /// per-ceremony nonce.
@@ -75,8 +90,8 @@ const PASSKEY_NONCE_BYTES: usize = 16;
 /// is independently prevented by the disjoint Redis key namespaces
 /// `add-passkey-registration-state::{user_id}`,
 /// `passkey-registration-state::{user_id}`, and
-/// `passkey-authentication-state::{user_id}` under which this struct is
-/// stored.
+/// `passkey-authentication-state::{ceremony_id}` under which this struct is
+/// stored, each with a [`PASSKEY_CEREMONY_TTL_SECONDS`] expiry.
 #[derive(Serialize, Deserialize)]
 struct NonceBound<T> {
     nonce: String,
@@ -504,12 +519,13 @@ pub async fn start_add_passkey_registration(
     cache
         .connection_manager
         .clone()
-        .set::<_, _, ()>(
+        .set_ex::<_, _, ()>(
             format!(
                 "{}::{}",
                 ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY, user_id
             ),
             registration_state_to_store,
+            PASSKEY_CEREMONY_TTL_SECONDS,
         )
         .await
         .context("Failed to store add Passkey registration state in Redis")?;
@@ -1138,9 +1154,10 @@ pub async fn start_passkey_registration(
     cache
         .connection_manager
         .clone()
-        .set::<_, _, ()>(
+        .set_ex::<_, _, ()>(
             format!("{}::{}", PASSKEY_REGISTRATION_STATE_SESSION_KEY, user_id),
             registration_state_to_store,
+            PASSKEY_CEREMONY_TTL_SECONDS,
         )
         .await
         .context("Failed to store Passkey registration state in Redis")?;
@@ -1275,8 +1292,16 @@ pub async fn start_passkey_authentication(
         .await?;
 
     let nonce = generate_passkey_nonce();
+    let ceremony = PasskeyAuthenticationCeremony {
+        id: Uuid::new_v4().to_string(),
+        user_id,
+    };
+    let ceremony_state_key = format!(
+        "{}::{}",
+        PASSKEY_AUTHENTICATION_STATE_SESSION_KEY, ceremony.id
+    );
     session
-        .insert(PASSKEY_AUTHENTICATION_STATE_SESSION_KEY, user_id)
+        .insert(PASSKEY_AUTHENTICATION_STATE_SESSION_KEY, &ceremony)
         .context("Failed to insert Passkey authentication state into the session")?;
     let bound = NonceBound {
         nonce: nonce.clone(),
@@ -1290,9 +1315,10 @@ pub async fn start_passkey_authentication(
     cache
         .connection_manager
         .clone()
-        .set::<_, _, ()>(
-            format!("{}::{}", PASSKEY_AUTHENTICATION_STATE_SESSION_KEY, user_id),
+        .set_ex::<_, _, ()>(
+            ceremony_state_key,
             authentication_state_to_store,
+            PASSKEY_CEREMONY_TTL_SECONDS,
         )
         .await
         .context("Failed to store Passkey authentication state in Redis")?;
@@ -1408,20 +1434,28 @@ pub async fn finish_passkey_authentication(
         credential: credentials,
     } = body.into_inner();
 
-    let user_id = session
+    let PasskeyAuthenticationCeremony {
+        id: ceremony_id,
+        user_id,
+    } = session
         .get(PASSKEY_AUTHENTICATION_STATE_SESSION_KEY)
         .context("Failed to extract Passkey authentication state from the session")?
         .ok_or_else(|| anyhow!("Unable to find Passkey authentication state in session"))?;
     session.remove(PASSKEY_AUTHENTICATION_STATE_SESSION_KEY);
-    let str: String = cache
+    let str: Option<String> = cache
         .connection_manager
         .clone()
         .get_del(format!(
             "{}::{}",
-            PASSKEY_AUTHENTICATION_STATE_SESSION_KEY, user_id
+            PASSKEY_AUTHENTICATION_STATE_SESSION_KEY, ceremony_id
         ))
         .await
         .context("Failed to fetch Passkey authentication state in Redis")?;
+    let str = str.ok_or_else(|| {
+        UniversalInboxError::Unauthorized(anyhow!(
+            "Passkey authentication ceremony not found or expired"
+        ))
+    })?;
     let Ok(bound) = serde_json::from_str::<NonceBound<PasskeyAuthentication>>(&str) else {
         return Err(UniversalInboxError::Unexpected(anyhow!(
             "Failed to load Passkey authentication state"
