@@ -114,7 +114,7 @@ impl SlackReaction {
     /// against it to tell a rename from an untouched task, which is why the
     /// formatting lives here rather than in the API crate.
     pub fn render_task_title(&self) -> String {
-        format!("[{}]({})", self.item.render_title(), self.get_html_url())
+        crate::utils::markdown::markdown_link(&self.item.render_title(), &self.get_html_url())
     }
 }
 
