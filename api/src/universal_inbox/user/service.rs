@@ -1178,6 +1178,15 @@ impl UserService {
         &self,
         password: SecretBox<Password>,
     ) -> Result<SecretBox<PasswordHash>, UniversalInboxError> {
+        // Every new password (registration, reset, adding or changing a local
+        // auth method) goes through here: enforce the policy server-side, the
+        // SPA's check is only a convenience.
+        Password::check_policy(&password.expose_secret().0).map_err(|err| {
+            UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: err.to_string(),
+            }
+        })?;
         let Some(AuthenticationSettings::Local(local_auth_settings)) = &self
             .application_settings
             .security
