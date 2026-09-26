@@ -1012,3 +1012,58 @@ mod revoke_provider_grants {
         assert_called_once(&google_guard, "Google").await;
     }
 }
+
+mod oauth_credential_storage {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use serde_json::json;
+    use universal_inbox_api::repository::oauth_credential::OAuthCredentialRepository;
+
+    /// A provider token response must never be persisted with its cleartext
+    /// credentials: they live encrypted in their own columns.
+    #[rstest]
+    #[tokio::test]
+    async fn test_store_oauth_credential_strips_cleartext_tokens(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let integration_connection = create_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+            IntegrationConnectionStatus::Validated,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await;
+
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        let stored = app
+            .app
+            .repository
+            .store_oauth_credential(
+                &mut transaction,
+                integration_connection.id,
+                vec![1, 2, 3],
+                None,
+                None,
+                json!({
+                    "ok": true,
+                    "access_token": "xoxe.xoxp-cleartext",
+                    "refresh_token": "xoxe-1-cleartext",
+                    "authed_user": { "id": "U1", "access_token": "xoxp-cleartext" }
+                }),
+            )
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+
+        assert_eq!(
+            stored.raw_token_response,
+            json!({ "ok": true, "authed_user": { "id": "U1" } })
+        );
+    }
+}

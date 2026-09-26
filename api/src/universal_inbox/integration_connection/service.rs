@@ -1746,8 +1746,11 @@ impl IntegrationConnectionService {
             };
 
             let expires_at = token_response.expires_at();
-            let raw_response =
-                serde_json::to_value(token_response.as_safe_token_response()).unwrap_or_default();
+            // Same sanitization as the OAuth callback: some providers (Slack)
+            // echo the whole token body in `extra`, cleartext tokens included.
+            let raw_response = provider.sanitize_raw_response(
+                &serde_json::to_value(token_response.as_safe_token_response()).unwrap_or_default(),
+            );
 
             match self
                 .repository
