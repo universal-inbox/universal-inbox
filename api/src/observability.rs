@@ -2,11 +2,16 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::{future::Future, time::Duration};
 
-use crate::middlewares::jwt_auth::Authenticated;
+use crate::{
+    configuration::{DEFAULT_TRUSTED_PROXY_HOPS, Settings},
+    middlewares::jwt_auth::Authenticated,
+    utils::rate_limit::{forwarded_for_chain, mask_forwarded_for},
+};
 use actix_http::body::MessageBody;
 use actix_web::{
     HttpMessage,
     dev::{ServiceRequest, ServiceResponse},
+    web,
 };
 use opentelemetry::{KeyValue, trace::TracerProvider as _};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
@@ -237,6 +242,28 @@ impl std::ops::Deref for RedactedRequest<'_> {
     }
 }
 
+/// Record the shape of the `X-Forwarded-For` chain on the root span, so an
+/// operator can pick `application.security.trusted_proxy_hops` from traces:
+/// on a request sent without its own `X-Forwarded-For`, the entry count is the
+/// number of proxies appending to the header. Client addresses are masked
+/// (see [`mask_forwarded_for`]); `http.client_ip` is dropped at export anyway.
+fn record_forwarded_for(span: &Span, request: &ServiceRequest) {
+    span.record(
+        "rate_limit.trusted_proxy_hops",
+        request
+            .app_data::<web::Data<Settings>>()
+            .map(|settings| settings.application.security.trusted_proxy_hops)
+            .unwrap_or(DEFAULT_TRUSTED_PROXY_HOPS),
+    );
+    if let Some(chain) = forwarded_for_chain(request.headers()) {
+        span.record("http.x_forwarded_for.entries", chain.split(',').count());
+        span.record(
+            "http.x_forwarded_for.masked",
+            tracing::field::display(mask_forwarded_for(&chain)),
+        );
+    }
+}
+
 /// This is a custom root span builder that will add the user id to the root
 /// span if the user is connected
 impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
@@ -244,18 +271,33 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
         let authenticated_value = request.extensions().get::<Authenticated<Claims>>().cloned();
         let redacted_request = RedactedRequest::new(request);
         let request = &redacted_request;
-        match authenticated_value
+        let span = match authenticated_value
             .and_then(|v| v.user_id_opt())
             .map(|user_id| user_id.to_string())
         {
             Some(user_id) => {
-                tracing_actix_web::root_span!(level = tracing::Level::INFO, request, user.id = %user_id)
+                tracing_actix_web::root_span!(
+                    level = tracing::Level::INFO,
+                    request,
+                    user.id = %user_id,
+                    http.x_forwarded_for.masked = tracing::field::Empty,
+                    http.x_forwarded_for.entries = tracing::field::Empty,
+                    rate_limit.trusted_proxy_hops = tracing::field::Empty,
+                )
             }
             // No user authenticated
             _ => {
-                tracing_actix_web::root_span!(level = tracing::Level::INFO, request)
+                tracing_actix_web::root_span!(
+                    level = tracing::Level::INFO,
+                    request,
+                    http.x_forwarded_for.masked = tracing::field::Empty,
+                    http.x_forwarded_for.entries = tracing::field::Empty,
+                    rate_limit.trusted_proxy_hops = tracing::field::Empty,
+                )
             }
-        }
+        };
+        record_forwarded_for(&span, request);
+        span
     }
 
     fn on_request_end<B: MessageBody>(
