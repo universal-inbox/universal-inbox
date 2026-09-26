@@ -572,6 +572,72 @@ mod email_verification {
 
         assert!(user.email_validated_at.is_some());
         assert!(user.email_validation_sent_at.is_some());
+        // The token is consumed: the link cannot be replayed.
+        assert_eq!(get_user_email_validation_token(&app, user.id).await, None);
+        let response = anonymous_client
+            .get(format!(
+                "{}users/{}/email-verification/{email_validation_token}",
+                app.api_address, user.id
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_verify_email_with_an_expired_token(
+        settings: Settings,
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        let (client, user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+        let email_validation_token = get_user_email_validation_token(&app, user.id)
+            .await
+            .unwrap();
+
+        // The verification email was sent just over the validity window ago.
+        let validity_in_hours = settings
+            .application
+            .security
+            .email_verification_token_validity_in_hours;
+        sqlx::query(
+            r#"
+                UPDATE "user"
+                SET email_validation_sent_at = NOW() - make_interval(hours => $2, mins => 1)
+                WHERE id = $1
+            "#,
+        )
+        .bind(user.id.0)
+        .bind(validity_in_hours as i32)
+        .execute(&*app.repository.pool)
+        .await
+        .unwrap();
+
+        let response = reqwest::Client::new()
+            .get(format!(
+                "{}users/{}/email-verification/{email_validation_token}",
+                app.api_address, user.id
+            ))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+        let body = response.text().await.unwrap();
+        assert!(
+            body.contains("expired"),
+            "the error should tell the user to request a new email, got: {body}"
+        );
+        let user = get_current_user(&client, &app).await;
+        assert!(user.email_validated_at.is_none());
     }
 
     #[rstest]
