@@ -190,7 +190,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string(), username = username.to_string()),
+        fields(user.id = user_id.to_string()),
         err
     )]
     pub async fn start_add_passkey_auth_method(
@@ -227,7 +227,7 @@ impl UserService {
         let (creation_challenge_response, passkey_registration) = self
             .webauthn
             .start_passkey_registration(user_id.0, username.0.as_str(), username.0.as_str(), None)
-            .with_context(|| format!("Failed to start Passkey registration for {username}"))?;
+            .with_context(|| format!("Failed to start Passkey registration for user {user_id}"))?;
 
         Ok((creation_challenge_response, passkey_registration))
     }
@@ -235,7 +235,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string(), username = username.to_string()),
+        fields(user.id = user_id.to_string()),
         err
     )]
     pub async fn finish_add_passkey_auth_method(
@@ -249,7 +249,7 @@ impl UserService {
         let passkey = self
             .webauthn
             .finish_passkey_registration(&register_credentials, &passkey_registration)
-            .with_context(|| format!("Failed to finish Passkey registration for {username}"))?;
+            .context("Failed to finish Passkey registration")?;
 
         let user_auth = UserAuth::Passkey(Box::new(PasskeyUserAuth {
             username: username.clone(),
@@ -1252,7 +1252,7 @@ impl UserService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(email_address), err)]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     pub async fn send_password_reset_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1267,7 +1267,7 @@ impl UserService {
         if let Some(user) = user
             && user.is_testing
         {
-            debug!("Skipping password reset email for test account {email_address}");
+            debug!("Skipping password reset email for test account {}", user.id);
             return Ok(());
         }
 
@@ -1308,12 +1308,11 @@ impl UserService {
                 updated: false,
                 result: None,
             } => {
-                warn!("No user found for email address {email_address}");
+                // No personal data in telemetry: the address is not logged.
+                warn!("No user found for the password reset email address");
             }
             _ => {
-                error!(
-                    "User not updated while resetting password for email address {email_address}, should not happen"
-                );
+                error!("User not updated while resetting password, should not happen");
             }
         }
 
@@ -1324,7 +1323,7 @@ impl UserService {
     /// too many failed login attempts. Best-effort and silent for unknown /
     /// test accounts: the login handler must return an identical generic
     /// response regardless, so this never reveals account existence.
-    #[tracing::instrument(level = "debug", skip_all, fields(email_address = %email), err)]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     pub async fn send_account_lockout_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1337,7 +1336,10 @@ impl UserService {
             return Ok(());
         };
         if user.is_testing {
-            debug!("Skipping account lockout email for test account {email}");
+            debug!(
+                "Skipping account lockout email for test account {}",
+                user.id
+            );
             return Ok(());
         }
 
@@ -1358,7 +1360,7 @@ impl UserService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(email_address = %email), err)]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     pub async fn send_registration_attempt_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1371,7 +1373,10 @@ impl UserService {
             return Ok(());
         };
         if user.is_testing {
-            debug!("Skipping registration attempt email for test account {email}");
+            debug!(
+                "Skipping registration attempt email for test account {}",
+                user.id
+            );
             return Ok(());
         }
 
@@ -1464,12 +1469,7 @@ impl UserService {
         }
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(username = username.to_string()),
-        err
-    )]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     pub async fn start_passkey_registration(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1524,7 +1524,7 @@ impl UserService {
         let passkey = self
             .webauthn
             .finish_passkey_registration(&register_credentials, &passkey_registration)
-            .with_context(|| format!("Failed to finish Passkey registration for {username}"))?;
+            .context("Failed to finish Passkey registration")?;
 
         let user = User::new_with_passkey(user_id);
         let user_auth = UserAuth::Passkey(Box::new(PasskeyUserAuth {
@@ -1540,12 +1540,7 @@ impl UserService {
         Ok(new_user)
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(username = username.to_string()),
-        err
-    )]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     pub async fn start_passkey_authentication(
         &self,
         executor: &mut Transaction<'_, Postgres>,

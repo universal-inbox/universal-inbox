@@ -913,7 +913,6 @@ impl UserRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            email_address = email_address.as_str(),
             password_reset_sent_at = password_reset_sent_at.map(|d| d.to_rfc3339()),
         ),
         err
@@ -973,10 +972,12 @@ impl UserRepository for Repository {
             .fetch_optional(&mut **executor)
             .await
             .map_err(|err| {
-                let message = format!(
-                    "Failed to update password reset parameters for user with email {email_address} from storage: {err}"
-                );
-                UniversalInboxError::DatabaseError { source: err, message }
+                let message =
+                    format!("Failed to update password reset parameters from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
             })?;
 
         if let Some(updated_user_row) = record {
@@ -1112,12 +1113,7 @@ impl UserRepository for Repository {
         Ok(row.and_then(|row| row.map(|token| token.into())))
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(user.email = user_email.to_string()),
-        err
-    )]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     async fn get_user_auth_by_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1146,9 +1142,7 @@ impl UserRepository for Repository {
         .fetch_optional(&mut **executor)
         .await
         .map_err(|err| {
-            let message = format!(
-                "Failed to fetch local user auth for user with email {user_email} from storage: {err}"
-            );
+            let message = format!("Failed to fetch local user auth by email from storage: {err}");
             UniversalInboxError::DatabaseError {
                 source: err,
                 message,
@@ -1259,12 +1253,7 @@ impl UserRepository for Repository {
         rows.into_iter().map(|row| row.try_into()).collect()
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(username = username.to_string()),
-        err
-    )]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     async fn get_user_auth_by_username(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1292,7 +1281,7 @@ impl UserRepository for Repository {
         .await
         .map_err(|err| {
             let message =
-                format!("Failed to fetch user auth for username {username} from storage: {err}");
+                format!("Failed to fetch user auth by passkey username from storage: {err}");
             UniversalInboxError::DatabaseError {
                 source: err,
                 message,
