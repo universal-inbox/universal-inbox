@@ -106,10 +106,13 @@ impl GoogleCalendarService {
         ical_uid: &str,
         access_token: &AccessToken,
     ) -> Result<GoogleCalendarEvent, UniversalInboxError> {
-        let url = format!(
-            "{}/calendars/{}/events?iCalUID={}&maxResults=1",
-            self.google_calendar_base_url, calendar_id, ical_uid
-        );
+        // `ical_uid` comes from an emailed .ics attachment: encode it so `&`
+        // or `#` cannot add parameters or drop the filters.
+        let url = build_endpoint(
+            &self.google_calendar_base_url,
+            &["calendars", calendar_id, "events"],
+            &[("iCalUID", ical_uid), ("maxResults", "1")],
+        )?;
 
         let events_list: GoogleCalendarEventsList = self
             .build_google_calendar_client(access_token)?
@@ -132,10 +135,11 @@ impl GoogleCalendarService {
         event_id: &str,
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
-        let url = format!(
-            "{}/calendars/{}/events/{}",
-            self.google_calendar_base_url, calendar_id, event_id
-        );
+        let url = build_endpoint(
+            &self.google_calendar_base_url,
+            &["calendars", calendar_id, "events", event_id],
+            &[],
+        )?;
         self.build_google_calendar_client(access_token)?
             .delete_no_response(&url)
             .await
@@ -187,10 +191,11 @@ impl GoogleCalendarService {
             }
         };
 
-        let url = format!(
-            "{}/calendars/primary/events/{}",
-            self.google_calendar_base_url, event.id
-        );
+        let url = build_endpoint(
+            &self.google_calendar_base_url,
+            &["calendars", "primary", "events", &event.id.to_string()],
+            &[],
+        )?;
 
         // Find the self attendee to update
         let self_attendee = event.get_self_attendee().ok_or_else(|| {
@@ -461,5 +466,51 @@ mod tests {
                 NotificationStatus::Unread
             );
         }
+    }
+}
+
+/// URL of a Google Calendar API endpoint below `base_url`, with every path
+/// segment percent-encoded and the query built by the `url` crate, so ids
+/// taken from third-party content cannot retarget the request.
+fn build_endpoint(
+    base_url: &str,
+    segments: &[&str],
+    query: &[(&str, &str)],
+) -> Result<String, UniversalInboxError> {
+    let mut url = Url::parse(base_url).context("Cannot parse Google Calendar base URL")?;
+    url.path_segments_mut()
+        .map_err(|_| anyhow!("Google Calendar base URL cannot be a base"))?
+        .pop_if_empty()
+        .extend(segments);
+    if !query.is_empty() {
+        url.query_pairs_mut().extend_pairs(query);
+    }
+    Ok(url.to_string())
+}
+
+#[cfg(test)]
+mod endpoint_tests {
+    use super::*;
+
+    #[test]
+    fn test_build_endpoint_encodes_ical_uid() {
+        assert_eq!(
+            build_endpoint(
+                "https://www.googleapis.com/calendar/v3",
+                &["calendars", "primary", "events"],
+                &[("iCalUID", "uid-1@example.com"), ("maxResults", "1")],
+            )
+            .unwrap(),
+            "https://www.googleapis.com/calendar/v3/calendars/primary/events?iCalUID=uid-1%40example.com&maxResults=1"
+        );
+        assert_eq!(
+            build_endpoint(
+                "https://www.googleapis.com/calendar/v3",
+                &["calendars", "primary", "events"],
+                &[("iCalUID", "x&showDeleted=true#frag"), ("maxResults", "1")],
+            )
+            .unwrap(),
+            "https://www.googleapis.com/calendar/v3/calendars/primary/events?iCalUID=x%26showDeleted%3Dtrue%23frag&maxResults=1"
+        );
     }
 }
