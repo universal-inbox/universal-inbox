@@ -51,6 +51,10 @@ use crate::{
     utils::login_throttle::LoginThrottle,
 };
 
+/// How long a password reset link stays valid after its email was sent. An
+/// expired link is rejected like an unknown one.
+const PASSWORD_RESET_VALIDITY_MINUTES: i64 = 60;
+
 /// How long the verification link of a pending email change stays valid.
 const EMAIL_CHANGE_VALIDITY_HOURS: i64 = 24;
 
@@ -1539,7 +1543,10 @@ impl UserService {
                 executor,
                 user_id,
                 new_password_hash,
-                Some(password_reset_token.clone()),
+                Some((
+                    password_reset_token.clone(),
+                    Utc::now() - TimeDelta::minutes(PASSWORD_RESET_VALIDITY_MINUTES),
+                )),
             )
             .await?;
 

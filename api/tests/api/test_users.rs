@@ -870,6 +870,61 @@ mod password_reset {
 
     #[rstest]
     #[tokio::test]
+    async fn test_reset_password_expired_token(#[future] tested_app_with_local_auth: TestedApp) {
+        let app = tested_app_with_local_auth.await;
+        let email: EmailAddress = "john@doe.name".parse().unwrap();
+
+        let (_, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
+
+        let anonymous_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let response = anonymous_client
+            .post(format!("{}users/password-reset", app.api_address))
+            .json(&email)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), http::StatusCode::OK);
+        let password_reset_token = get_password_reset_token(&app, user.id).await.unwrap();
+
+        // The reset email was sent two hours ago: the link has expired.
+        let mut transaction = app.repository.begin().await.unwrap();
+        sqlx::query(
+            "UPDATE user_auth SET password_reset_sent_at = password_reset_sent_at - interval '2 hours' WHERE user_id = $1",
+        )
+        .bind(user.id.0)
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+        transaction.commit().await.unwrap();
+
+        let response = anonymous_client
+            .post(format!(
+                "{}users/{}/password-reset/{password_reset_token}",
+                app.api_address, user.id
+            ))
+            .json(&Password::from_str("New-very-harD-pasSword-5").unwrap())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+
+        // The old password still works, the new one does not
+        let response = login_user_response(
+            &anonymous_client,
+            &app,
+            email.clone(),
+            "New-very-harD-pasSword-5",
+        )
+        .await;
+        assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[rstest]
+    #[tokio::test]
     async fn test_reset_password_invalid_token(#[future] tested_app_with_local_auth: TestedApp) {
         let app = tested_app_with_local_auth.await;
         let email: EmailAddress = "john@doe.name".parse().unwrap();
