@@ -163,11 +163,16 @@ pub async fn generate_jwt_token(
         "Failed to commit transaction while generating new authentication token for {user_email}"
     ))?;
 
+    // The token is a live bearer credential: never send it through
+    // `tracing`, whose subscribers ship log lines to stdout logging and the
+    // OTLP exporter. Print it once, on stdout only, for the operator to copy.
+    // Only its id goes to the logs; revoke it with
+    // `DELETE /api/users/me/authentication-tokens/{id}` if it leaks.
     info!(
-        "New JWT token for user {}: {}",
-        user.id,
-        auth_token.jwt_token.expose_secret().0
+        "New API token {} generated for user {} (expires {:?})",
+        auth_token.id, user.id, auth_token.expire_at
     );
+    println!("{}", auth_token.jwt_token.expose_secret().0);
 
     Ok(())
 }

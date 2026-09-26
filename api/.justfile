@@ -78,7 +78,7 @@ generate-jwt-key-pair:
     cargo run -- generate-jwt-key-pair
 
 generate-jwt-token user-email:
-    cargo run -- generate-jwt-token {{user-email}}
+    cargo run -- user generate-jwt-token {{user-email}}
 
 reset-password user-email:
     cargo run -- user reset-password {{user-email}}
