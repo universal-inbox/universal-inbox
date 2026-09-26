@@ -106,6 +106,15 @@ pub trait UserRepository {
         user_id: UserId,
     ) -> Result<Option<EmailValidationToken>, UniversalInboxError>;
 
+    /// Mark the user's email as validated now and consume the validation
+    /// token, so a verification link can only be used once.
+    async fn mark_email_as_validated(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        validated_at: DateTime<Utc>,
+    ) -> Result<bool, UniversalInboxError>;
+
     async fn update_password_reset_parameters(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -837,6 +846,40 @@ impl UserRepository for Repository {
                 result: None,
             })
         }
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    async fn mark_email_as_validated(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        validated_at: DateTime<Utc>,
+    ) -> Result<bool, UniversalInboxError> {
+        let res = sqlx::query(
+            r#"
+                UPDATE "user"
+                SET email_validated_at = $2, email_validation_token = NULL
+                WHERE id = $1
+            "#,
+        )
+        .bind(user_id.0)
+        .bind(validated_at.naive_utc())
+        .execute(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!("Failed to mark email as validated for user ID {user_id}: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        Ok(res.rows_affected() == 1)
     }
 
     #[tracing::instrument(

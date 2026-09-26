@@ -2,7 +2,7 @@ use std::{str::FromStr, sync::Arc};
 
 use anyhow::{Context, anyhow};
 use argon2::{Argon2, Params, PasswordHasher, PasswordVerifier, password_hash::SaltString};
-use chrono::Utc;
+use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
 use openidconnect::{
     AccessToken, AuthorizationCode, CsrfToken, EmptyAdditionalClaims, EndSessionUrl, IdToken,
@@ -1218,14 +1218,30 @@ impl UserService {
 
         match stored_email_validation_token {
             Some(token) if token == email_validation_token => {
+                let email_validation_sent_at = self
+                    .repository
+                    .get_user(executor, user_id)
+                    .await?
+                    .and_then(|user| user.email_validation_sent_at);
+                let validity = TimeDelta::hours(i64::from(
+                    self.application_settings
+                        .security
+                        .email_verification_token_validity_in_hours,
+                ));
+                let now = Utc::now();
+                // A token without a send date predates this check: treat it as
+                // expired rather than valid forever.
+                let is_expired =
+                    email_validation_sent_at.is_none_or(|sent_at| sent_at + validity < now);
+                if is_expired {
+                    return Err(UniversalInboxError::InvalidInputData {
+                        source: None,
+                        user_error: "This email verification link has expired, please request a new verification email".to_string(),
+                    });
+                }
+
                 self.repository
-                    .update_email_validation_parameters(
-                        executor,
-                        user_id,
-                        Some(Utc::now()),
-                        None,
-                        None,
-                    )
+                    .mark_email_as_validated(executor, user_id, now)
                     .await?;
                 Ok(())
             }

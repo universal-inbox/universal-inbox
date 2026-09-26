@@ -245,6 +245,14 @@ pub struct SecuritySettings {
     /// access will be rejected with the corresponding message.
     #[serde(default)]
     pub email_domain_blacklist: HashMap<String, String>,
+    /// How long an email-verification link stays valid after it was sent.
+    /// Older links are rejected and the user must request a new email.
+    #[serde(default = "default_email_verification_token_validity_in_hours")]
+    pub email_verification_token_validity_in_hours: u32,
+}
+
+fn default_email_verification_token_validity_in_hours() -> u32 {
+    24
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -929,6 +937,7 @@ mod tests {
             mcp_extra_allowed_origins: vec![],
             authentication: vec![local_auth_settings],
             email_domain_blacklist: HashMap::new(),
+            email_verification_token_validity_in_hours: 24,
         };
 
         let result = security_settings.get_authentication_settings(UserAuthKind::Local);
@@ -963,6 +972,7 @@ mod tests {
             mcp_extra_allowed_origins: vec![],
             authentication: vec![oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
+            email_verification_token_validity_in_hours: 24,
         };
 
         let result =
@@ -989,6 +999,7 @@ mod tests {
             mcp_extra_allowed_origins: vec![],
             authentication: vec![oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
+            email_verification_token_validity_in_hours: 24,
         };
 
         let result = security_settings
@@ -1035,6 +1046,7 @@ mod tests {
             mcp_extra_allowed_origins: vec![],
             authentication: vec![local_auth_settings, oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
+            email_verification_token_validity_in_hours: 24,
         };
 
         let result = security_settings.get_authentication_settings(UserAuthKind::Local);
