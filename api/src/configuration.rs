@@ -254,10 +254,24 @@ pub struct SecuritySettings {
     /// Older links are rejected and the user must request a new email.
     #[serde(default = "default_email_verification_token_validity_in_hours")]
     pub email_verification_token_validity_in_hours: u32,
+    /// Number of reverse proxies in front of the API that append the client
+    /// address to `X-Forwarded-For`. Rate limits are keyed on the client IP
+    /// taken that many entries from the right of that header (entries further
+    /// left are client-supplied and ignored); `0` ignores forwarding headers
+    /// and keys on the TCP peer address. The `Forwarded` header is never
+    /// trusted.
+    #[serde(default = "default_trusted_proxy_hops")]
+    pub trusted_proxy_hops: usize,
 }
 
 fn default_email_verification_token_validity_in_hours() -> u32 {
     24
+}
+
+pub const DEFAULT_TRUSTED_PROXY_HOPS: usize = 1;
+
+fn default_trusted_proxy_hops() -> usize {
+    DEFAULT_TRUSTED_PROXY_HOPS
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -948,6 +962,7 @@ mod tests {
             authentication: vec![local_auth_settings],
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,
+            trusted_proxy_hops: DEFAULT_TRUSTED_PROXY_HOPS,
         };
 
         let result = security_settings.get_authentication_settings(UserAuthKind::Local);
@@ -984,6 +999,7 @@ mod tests {
             authentication: vec![oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,
+            trusted_proxy_hops: DEFAULT_TRUSTED_PROXY_HOPS,
         };
 
         let result =
@@ -1012,6 +1028,7 @@ mod tests {
             authentication: vec![oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,
+            trusted_proxy_hops: DEFAULT_TRUSTED_PROXY_HOPS,
         };
 
         let result = security_settings
@@ -1060,6 +1077,7 @@ mod tests {
             authentication: vec![local_auth_settings, oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,
+            trusted_proxy_hops: DEFAULT_TRUSTED_PROXY_HOPS,
         };
 
         let result = security_settings.get_authentication_settings(UserAuthKind::Local);

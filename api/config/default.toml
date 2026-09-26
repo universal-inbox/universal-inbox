@@ -49,6 +49,18 @@ reply_to_header = "support <support@example.com>"
 
 [application.security]
 csp_extra_connect_src = []
+# Reverse proxies in front of the API that append the client address to
+# X-Forwarded-For (one TLS-terminating proxy or ingress is the common case).
+# Per-IP rate limits use the client IP found that many entries from the right
+# of X-Forwarded-For; entries further left are client-supplied and ignored.
+# Set to 0 when the API is exposed directly: forwarding headers are then
+# ignored and the TCP peer address is used. `Forwarded` is never trusted.
+# Not sure how many proxies there are? Send a request without an
+# X-Forwarded-For header and look at its HTTP root span: the value to set is
+# `http.x_forwarded_for.entries`, and `http.x_forwarded_for.masked` lists the
+# chain with public (client) addresses masked. A chain shorter than this
+# setting is refused and logged as a warning.
+trusted_proxy_hops = 1
 # Origins trusted as MCP clients. This single allow-list is checked in three
 # places:
 #   1. path-restricted CORS for `/api/mcp`, `/api/oauth2`, `/.well-known/oauth-*`
