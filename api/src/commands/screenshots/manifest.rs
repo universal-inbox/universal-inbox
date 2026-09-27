@@ -88,7 +88,7 @@ const WIDE: Viewport = Viewport {
 // - Notification rows: `.ui-nrow`. Each row contains a provider icon span
 //   whose class includes the iconify identifier (e.g. `logos--github-icon`).
 //   Combined with `:has([class*='...'])` this lets us pick a row by source.
-// - Preview pane: `.detail-panel` (only present when a notification is
+// - Preview pane: `#detail-panel` (only present when a notification is
 //   selected — clicking a row makes it appear).
 // - Action buttons (delete/snooze/unsubscribe/…): plain `<button>` with an
 //   `aria-label` set from the action title.
