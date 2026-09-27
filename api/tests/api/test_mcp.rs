@@ -22,7 +22,9 @@ use universal_inbox::{
     third_party::integrations::todoist::TodoistItem,
 };
 use universal_inbox_api::{
-    configuration::Settings, integrations::todoist::TodoistSyncResponse, mcp::RedisSessionStore,
+    configuration::Settings,
+    integrations::todoist::TodoistSyncResponse,
+    mcp::{McpSessionOwnerStore, RedisSessionStore},
 };
 
 use crate::helpers::integration_connection::OAuthCredentialFixture;
@@ -706,6 +708,11 @@ mod protocol {
             )
             .await
             .expect("Failed to seed session store");
+        // The pod that handled `initialize` also recorded the session owner
+        McpSessionOwnerStore::new(app.app.cache.connection_manager.clone(), 60)
+            .record_owner(&session_id, app.user.id)
+            .await
+            .expect("Failed to seed session owner");
 
         let response = mcp_call(
             &client,
