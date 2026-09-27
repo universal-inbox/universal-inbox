@@ -50,21 +50,22 @@ const RECORDING_VIEWPORT: Viewport = Viewport {
 
 // ---------- Selectors (kept close to the scenario for easy editing) ----------
 
-const GITHUB_CARD: &str = ".integration-card:has(:text-is(\"Github\"))";
+// Integration cards anchor on the stable `#integration-card-{Kind}` id (the suffix is the
+// `IntegrationProviderKind` variant name), same as the doc-screenshot manifest.
+const GITHUB_CARD: &str = "#integration-card-Github";
 const GITHUB_CARD_HEADER: &str = "[aria-label=\"Toggle Github settings\"]";
 const ANY_NOTIFICATION_ROW: &str = "#notifications-list .ui-nrow";
 const SLACK_THREAD_ROW: &str = "#notifications-list .ui-nrow[data-provider='slack']";
 const GITHUB_PR_ROW: &str =
     "#notifications-list .ui-nrow[data-provider='github'][data-kind='pull_request']";
 const GCAL_EVENT_ROW: &str = "#notifications-list .ui-nrow[data-provider='google_calendar']";
-const DISCONNECTED_INTEGRATION_CARD: &str = ".integration-card.disconnected-card";
-const DETAIL_PANEL: &str = ".detail-panel";
+// Scoped to the provider cards: the AI Agents (MCP) card also carries `disconnected-card`
+// and stays disconnected for the recording user, so an unscoped selector never goes away.
+const DISCONNECTED_INTEGRATION_CARD: &str = "[id^='integration-card-'].disconnected-card";
+const DETAIL_PANEL: &str = "#detail-panel";
 const TASK_PLANNING_MODAL: &str = "#task-planning-modal";
 const TASK_PLANNING_MODAL_CANCEL: &str = "#task-planning-modal button:has-text(\"Cancel\")";
-// ui-redesign removed the legacy `.settings-container` class; we now wait for any
-// integration card to be visible (an unambiguous signal that the settings page has
-// rendered) since `.integration-card` is emitted by the Card UI component.
-const SETTINGS_CONTAINER: &str = ".integration-card";
+const SETTINGS_PAGE: &str = "#settings-page";
 const TASKS_PAGE: &str = "#tasks-page";
 const DELETE_ALL_BUTTON: &str = "button[aria-label='Delete all notifications']";
 const DELETE_ALL_MODAL: &str = "#delete-all-confirmation-modal";
@@ -132,7 +133,7 @@ const SCENARIO: &[ScenarioBeat] = &[
         name: "2 - connect github (no real oauth)",
         actions: &[
             BeatAction::Goto("/settings"),
-            BeatAction::WaitFor(SETTINGS_CONTAINER),
+            BeatAction::WaitFor(SETTINGS_PAGE),
             BeatAction::WaitFor(GITHUB_CARD),
             BeatAction::Hover(GITHUB_CARD),
             BeatAction::Sleep(1_500),
@@ -150,7 +151,7 @@ const SCENARIO: &[ScenarioBeat] = &[
             // of the camera; after a Reload it will reflect every card as Connected.
             BeatAction::GenerateNotifications,
             BeatAction::Reload,
-            BeatAction::WaitFor(SETTINGS_CONTAINER),
+            BeatAction::WaitFor(SETTINGS_PAGE),
             BeatAction::WaitForGone(DISCONNECTED_INTEGRATION_CARD),
             BeatAction::Sleep(8_000),
         ],
