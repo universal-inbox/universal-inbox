@@ -90,6 +90,10 @@ pub async fn browser_tested_app(
             login_attempt_window_seconds: 900,
             login_lockout_base_seconds: 60,
             login_lockout_max_seconds: 900,
+            max_login_requests_per_account: 10_000,
+            login_request_window_seconds: 60,
+            max_account_emails_per_address: 10_000,
+            account_email_window_seconds: 3600,
         })];
     settings.application.security.email_domain_blacklist = HashMap::new();
 
@@ -167,6 +171,10 @@ pub async fn browser_tested_app_with_billing(
             login_attempt_window_seconds: 900,
             login_lockout_base_seconds: 60,
             login_lockout_max_seconds: 900,
+            max_login_requests_per_account: 10_000,
+            login_request_window_seconds: 60,
+            max_account_emails_per_address: 10_000,
+            account_email_window_seconds: 3600,
         })];
     settings.application.security.email_domain_blacklist = HashMap::new();
 
