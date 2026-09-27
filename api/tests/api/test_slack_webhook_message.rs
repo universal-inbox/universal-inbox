@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 use anyhow::Context;
-use apalis::prelude::*;
+use redis_apalis::AsyncCommands;
 use rstest::*;
 use slack_morphism::prelude::*;
 
@@ -228,29 +228,27 @@ mod webhook {
     }
 
     async fn assert_message_ignored(app: &mut TestedApp) {
-        assert!(
-            app.redis_storage
-                .is_empty()
-                .await
-                .expect("Failed to get jobs count")
-        );
+        assert_eq!(pushed_jobs_count(app).await, 0);
     }
 
     async fn assert_message_processed(app: &mut TestedApp) {
-        // The job is pushed to Redis during the webhook handler, but there can
-        // be a small delay before it becomes visible to `is_empty()` in CI.
-        for _ in 0..10 {
-            if !app
-                .redis_storage
-                .is_empty()
-                .await
-                .expect("Failed to get jobs count")
-            {
-                return;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-        panic!("Expected a job to be enqueued in Redis, but storage is empty after retries");
+        assert_eq!(pushed_jobs_count(app).await, 1);
+    }
+
+    /// Counts the jobs pushed to the test's queue, whatever their state.
+    ///
+    /// The webhook pushes its job before answering, but `is_empty()` only reads
+    /// the active jobs list, and the test app's worker moves the job out of it
+    /// within one poll interval: a test descheduled for that long saw an empty
+    /// queue. The job data hash keeps every job until it is vacuumed, and the
+    /// vacuum is disabled in tests.
+    async fn pushed_jobs_count(app: &TestedApp) -> usize {
+        app.redis_storage
+            .get_connection()
+            .clone()
+            .hlen(app.redis_storage.get_config().job_data_hash())
+            .await
+            .expect("Failed to get jobs count")
     }
 }
 
