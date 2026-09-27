@@ -334,6 +334,100 @@ async fn test_sync_notifications_should_handle_pull_request_without_commits(
     assert!(integration_connection.failure_message.is_none());
 }
 
+/// Stored third party data can stop matching the current types (eg. after a serde or
+/// dependency upgrade). Syncing the same item again must overwrite the broken data with the
+/// fresh upstream one instead of failing the sync.
+#[rstest]
+#[tokio::test]
+async fn test_sync_notifications_should_heal_undecodable_existing_third_party_item(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
+    sync_github_notifications: Vec<GithubNotification>,
+    github_pull_request_123_response: Response<pull_request_query::ResponseData>,
+    github_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+
+    let github_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings,
+        github_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    let existing_notification = create_notification_from_github_notification(
+        &app.app,
+        &sync_github_notifications[1],
+        app.user.id,
+        github_integration_connection.id,
+    )
+    .await;
+    sqlx::query(
+        r#"UPDATE third_party_item SET data = '{"type": "GithubNotification", "content": {"unexpected": true}}'::jsonb WHERE id = $1"#,
+    )
+    .bind(existing_notification.source_item.id.0)
+    .execute(&*app.app.repository.pool)
+    .await
+    .expect("Failed to corrupt the third party item data");
+
+    let _github_notifications_mock = mock_github_notifications_service(
+        &app.app.github_mock_server,
+        "1",
+        &sync_github_notifications,
+    )
+    .await;
+    let empty_result = Vec::<GithubNotification>::new();
+    let _github_notifications_mock2 =
+        mock_github_notifications_service(&app.app.github_mock_server, "2", &empty_result).await;
+
+    let _github_pull_request_123_query_mock = mock_github_pull_request_query(
+        &app.app.github_mock_server,
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
+        &github_pull_request_123_response,
+    )
+    .await;
+
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::Github),
+        false,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), sync_github_notifications.len());
+
+    let healed_notification: Box<NotificationWithTask> = get_resource(
+        &app.client,
+        &app.app.api_address,
+        "notifications",
+        existing_notification.id.into(),
+    )
+    .await;
+    // The broken row is updated in place, not duplicated
+    assert_eq!(
+        healed_notification.source_item.id,
+        existing_notification.source_item.id
+    );
+    assert_eq!(
+        healed_notification.source_item.data,
+        ThirdPartyItemData::GithubNotification(Box::new(sync_github_notifications[1].clone()))
+    );
+    // Downstream notification update happened as for a regular update
+    assert_eq!(healed_notification.status, NotificationStatus::Read);
+    assert_eq!(
+        healed_notification.last_read_at,
+        Some(Utc.with_ymd_and_hms(2014, 11, 7, 23, 2, 45).unwrap())
+    );
+}
+
 #[rstest]
 #[tokio::test]
 async fn test_sync_notifications_should_mark_deleted_notification_without_subscription(
