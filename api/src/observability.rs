@@ -180,12 +180,34 @@ const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
     "password",
 ];
 
-/// `path_and_query` with the value of every [`SENSITIVE_QUERY_PARAMETERS`]
-/// entry replaced by `REDACTED` (parameter names and other values are kept
-/// for debugging).
+/// Path segments that, in `/users/{user_id}/<segment>/<token>`, are followed
+/// by a one-time secret (email-verification and password-reset tokens). The
+/// shape is matched wherever it sits in the path, so both the API routes
+/// (under the configurable API prefix) and the matching web app pages served
+/// by the API are covered.
+const ONE_TIME_TOKEN_PATH_SEGMENTS: &[&str] = &["email-verification", "password-reset"];
+
+/// `path` with every one-time token segment (see
+/// [`ONE_TIME_TOKEN_PATH_SEGMENTS`]) replaced by `REDACTED`.
+fn redact_path(path: &str) -> String {
+    let mut segments: Vec<&str> = path.split('/').collect();
+    for index in 2..segments.len().saturating_sub(1) {
+        if segments[index - 2] == "users"
+            && ONE_TIME_TOKEN_PATH_SEGMENTS.contains(&segments[index])
+            && !segments[index + 1].is_empty()
+        {
+            segments[index + 1] = "REDACTED";
+        }
+    }
+    segments.join("/")
+}
+
+/// `path_and_query` with one-time token path segments (see [`redact_path`])
+/// and the value of every [`SENSITIVE_QUERY_PARAMETERS`] entry replaced by
+/// `REDACTED` (parameter names and other values are kept for debugging).
 pub fn redact_path_and_query(path_and_query: &str) -> String {
     let Some((path, query)) = path_and_query.split_once('?') else {
-        return path_and_query.to_string();
+        return redact_path(path_and_query);
     };
     let redacted_query = query
         .split('&')
@@ -201,7 +223,7 @@ pub fn redact_path_and_query(path_and_query: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("&");
-    format!("{path}?{redacted_query}")
+    format!("{}?{redacted_query}", redact_path(path))
 }
 
 /// A [`ServiceRequest`] view whose `uri()` has its credentials redacted.
@@ -209,9 +231,10 @@ pub fn redact_path_and_query(path_and_query: &str) -> String {
 /// `tracing_actix_web::root_span!` records `http.target` from
 /// `request.uri().path_and_query()`, i.e. with the raw query string, which for
 /// `/api/oauth/callback` and `/api/auth/session/authenticated` carries OAuth
-/// authorization codes. Handing the macro this wrapper (every other method
-/// derefs to the real request) keeps the default span fields while recording
-/// a redacted target.
+/// authorization codes, and the raw path, which for email-verification and
+/// password-reset links carries one-time tokens. Handing the macro this
+/// wrapper (every other method derefs to the real request) keeps the default
+/// span fields while recording a redacted target.
 struct RedactedRequest<'a> {
     request: &'a ServiceRequest,
     uri: actix_web::http::Uri,
@@ -485,6 +508,35 @@ mod redaction_tests {
     #[case::mixed(
         "/api/auth/session/authenticated?foo=bar&CODE=x&token=y",
         "/api/auth/session/authenticated?foo=bar&CODE=REDACTED&token=REDACTED"
+    )]
+    #[case::email_verification_token(
+        "/api/users/0192f3a1-user/email-verification/secret-token",
+        "/api/users/0192f3a1-user/email-verification/REDACTED"
+    )]
+    #[case::password_reset_token(
+        "/api/users/0192f3a1-user/password-reset/secret-token",
+        "/api/users/0192f3a1-user/password-reset/REDACTED"
+    )]
+    #[case::web_page_token(
+        "/users/0192f3a1-user/email-verification/secret-token",
+        "/users/0192f3a1-user/email-verification/REDACTED"
+    )]
+    #[case::token_and_query(
+        "/api/users/0192f3a1-user/password-reset/secret-token?code=x&foo=bar",
+        "/api/users/0192f3a1-user/password-reset/REDACTED?code=REDACTED&foo=bar"
+    )]
+    #[case::send_verification_email(
+        "/api/users/me/email-verification",
+        "/api/users/me/email-verification"
+    )]
+    #[case::send_password_reset_email("/api/users/password-reset", "/api/users/password-reset")]
+    #[case::trailing_slash(
+        "/api/users/0192f3a1-user/password-reset/",
+        "/api/users/0192f3a1-user/password-reset/"
+    )]
+    #[case::other_user_route(
+        "/api/users/me/authentication-tokens/0192f3a1-token-id",
+        "/api/users/me/authentication-tokens/0192f3a1-token-id"
     )]
     fn test_redact_path_and_query(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(redact_path_and_query(input), expected);
