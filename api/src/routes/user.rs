@@ -25,8 +25,8 @@ use universal_inbox::{
     auth::auth_token::{AuthenticationToken, AuthenticationTokenId, TruncatedAuthenticationToken},
     user::{
         Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordResetToken,
-        RegisterUserParameters, User, UserAuthKind, UserAuthMethod, UserId, UserPatch,
-        UserPreferences, UserPreferencesPatch, Username,
+        RegisterUserParameters, UserAuthKind, UserAuthMethod, UserId, UserPatch, UserPreferences,
+        UserPreferencesPatch, Username,
     },
 };
 
@@ -35,13 +35,8 @@ use crate::{
     configuration::Settings,
     routes::auth::USER_AUTH_KIND_SESSION_KEY,
     universal_inbox::{
-        UniversalInboxError, UpdateStatus,
-        auth_token::service::AuthenticationTokenService,
-        oauth2::service::OAuth2Service,
-        user::{
-            model::{LocalUserAuth, UserAuth},
-            service::UserService,
-        },
+        UniversalInboxError, UpdateStatus, auth_token::service::AuthenticationTokenService,
+        oauth2::service::OAuth2Service, user::service::UserService,
     },
     utils::{
         cache::Cache,
@@ -150,9 +145,9 @@ fn verify_passkey_nonce(
 /// One shared limiter covers all auth endpoints rather than per-endpoint
 /// limiters: an attacker pivoting from `login` to `password-reset` to
 /// `email-verification` from a single IP should drain a shared bucket, not
-/// reset their budget at each endpoint. Email- and username-based
-/// secondary keying (so a single attacker rotating IPs cannot still
-/// email-bomb one victim) is a follow-up.
+/// reset their budget at each endpoint. Per-email budgets (so a single
+/// attacker rotating IPs cannot still email-bomb one victim) are enforced on
+/// top of this in `UserService`; see `utils::login_throttle`.
 const AUTH_RATE_LIMIT_PER_MINUTE: u32 = 30;
 
 pub type AuthRateLimiter = IpRateLimiter;
@@ -676,7 +671,6 @@ pub async fn remove_auth_method(
 pub async fn register_user(
     req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
-    settings: web::Data<Settings>,
     rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     register_user_parameters: web::Json<RegisterUserParameters>,
 ) -> Result<HttpResponse, UniversalInboxError> {
@@ -693,67 +687,19 @@ pub async fn register_user(
         .validate()
         .map_err(UniversalInboxError::InvalidParameters)?;
 
-    let email_domain = register_user_parameters
-        .credentials
-        .email
-        .domain()
-        .to_lowercase();
-
-    if let Some(rejection_message) = settings
-        .application
-        .security
-        .email_domain_blacklist
-        .get(&email_domain)
-    {
-        return Err(UniversalInboxError::Forbidden(rejection_message.clone()));
-    }
-
-    let registration_email = register_user_parameters.credentials.email.clone();
-
-    let result = user_service
-        .register_user(
+    // An already-registered email gets the same response: the service emails
+    // its owner instead of failing, so the response does not leak its existence.
+    user_service
+        .register_local_user(
             &mut transaction,
-            User::new(
-                None,
-                None,
-                register_user_parameters.credentials.email.clone(),
-            ),
-            UserAuth::Local(Box::new(LocalUserAuth {
-                password_hash: user_service
-                    .get_new_password_hash(register_user_parameters.credentials.password.clone())?,
-                password_reset_at: None,
-                password_reset_sent_at: None,
-            })),
+            register_user_parameters.into_inner().credentials,
         )
-        .await;
+        .await?;
 
-    match result {
-        Ok(_) => {
-            transaction
-                .commit()
-                .await
-                .context("Failed to commit while registering user")?;
-        }
-        Err(UniversalInboxError::AlreadyExists { .. }) => {
-            transaction
-                .rollback()
-                .await
-                .context("Failed to rollback aborted transaction")?;
-
-            let mut transaction = user_service
-                .begin()
-                .await
-                .context("Failed to create new transaction for registration attempt email")?;
-            user_service
-                .send_registration_attempt_email(&mut transaction, &registration_email, false)
-                .await?;
-            transaction
-                .commit()
-                .await
-                .context("Failed to commit while sending registration attempt email")?;
-        }
-        Err(err) => return Err(err),
-    }
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while registering user")?;
 
     let response = SuccessResponse {
         success: true,
@@ -783,7 +729,8 @@ pub async fn login_user(
 
     // The service applies per-account throttling on top of the per-IP limit
     // above: a generic 401 on bad credentials, or `TooManyLoginAttempts`
-    // (→ 429 + Retry-After) once an account is temporarily locked.
+    // (→ 429 + Retry-After) once an account is temporarily locked or its
+    // login request budget is exhausted.
     let user = service
         .validate_credentials(&mut transaction, credentials.into_inner())
         .await?;

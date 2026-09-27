@@ -168,34 +168,83 @@ pub async fn tested_app(
     }
 }
 
+/// Local auth settings shared by the test fixtures. The per-account request
+/// budgets are Redis-backed, so they are shared by every test run on the
+/// machine: they are set high enough that tests reusing a fixed email across
+/// runs never hit them. `tested_app_with_account_rate_limits` lowers them.
+pub fn local_auth_settings() -> LocalAuthenticationSettings {
+    LocalAuthenticationSettings {
+        argon2_algorithm: argon2::Algorithm::Argon2id,
+        argon2_version: argon2::Version::V0x13,
+        argon2_memory_size: 20000,
+        argon2_iterations: 2,
+        argon2_parallelism: 1,
+        max_login_attempts: 5,
+        login_attempt_window_seconds: 900,
+        login_lockout_base_seconds: 60,
+        login_lockout_max_seconds: 900,
+        max_login_requests_per_account: 10_000,
+        login_request_window_seconds: 60,
+        max_account_emails_per_address: 10_000,
+        account_email_window_seconds: 3600,
+    }
+}
+
+/// Per-account budgets of `tested_app_with_account_rate_limits`.
+pub const TEST_MAX_LOGIN_REQUESTS_PER_ACCOUNT: u32 = 8;
+pub const TEST_MAX_ACCOUNT_EMAILS_PER_ADDRESS: u32 = 3;
+
 #[fixture]
 pub async fn tested_app_with_local_auth(
-    mut settings: Settings,
+    settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: TestDb,
     #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+) -> TestedApp {
+    setup_tested_app_with_local_auth(
+        settings,
+        local_auth_settings(),
+        db_connection.await,
+        redis_storage.await,
+    )
+    .await
+}
+
+#[fixture]
+pub async fn tested_app_with_account_rate_limits(
+    settings: Settings,
+    #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
+    #[future] db_connection: TestDb,
+    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+) -> TestedApp {
+    setup_tested_app_with_local_auth(
+        settings,
+        LocalAuthenticationSettings {
+            max_login_requests_per_account: TEST_MAX_LOGIN_REQUESTS_PER_ACCOUNT,
+            max_account_emails_per_address: TEST_MAX_ACCOUNT_EMAILS_PER_ADDRESS,
+            ..local_auth_settings()
+        },
+        db_connection.await,
+        redis_storage.await,
+    )
+    .await
+}
+
+async fn setup_tested_app_with_local_auth(
+    mut settings: Settings,
+    local_auth_settings: LocalAuthenticationSettings,
+    test_db: TestDb,
+    redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> TestedApp {
     info!("Setting up server");
 
     let (listener, port, cache, mock_servers) = setup_test_env(&settings).await;
 
     settings.application.security.authentication =
-        vec![AuthenticationSettings::Local(LocalAuthenticationSettings {
-            argon2_algorithm: argon2::Algorithm::Argon2id,
-            argon2_version: argon2::Version::V0x13,
-            argon2_memory_size: 20000,
-            argon2_iterations: 2,
-            argon2_parallelism: 1,
-            max_login_attempts: 5,
-            login_attempt_window_seconds: 900,
-            login_lockout_base_seconds: 60,
-            login_lockout_max_seconds: 900,
-        })];
+        vec![AuthenticationSettings::Local(local_auth_settings)];
     settings.application.security.email_domain_blacklist = HashMap::new();
 
-    let test_db = db_connection.await;
     let pool: Arc<PgPool> = test_db.pool.clone();
-    let redis_storage = redis_storage.await;
 
     let (services, mailer_stub, redis_storage) = build_and_spawn(
         listener,
@@ -272,17 +321,7 @@ pub async fn tested_app_with_domain_blacklist(
         .application
         .security
         .authentication
-        .push(AuthenticationSettings::Local(LocalAuthenticationSettings {
-            argon2_algorithm: argon2::Algorithm::Argon2id,
-            argon2_version: argon2::Version::V0x13,
-            argon2_memory_size: 20000,
-            argon2_iterations: 2,
-            argon2_parallelism: 1,
-            max_login_attempts: 5,
-            login_attempt_window_seconds: 900,
-            login_lockout_base_seconds: 60,
-            login_lockout_max_seconds: 900,
-        }));
+        .push(AuthenticationSettings::Local(local_auth_settings()));
     settings.application.security.email_domain_blacklist.insert(
         "blocked.com".to_string(),
         "Registration is not allowed from this domain".to_string(),

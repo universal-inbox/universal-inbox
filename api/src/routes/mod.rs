@@ -42,6 +42,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             UniversalInboxError::Forbidden(_) => StatusCode::FORBIDDEN,
             UniversalInboxError::TooManyLoginAttempts { .. } => StatusCode::TOO_MANY_REQUESTS,
+            UniversalInboxError::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
             UniversalInboxError::UnsupportedAction(_) => StatusCode::BAD_REQUEST,
             UniversalInboxError::DatabaseError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::OAuth2InvalidGrant(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -57,8 +58,12 @@ impl ResponseError for UniversalInboxError {
             ContentType::json().try_into_value().unwrap(),
         );
 
-        // Advertise when the caller may retry after a per-account lockout.
+        // Advertise when the caller may retry after a per-account lockout or
+        // an exhausted per-account request budget.
         if let UniversalInboxError::TooManyLoginAttempts {
+            retry_after_seconds,
+        }
+        | UniversalInboxError::TooManyRequests {
             retry_after_seconds,
         } = self
             && let Ok(value) = header::HeaderValue::from_str(&retry_after_seconds.to_string())
