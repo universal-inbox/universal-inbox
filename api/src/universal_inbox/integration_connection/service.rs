@@ -1981,6 +1981,33 @@ impl IntegrationConnectionService {
             )
             .await?;
 
+        let raw_response = serde_json::to_value(token_response.as_safe_token_response())
+            .context("Failed to serialize token response to Value")?;
+
+        let provider_user_id = match provider.extract_provider_user_id(&raw_response) {
+            Some(provider_user_id) => Some(provider_user_id),
+            None => {
+                self.oauth2_flow_service
+                    .fetch_provider_user_id(provider, token_response.access_token.expose_secret())
+                    .await?
+            }
+        };
+
+        // Reconnecting with another provider account than the pinned one is
+        // allowed: the connection is re-pinned to the new account below, and
+        // provider contexts cached from the previous account are refreshed on
+        // the next sync. Identities are not logged.
+        if let (Some(pinned_provider_user_id), Some(provider_user_id)) = (
+            integration_connection.provider_user_id.as_ref(),
+            provider_user_id.as_ref(),
+        ) && pinned_provider_user_id != provider_user_id
+        {
+            warn!(
+                "Pinned {} identity of integration connection {} changed on reconnect, re-pinning it",
+                state_data.provider_kind, state_data.integration_connection_id
+            );
+        }
+
         // Encrypt tokens (bind ciphertext to this specific connection via AAD)
         let aad_context = state_data.integration_connection_id.0.as_bytes();
         let encrypted_access_token = encrypt_token(
@@ -2002,8 +2029,6 @@ impl IntegrationConnectionService {
 
         let expires_at = token_response.expires_at();
 
-        let raw_response = serde_json::to_value(token_response.as_safe_token_response())
-            .context("Failed to serialize token response to Value")?;
         let registered_scopes = provider.extract_registered_scopes(&raw_response)?;
 
         let stored_raw_response = provider.sanitize_raw_response(&raw_response);
@@ -2018,7 +2043,7 @@ impl IntegrationConnectionService {
             )
             .await?;
 
-        if let Some(provider_user_id) = provider.extract_provider_user_id(&raw_response) {
+        if let Some(provider_user_id) = provider_user_id {
             self.repository
                 .update_integration_connection_provider_user_id(
                     executor,

@@ -740,7 +740,7 @@ mod update_integration_connection_config {
 
 /// Disconnecting an integration (or deleting the account) revokes the OAuth
 /// grant at the provider. The revocation endpoints point at the per-test mock
-/// servers (see `with_mocked_oauth_revocation_urls`).
+/// servers (see `with_mocked_oauth_urls`).
 mod revoke_provider_grants {
     use pretty_assertions::assert_eq;
     use serde_json::json;

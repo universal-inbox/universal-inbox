@@ -663,6 +663,10 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
 
         let config = GoogleMailService::get_config(&integration_connection)?;
 
+        // The cached address is stale once the connection has been reconnected
+        // with another Google account: `provider_user_id` is the lowercased
+        // email of the account pinned at the last OAuth exchange. The address
+        // is then read again from Gmail to keep its exact spelling.
         let user_email_address = match &integration_connection.provider {
             IntegrationProvider::GoogleMail {
                 context:
@@ -670,7 +674,12 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
                         user_email_address, ..
                     }),
                 ..
-            } => user_email_address.clone(),
+            } if integration_connection.provider_user_id.as_ref().is_none_or(
+                |provider_user_id| *provider_user_id == user_email_address.as_str().to_lowercase(),
+            ) =>
+            {
+                user_email_address.clone()
+            }
             _ => {
                 let GoogleMailUserProfile { email_address, .. } =
                     self.get_user_profile(&access_token).await?;

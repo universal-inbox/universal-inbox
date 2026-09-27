@@ -443,48 +443,57 @@ impl ThirdPartyItemSourceService<GoogleDriveComment> for GoogleDriveService {
 
         let mut third_party_items = Vec::new();
 
-        // Get user email and display name for mention detection
-        let (user_email, display_name) =
-            match &integration_connection.provider {
-                IntegrationProvider::GoogleDrive {
-                    context:
-                        Some(GoogleDriveContext {
-                            user_email_address,
-                            user_display_name,
+        // Get user email and display name for mention detection. The cached
+        // ones are stale once the connection has been reconnected with another
+        // Google account: `provider_user_id` is the lowercased email of the
+        // account pinned at the last OAuth exchange.
+        let (user_email, display_name) = match &integration_connection.provider {
+            IntegrationProvider::GoogleDrive {
+                context:
+                    Some(GoogleDriveContext {
+                        user_email_address,
+                        user_display_name,
+                    }),
+                ..
+            } if integration_connection.provider_user_id.as_ref().is_none_or(
+                |provider_user_id| *provider_user_id == user_email_address.as_str().to_lowercase(),
+            ) =>
+            {
+                (user_email_address.clone(), user_display_name.clone())
+            }
+            _ => {
+                let GoogleDriveUserInfo {
+                    email_address,
+                    display_name,
+                } = self.get_user_info(&access_token).await?;
+                let user_email_address = EmailAddress::from_str(&email_address)
+                    .context("Invalid email address from Google Drive user info")?;
+                self.integration_connection_service
+                    .upgrade()
+                    .context(
+                        "Unable to access integration_connection_service from google_drive_service",
+                    )?
+                    .read()
+                    .await
+                    .update_integration_connection_context(
+                        executor,
+                        integration_connection.id,
+                        IntegrationConnectionContext::GoogleDrive(GoogleDriveContext {
+                            user_email_address: user_email_address.clone(),
+                            user_display_name: display_name.clone(),
                         }),
-                    ..
-                } => (user_email_address.clone(), user_display_name.clone()),
-                _ => {
-                    let GoogleDriveUserInfo {
-                        email_address,
-                        display_name,
-                    } = self.get_user_info(&access_token).await?;
-                    let user_email_address = EmailAddress::from_str(&email_address)
-                        .context("Invalid email address from Google Drive user info")?;
-                    self.integration_connection_service
-            .upgrade()
-            .context("Unable to access integration_connection_service from google_drive_service")?
-            .read()
-            .await
-            .update_integration_connection_context(
-                executor,
-                integration_connection.id,
-                IntegrationConnectionContext::GoogleDrive(GoogleDriveContext {
-                    user_email_address: user_email_address.clone(),
-                    user_display_name: display_name.clone(),
-                }),
-            )
-            .await
-            .map_err(|_| {
-                anyhow!(
-                    "Failed to update Google Drive integration connection {} context",
-                    integration_connection.id
-                )
-            })?;
+                    )
+                    .await
+                    .map_err(|_| {
+                        anyhow!(
+                            "Failed to update Google Drive integration connection {} context",
+                            integration_connection.id
+                        )
+                    })?;
 
-                    (user_email_address, display_name)
-                }
-            };
+                (user_email_address, display_name)
+            }
+        };
 
         for file in &files {
             debug!(

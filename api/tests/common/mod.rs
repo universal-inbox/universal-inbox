@@ -149,12 +149,10 @@ pub struct TestServices {
     pub oauth2_service: Arc<OAuth2Service>,
 }
 
-/// Point every provider's OAuth grant revocation endpoint at its mock server
-/// so disconnect / account deletion never calls a real provider.
-pub fn with_mocked_oauth_revocation_urls(
-    settings: &Settings,
-    mock_servers: &MockServers,
-) -> Settings {
+/// Point every provider's OAuth grant revocation endpoint (and Google's token
+/// endpoint) at its mock server so disconnect / account deletion / OAuth
+/// callbacks never call a real provider.
+pub fn with_mocked_oauth_urls(settings: &Settings, mock_servers: &MockServers) -> Settings {
     let mut settings = settings.clone();
     for (name, integration) in settings.integrations.iter_mut() {
         let revocation_url = match name.as_str() {
@@ -174,6 +172,19 @@ pub fn with_mocked_oauth_revocation_urls(
         };
         integration.oauth_revocation_url =
             Some(revocation_url.parse().expect("valid mock revocation URL"));
+
+        // Google code exchanges hit the integration's mock server too.
+        let google_mock_server = match name.as_str() {
+            "google_mail" => &mock_servers.google_mail,
+            "google_calendar" => &mock_servers.google_calendar,
+            "google_drive" => &mock_servers.google_drive,
+            _ => continue,
+        };
+        integration.oauth_token_url = Some(
+            format!("{}/token", google_mock_server.uri())
+                .parse()
+                .expect("valid mock token URL"),
+        );
     }
     settings
 }
@@ -202,7 +213,7 @@ pub async fn build_test_services(
         _billing_service,
     ) = universal_inbox_api::build_services(
         pool,
-        &with_mocked_oauth_revocation_urls(settings, mock_servers),
+        &with_mocked_oauth_urls(settings, mock_servers),
         Some(mock_servers.github.uri()),
         Some(mock_servers.linear.uri()),
         Some(mock_servers.google_mail.uri()),
