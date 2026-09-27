@@ -7,6 +7,10 @@ use email_address::EmailAddress;
 use pretty_assertions::assert_eq;
 use rrule::Frequency;
 use rstest::*;
+use wiremock::{
+    Mock, ResponseTemplate,
+    matchers::{method, path},
+};
 
 use universal_inbox::{
     integration_connection::{
@@ -17,7 +21,7 @@ use universal_inbox::{
             google_mail::{GoogleMailConfig, GoogleMailContext},
             todoist::TodoistConfig,
         },
-        provider::IntegrationProvider,
+        provider::{IntegrationConnectionContext, IntegrationProvider},
     },
     notification::{
         Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
@@ -1154,4 +1158,102 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
         synced_notification.source_item.integration_connection_id,
         google_mail_integration_connection.id
     );
+}
+
+/// The cached user email address follows the Google account the connection
+/// is pinned to: it is read again from Gmail once the connection has been
+/// reconnected with another account, and reused otherwise.
+#[rstest]
+#[case::reconnected_with_another_account(Some("user@example.com"), 1)]
+#[case::same_account(Some("previous@example.com"), 0)]
+#[case::not_pinned_yet(None, 0)]
+#[tokio::test]
+async fn test_sync_notifications_should_refresh_user_email_address_of_pinned_account(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    google_mail_user_profile: GoogleMailUserProfile,
+    google_mail_labels_list: GoogleMailLabelList,
+    google_mail_oauth_credential: OAuthCredentialFixture,
+    #[case] provider_user_id: Option<&str>,
+    #[case] expected_user_profile_calls: u64,
+) {
+    let app = authenticated_app.await;
+    let previous_email_address = EmailAddress::from_str("Previous@example.com").unwrap();
+    let google_mail_config = GoogleMailConfig::enabled();
+    let google_mail_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
+        &settings,
+        OAuthCredentialFixture {
+            provider_user_id: provider_user_id.map(|id| id.to_string()),
+            ..google_mail_oauth_credential
+        },
+        None,
+        Some(IntegrationConnectionContext::GoogleMail(
+            GoogleMailContext {
+                user_email_address: previous_email_address.clone(),
+                labels: vec![],
+            },
+        )),
+    )
+    .await;
+
+    Mock::given(method("GET"))
+        .and(path("/users/me/profile"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&google_mail_user_profile))
+        .expect(expected_user_profile_calls)
+        .mount(&app.app.google_mail_mock_server)
+        .await;
+    mock_google_mail_labels_list_service(
+        &app.app.google_mail_mock_server,
+        &google_mail_labels_list,
+    )
+    .await;
+    mock_google_mail_threads_list_service(
+        &app.app.google_mail_mock_server,
+        None,
+        settings
+            .integrations
+            .get("google_mail")
+            .unwrap()
+            .page_size
+            .unwrap(),
+        Some(vec![google_mail_config.synced_label.id.clone()]),
+        &GoogleMailThreadList {
+            threads: None,
+            result_size_estimate: 0,
+            next_page_token: None,
+        },
+    )
+    .await;
+
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::GoogleMail),
+        false,
+    )
+    .await;
+    assert!(notifications.is_empty());
+
+    let updated_integration_connection =
+        get_integration_connection(&app, google_mail_integration_connection.id)
+            .await
+            .unwrap();
+    let expected_email_address = if expected_user_profile_calls > 0 {
+        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap()
+    } else {
+        previous_email_address
+    };
+    let IntegrationProvider::GoogleMail {
+        context: Some(GoogleMailContext {
+            user_email_address, ..
+        }),
+        ..
+    } = updated_integration_connection.provider
+    else {
+        panic!("Google Mail integration connection must have a context");
+    };
+    assert_eq!(user_email_address, expected_email_address);
 }

@@ -77,6 +77,19 @@ pub trait OAuth2Provider: Send + Sync + std::fmt::Debug {
     /// Parse the token response and extract the provider user ID (if available).
     fn extract_provider_user_id(&self, raw_response: &Value) -> Option<String>;
 
+    /// Endpoint returning the account an access token belongs to, called at
+    /// code exchange when the token response does not carry the provider user
+    /// ID (e.g. Google). Default: none.
+    fn provider_user_id_url(&self) -> Option<&Url> {
+        None
+    }
+
+    /// Extract the provider user ID from the [`Self::provider_user_id_url`]
+    /// response body.
+    fn parse_provider_user_id_response(&self, _response: &Value) -> Option<String> {
+        None
+    }
+
     /// Parse the token response and extract the provider context (if available).
     fn extract_provider_context(
         &self,
@@ -252,6 +265,54 @@ impl OAuth2FlowService {
         }
 
         provider.parse_token_response(&body)
+    }
+
+    /// Fetch the provider user ID of `access_token` from the provider's
+    /// identity endpoint. `Ok(None)` when the provider has no such endpoint.
+    pub async fn fetch_provider_user_id(
+        &self,
+        provider: &dyn OAuth2Provider,
+        access_token: &AccessToken,
+    ) -> Result<Option<String>, UniversalInboxError> {
+        let Some(provider_user_id_url) = provider.provider_user_id_url() else {
+            return Ok(None);
+        };
+
+        debug!(
+            "Fetching provider user ID at {provider_user_id_url} for {:?}",
+            provider.provider_kind()
+        );
+
+        let response = self
+            .client
+            .get(provider_user_id_url.as_str())
+            .bearer_auth(access_token.as_str())
+            .send()
+            .await
+            .context("Failed to fetch the provider user ID")?;
+
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .context("Failed to read provider user ID response body")?;
+
+        if !status.is_success() {
+            return Err(UniversalInboxError::Unexpected(anyhow::anyhow!(
+                "Provider user ID request failed with status {status}: {body}"
+            )));
+        }
+
+        let response: Value = serde_json::from_str(&body)
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, body.clone()))?;
+        provider
+            .parse_provider_user_id_response(&response)
+            .map(Some)
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow::anyhow!(
+                    "No provider user ID in the response of {provider_user_id_url}"
+                ))
+            })
     }
 
     /// Revoke a grant at the provider.

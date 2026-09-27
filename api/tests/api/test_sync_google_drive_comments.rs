@@ -6,6 +6,10 @@ use chrono::{Datelike, Duration, TimeZone, Utc};
 use email_address::EmailAddress;
 use pretty_assertions::assert_eq;
 use rstest::*;
+use wiremock::{
+    Mock, ResponseTemplate,
+    matchers::{method, path, query_param},
+};
 
 use universal_inbox::{
     integration_connection::{
@@ -15,7 +19,7 @@ use universal_inbox::{
             google_drive::{GoogleDriveConfig, GoogleDriveContext},
             todoist::TodoistConfig,
         },
-        provider::IntegrationProvider,
+        provider::{IntegrationConnectionContext, IntegrationProvider},
     },
     notification::{
         Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
@@ -570,4 +574,102 @@ async fn test_sync_notifications_skips_files_returning_404_on_comments(
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].kind, NotificationSourceKind::GoogleDrive);
     assert_eq!(notifications[0].status, NotificationStatus::Unread);
+}
+
+/// The cached user email address and display name follow the Google account
+/// the connection is pinned to: they are read again from Drive once the
+/// connection has been reconnected with another account, and reused otherwise.
+#[rstest]
+#[case::reconnected_with_another_account(Some("john.roe@example.com"), 1)]
+#[case::same_account(Some("previous@example.com"), 0)]
+#[case::not_pinned_yet(None, 0)]
+#[tokio::test]
+async fn test_sync_notifications_should_refresh_user_info_of_pinned_account(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    google_drive_oauth_credential: OAuthCredentialFixture,
+    #[case] provider_user_id: Option<&str>,
+    #[case] expected_user_info_calls: u64,
+) {
+    let app = authenticated_app.await;
+    let previous_context = GoogleDriveContext {
+        user_email_address: EmailAddress::from_str("Previous@example.com").unwrap(),
+        user_display_name: "Previous User".to_string(),
+    };
+    let google_drive_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::GoogleDrive(GoogleDriveConfig::enabled()),
+        &settings,
+        OAuthCredentialFixture {
+            provider_user_id: provider_user_id.map(|id| id.to_string()),
+            ..google_drive_oauth_credential
+        },
+        None,
+        Some(IntegrationConnectionContext::GoogleDrive(
+            previous_context.clone(),
+        )),
+    )
+    .await;
+
+    Mock::given(method("GET"))
+        .and(path("/about"))
+        .and(query_param("fields", "user(emailAddress,displayName)"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GoogleDriveAboutResponse {
+                user: GoogleDriveUserInfo {
+                    email_address: "John.Roe@example.com".to_string(),
+                    display_name: "John Roe".to_string(),
+                },
+            }),
+        )
+        .expect(expected_user_info_calls)
+        .mount(&app.app.google_drive_mock_server)
+        .await;
+    mock_google_drive_files_list_service(
+        &app.app.google_drive_mock_server,
+        None,
+        settings
+            .integrations
+            .get("google_drive")
+            .unwrap()
+            .page_size
+            .unwrap(),
+        google_drive_integration_connection.created_at,
+        &GoogleDriveFileList {
+            files: None,
+            incomplete_search: None,
+            next_page_token: None,
+        },
+    )
+    .await;
+
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::GoogleDrive),
+        false,
+    )
+    .await;
+    assert!(notifications.is_empty());
+
+    let updated_integration_connection =
+        get_integration_connection(&app, google_drive_integration_connection.id)
+            .await
+            .unwrap();
+    let expected_context = if expected_user_info_calls > 0 {
+        GoogleDriveContext {
+            user_email_address: EmailAddress::from_str("John.Roe@example.com").unwrap(),
+            user_display_name: "John Roe".to_string(),
+        }
+    } else {
+        previous_context
+    };
+    assert_eq!(
+        updated_integration_connection.provider,
+        IntegrationProvider::GoogleDrive {
+            context: Some(expected_context),
+            config: GoogleDriveConfig::enabled(),
+        }
+    );
 }

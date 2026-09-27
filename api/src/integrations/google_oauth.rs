@@ -1,3 +1,4 @@
+use anyhow::Context;
 use secrecy::SecretBox;
 use serde_json::Value;
 use universal_inbox::integration_connection::provider::{
@@ -22,6 +23,7 @@ pub struct GoogleOAuth2Provider {
     client_secret: SecretBox<ClientSecret>,
     required_scopes: Vec<String>,
     revocation_url: Url,
+    provider_user_id_url: Url,
 }
 
 impl std::fmt::Debug for GoogleOAuth2Provider {
@@ -32,6 +34,7 @@ impl std::fmt::Debug for GoogleOAuth2Provider {
             .field("token_url", &self.token_url)
             .field("client_id", &self.client_id)
             .field("required_scopes", &self.required_scopes)
+            .field("provider_user_id_url", &self.provider_user_id_url)
             .finish_non_exhaustive()
     }
 }
@@ -54,6 +57,11 @@ impl GoogleOAuth2Provider {
             required_scopes,
             revocation_url: Url::parse("https://oauth2.googleapis.com/revoke")
                 .expect("Invalid Google revocation URL"),
+            provider_user_id_url: build_provider_user_id_url(
+                provider_kind,
+                default_api_base_url(provider_kind),
+            )
+            .expect("Invalid Google provider user ID URL"),
         }
     }
 
@@ -62,6 +70,46 @@ impl GoogleOAuth2Provider {
         self.revocation_url = revocation_url;
         self
     }
+
+    /// Override the token endpoint (tests point it at a mock).
+    pub fn with_token_url(mut self, token_url: Url) -> Self {
+        self.token_url = token_url;
+        self
+    }
+
+    /// Override the base URL of the Google API the provider user ID is read
+    /// from (tests point it at a mock).
+    pub fn with_api_base_url(mut self, api_base_url: &str) -> Result<Self, UniversalInboxError> {
+        self.provider_user_id_url = build_provider_user_id_url(self.provider_kind, api_base_url)?;
+        Ok(self)
+    }
+}
+
+fn default_api_base_url(provider_kind: IntegrationProviderKind) -> &'static str {
+    match provider_kind {
+        IntegrationProviderKind::GoogleCalendar => "https://www.googleapis.com/calendar/v3",
+        IntegrationProviderKind::GoogleDrive => "https://www.googleapis.com/drive/v3",
+        _ => "https://gmail.googleapis.com/gmail/v1",
+    }
+}
+
+/// The token response does not identify the Google account and the
+/// integrations do not request the `openid`/`email` scopes the userinfo
+/// endpoint needs, so each integration reads the account email from its own
+/// API, within the scopes it already has.
+fn build_provider_user_id_url(
+    provider_kind: IntegrationProviderKind,
+    api_base_url: &str,
+) -> Result<Url, UniversalInboxError> {
+    let api_base_url = api_base_url.trim_end_matches('/');
+    let url = match provider_kind {
+        IntegrationProviderKind::GoogleCalendar => format!("{api_base_url}/calendars/primary"),
+        IntegrationProviderKind::GoogleDrive => {
+            format!("{api_base_url}/about?fields=user(emailAddress)")
+        }
+        _ => format!("{api_base_url}/users/me/profile"),
+    };
+    Ok(Url::parse(&url).context("Invalid Google provider user ID URL")?)
 }
 
 impl OAuth2Provider for GoogleOAuth2Provider {
@@ -122,6 +170,21 @@ impl OAuth2Provider for GoogleOAuth2Provider {
 
     fn extract_provider_user_id(&self, _raw_response: &Value) -> Option<String> {
         None
+    }
+
+    fn provider_user_id_url(&self) -> Option<&Url> {
+        Some(&self.provider_user_id_url)
+    }
+
+    fn parse_provider_user_id_response(&self, response: &Value) -> Option<String> {
+        // The primary calendar ID is the account email address.
+        let email_address = match self.provider_kind {
+            IntegrationProviderKind::GoogleCalendar => response.get("id"),
+            IntegrationProviderKind::GoogleDrive => response.pointer("/user/emailAddress"),
+            _ => response.get("emailAddress"),
+        }?
+        .as_str()?;
+        (!email_address.is_empty()).then(|| email_address.to_lowercase())
     }
 
     fn extract_provider_context(
@@ -204,6 +267,73 @@ mod tests {
                 .extract_registered_scopes(&raw)
                 .unwrap()
                 .is_empty()
+        );
+    }
+
+    fn provider(provider_kind: IntegrationProviderKind) -> GoogleOAuth2Provider {
+        GoogleOAuth2Provider::new(
+            provider_kind,
+            "cid".to_string(),
+            SecretBox::new(Box::new(ClientSecret("cs".to_string()))),
+            vec![],
+        )
+    }
+
+    #[test]
+    fn test_provider_user_id_url_per_kind() {
+        let url = |kind| provider(kind).provider_user_id_url().unwrap().to_string();
+        assert_eq!(
+            url(IntegrationProviderKind::GoogleMail),
+            "https://gmail.googleapis.com/gmail/v1/users/me/profile"
+        );
+        assert_eq!(
+            url(IntegrationProviderKind::GoogleCalendar),
+            "https://www.googleapis.com/calendar/v3/calendars/primary"
+        );
+        assert_eq!(
+            url(IntegrationProviderKind::GoogleDrive),
+            "https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)"
+        );
+    }
+
+    #[test]
+    fn test_provider_user_id_url_with_api_base_url() {
+        let provider = provider(IntegrationProviderKind::GoogleCalendar)
+            .with_api_base_url("http://127.0.0.1:1234/")
+            .unwrap();
+        assert_eq!(
+            provider.provider_user_id_url().unwrap().as_str(),
+            "http://127.0.0.1:1234/calendars/primary"
+        );
+    }
+
+    #[test]
+    fn test_parse_provider_user_id_response_per_kind() {
+        assert_eq!(
+            provider(IntegrationProviderKind::GoogleMail)
+                .parse_provider_user_id_response(&json!({ "emailAddress": "Jane@Example.com" })),
+            Some("jane@example.com".to_string())
+        );
+        assert_eq!(
+            provider(IntegrationProviderKind::GoogleCalendar)
+                .parse_provider_user_id_response(&json!({ "id": "jane@example.com" })),
+            Some("jane@example.com".to_string())
+        );
+        assert_eq!(
+            provider(IntegrationProviderKind::GoogleDrive).parse_provider_user_id_response(
+                &json!({ "user": { "emailAddress": "jane@example.com" } })
+            ),
+            Some("jane@example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_provider_user_id_response_missing_email() {
+        let provider = provider(IntegrationProviderKind::GoogleMail);
+        assert_eq!(provider.parse_provider_user_id_response(&json!({})), None);
+        assert_eq!(
+            provider.parse_provider_user_id_response(&json!({ "emailAddress": "" })),
+            None
         );
     }
 }
