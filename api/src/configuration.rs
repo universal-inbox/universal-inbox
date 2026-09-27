@@ -610,6 +610,10 @@ pub struct IntegrationSettings {
     /// default endpoint; tests point it at a mock server.
     #[serde(default)]
     pub oauth_revocation_url: Option<Url>,
+    /// Override of the provider's OAuth token endpoint. Leave unset to use the
+    /// provider's default endpoint; tests point it at a mock server.
+    #[serde(default)]
+    pub oauth_token_url: Option<Url>,
 }
 
 #[derive(Debug, Clone)]

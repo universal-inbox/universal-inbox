@@ -811,25 +811,43 @@ pub async fn build_services(
             )),
         );
     }
-    for (settings_key, provider_kind) in [
-        ("google_mail", IntegrationProviderKind::GoogleMail),
-        ("google_calendar", IntegrationProviderKind::GoogleCalendar),
-        ("google_drive", IntegrationProviderKind::GoogleDrive),
+    for (settings_key, provider_kind, api_base_url) in [
+        (
+            "google_mail",
+            IntegrationProviderKind::GoogleMail,
+            &google_mail_base_url,
+        ),
+        (
+            "google_calendar",
+            IntegrationProviderKind::GoogleCalendar,
+            &google_calendar_base_url,
+        ),
+        (
+            "google_drive",
+            IntegrationProviderKind::GoogleDrive,
+            &google_drive_base_url,
+        ),
     ] {
         if let Some(google_settings) = settings.integrations.get(settings_key) {
-            oauth2_providers.insert(
-                provider_kind,
-                Arc::new(with_revocation_url_override(
-                    GoogleOAuth2Provider::new(
-                        provider_kind,
-                        google_settings.oauth_client_id.clone(),
-                        SecretBox::new(Box::new(google_settings.oauth_client_secret.clone())),
-                        google_settings.required_oauth_scopes.clone(),
-                    ),
-                    google_settings,
-                    GoogleOAuth2Provider::with_revocation_url,
-                )),
+            let mut provider = with_revocation_url_override(
+                GoogleOAuth2Provider::new(
+                    provider_kind,
+                    google_settings.oauth_client_id.clone(),
+                    SecretBox::new(Box::new(google_settings.oauth_client_secret.clone())),
+                    google_settings.required_oauth_scopes.clone(),
+                ),
+                google_settings,
+                GoogleOAuth2Provider::with_revocation_url,
             );
+            if let Some(token_url) = &google_settings.oauth_token_url {
+                provider = provider.with_token_url(token_url.clone());
+            }
+            if let Some(api_base_url) = api_base_url {
+                provider = provider
+                    .with_api_base_url(api_base_url)
+                    .expect("Invalid Google API base URL");
+            }
+            oauth2_providers.insert(provider_kind, Arc::new(provider));
         }
     }
     if let Some(ticktick_settings) = settings.integrations.get("ticktick") {
