@@ -21,6 +21,14 @@
 //! Tuning lives directly on [`LocalAuthenticationSettings`] (`max_login_attempts`,
 //! `login_attempt_window_seconds`, `login_lockout_base_seconds`,
 //! `login_lockout_max_seconds`).
+//!
+//! The same throttle also enforces per-account request budgets
+//! ([`AccountRateLimitScope`]): a fixed-window counter per email, whatever the
+//! client IP, so an attacker rotating IPs can neither hammer one account's
+//! login nor flood one address with registration / password-reset emails. The
+//! increment and its TTL are set by one atomic Lua script
+//! (`scripts/lua/account_rate_limit.lua`), and the same no-enumeration rule
+//! applies: the budget is consumed whether or not the account exists.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -32,6 +40,40 @@ use ring::digest;
 use crate::{configuration::LocalAuthenticationSettings, universal_inbox::UniversalInboxError};
 
 const NAMESPACE: &str = "universal-inbox:login-throttle:";
+const RATE_LIMIT_NAMESPACE: &str = "universal-inbox:account-rate-limit:";
+
+/// A per-account request budget, counted per email over a fixed window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AccountRateLimitScope {
+    /// Every login attempt, successful or not.
+    LoginRequest,
+    /// Requests that email the address: registration and password reset share
+    /// one budget, so alternating between them does not double the volume.
+    AccountEmail,
+}
+
+impl AccountRateLimitScope {
+    fn as_str(&self) -> &'static str {
+        match self {
+            AccountRateLimitScope::LoginRequest => "login",
+            AccountRateLimitScope::AccountEmail => "account-email",
+        }
+    }
+
+    /// `(max requests, window seconds)` for this scope.
+    fn limits(&self, settings: &LocalAuthenticationSettings) -> (u32, u64) {
+        match self {
+            AccountRateLimitScope::LoginRequest => (
+                settings.max_login_requests_per_account,
+                settings.login_request_window_seconds,
+            ),
+            AccountRateLimitScope::AccountEmail => (
+                settings.max_account_emails_per_address,
+                settings.account_email_window_seconds,
+            ),
+        }
+    }
+}
 
 /// Outcome of recording a failed attempt.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -74,12 +116,23 @@ impl LoginThrottle {
         Self { conn, settings }
     }
 
-    /// SHA-256 of the lowercased address, namespaced. Emails are treated
+    /// Hex SHA-256 of the lowercased address. Emails are treated
     /// case-insensitively for throttling, and never stored in the clear.
-    fn key(email: &EmailAddress) -> String {
+    fn email_hash(email: &EmailAddress) -> String {
         let normalized = email.to_string().to_lowercase();
-        let hash = digest::digest(&digest::SHA256, normalized.as_bytes());
-        format!("{NAMESPACE}{}", hex::encode(hash.as_ref()))
+        hex::encode(digest::digest(&digest::SHA256, normalized.as_bytes()).as_ref())
+    }
+
+    fn key(email: &EmailAddress) -> String {
+        format!("{NAMESPACE}{}", Self::email_hash(email))
+    }
+
+    fn rate_limit_key(scope: AccountRateLimitScope, email: &EmailAddress) -> String {
+        format!(
+            "{RATE_LIMIT_NAMESPACE}{}:{}",
+            scope.as_str(),
+            Self::email_hash(email)
+        )
     }
 
     fn now_secs() -> u64 {
@@ -137,6 +190,32 @@ impl LoginThrottle {
         })
     }
 
+    /// Count one request against the `scope` budget of the account. Returns the
+    /// number of seconds until the budget refills when it is exhausted, or
+    /// `None` if the request may proceed.
+    #[tracing::instrument(level = "debug", skip_all, fields(scope = scope.as_str()), err)]
+    pub async fn consume_request(
+        &self,
+        scope: AccountRateLimitScope,
+        email: &EmailAddress,
+    ) -> Result<Option<u64>, UniversalInboxError> {
+        let mut conn = self.conn.clone();
+        let key = Self::rate_limit_key(scope, email);
+        let (max_requests, window_seconds) = scope.limits(&self.settings);
+        let (count, ttl): (i64, i64) =
+            Script::new(include_str!("../../scripts/lua/account_rate_limit.lua"))
+                .key(&key)
+                .arg(window_seconds)
+                .invoke_async(&mut conn)
+                .await
+                .context("Failed to count account request in Redis")?;
+        if count > max_requests as i64 {
+            Ok(Some(ttl.max(1) as u64))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Clear the counter after a successful login.
     #[tracing::instrument(level = "debug", skip_all, err)]
     pub async fn reset(&self, email: &EmailAddress) -> Result<(), UniversalInboxError> {
@@ -165,6 +244,10 @@ mod tests {
             login_attempt_window_seconds: 900,
             login_lockout_base_seconds: 60,
             login_lockout_max_seconds: 900,
+            max_login_requests_per_account: 20,
+            login_request_window_seconds: 60,
+            max_account_emails_per_address: 5,
+            account_email_window_seconds: 3600,
         }
     }
 
@@ -203,5 +286,22 @@ mod tests {
         // SHA-256 hex is 64 chars; the raw email never appears in the key.
         assert_eq!(LoginThrottle::key(&lower).len(), NAMESPACE.len() + 64);
         assert!(!LoginThrottle::key(&lower).contains("user@example.com"));
+    }
+
+    #[test]
+    fn rate_limit_keys_are_scoped_and_hashed() {
+        let lower: EmailAddress = "user@example.com".parse().unwrap();
+        let mixed: EmailAddress = "User@Example.com".parse().unwrap();
+        let login = LoginThrottle::rate_limit_key(AccountRateLimitScope::LoginRequest, &lower);
+        let email = LoginThrottle::rate_limit_key(AccountRateLimitScope::AccountEmail, &lower);
+        assert_eq!(
+            login,
+            LoginThrottle::rate_limit_key(AccountRateLimitScope::LoginRequest, &mixed)
+        );
+        assert_ne!(login, email);
+        assert_ne!(login, LoginThrottle::key(&lower));
+        assert!(login.starts_with(RATE_LIMIT_NAMESPACE));
+        assert!(!login.contains("user@example.com"));
+        assert!(login.ends_with(&LoginThrottle::email_hash(&lower)));
     }
 }

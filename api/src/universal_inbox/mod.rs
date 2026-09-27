@@ -78,6 +78,10 @@ pub enum UniversalInboxError {
     Forbidden(String),
     #[error("Too many login attempts. Please try again later.")]
     TooManyLoginAttempts { retry_after_seconds: u64 },
+    /// Mapped to HTTP 429 + `Retry-After`. A per-account request budget (e.g.
+    /// registration / password-reset emails per address) is exhausted.
+    #[error("Too many requests. Please try again later.")]
+    TooManyRequests { retry_after_seconds: u64 },
     #[error("Recoverable error: {0}")]
     Recoverable(#[source] anyhow::Error),
     #[error("OAuth2 refresh token is no longer valid (invalid_grant): {0}")]

@@ -130,6 +130,14 @@ max_login_attempts = 5
 login_attempt_window_seconds = 3600
 login_lockout_base_seconds = 300
 login_lockout_max_seconds = 3600
+# Per-account request budgets (in addition to the per-IP rate limit), counted per
+# email whatever the client IP and whether or not the account exists: login
+# requests over `login_request_window_seconds`, and registration + password-reset
+# requests (which send emails) over `account_email_window_seconds`.
+max_login_requests_per_account = 20
+login_request_window_seconds = 60
+max_account_emails_per_address = 5
+account_email_window_seconds = 3600
 #
 # OR
 #

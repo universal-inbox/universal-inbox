@@ -346,6 +346,37 @@ pub struct LocalAuthenticationSettings {
     pub login_lockout_base_seconds: u64,
     /// Cap, in seconds, on the exponential-backoff lockout duration.
     pub login_lockout_max_seconds: u64,
+    /// Number of login requests (successful or not) accepted per account
+    /// (email) within `login_request_window_seconds`, whatever the client IP.
+    #[serde(default = "default_max_login_requests_per_account")]
+    pub max_login_requests_per_account: u32,
+    /// Fixed window, in seconds, over which login requests are counted.
+    #[serde(default = "default_login_request_window_seconds")]
+    pub login_request_window_seconds: u64,
+    /// Number of registration and password-reset requests (each may send an
+    /// email) accepted per email address within `account_email_window_seconds`,
+    /// whatever the client IP, so rotating IPs cannot email-bomb one victim.
+    #[serde(default = "default_max_account_emails_per_address")]
+    pub max_account_emails_per_address: u32,
+    /// Fixed window, in seconds, over which those requests are counted.
+    #[serde(default = "default_account_email_window_seconds")]
+    pub account_email_window_seconds: u64,
+}
+
+fn default_max_login_requests_per_account() -> u32 {
+    20
+}
+
+fn default_login_request_window_seconds() -> u64 {
+    60
+}
+
+fn default_max_account_emails_per_address() -> u32 {
+    5
+}
+
+fn default_account_email_window_seconds() -> u64 {
+    3600
 }
 
 fn from_u32<'de, D>(deserializer: D) -> Result<argon2::Version, D::Error>
@@ -1006,6 +1037,10 @@ mod tests {
             login_attempt_window_seconds: 900,
             login_lockout_base_seconds: 60,
             login_lockout_max_seconds: 900,
+            max_login_requests_per_account: 20,
+            login_request_window_seconds: 60,
+            max_account_emails_per_address: 5,
+            account_email_window_seconds: 3600,
         });
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
@@ -1105,6 +1140,10 @@ mod tests {
             login_attempt_window_seconds: 900,
             login_lockout_base_seconds: 60,
             login_lockout_max_seconds: 900,
+            max_login_requests_per_account: 20,
+            login_request_window_seconds: 60,
+            max_account_emails_per_address: 5,
+            account_email_window_seconds: 3600,
         });
         let oidc_auth_settings =
             AuthenticationSettings::OpenIDConnect(Box::new(OpenIDConnectSettings {

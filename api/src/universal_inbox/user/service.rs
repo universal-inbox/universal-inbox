@@ -14,7 +14,7 @@ use openidconnect::{
     },
 };
 use secrecy::{ExposeSecret, SecretBox};
-use sqlx::{Postgres, Transaction};
+use sqlx::{Acquire, Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use url::Url;
@@ -48,7 +48,7 @@ use crate::{
             AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
         },
     },
-    utils::login_throttle::LoginThrottle,
+    utils::login_throttle::{AccountRateLimitScope, LoginThrottle},
 };
 
 /// How long a password reset link stays valid after its email was sent. An
@@ -1049,18 +1049,93 @@ impl UserService {
         user: User,
         user_auth: UserAuth,
     ) -> Result<User, UniversalInboxError> {
+        // Registering an already-known address emails its owner too, so both
+        // outcomes draw from the same per-address budget, checked before the
+        // lookup so the throttled response does not reveal account existence.
+        if let Some(email) = &user.email
+            && let Some(retry_after_seconds) = self
+                .account_rate_limited_for(AccountRateLimitScope::AccountEmail, email)
+                .await
+        {
+            return Err(UniversalInboxError::TooManyRequests {
+                retry_after_seconds,
+            });
+        }
+
         let new_user = self
             .repository
             .create_user(executor, user, user_auth)
             .await?;
-        self.send_verification_email(executor, new_user.id, false)
+        // The budget was consumed above: do not count this email twice.
+        self.send_verification_email_to(executor, &new_user, false)
             .await?;
         Ok(new_user)
     }
 
+    /// Register a new local-password account from sign-up credentials.
+    ///
+    /// Rejects blacklisted email domains with [`UniversalInboxError::Forbidden`].
+    /// When the email is already registered, emails its owner instead and
+    /// returns `Ok(())` like a successful registration, so the caller's
+    /// response does not reveal whether the account exists.
+    #[tracing::instrument(level = "debug", skip_all, err)]
+    pub async fn register_local_user(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        credentials: Credentials,
+    ) -> Result<(), UniversalInboxError> {
+        let email_domain = credentials.email.domain().to_lowercase();
+        if let Some(rejection_message) = self
+            .application_settings
+            .security
+            .email_domain_blacklist
+            .get(&email_domain)
+        {
+            return Err(UniversalInboxError::Forbidden(rejection_message.clone()));
+        }
+
+        let user_auth = UserAuth::Local(Box::new(LocalUserAuth {
+            password_hash: self.get_new_password_hash(credentials.password)?,
+            password_reset_at: None,
+            password_reset_sent_at: None,
+        }));
+
+        // The duplicate insert aborts its transaction: run it in a savepoint
+        // so the registration attempt email can still use `executor`.
+        let mut savepoint = executor
+            .begin()
+            .await
+            .context("Failed to create savepoint while registering user")?;
+        let result = self
+            .register_user(
+                &mut savepoint,
+                User::new(None, None, credentials.email.clone()),
+                user_auth,
+            )
+            .await;
+
+        match result {
+            Ok(_) => savepoint
+                .commit()
+                .await
+                .context("Failed to release savepoint while registering user")?,
+            Err(UniversalInboxError::AlreadyExists { .. }) => {
+                savepoint
+                    .rollback()
+                    .await
+                    .context("Failed to rollback aborted registration savepoint")?;
+                self.send_registration_attempt_email(executor, &credentials.email, false)
+                    .await?;
+            }
+            Err(err) => return Err(err),
+        }
+
+        Ok(())
+    }
+
     /// Validate local-password credentials, applying per-account throttling.
     ///
-    /// On too many recent failures for the email, returns
+    /// On too many recent requests or failures for the email, returns
     /// [`UniversalInboxError::TooManyLoginAttempts`] (→ 429) before the password
     /// is even checked. On a wrong password it records the failure (locking the
     /// account with exponential backoff past the threshold, emailing the owner
@@ -1076,6 +1151,15 @@ impl UserService {
         credentials: Credentials,
     ) -> Result<User, UniversalInboxError> {
         let email = credentials.email.clone();
+
+        if let Some(retry_after_seconds) = self
+            .account_rate_limited_for(AccountRateLimitScope::LoginRequest, &email)
+            .await
+        {
+            return Err(UniversalInboxError::TooManyLoginAttempts {
+                retry_after_seconds,
+            });
+        }
 
         if let Some(throttle) = &self.login_throttle {
             match throttle.locked_for(&email).await {
@@ -1106,6 +1190,25 @@ impl UserService {
                 )))
             }
             Err(other) => Err(other),
+        }
+    }
+
+    /// Count one request against the per-account `scope` budget of `email`.
+    /// Returns the seconds until the budget refills when it is exhausted. Like
+    /// the login lockout, Redis errors fail open (the per-IP limiter still
+    /// applies).
+    async fn account_rate_limited_for(
+        &self,
+        scope: AccountRateLimitScope,
+        email: &EmailAddress,
+    ) -> Option<u64> {
+        let throttle = self.login_throttle.as_ref()?;
+        match throttle.consume_request(scope, email).await {
+            Ok(retry_after_seconds) => retry_after_seconds,
+            Err(err) => {
+                warn!("Account rate limit check failed, allowing request: {err:?}");
+                None
+            }
         }
     }
 
@@ -1249,11 +1352,36 @@ impl UserService {
         user_id: UserId,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
-        // Skip sending verification email for test accounts
-        let user = self.repository.get_user(executor, user_id).await?;
-        if let Some(user) = user
-            && user.is_testing
+        let Some(user) = self.repository.get_user(executor, user_id).await? else {
+            return Ok(());
+        };
+        // Resends draw from the same per-address budget as registration and
+        // password reset, so one account cannot flood an address.
+        if let Some(email) = &user.email
+            && let Some(retry_after_seconds) = self
+                .account_rate_limited_for(AccountRateLimitScope::AccountEmail, email)
+                .await
         {
+            return Err(UniversalInboxError::TooManyRequests {
+                retry_after_seconds,
+            });
+        }
+
+        self.send_verification_email_to(executor, &user, dry_run)
+            .await
+    }
+
+    /// Send the verification email without consuming the per-address budget,
+    /// for callers that already consumed it in the same request.
+    async fn send_verification_email_to(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user: &User,
+        dry_run: bool,
+    ) -> Result<(), UniversalInboxError> {
+        let user_id = user.id;
+        // Skip sending verification email for test accounts
+        if user.is_testing {
             debug!("Skipping verification email for test account {user_id}");
             return Ok(());
         }
@@ -1388,6 +1516,17 @@ impl UserService {
         email_address: EmailAddress,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
+        // Checked before the lookup: the budget is consumed and the throttled
+        // response identical whether or not the address has an account.
+        if let Some(retry_after_seconds) = self
+            .account_rate_limited_for(AccountRateLimitScope::AccountEmail, &email_address)
+            .await
+        {
+            return Err(UniversalInboxError::TooManyRequests {
+                retry_after_seconds,
+            });
+        }
+
         // Skip sending password reset email for test accounts
         let user = self
             .repository
