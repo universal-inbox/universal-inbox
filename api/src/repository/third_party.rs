@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{FromRow, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow, types::Json};
-use tracing::debug;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -129,8 +129,8 @@ impl ThirdPartyItemRepository for Repository {
             .push("third_party_item.integration_connection_id = ")
             .push_bind_unseparated(third_party_item.integration_connection_id.0);
 
-        let existing_third_party_item: Option<ThirdPartyItem> = query_builder
-            .build_query_as::<ThirdPartyItemRow>()
+        let existing_row = query_builder
+            .build()
             .fetch_optional(&mut **executor)
             .await
             .map_err(|err| {
@@ -142,12 +142,50 @@ impl ThirdPartyItemRepository for Repository {
                     source: err,
                     message,
                 }
-            })?
-            .map(TryInto::try_into)
-            .transpose()?;
+            })?;
+
+        let (existing_third_party_item, is_healing) = match existing_row {
+            None => (None, false),
+            Some(row) => match ThirdPartyItemRow::from_row(&row) {
+                Ok(existing_row) => (Some(ThirdPartyItem::try_from(existing_row)?), false),
+                Err(decode_err) => {
+                    // The stored data no longer matches the current types (eg. after a third
+                    // party payload shape change): only decode the plain columns and let the
+                    // update below overwrite the data with the fresh upstream one.
+                    let decode_plain_columns = || -> sqlx::Result<(Uuid, NaiveDateTime)> {
+                        Ok((
+                            row.try_get("third_party_item__id")?,
+                            row.try_get("third_party_item__created_at")?,
+                        ))
+                    };
+                    let (id, created_at) = decode_plain_columns().map_err(|err| {
+                        let message = format!(
+                            "Failed to decode third_party_item with source ID {} from storage: {err}",
+                            third_party_item.source_id
+                        );
+                        UniversalInboxError::DatabaseError {
+                            source: err,
+                            message,
+                        }
+                    })?;
+                    warn!(
+                        "Healing {} third_party_item {} (from {}) for {} that cannot be decoded: {decode_err}",
+                        kind, id, third_party_item.source_id, third_party_item.user_id
+                    );
+                    // The undecodable data cannot be returned as the `old` value, use the new
+                    // one instead
+                    let healed_third_party_item = ThirdPartyItem {
+                        id: id.into(),
+                        created_at: DateTime::from_naive_utc_and_offset(created_at, Utc),
+                        ..*third_party_item.clone()
+                    };
+                    (Some(healed_third_party_item), true)
+                }
+            },
+        };
 
         if let Some(existing_third_party_item) = existing_third_party_item {
-            if existing_third_party_item == *third_party_item {
+            if !is_healing && existing_third_party_item == *third_party_item {
                 debug!(
                     "Existing third_party_item {} {} (from {}) for {} does not need updating",
                     kind,
