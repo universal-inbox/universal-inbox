@@ -22,7 +22,7 @@ use actix_session::{
     storage::CookieSessionStore,
 };
 use actix_web::{
-    App, HttpServer, Result as ActixResult,
+    App, HttpResponse, HttpServer, Result as ActixResult,
     cookie::{
         Cookie, Key, SameSite,
         time::{Duration, OffsetDateTime},
@@ -508,6 +508,16 @@ pub async fn run_server(
             info!(
                 "Mounting static files on {}",
                 if path.is_empty() { "/" } else { path }
+            );
+            // actix-files rejects any path segment starting with '.' or '*', ending
+            // with ':', '<' or '>', or containing an encoded '/' (`%2F`, which the
+            // router keeps encoded), with a 400 (e.g. "segment started with
+            // invalid character: ('.')"). Scanners probing `/.env`, `/.git/...`,
+            // `/..%2f.env` trigger these constantly. Answer them with a plain 404
+            // before they reach the SPA service.
+            app = app.route(
+                &format!(r"{path}/{{invalid_path:(.*/)?([.*]|[^/]*[:<>](/|$)).*|.*%2[fF].*}}"),
+                web::route().to(|| async { HttpResponse::NotFound().finish() }),
             );
             app = app.service(
                 spa()
