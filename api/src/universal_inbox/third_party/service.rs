@@ -6,7 +6,7 @@ use std::{
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, Utc};
 use log::debug;
-use sqlx::{Postgres, Transaction};
+use sqlx::{PgConnection, Postgres, Transaction, pool::PoolConnection};
 use tokio::sync::RwLock;
 
 use universal_inbox::{
@@ -88,6 +88,10 @@ impl ThirdPartyItemService {
 
     pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
         self.repository.begin().await
+    }
+
+    pub async fn connect(&self) -> Result<PoolConnection<Postgres>, UniversalInboxError> {
+        self.repository.connect().await
     }
 
     #[tracing::instrument(
@@ -557,7 +561,7 @@ impl ThirdPartyItemService {
 
     pub async fn has_third_party_item_for_source_id(
         &self,
-        executor: &mut Transaction<'_, Postgres>,
+        executor: &mut PgConnection,
         kind: ThirdPartyItemKind,
         source_id: &str,
     ) -> Result<bool, UniversalInboxError> {
