@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use anyhow::Context;
 use sqlx::{FromRow, PgPool, Postgres, Row, Transaction, pool::PoolConnection, postgres::PgRow};
 use tracing::error;
 use uuid::Uuid;
@@ -29,19 +28,29 @@ impl Repository {
     }
 
     pub async fn connect(&self) -> Result<PoolConnection<Postgres>, UniversalInboxError> {
-        Ok(self
-            .pool
+        self.pool
             .acquire()
             .await
-            .context("Failed to connection to the database")?)
+            .map_err(|err| pool_error(err, "Failed to connection to the database"))
     }
 
     pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
-        Ok(self
-            .pool
+        self.pool
             .begin()
             .await
-            .context("Failed to begin database transaction")?)
+            .map_err(|err| pool_error(err, "Failed to begin database transaction"))
+    }
+}
+
+/// A pool acquire timeout is surfaced as the retryable `DatabaseUnavailable` (HTTP 503);
+/// any other failure keeps its context and stays unexpected.
+fn pool_error(err: sqlx::Error, message: &'static str) -> UniversalInboxError {
+    match err {
+        sqlx::Error::PoolTimedOut => UniversalInboxError::DatabaseUnavailable {
+            source: err,
+            message: message.to_string(),
+        },
+        err => UniversalInboxError::Unexpected(anyhow::Error::new(err).context(message)),
     }
 }
 
@@ -75,4 +84,42 @@ where
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pool_timeout_maps_to_database_unavailable() {
+        let err = pool_error(
+            sqlx::Error::PoolTimedOut,
+            "Failed to begin database transaction",
+        );
+
+        assert!(matches!(
+            err,
+            UniversalInboxError::DatabaseUnavailable {
+                source: sqlx::Error::PoolTimedOut,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn other_pool_errors_stay_unexpected_with_context() {
+        let err = pool_error(
+            sqlx::Error::PoolClosed,
+            "Failed to begin database transaction",
+        );
+
+        let UniversalInboxError::Unexpected(err) = err else {
+            panic!("expected Unexpected, got {err:?}");
+        };
+        assert_eq!(err.to_string(), "Failed to begin database transaction");
+        assert!(matches!(
+            err.downcast_ref::<sqlx::Error>(),
+            Some(sqlx::Error::PoolClosed)
+        ));
+    }
 }

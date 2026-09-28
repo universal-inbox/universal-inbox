@@ -112,10 +112,8 @@ pub async fn push_slack_event(
             current_span.set_attribute("slack.reaction", reaction.to_string());
 
             let service = integration_connection_service.read().await;
-            let mut transaction = service
-                .begin()
-                .await
-                .context("Failed to create new transaction while checking Slack user ID")?;
+            // No `.context()`: keep a pool timeout as `DatabaseUnavailable` (503).
+            let mut transaction = service.begin().await?;
 
             let config = service
                 .get_integration_connection_config_for_provider_user_id(
@@ -193,11 +191,8 @@ pub async fn push_slack_event(
                 current_span.set_attribute("slack.user_id", user.to_string());
             }
 
-            let service = third_party_item_service.read().await;
-            let mut transaction = service.begin().await.context(
-                "Failed to create new transaction while checking for known Slack threads",
-            )?;
-
+            // Cheap, DB-free check first: this endpoint receives every message of every
+            // channel the app is in, so most events must not cost a pool connection.
             if has_slack_references_in_message(content) {
                 current_span.set_attribute("slack.event.outcome", "queued");
                 current_span.set_attribute("slack.event.queue_reason", "has_references");
@@ -205,16 +200,26 @@ pub async fn push_slack_event(
                 return Ok(HttpResponse::Ok().finish());
             }
 
-            // Check if the message is a reply to a known thread
-            if let Some(thread_ts) = &thread_ts
-                && service
-                    .has_third_party_item_for_source_id(
-                        &mut transaction,
-                        ThirdPartyItemKind::SlackThread,
-                        &thread_ts.0,
-                    )
-                    .await?
-            {
+            // Only thread replies can belong to a known thread
+            let is_known_thread = match thread_ts {
+                Some(thread_ts) => {
+                    let service = third_party_item_service.read().await;
+                    // A single read: use a plain connection (no BEGIN/ROLLBACK), returned to
+                    // the pool before the Redis job push below. Pool exhaustion surfaces as
+                    // `DatabaseUnavailable` (503) so Slack retries the event.
+                    let mut connection = service.connect().await?;
+                    service
+                        .has_third_party_item_for_source_id(
+                            &mut connection,
+                            ThirdPartyItemKind::SlackThread,
+                            &thread_ts.0,
+                        )
+                        .await?
+                }
+                None => false,
+            };
+
+            if is_known_thread {
                 current_span.set_attribute("slack.event.outcome", "queued");
                 current_span.set_attribute("slack.event.queue_reason", "known_thread");
                 send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;

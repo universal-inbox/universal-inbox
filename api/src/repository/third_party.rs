@@ -1,7 +1,9 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use sqlx::{FromRow, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow, types::Json};
+use sqlx::{
+    FromRow, PgConnection, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow, types::Json,
+};
 use tracing::{debug, warn};
 use uuid::Uuid;
 
@@ -37,7 +39,7 @@ pub trait ThirdPartyItemRepository {
 
     async fn has_third_party_item_for_source_id(
         &self,
-        executor: &mut Transaction<'_, Postgres>,
+        executor: &mut PgConnection,
         kind: ThirdPartyItemKind,
         source_id: &str,
     ) -> Result<bool, UniversalInboxError>;
@@ -416,7 +418,7 @@ impl ThirdPartyItemRepository for Repository {
     )]
     async fn has_third_party_item_for_source_id(
         &self,
-        executor: &mut Transaction<'_, Postgres>,
+        executor: &mut PgConnection,
         kind: ThirdPartyItemKind,
         source_id: &str,
     ) -> Result<bool, UniversalInboxError> {
@@ -428,7 +430,7 @@ impl ThirdPartyItemRepository for Repository {
 
         let count: Option<i64> = query_builder
             .build_query_scalar()
-            .fetch_one(&mut **executor)
+            .fetch_one(&mut *executor)
             .await
             .map_err(|err| {
                 let message =
