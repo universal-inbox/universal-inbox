@@ -21,6 +21,8 @@ use serde_json::json;
 
 use crate::universal_inbox::{UniversalInboxError, UpstreamErrorKind};
 
+const DATABASE_UNAVAILABLE_RETRY_AFTER_SECONDS: &str = "5";
+
 impl ResponseError for UniversalInboxError {
     fn status_code(&self) -> StatusCode {
         match self {
@@ -45,6 +47,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
             UniversalInboxError::UnsupportedAction(_) => StatusCode::BAD_REQUEST,
             UniversalInboxError::DatabaseError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            UniversalInboxError::DatabaseUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
             UniversalInboxError::OAuth2InvalidGrant(_) => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::PaymentRequired { .. } => StatusCode::PAYMENT_REQUIRED,
         }
@@ -69,6 +72,14 @@ impl ResponseError for UniversalInboxError {
             && let Ok(value) = header::HeaderValue::from_str(&retry_after_seconds.to_string())
         {
             res.headers_mut().insert(header::RETRY_AFTER, value);
+        }
+
+        // Pool exhaustion is transient: tell the caller to retry shortly.
+        if let UniversalInboxError::DatabaseUnavailable { .. } = self {
+            res.headers_mut().insert(
+                header::RETRY_AFTER,
+                header::HeaderValue::from_static(DATABASE_UNAVAILABLE_RETRY_AFTER_SECONDS),
+            );
         }
 
         // PaymentRequired carries a structured body so the UI can pick the
@@ -159,5 +170,22 @@ mod tests {
         assert_eq!(parsed["details"]["current_plan"], "free");
         assert_eq!(parsed["details"]["limit"], 2);
         assert_eq!(parsed["details"]["usage"], 2);
+    }
+
+    #[test]
+    fn database_unavailable_response_uses_503_and_retry_after() {
+        let err = UniversalInboxError::DatabaseUnavailable {
+            source: sqlx::Error::PoolTimedOut,
+            message: "Failed to begin database transaction".to_string(),
+        };
+
+        let res = err.error_response();
+        assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            res.headers()
+                .get(header::RETRY_AFTER)
+                .map(|v| v.to_str().unwrap()),
+            Some(DATABASE_UNAVAILABLE_RETRY_AFTER_SECONDS)
+        );
     }
 }

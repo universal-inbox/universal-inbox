@@ -72,6 +72,15 @@ pub enum UniversalInboxError {
         source: sqlx::Error,
         message: String,
     },
+    /// Mapped to HTTP 503 + `Retry-After`. No database connection could be acquired from
+    /// the pool within `acquire_timeout` (the pool is exhausted): a transient overload the
+    /// caller should retry, not a fault in the request.
+    #[error("Database unavailable: {message}")]
+    DatabaseUnavailable {
+        #[source]
+        source: sqlx::Error,
+        message: String,
+    },
     #[error("Unauthorized access: {0}")]
     Unauthorized(anyhow::Error),
     #[error("Forbidden access: {0}")]
