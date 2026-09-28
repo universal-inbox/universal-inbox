@@ -11,6 +11,7 @@ use actix_http::body::MessageBody;
 use actix_web::{
     HttpMessage,
     dev::{ServiceRequest, ServiceResponse},
+    http::StatusCode,
     web,
 };
 use opentelemetry::{KeyValue, trace::TracerProvider as _};
@@ -327,6 +328,17 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
         span: Span,
         outcome: &Result<ServiceResponse<B>, actix_web::Error>,
     ) {
+        // A 401 is an expected outcome (logged-out clients), not an exception:
+        // record the status only, so it does not surface as an error in traces
+        let status = match outcome {
+            Ok(response) => response.status(),
+            Err(error) => error.as_response_error().status_code(),
+        };
+        if status == StatusCode::UNAUTHORIZED {
+            span.record("http.status_code", i32::from(status.as_u16()));
+            span.record("otel.status_code", "OK");
+            return;
+        }
         DefaultRootSpanBuilder::on_request_end(span, outcome);
     }
 }
