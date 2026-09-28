@@ -175,3 +175,76 @@ mod cors {
         }
     }
 }
+
+mod invalid_static_paths {
+    use super::*;
+
+    use pretty_assertions::assert_eq;
+
+    #[rstest]
+    #[case::dotfile("/.env")]
+    #[case::nested_dotfile("/.git/config")]
+    #[case::unknown_well_known("/.well-known/security.txt")]
+    #[case::wildcard("/*")]
+    #[case::nested_wildcard("/assets/*.js")]
+    #[case::trailing_colon("/c:")]
+    #[case::nested_trailing_colon("/foo:/bar")]
+    #[case::trailing_lower_than("/foo%3C")]
+    #[case::trailing_greater_than("/foo%3E")]
+    // Real scanner probes seen in production traces
+    #[case::encoded_slash("/admin%2F.env")]
+    #[case::encoded_lowercase_slash_traversal("/static/%2e%2e%2f%2e%2e%2f.env")]
+    #[case::encoded_dot_after_wildcard("/*%2eenv%2esave")]
+    #[case::encoded_dotfile("/home/user/%2eaws/credentials")]
+    #[case::url_as_path("/https://app.universal-inbox.com/")]
+    #[tokio::test]
+    async fn test_invalid_static_path_returns_not_found(
+        #[future] tested_app: TestedApp,
+        #[case] path: &str,
+    ) {
+        let app = tested_app.await;
+
+        let response = reqwest::Client::new()
+            .get(format!("{}{path}", app.app_address))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 404);
+    }
+
+    #[rstest]
+    #[case::inner_dot("/assets/app.min.js")]
+    #[case::inner_colon("/notifications/a:b")]
+    #[case::inner_wildcard("/foo*bar")]
+    #[tokio::test]
+    async fn test_valid_static_path_is_served(#[future] tested_app: TestedApp, #[case] path: &str) {
+        let app = tested_app.await;
+
+        let response = reqwest::Client::new()
+            .get(format!("{}{path}", app.app_address))
+            .send()
+            .await
+            .unwrap();
+
+        // Unknown SPA routes fall back to index.html
+        assert_eq!(response.status(), 200);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_registered_well_known_route_still_served(#[future] tested_app: TestedApp) {
+        let app = tested_app.await;
+
+        let response = reqwest::Client::new()
+            .get(format!(
+                "{}/.well-known/oauth-authorization-server",
+                app.app_address
+            ))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+    }
+}
