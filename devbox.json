@@ -42,7 +42,10 @@
         "sccache": "latest",
         "zellij": "latest",
         "beads": "latest",
-        "stripe-cli": "latest"
+        "stripe-cli": {
+            "version": "latest",
+            "excluded_platforms": ["aarch64-linux"]
+        }
     },
     "shell": {
         "init_hook": [
