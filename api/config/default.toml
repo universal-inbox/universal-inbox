@@ -159,6 +159,8 @@ max_age_days = 30
 # carrying customer PII as span attributes.
 log_directive = "info"
 dependencies_log_level = "error"
+# "Pretty" (multi-line, colored) or "Json" (one object per line, for log collectors)
+format = "Pretty"
 
 # [application.observability.tracing]
 # otlp_exporter_protocol = "Grpc" # or Http

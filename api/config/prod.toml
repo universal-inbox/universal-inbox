@@ -4,6 +4,9 @@ static_dir = "./statics"
 static_path = ""
 show_changelog = true
 
+[application.observability.logging]
+format = "Json"
+
 [database]
 max_connections = 100
 

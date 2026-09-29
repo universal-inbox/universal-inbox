@@ -303,6 +303,18 @@ pub enum OtlpExporterProtocol {
 pub struct LoggingSettings {
     pub log_directive: String,
     pub dependencies_log_level: String,
+    #[serde(default)]
+    pub format: LogFormat,
+}
+
+/// Format of the logs written to stdout.
+#[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq)]
+pub enum LogFormat {
+    /// Multi-line, colored output for humans.
+    #[default]
+    Pretty,
+    /// One JSON object per line, without ANSI colors, for log collectors.
+    Json,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -900,21 +912,21 @@ impl Settings {
         let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "config".into());
         let mut config_builder =
             Config::builder().add_source(File::with_name(&format!("{config_path}/default")));
-        eprintln!("Loading {config_path}/default config file");
+        println!("Loading {config_path}/default config file");
         if let Some(file) = file {
             config_builder = config_builder.add_source(File::with_name(&file).required(true));
-            eprintln!("Loading {file} config file");
+            println!("Loading {file} config file");
         } else if let Ok(config_file) = env::var("CONFIG_FILE") {
             config_builder =
                 config_builder.add_source(File::with_name(&config_file).required(true));
-            eprintln!("Loading {config_file} config file");
+            println!("Loading {config_file} config file");
         } else {
             config_builder = config_builder
                 .add_source(File::with_name(&format!("{config_path}/dev")).required(true));
-            eprintln!("Loading {config_path}/dev config file");
+            println!("Loading {config_path}/dev config file");
             config_builder = config_builder
                 .add_source(File::with_name(&format!("{config_path}/local")).required(false));
-            eprintln!("Loading {config_path}/local config file");
+            println!("Loading {config_path}/local config file");
         }
 
         serde_path_to_error::deserialize(

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::OnceLock;
 use std::{future::Future, time::Duration};
 
 use crate::{
@@ -33,12 +34,13 @@ use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder};
 use tracing_log::LogTracer;
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{
-    EnvFilter, Registry,
+    EnvFilter, Layer, Registry,
     layer::{Layered, SubscriberExt},
+    registry::LookupSpan,
 };
 
 use crate::{
-    configuration::{OtlpExporterProtocol, TracingSettings},
+    configuration::{LogFormat, OtlpExporterProtocol, TracingSettings},
     utils::jwt::Claims,
 };
 
@@ -78,6 +80,10 @@ fn with_forced_off_targets(filter: EnvFilter) -> EnvFilter {
         )
     })
 }
+
+/// Kept so the panic hook can flush buffered spans and logs before the
+/// process exits: batch processors would otherwise drop them.
+static TELEMETRY_PROVIDERS: OnceLock<(SdkTracerProvider, SdkLoggerProvider)> = OnceLock::new();
 
 fn build_env_filter(env_filter_str: &str) -> EnvFilter {
     with_forced_off_targets(
@@ -130,6 +136,8 @@ pub fn get_subscriber_with_telemetry(
     // The bridge currently has a bug as it does not add the span_id and trace_id to the log record
     // See https://github.com/open-telemetry/opentelemetry-rust/pull/1394
     let logging = OpenTelemetryTracingBridge::new(&logger);
+    // Already set only if the subscriber is built twice: the first providers stay.
+    let _ = TELEMETRY_PROVIDERS.set((tracer_provider, logger));
 
     Registry::default()
         .with(env_filter)
@@ -143,17 +151,67 @@ pub fn get_subscriber_with_telemetry_and_logging(
     config: &TracingSettings,
     service_name: &str,
     version: Option<String>,
+    log_format: LogFormat,
 ) -> impl Subscriber + Send + Sync {
-    let fmt = tracing_subscriber::fmt::layer().pretty();
     get_subscriber_with_telemetry(environment, env_filter_str, config, service_name, version)
-        .with(fmt)
+        .with(build_fmt_layer(log_format))
 }
 
-pub fn get_subscriber(env_filter_str: &str) -> impl Subscriber + Send + Sync {
+pub fn get_subscriber(
+    env_filter_str: &str,
+    log_format: LogFormat,
+) -> impl Subscriber + Send + Sync {
     let env_filter = build_env_filter(env_filter_str);
-    let fmt = tracing_subscriber::fmt::layer().pretty();
 
-    Registry::default().with(env_filter).with(fmt)
+    Registry::default()
+        .with(env_filter)
+        .with(build_fmt_layer(log_format))
+}
+
+fn build_fmt_layer<S>(log_format: LogFormat) -> Box<dyn Layer<S> + Send + Sync>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    match log_format {
+        LogFormat::Pretty => tracing_subscriber::fmt::layer().pretty().boxed(),
+        // `flatten_event` puts `message` and `level` at the top level, where
+        // log collectors such as Datadog read them without a custom pipeline.
+        LogFormat::Json => tracing_subscriber::fmt::layer()
+            .json()
+            .with_ansi(false)
+            .flatten_event(true)
+            .with_current_span(true)
+            .boxed(),
+    }
+}
+
+/// Report panics as `error` events so they reach the configured log output
+/// and the OTLP backend, then run the previously installed hook (the colored
+/// backtrace). Install it after the tracing subscriber.
+pub fn install_panic_hook() {
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let payload = panic_info.payload();
+        let message = payload
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+            .unwrap_or("<non-string panic payload>");
+        let location = panic_info
+            .location()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+        tracing::error!(panic.location = %location, "The application panicked: {message}");
+
+        if let Some((tracer_provider, logger_provider)) = TELEMETRY_PROVIDERS.get() {
+            // Best effort: the process is going down and there is nowhere
+            // left to report a failed export.
+            let _ = tracer_provider.force_flush();
+            let _ = logger_provider.force_flush();
+        }
+
+        previous_hook(panic_info);
+    }));
 }
 
 pub fn init_subscriber(
