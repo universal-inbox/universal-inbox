@@ -55,7 +55,10 @@ pub mod test_db;
 pub fn tracing_setup(settings: Settings) {
     info!("Setting up tracing");
 
-    let subscriber = get_subscriber(&settings.application.observability.logging.log_directive);
+    let subscriber = get_subscriber(
+        &settings.application.observability.logging.log_directive,
+        settings.application.observability.logging.format,
+    );
     init_subscriber(
         subscriber,
         log::LevelFilter::from_str(

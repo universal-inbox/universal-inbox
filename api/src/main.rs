@@ -17,7 +17,7 @@ use universal_inbox_api::{
     mailer::SmtpMailer,
     observability::{
         get_subscriber, get_subscriber_with_telemetry, get_subscriber_with_telemetry_and_logging,
-        init_subscriber,
+        init_subscriber, install_panic_hook,
     },
     utils::passkey::build_webauthn,
 };
@@ -40,6 +40,7 @@ async fn main() -> std::io::Result<()> {
         _ => ExecutionContext::Worker, // All other commands (sync operations, workers, etc.)
     };
     let (log_env_filter, dep_log_level_filter) = cli.log_level(&settings);
+    let log_format = settings.application.observability.logging.format;
     if let Some(tracing_settings) = &settings.application.observability.tracing {
         let service_name = cli.service_name();
         if tracing_settings.is_stdout_logging_enabled {
@@ -50,6 +51,7 @@ async fn main() -> std::io::Result<()> {
                     tracing_settings,
                     &service_name,
                     settings.application.version.clone(),
+                    log_format,
                 ),
                 dep_log_level_filter,
             );
@@ -66,9 +68,10 @@ async fn main() -> std::io::Result<()> {
             );
         }
     } else {
-        let subscriber = get_subscriber(&log_env_filter);
+        let subscriber = get_subscriber(&log_env_filter, log_format);
         init_subscriber(subscriber, dep_log_level_filter);
     };
+    install_panic_hook();
 
     info!(
         "Connecting to PostgreSQL on {}",
