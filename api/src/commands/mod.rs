@@ -35,6 +35,7 @@ pub mod oauth;
 #[cfg(feature = "screenshots")]
 pub mod screenshots;
 pub mod sync;
+pub mod todoist;
 pub mod user;
 
 async fn shutdown_signal() -> std::io::Result<()> {
@@ -129,6 +130,12 @@ pub enum Commands {
         command: UserCommands,
     },
 
+    /// Todoist maintenance tasks
+    Todoist {
+        #[clap(subcommand)]
+        command: TodoistCommands,
+    },
+
     /// Manage Stripe-backed billing state (reconciliation, etc.).
     /// No-op when `[billing]` is absent from configuration.
     Billing {
@@ -204,6 +211,19 @@ pub enum TestCommands {
         /// Skip deleting the recording user at the end of the run.
         #[arg(long, default_value_t = false)]
         keep_user: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TodoistCommands {
+    /// Replace legacy (pre API v1) Todoist IDs of synced tasks with their
+    /// API v1 IDs (one-off backfill)
+    MigrateLegacyIds {
+        /// Only migrate tasks of given user
+        #[arg(short, long)]
+        user_id: Option<UserId>,
+        #[arg(short, long)]
+        dry_run: bool,
     },
 }
 
@@ -566,6 +586,18 @@ impl Cli {
 
                 UserCommands::GenerateJWTToken { user_email } => {
                     user::generate_jwt_token(user_service, auth_token_service, user_email).await
+                }
+            },
+
+            Commands::Todoist { command } => match command {
+                TodoistCommands::MigrateLegacyIds { user_id, dry_run } => {
+                    todoist::migrate_legacy_ids(
+                        task_service,
+                        integration_connection_service,
+                        *user_id,
+                        *dry_run,
+                    )
+                    .await
                 }
             },
 

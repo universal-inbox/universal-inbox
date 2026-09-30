@@ -41,7 +41,10 @@ use universal_inbox::{
     },
     third_party::{
         integrations::todoist::{TodoistColor, TodoistItem, TodoistItemDue, TodoistItemPriority},
-        item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
+        item::{
+            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemKind,
+            ThirdPartyItemSourceKind,
+        },
     },
     user::UserId,
     utils::default_value::DefaultValue,
@@ -55,6 +58,7 @@ use crate::{
         task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
         third_party::ThirdPartyItemSourceService,
     },
+    repository::{Repository, task::TaskRepository, third_party::ThirdPartyItemRepository},
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
     },
@@ -66,11 +70,49 @@ pub struct TodoistService {
     pub todoist_base_url: String,
     pub todoist_base_path: String,
     pub projects_cache_index: Arc<AtomicU64>,
+    pub repository: Arc<Repository>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     pub max_retry_duration: Duration,
 }
 
 static TODOIST_BASE_URL: &str = "https://api.todoist.com/api/v1";
+
+/// Todoist sync error code returned when a command uses a legacy (pre API v1)
+/// ID: "The ID provided was deprecated and cannot be used with this version of
+/// the API".
+const TODOIST_DEPRECATED_ID_ERROR_CODE: i32 = 557;
+
+/// `GET /id_mappings/{obj_name}/{ids}` accepts at most 100 IDs per call.
+const TODOIST_ID_MAPPINGS_MAX_IDS: usize = 100;
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistIdMapping {
+    pub old_id: String,
+    pub new_id: String,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum LegacyIdMigrationStatus {
+    /// The item's `source_id` (and `data`) now use the Todoist API v1 IDs.
+    Migrated,
+    /// An item with the new ID already exists (created by a sync after the API
+    /// v1 migration): the legacy item's task has been marked as `Deleted`.
+    Duplicate,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Default)]
+pub struct LegacyIdMigrationReport {
+    pub migrated: usize,
+    pub duplicates: usize,
+    /// Legacy IDs unknown to Todoist (most likely tasks deleted since).
+    pub unmapped: usize,
+}
+
+/// Legacy Todoist IDs (pre API v1) are all-digit, API v1 IDs are opaque
+/// alphanumeric strings.
+pub fn is_legacy_todoist_id(id: &str) -> bool {
+    !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit())
+}
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 #[serde(tag = "type")]
@@ -231,6 +273,7 @@ pub enum TodoistCommandStatus {
 impl TodoistService {
     pub fn new(
         todoist_base_url: Option<String>,
+        repository: Arc<Repository>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         max_retry_duration: Duration,
     ) -> Result<TodoistService, UniversalInboxError> {
@@ -248,6 +291,7 @@ impl TodoistService {
                 todoist_base_path
             },
             projects_cache_index: Arc::new(AtomicU64::new(0)),
+            repository,
             integration_connection_service,
             max_retry_duration,
         })
@@ -354,6 +398,10 @@ impl TodoistService {
             [
                 format!("{}/sync", self.todoist_base_path),
                 format!("{}/tasks", self.todoist_base_path),
+                format!(
+                    "{}/id_mappings/{{obj_name}}/{{obj_ids}}",
+                    self.todoist_base_path
+                ),
             ],
             self.max_retry_duration,
         )
@@ -429,9 +477,18 @@ impl TodoistService {
         commands: Vec<TodoistSyncCommand>,
         access_token: &AccessToken,
     ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
+        let sync_response = self.post_sync_commands(&commands, access_token).await?;
+        Self::check_sync_status(sync_response, &commands)
+    }
+
+    async fn post_sync_commands(
+        &self,
+        commands: &[TodoistSyncCommand],
+        access_token: &AccessToken,
+    ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
         let body = json!({ "commands": commands });
 
-        let sync_response: TodoistSyncStatusResponse = self
+        Ok(self
             .build_todoist_client(access_token)?
             .post(format!("{}/sync", self.todoist_base_url), Some(&body))
             .await
@@ -439,8 +496,253 @@ impl TodoistService {
                 format!(
                     "Failed to fetch response from Todoist API while sending commands {commands:?}"
                 )
-            })?;
+            })?)
+    }
 
+    fn has_deprecated_id_error(sync_response: &TodoistSyncStatusResponse) -> bool {
+        sync_response.sync_status.values().any(|status| {
+            matches!(
+                status,
+                TodoistCommandStatus::Error { error_code, .. }
+                    if *error_code == TODOIST_DEPRECATED_ID_ERROR_CODE
+            )
+        })
+    }
+
+    /// Sends commands targeting `third_party_item`'s Todoist task, built from
+    /// its ID by `build_commands`. If Todoist rejects the ID as a legacy (pre
+    /// API v1) one, the new ID is resolved via `id_mappings`, persisted on the
+    /// third party item and the commands are sent again once with it.
+    async fn send_item_sync_commands<F>(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        third_party_item: &ThirdPartyItem,
+        access_token: &AccessToken,
+        build_commands: F,
+    ) -> Result<TodoistSyncStatusResponse, UniversalInboxError>
+    where
+        F: Fn(&str) -> Vec<TodoistSyncCommand> + Send + Sync,
+    {
+        let commands = build_commands(&third_party_item.source_id);
+        let sync_response = self.post_sync_commands(&commands, access_token).await?;
+        if !Self::has_deprecated_id_error(&sync_response) {
+            return Self::check_sync_status(sync_response, &commands);
+        }
+
+        let old_id = third_party_item.source_id.clone();
+        let Some(new_id) = self
+            .get_id_mappings("tasks", std::slice::from_ref(&old_id), access_token)
+            .await?
+            .remove(&old_id)
+        else {
+            return Self::check_sync_status(sync_response, &commands);
+        };
+        tracing::info!(
+            "Todoist task legacy ID {old_id} was rejected as deprecated, retrying with its new ID {new_id}"
+        );
+        let new_project_id = self
+            .map_legacy_project_id(third_party_item, access_token)
+            .await;
+        self.migrate_legacy_item_id(executor, third_party_item, &new_id, new_project_id)
+            .await?;
+
+        let commands = build_commands(&new_id);
+        let sync_response = self.post_sync_commands(&commands, access_token).await?;
+        Self::check_sync_status(sync_response, &commands)
+    }
+
+    /// Resolves the new ID of `third_party_item`'s project if it is a legacy
+    /// one. Best-effort: the project ID is only informational.
+    async fn map_legacy_project_id(
+        &self,
+        third_party_item: &ThirdPartyItem,
+        access_token: &AccessToken,
+    ) -> Option<String> {
+        let ThirdPartyItemData::TodoistItem(ref item) = third_party_item.data else {
+            return None;
+        };
+        if !is_legacy_todoist_id(&item.project_id) {
+            return None;
+        }
+        match self
+            .get_id_mappings(
+                "projects",
+                std::slice::from_ref(&item.project_id),
+                access_token,
+            )
+            .await
+        {
+            Ok(mut mappings) => mappings.remove(&item.project_id),
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    "Failed to resolve new ID of Todoist legacy project ID {}",
+                    item.project_id
+                );
+                None
+            }
+        }
+    }
+
+    /// Translates legacy (pre API v1) Todoist IDs of `obj_name` objects
+    /// (`tasks`, `projects`, ...) into their new ID. IDs unknown to Todoist are
+    /// absent from the returned map.
+    pub async fn get_id_mappings(
+        &self,
+        obj_name: &str,
+        ids: &[String],
+        access_token: &AccessToken,
+    ) -> Result<HashMap<String, String>, UniversalInboxError> {
+        let client = self.build_todoist_client(access_token)?;
+        let mut mappings = HashMap::new();
+        for chunk in ids.chunks(TODOIST_ID_MAPPINGS_MAX_IDS) {
+            let chunk_mappings: Vec<TodoistIdMapping> = client
+                .get(format!(
+                    "{}/id_mappings/{obj_name}/{}",
+                    self.todoist_base_url,
+                    chunk.join(",")
+                ))
+                .await
+                .with_context(|| {
+                    format!("Failed to fetch Todoist {obj_name} ID mappings for {chunk:?}")
+                })?;
+            mappings.extend(
+                chunk_mappings
+                    .into_iter()
+                    .map(|mapping| (mapping.old_id, mapping.new_id)),
+            );
+        }
+        Ok(mappings)
+    }
+
+    /// Replaces the legacy Todoist ID of `third_party_item` with `new_id`
+    /// (and its project ID with `new_project_id` if given). If an item with
+    /// `new_id` already exists, it was synced after the API v1 migration and
+    /// duplicates the legacy one: the legacy item's task is marked as
+    /// `Deleted` (locally only) instead.
+    pub async fn migrate_legacy_item_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        third_party_item: &ThirdPartyItem,
+        new_id: &str,
+        new_project_id: Option<String>,
+    ) -> Result<LegacyIdMigrationStatus, UniversalInboxError> {
+        let existing_items = self
+            .repository
+            .find_third_party_items_for_source_id(
+                executor,
+                ThirdPartyItemKind::TodoistItem,
+                new_id,
+                Some(third_party_item.user_id),
+            )
+            .await?;
+        // A caller holding a stale copy of an already migrated item finds the
+        // item itself: it is not a duplicate.
+        if existing_items.iter().any(|item| {
+            item.id != third_party_item.id
+                && item.integration_connection_id == third_party_item.integration_connection_id
+        }) {
+            if let Some(task) = self
+                .repository
+                .get_task_for_source_item_id(
+                    executor,
+                    third_party_item.id.0,
+                    third_party_item.user_id,
+                )
+                .await?
+            {
+                self.repository
+                    .update_task(
+                        executor,
+                        task.id,
+                        &TaskPatch {
+                            status: Some(TaskStatus::Deleted),
+                            ..Default::default()
+                        },
+                        third_party_item.user_id,
+                    )
+                    .await?;
+            }
+            return Ok(LegacyIdMigrationStatus::Duplicate);
+        }
+
+        let mut data = third_party_item.data.clone();
+        if let ThirdPartyItemData::TodoistItem(ref mut item) = data {
+            item.id = new_id.to_string();
+            if let Some(new_project_id) = new_project_id {
+                item.project_id = new_project_id;
+            }
+        }
+        self.repository
+            .update_third_party_item_source_id(executor, third_party_item.id, new_id, &data)
+            .await?;
+
+        Ok(LegacyIdMigrationStatus::Migrated)
+    }
+
+    /// Migrates `items` (all from the same Todoist connection, authorized by
+    /// `access_token`) from legacy Todoist IDs to their API v1 IDs.
+    pub async fn migrate_legacy_items(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        items: &[ThirdPartyItem],
+        access_token: &AccessToken,
+    ) -> Result<LegacyIdMigrationReport, UniversalInboxError> {
+        let item_ids: Vec<String> = items.iter().map(|item| item.source_id.clone()).collect();
+        let mut project_ids: Vec<String> = items
+            .iter()
+            .filter_map(|item| match item.data {
+                ThirdPartyItemData::TodoistItem(ref todoist_item)
+                    if is_legacy_todoist_id(&todoist_item.project_id) =>
+                {
+                    Some(todoist_item.project_id.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        project_ids.sort();
+        project_ids.dedup();
+
+        let item_mappings = self
+            .get_id_mappings("tasks", &item_ids, access_token)
+            .await?;
+        let project_mappings = self
+            .get_id_mappings("projects", &project_ids, access_token)
+            .await?;
+
+        let mut report = LegacyIdMigrationReport::default();
+        for item in items {
+            let Some(new_id) = item_mappings.get(&item.source_id) else {
+                tracing::warn!(
+                    "No Todoist API v1 ID found for legacy Todoist task ID {} (third party item {})",
+                    item.source_id,
+                    item.id
+                );
+                report.unmapped += 1;
+                continue;
+            };
+            let new_project_id = match item.data {
+                ThirdPartyItemData::TodoistItem(ref todoist_item) => {
+                    project_mappings.get(&todoist_item.project_id).cloned()
+                }
+                _ => None,
+            };
+            match self
+                .migrate_legacy_item_id(executor, item, new_id, new_project_id)
+                .await?
+            {
+                LegacyIdMigrationStatus::Migrated => report.migrated += 1,
+                LegacyIdMigrationStatus::Duplicate => report.duplicates += 1,
+            }
+        }
+
+        Ok(report)
+    }
+
+    fn check_sync_status(
+        sync_response: TodoistSyncStatusResponse,
+        commands: &[TodoistSyncCommand],
+    ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
         let command_result = sync_response.sync_status.values().next();
         match command_result {
             Some(TodoistCommandStatus::Ok(_)) => Ok(sync_response),
@@ -741,15 +1043,12 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
             .await?
             .ok_or_else(|| anyhow!("Cannot delete a Todoist task without an access token"))?;
 
-        self.send_sync_commands(
+        self.send_item_sync_commands(executor, third_party_item, &access_token, |id| {
             vec![TodoistSyncCommand::ItemDelete {
                 uuid: Uuid::new_v4(),
-                args: TodoistSyncCommandItemDeleteArgs {
-                    id: third_party_item.source_id.clone(),
-                },
-            }],
-            &access_token,
-        )
+                args: TodoistSyncCommandItemDeleteArgs { id: id.to_string() },
+            }]
+        })
         .await?;
 
         Ok(())
@@ -780,15 +1079,12 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
             .await?
             .ok_or_else(|| anyhow!("Cannot complete a Todoist task without an access token"))?;
 
-        self.send_sync_commands(
+        self.send_item_sync_commands(executor, third_party_item, &access_token, |id| {
             vec![TodoistSyncCommand::ItemComplete {
                 uuid: Uuid::new_v4(),
-                args: TodoistSyncCommandItemCompleteArgs {
-                    id: third_party_item.source_id.clone(),
-                },
-            }],
-            &access_token,
-        )
+                args: TodoistSyncCommandItemCompleteArgs { id: id.to_string() },
+            }]
+        })
         .await?;
 
         Ok(())
@@ -819,15 +1115,12 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
             .await?
             .ok_or_else(|| anyhow!("Cannot complete a Todoist task without an access token"))?;
 
-        self.send_sync_commands(
+        self.send_item_sync_commands(executor, third_party_item, &access_token, |id| {
             vec![TodoistSyncCommand::ItemUncomplete {
                 uuid: Uuid::new_v4(),
-                args: TodoistSyncCommandItemUncompleteArgs {
-                    id: third_party_item.source_id.clone(),
-                },
-            }],
-            &access_token,
-        )
+                args: TodoistSyncCommandItemUncompleteArgs { id: id.to_string() },
+            }]
+        })
         .await?;
 
         Ok(())
@@ -850,7 +1143,6 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         patch: &TaskPatch,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        let id = third_party_item.source_id.as_str();
         let (access_token, _) = self
             .integration_connection_service
             .read()
@@ -858,48 +1150,56 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
             .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot update a Todoist task without an access token"))?;
-        let mut commands: Vec<TodoistSyncCommand> = vec![];
-        if let Some(ref project_name) = patch.project_name {
-            let project = self
-                .get_or_create_project(executor, project_name, user_id, Some(&access_token))
-                .await?;
-            commands.push(TodoistSyncCommand::ItemMove {
-                uuid: Uuid::new_v4(),
-                args: TodoistSyncCommandItemMoveArgs {
-                    id: id.to_string(),
-                    project_id: project.source_id.to_string(),
-                },
-            });
-        }
-
-        if patch.priority.is_some()
+        let project_id = match patch.project_name {
+            Some(ref project_name) => Some(
+                self.get_or_create_project(executor, project_name, user_id, Some(&access_token))
+                    .await?
+                    .source_id
+                    .to_string(),
+            ),
+            None => None,
+        };
+        let has_item_update = patch.priority.is_some()
             || patch.due_at.is_some()
             || patch.body.is_some()
-            || patch.title.is_some()
-        {
-            let priority = patch.priority.map(|priority| priority.into());
-            let due = patch
-                .due_at
-                .as_ref()
-                .map(|due| due.as_ref().map(|d| d.into()));
-            let description = patch.body.clone();
-            let content = patch.title.clone();
+            || patch.title.is_some();
 
-            commands.push(TodoistSyncCommand::ItemUpdate {
-                uuid: Uuid::new_v4(),
-                args: TodoistSyncCommandItemUpdateArgs {
-                    id: id.to_string(),
-                    due,
-                    priority,
-                    description,
-                    content,
-                },
-            });
+        if project_id.is_none() && !has_item_update {
+            return Ok(());
         }
 
-        if !commands.is_empty() {
-            self.send_sync_commands(commands, &access_token).await?;
-        }
+        let build_commands = |id: &str| {
+            let mut commands: Vec<TodoistSyncCommand> = vec![];
+            if let Some(ref project_id) = project_id {
+                commands.push(TodoistSyncCommand::ItemMove {
+                    uuid: Uuid::new_v4(),
+                    args: TodoistSyncCommandItemMoveArgs {
+                        id: id.to_string(),
+                        project_id: project_id.clone(),
+                    },
+                });
+            }
+
+            if has_item_update {
+                commands.push(TodoistSyncCommand::ItemUpdate {
+                    uuid: Uuid::new_v4(),
+                    args: TodoistSyncCommandItemUpdateArgs {
+                        id: id.to_string(),
+                        due: patch
+                            .due_at
+                            .as_ref()
+                            .map(|due| due.as_ref().map(|d| d.into())),
+                        priority: patch.priority.map(|priority| priority.into()),
+                        description: patch.body.clone(),
+                        content: patch.title.clone(),
+                    },
+                });
+            }
+            commands
+        };
+
+        self.send_item_sync_commands(executor, third_party_item, &access_token, build_commands)
+            .await?;
 
         Ok(())
     }
@@ -1247,6 +1547,28 @@ mod tests {
             full_sync: false,
             sync_token: SyncToken("abcd".to_string())
         });
+    }
+
+    #[rstest]
+    fn test_parse_todoist_id_mappings_response() {
+        assert_eq!(
+            serde_json::from_str::<Vec<TodoistIdMapping>>(
+                r#"[{ "old_id": "918273645", "new_id": "6VfWjjjFg2xqX6Pa" }]"#
+            )
+            .unwrap(),
+            vec![TodoistIdMapping {
+                old_id: "918273645".to_string(),
+                new_id: "6VfWjjjFg2xqX6Pa".to_string(),
+            }]
+        );
+    }
+
+    #[rstest]
+    #[case::legacy("9735649058", true)]
+    #[case::api_v1("6VfWjjjFg2xqX6Pa", false)]
+    #[case::empty("", false)]
+    fn test_is_legacy_todoist_id(#[case] id: &str, #[case] expected: bool) {
+        assert_eq!(is_legacy_todoist_id(id), expected);
     }
 
     #[rstest]
