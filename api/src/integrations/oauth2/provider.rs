@@ -380,11 +380,12 @@ impl OAuth2FlowService {
         if !status.is_success() {
             // RFC 6749 §5.2: an authorization server returns HTTP 400 with
             // `{"error":"invalid_grant",...}` when the refresh token has expired
-            // or been revoked. Surface this as a typed error so the caller can
+            // or been revoked (some providers deviate, see
+            // `OAuth2ErrorBody::is_terminal_refresh_error`). Surface this as a typed error so the caller can
             // mark the integration connection Failing and prompt re-auth.
             if status == http::StatusCode::BAD_REQUEST
                 && let Ok(error_body) = serde_json::from_str::<OAuth2ErrorBody>(&body)
-                && error_body.error == "invalid_grant"
+                && error_body.is_terminal_refresh_error()
             {
                 let detail = error_body.error_description.unwrap_or_default();
                 return Err(UniversalInboxError::OAuth2InvalidGrant(detail));
@@ -402,6 +403,22 @@ impl OAuth2FlowService {
 struct OAuth2ErrorBody {
     error: String,
     error_description: Option<String>,
+}
+
+impl OAuth2ErrorBody {
+    /// Whether the refresh token can never be used again, so retrying is pointless.
+    /// Linear deviates from RFC 6749 and answers a revoked refresh token with
+    /// `invalid_request` + "Refresh token revoked" instead of `invalid_grant`.
+    /// Other `invalid_request` errors (e.g. missing client_id) are configuration
+    /// bugs and must stay non-terminal.
+    fn is_terminal_refresh_error(&self) -> bool {
+        self.error == "invalid_grant"
+            || (self.error == "invalid_request"
+                && self
+                    .error_description
+                    .as_deref()
+                    .is_some_and(|d| d.to_ascii_lowercase().contains("revoked")))
+    }
 }
 
 #[cfg(test)]
@@ -507,6 +524,19 @@ mod tests {
         let body = serde_json::json!({ "error": "invalid_grant" });
         let err = refresh_with_response(ResponseTemplate::new(400).set_body_json(body)).await;
         assert!(matches!(err, UniversalInboxError::OAuth2InvalidGrant(s) if s.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn test_refresh_linear_revoked_invalid_request_returns_typed_error() {
+        let body = serde_json::json!({
+            "error": "invalid_request",
+            "error_description": "Refresh token revoked",
+        });
+        let err = refresh_with_response(ResponseTemplate::new(400).set_body_json(body)).await;
+        assert!(
+            matches!(&err, UniversalInboxError::OAuth2InvalidGrant(s) if s == "Refresh token revoked"),
+            "Linear's revoked refresh token must be terminal, got {err:?}"
+        );
     }
 
     #[tokio::test]
