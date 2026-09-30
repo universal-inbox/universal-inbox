@@ -22,7 +22,7 @@ use universal_inbox::{
 
 use wiremock::{
     Mock, ResponseTemplate,
-    matchers::{method, path},
+    matchers::{method, path, path_regex},
 };
 
 use universal_inbox_api::{
@@ -1350,5 +1350,50 @@ mod legacy_todoist_ids {
             .unwrap();
         transaction.commit().await.unwrap();
         assert_eq!(legacy_items, vec![]);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_migrate_legacy_todoist_ids_skips_user_on_todoist_error(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        setup(
+            &settings,
+            &app,
+            &sync_todoist_projects_response,
+            todoist_oauth_credential,
+        )
+        .await;
+        let legacy = create_task_third_party_item(
+            &app.app,
+            legacy_todoist_item(&todoist_item, LEGACY_TASK_ID),
+            app.user.id,
+        )
+        .await;
+
+        // A revoked access token
+        Mock::given(method("GET"))
+            .and(path_regex("^/id_mappings/"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&app.app.todoist_mock_server)
+            .await;
+
+        migrate_legacy_ids(
+            app.app.task_service.clone(),
+            app.app.integration_connection_service.clone(),
+            Some(app.user.id),
+            false,
+        )
+        .await
+        .unwrap();
+
+        let task = get_task(&app, legacy.task.as_ref().unwrap().id).await;
+        assert_eq!(task.status, TaskStatus::Active);
+        assert_todoist_ids(&task.source_item, LEGACY_TASK_ID, LEGACY_PROJECT_ID);
     }
 }

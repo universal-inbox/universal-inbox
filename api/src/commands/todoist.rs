@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Context;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use universal_inbox::{
     integration_connection::IntegrationConnectionId, third_party::item::ThirdPartyItem,
@@ -33,13 +33,13 @@ pub async fn migrate_legacy_ids(
     dry_run: bool,
 ) -> Result<(), UniversalInboxError> {
     let service = task_service.read().await;
-    let todoist_service = service.todoist_service.clone();
 
     let mut transaction = service
         .begin()
         .await
         .context("Failed to create new transaction while loading legacy Todoist items")?;
-    let legacy_items = todoist_service
+    let legacy_items = service
+        .todoist_service
         .repository
         .find_legacy_todoist_items(&mut transaction, user_id)
         .await?;
@@ -61,48 +61,89 @@ pub async fn migrate_legacy_ids(
             .push(item);
     }
 
+    // Each connection is migrated in its own transaction: a failure (e.g. a
+    // revoked access token) only rolls back that user's changes and the
+    // command carries on with the next one.
+    let mut failed_user_ids = Vec::new();
     for ((user_id, integration_connection_id), items) in items_per_connection {
-        let mut transaction = service.begin().await.context(format!(
-            "Failed to create new transaction while migrating legacy Todoist IDs for user {user_id}"
-        ))?;
-        let Some((access_token, _)) = integration_connection_service
-            .read()
-            .await
-            .find_access_token_for_connection(&mut transaction, integration_connection_id, user_id)
-            .await?
-        else {
-            warn!(
-                "Skipping {} legacy Todoist items of user {user_id}: no access token for integration connection {integration_connection_id}",
+        if let Err(err) = migrate_connection_legacy_ids(
+            &service,
+            &integration_connection_service,
+            user_id,
+            integration_connection_id,
+            &items,
+            dry_run,
+        )
+        .await
+        {
+            error!(
+                "Failed to migrate {} legacy Todoist items of user {user_id} (integration connection {integration_connection_id}), skipping: {err:?}",
                 items.len()
             );
-            transaction
-                .rollback()
-                .await
-                .context("Failed to rollback transaction while migrating legacy Todoist IDs")?;
-            continue;
-        };
-
-        let report = todoist_service
-            .migrate_legacy_items(&mut transaction, &items, &access_token)
-            .await?;
-        info!(
-            "User {user_id}: {} Todoist items migrated, {} duplicates marked as deleted, {} unmapped{}",
-            report.migrated,
-            report.duplicates,
-            report.unmapped,
-            if dry_run { " (dry-run)" } else { "" }
-        );
-
-        if dry_run {
-            transaction.rollback().await.context(
-                "Failed to rollback (dry-run) transaction while migrating legacy Todoist IDs",
-            )?;
-        } else {
-            transaction
-                .commit()
-                .await
-                .context("Failed to commit transaction while migrating legacy Todoist IDs")?;
+            failed_user_ids.push(user_id);
         }
+    }
+
+    if !failed_user_ids.is_empty() {
+        warn!(
+            "Legacy Todoist IDs migration failed for {} users: {failed_user_ids:?}",
+            failed_user_ids.len()
+        );
+    }
+
+    Ok(())
+}
+
+async fn migrate_connection_legacy_ids(
+    service: &TaskService,
+    integration_connection_service: &RwLock<IntegrationConnectionService>,
+    user_id: UserId,
+    integration_connection_id: IntegrationConnectionId,
+    items: &[ThirdPartyItem],
+    dry_run: bool,
+) -> Result<(), UniversalInboxError> {
+    let mut transaction = service.begin().await.context(format!(
+        "Failed to create new transaction while migrating legacy Todoist IDs for user {user_id}"
+    ))?;
+    let Some((access_token, _)) = integration_connection_service
+        .read()
+        .await
+        .find_access_token_for_connection(&mut transaction, integration_connection_id, user_id)
+        .await?
+    else {
+        warn!(
+            "Skipping {} legacy Todoist items of user {user_id}: no access token for integration connection {integration_connection_id}",
+            items.len()
+        );
+        transaction
+            .rollback()
+            .await
+            .context("Failed to rollback transaction while migrating legacy Todoist IDs")?;
+        return Ok(());
+    };
+
+    // On error, `transaction` is dropped and thus rolled back
+    let report = service
+        .todoist_service
+        .migrate_legacy_items(&mut transaction, items, &access_token)
+        .await?;
+    info!(
+        "User {user_id}: {} Todoist items migrated, {} duplicates marked as deleted, {} unmapped{}",
+        report.migrated,
+        report.duplicates,
+        report.unmapped,
+        if dry_run { " (dry-run)" } else { "" }
+    );
+
+    if dry_run {
+        transaction.rollback().await.context(
+            "Failed to rollback (dry-run) transaction while migrating legacy Todoist IDs",
+        )?;
+    } else {
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction while migrating legacy Todoist IDs")?;
     }
 
     Ok(())
