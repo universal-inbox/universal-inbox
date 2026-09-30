@@ -74,6 +74,22 @@ pub trait ThirdPartyItemRepository {
         notification_status: NotificationStatus,
         user_id: UserId,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
+
+    /// Todoist items still stored with a legacy (pre API v1) all-digit ID,
+    /// excluding those whose task is already `Deleted`.
+    async fn find_legacy_todoist_items(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: Option<UserId>,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
+
+    async fn update_third_party_item_source_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        id: ThirdPartyItemId,
+        source_id: &str,
+        data: &ThirdPartyItemData,
+    ) -> Result<(), UniversalInboxError>;
 }
 
 #[async_trait]
@@ -641,6 +657,108 @@ impl ThirdPartyItemRepository for Repository {
         .iter()
         .map(|r| r.try_into())
         .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.map(|id| id.to_string())),
+        err
+    )]
+    async fn find_legacy_todoist_items(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: Option<UserId>,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+              SELECT
+                third_party_item.id as third_party_item__id,
+                third_party_item.source_id as third_party_item__source_id,
+                third_party_item.data as third_party_item__data,
+                third_party_item.created_at as third_party_item__created_at,
+                third_party_item.updated_at as third_party_item__updated_at,
+                third_party_item.user_id as third_party_item__user_id,
+                third_party_item.integration_connection_id as third_party_item__integration_connection_id,
+                source_item.id as third_party_item__si__id,
+                source_item.source_id as third_party_item__si__source_id,
+                source_item.data as third_party_item__si__data,
+                source_item.created_at as third_party_item__si__created_at,
+                source_item.updated_at as third_party_item__si__updated_at,
+                source_item.user_id as third_party_item__si__user_id,
+                source_item.integration_connection_id as third_party_item__si__integration_connection_id
+              FROM third_party_item
+              LEFT JOIN task ON task.source_item_id = third_party_item.id
+              LEFT JOIN third_party_item as source_item ON third_party_item.source_item_id = source_item.id
+              WHERE third_party_item.kind::TEXT = 'TodoistItem'
+                AND third_party_item.source_id ~ '^[0-9]+$'
+                AND (task.id IS NULL OR task.status != 'Deleted')
+            "#,
+        );
+        if let Some(user_id) = user_id {
+            query_builder.push(" AND third_party_item.user_id = ");
+            query_builder.push_bind(user_id.0);
+        }
+
+        let records = query_builder
+            .build()
+            .fetch_all(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message =
+                    format!("Failed to find legacy Todoist third party items from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        decode_rows_skipping_invalid::<ThirdPartyItemRow>(
+            &records,
+            "third_party_item__id",
+            "third party item",
+        )
+        .iter()
+        .map(|r| r.try_into())
+        .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(third_party_item.id = id.to_string(), source_id),
+        err
+    )]
+    async fn update_third_party_item_source_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        id: ThirdPartyItemId,
+        source_id: &str,
+        data: &ThirdPartyItemData,
+    ) -> Result<(), UniversalInboxError> {
+        sqlx::query(
+            r#"
+              UPDATE third_party_item
+              SET source_id = $1, data = $2, updated_at = $3
+              WHERE id = $4
+            "#,
+        )
+        .bind(source_id)
+        .bind(Json(data))
+        .bind(Utc::now().naive_utc())
+        .bind(id.0)
+        .execute(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message =
+                format!("Failed to update source_id of third party item {id} in storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        Ok(())
     }
 }
 

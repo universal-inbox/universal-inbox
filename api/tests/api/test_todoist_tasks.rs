@@ -961,3 +961,394 @@ mod patch_notification {
         );
     }
 }
+
+mod legacy_todoist_ids {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    use universal_inbox::task::TaskId;
+    use universal_inbox_api::{
+        commands::todoist::migrate_legacy_ids,
+        integrations::todoist::TodoistSyncCommandItemCompleteArgs,
+        repository::third_party::ThirdPartyItemRepository,
+    };
+
+    use crate::helpers::task::todoist::{
+        mock_todoist_id_mappings_service, mock_todoist_sync_service_with_command_error,
+    };
+
+    const LEGACY_TASK_ID: &str = "9735649058";
+    const NEW_TASK_ID: &str = "6Jf8VQXxpwv56VQ7";
+    const LEGACY_PROJECT_ID: &str = "2203306141";
+    const NEW_PROJECT_ID: &str = "6Jf8VQXxpwv56VQ9";
+
+    async fn setup(
+        settings: &Settings,
+        app: &AuthenticatedApp,
+        sync_todoist_projects_response: &TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            settings,
+            todoist_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            sync_todoist_projects_response,
+            None,
+        )
+        .await;
+    }
+
+    fn legacy_todoist_item(todoist_item: &TodoistItem, id: &str) -> ThirdPartyItemData {
+        ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+            id: id.to_string(),
+            project_id: LEGACY_PROJECT_ID.to_string(),
+            ..todoist_item.clone()
+        }))
+    }
+
+    async fn get_task(app: &AuthenticatedApp, task_id: TaskId) -> Box<Task> {
+        get_resource(&app.client, &app.app.api_address, "tasks", task_id.into()).await
+    }
+
+    fn assert_todoist_ids(item: &ThirdPartyItem, id: &str, project_id: &str) {
+        assert_eq!(item.source_id, id);
+        let ThirdPartyItemData::TodoistItem(ref todoist_item) = item.data else {
+            panic!("Expected a Todoist item, got {:?}", item.data);
+        };
+        assert_eq!(todoist_item.id, id);
+        assert_eq!(todoist_item.project_id, project_id);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_todoist_task_with_legacy_id_status_as_done(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        setup(
+            &settings,
+            &app,
+            &sync_todoist_projects_response,
+            todoist_oauth_credential,
+        )
+        .await;
+        let creation = create_task_third_party_item(
+            &app.app,
+            legacy_todoist_item(&todoist_item, LEGACY_TASK_ID),
+            app.user.id,
+        )
+        .await;
+        let existing_todoist_task = creation.task.as_ref().unwrap().clone();
+
+        mock_todoist_sync_service_with_command_error(
+            &app.app.todoist_mock_server,
+            vec![TodoistSyncPartialCommand::ItemComplete {
+                args: TodoistSyncCommandItemCompleteArgs {
+                    id: LEGACY_TASK_ID.to_string(),
+                },
+            }],
+            557,
+        )
+        .await;
+        mock_todoist_id_mappings_service(
+            &app.app.todoist_mock_server,
+            "tasks",
+            vec![(LEGACY_TASK_ID, NEW_TASK_ID)],
+        )
+        .await;
+        mock_todoist_id_mappings_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            vec![(LEGACY_PROJECT_ID, NEW_PROJECT_ID)],
+        )
+        .await;
+        mock_todoist_complete_item_service(&app.app.todoist_mock_server, NEW_TASK_ID).await;
+
+        let patched_task: Box<Task> = patch_resource(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            existing_todoist_task.id.into(),
+            &TaskPatch {
+                status: Some(TaskStatus::Done),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_eq!(patched_task.status, TaskStatus::Done);
+
+        let task: Box<Task> = get_resource(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            existing_todoist_task.id.into(),
+        )
+        .await;
+        assert_eq!(task.status, TaskStatus::Done);
+        assert_todoist_ids(&task.source_item, NEW_TASK_ID, NEW_PROJECT_ID);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_todoist_task_with_legacy_id_status_and_title(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        setup(
+            &settings,
+            &app,
+            &sync_todoist_projects_response,
+            todoist_oauth_credential,
+        )
+        .await;
+        let creation = create_task_third_party_item(
+            &app.app,
+            legacy_todoist_item(&todoist_item, LEGACY_TASK_ID),
+            app.user.id,
+        )
+        .await;
+        let existing_todoist_task = creation.task.as_ref().unwrap().clone();
+
+        mock_todoist_sync_service_with_command_error(
+            &app.app.todoist_mock_server,
+            vec![TodoistSyncPartialCommand::ItemComplete {
+                args: TodoistSyncCommandItemCompleteArgs {
+                    id: LEGACY_TASK_ID.to_string(),
+                },
+            }],
+            557,
+        )
+        .await;
+        mock_todoist_complete_item_service(&app.app.todoist_mock_server, NEW_TASK_ID).await;
+        // The title update is sent with the (stale) legacy ID too: it is
+        // remapped a second time.
+        mock_todoist_sync_service_with_command_error(
+            &app.app.todoist_mock_server,
+            vec![TodoistSyncPartialCommand::ItemUpdate {
+                args: TodoistSyncCommandItemUpdateArgs {
+                    id: LEGACY_TASK_ID.to_string(),
+                    content: Some("New title".to_string()),
+                    ..Default::default()
+                },
+            }],
+            557,
+        )
+        .await;
+        mock_todoist_sync_service_expecting_one_call(
+            &app.app.todoist_mock_server,
+            vec![TodoistSyncPartialCommand::ItemUpdate {
+                args: TodoistSyncCommandItemUpdateArgs {
+                    id: NEW_TASK_ID.to_string(),
+                    content: Some("New title".to_string()),
+                    ..Default::default()
+                },
+            }],
+            None,
+        )
+        .await;
+        mock_todoist_id_mappings_service(
+            &app.app.todoist_mock_server,
+            "tasks",
+            vec![(LEGACY_TASK_ID, NEW_TASK_ID)],
+        )
+        .await;
+        mock_todoist_id_mappings_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            vec![(LEGACY_PROJECT_ID, NEW_PROJECT_ID)],
+        )
+        .await;
+
+        let patched_task: Box<Task> = patch_resource(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            existing_todoist_task.id.into(),
+            &TaskPatch {
+                status: Some(TaskStatus::Done),
+                title: Some("New title".to_string()),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_eq!(patched_task.status, TaskStatus::Done);
+
+        let task = get_task(&app, existing_todoist_task.id).await;
+        assert_eq!(task.status, TaskStatus::Done);
+        assert_todoist_ids(&task.source_item, NEW_TASK_ID, NEW_PROJECT_ID);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_todoist_task_with_unmapped_legacy_id_fails(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        setup(
+            &settings,
+            &app,
+            &sync_todoist_projects_response,
+            todoist_oauth_credential,
+        )
+        .await;
+        let creation = create_task_third_party_item(
+            &app.app,
+            legacy_todoist_item(&todoist_item, LEGACY_TASK_ID),
+            app.user.id,
+        )
+        .await;
+        let existing_todoist_task = creation.task.as_ref().unwrap().clone();
+
+        mock_todoist_sync_service_with_command_error(
+            &app.app.todoist_mock_server,
+            vec![TodoistSyncPartialCommand::ItemComplete {
+                args: TodoistSyncCommandItemCompleteArgs {
+                    id: LEGACY_TASK_ID.to_string(),
+                },
+            }],
+            557,
+        )
+        .await;
+        mock_todoist_id_mappings_service(&app.app.todoist_mock_server, "tasks", vec![]).await;
+
+        let response = patch_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            existing_todoist_task.id.into(),
+            &TaskPatch {
+                status: Some(TaskStatus::Done),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_eq!(response.status(), 500);
+
+        let task: Box<Task> = get_resource(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            existing_todoist_task.id.into(),
+        )
+        .await;
+        assert_eq!(task.status, TaskStatus::Active);
+        assert_todoist_ids(&task.source_item, LEGACY_TASK_ID, LEGACY_PROJECT_ID);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_migrate_legacy_todoist_ids(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        setup(
+            &settings,
+            &app,
+            &sync_todoist_projects_response,
+            todoist_oauth_credential,
+        )
+        .await;
+        const LEGACY_DUPLICATED_TASK_ID: &str = "9735649059";
+        const NEW_DUPLICATED_TASK_ID: &str = "6Jf8VQXxpwv56VQ8";
+        let legacy = create_task_third_party_item(
+            &app.app,
+            legacy_todoist_item(&todoist_item, LEGACY_TASK_ID),
+            app.user.id,
+        )
+        .await;
+        let legacy_duplicated = create_task_third_party_item(
+            &app.app,
+            legacy_todoist_item(&todoist_item, LEGACY_DUPLICATED_TASK_ID),
+            app.user.id,
+        )
+        .await;
+        // Synced after the Todoist API v1 migration, duplicating `legacy_duplicated`
+        let duplicate = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
+                id: NEW_DUPLICATED_TASK_ID.to_string(),
+                project_id: NEW_PROJECT_ID.to_string(),
+                ..*todoist_item.clone()
+            })),
+            app.user.id,
+        )
+        .await;
+
+        mock_todoist_id_mappings_service(
+            &app.app.todoist_mock_server,
+            "tasks",
+            vec![
+                (LEGACY_TASK_ID, NEW_TASK_ID),
+                (LEGACY_DUPLICATED_TASK_ID, NEW_DUPLICATED_TASK_ID),
+            ],
+        )
+        .await;
+        mock_todoist_id_mappings_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            vec![(LEGACY_PROJECT_ID, NEW_PROJECT_ID)],
+        )
+        .await;
+
+        migrate_legacy_ids(
+            app.app.task_service.clone(),
+            app.app.integration_connection_service.clone(),
+            Some(app.user.id),
+            false,
+        )
+        .await
+        .unwrap();
+
+        let migrated_task = get_task(&app, legacy.task.as_ref().unwrap().id).await;
+        assert_eq!(migrated_task.status, TaskStatus::Active);
+        assert_todoist_ids(&migrated_task.source_item, NEW_TASK_ID, NEW_PROJECT_ID);
+
+        let legacy_duplicated_task =
+            get_task(&app, legacy_duplicated.task.as_ref().unwrap().id).await;
+        assert_eq!(legacy_duplicated_task.status, TaskStatus::Deleted);
+        assert_todoist_ids(
+            &legacy_duplicated_task.source_item,
+            LEGACY_DUPLICATED_TASK_ID,
+            LEGACY_PROJECT_ID,
+        );
+
+        let duplicate_task = get_task(&app, duplicate.task.as_ref().unwrap().id).await;
+        assert_eq!(duplicate_task.status, TaskStatus::Active);
+
+        // A second run has nothing left to migrate
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        let legacy_items = app
+            .app
+            .repository
+            .find_legacy_todoist_items(&mut transaction, Some(app.user.id))
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+        assert_eq!(legacy_items, vec![]);
+    }
+}
