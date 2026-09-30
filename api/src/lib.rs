@@ -951,6 +951,7 @@ pub async fn build_services(
     let todoist_service = Arc::new(
         TodoistService::new(
             todoist_address,
+            repository.clone(),
             integration_connection_service.clone(),
             settings.get_integration_max_retry_duration(execution_context, "todoist"),
         )

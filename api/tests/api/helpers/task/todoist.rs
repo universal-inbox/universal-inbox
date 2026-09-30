@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
 use uuid::Uuid;
-use wiremock::matchers::{body_json, body_partial_json, header, method, path};
+use wiremock::matchers::{body_json, body_partial_json, header, method, path, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use universal_inbox::{
@@ -23,10 +23,11 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::integrations::todoist::{
-    TodoistCommandStatus, TodoistSyncCommandItemAddArgs, TodoistSyncCommandItemCompleteArgs,
-    TodoistSyncCommandItemDeleteArgs, TodoistSyncCommandItemMoveArgs,
-    TodoistSyncCommandItemUncompleteArgs, TodoistSyncCommandItemUpdateArgs,
-    TodoistSyncCommandProjectAddArgs, TodoistSyncResponse, TodoistSyncStatusResponse,
+    TodoistCommandStatus, TodoistIdMapping, TodoistSyncCommandItemAddArgs,
+    TodoistSyncCommandItemCompleteArgs, TodoistSyncCommandItemDeleteArgs,
+    TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUncompleteArgs,
+    TodoistSyncCommandItemUpdateArgs, TodoistSyncCommandProjectAddArgs, TodoistSyncResponse,
+    TodoistSyncStatusResponse,
 };
 
 use crate::helpers::load_json_fixture_file;
@@ -205,6 +206,33 @@ pub async fn mock_todoist_sync_service_with_command_error(
         }),
     )
     .await;
+}
+
+/// Mock Todoist's `GET /id_mappings/{obj_name}/{ids}` endpoint translating
+/// legacy IDs (pre API v1) of `obj_name` objects into their new ID. It answers
+/// with all of `mappings` whatever the requested IDs.
+pub async fn mock_todoist_id_mappings_service(
+    todoist_mock_server: &MockServer,
+    obj_name: &str,
+    mappings: Vec<(&str, &str)>,
+) {
+    let mappings: Vec<TodoistIdMapping> = mappings
+        .into_iter()
+        .map(|(old_id, new_id)| TodoistIdMapping {
+            old_id: old_id.to_string(),
+            new_id: new_id.to_string(),
+        })
+        .collect();
+    Mock::given(method("GET"))
+        .and(path_regex(format!("^/id_mappings/{obj_name}/")))
+        .and(header("authorization", "Bearer todoist_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(&mappings),
+        )
+        .mount(todoist_mock_server)
+        .await;
 }
 
 async fn mount_todoist_sync_mock(
