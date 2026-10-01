@@ -515,6 +515,17 @@ impl SlackService {
         session
             .reactions_remove(&request)
             .await
+            .map(|_| ())
+            .or_else(|e| match &e {
+                SlackClientError::ApiError(SlackClientApiError { code, .. }) => {
+                    if code == "no_reaction" {
+                        Ok(())
+                    } else {
+                        Err(e)
+                    }
+                }
+                _ => Err(e),
+            })
             .context("Failed to remove Slack reaction")?;
 
         Ok(())

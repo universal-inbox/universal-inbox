@@ -340,6 +340,27 @@ pub async fn mock_slack_reactions_remove(
     message_id: &str,
     reaction_name: &str,
 ) {
+    mock_slack_reactions_remove_with_error(
+        slack_mock_server,
+        channel_id,
+        message_id,
+        reaction_name,
+        None,
+    )
+    .await;
+}
+
+pub async fn mock_slack_reactions_remove_with_error(
+    slack_mock_server: &MockServer,
+    channel_id: &str,
+    message_id: &str,
+    reaction_name: &str,
+    error: Option<&str>,
+) {
+    let response_body = match error {
+        Some(error) => json!({ "ok": false, "error": error }),
+        None => json!({ "ok": true }),
+    };
     Mock::given(method("POST"))
         .and(path("/reactions.remove"))
         .and(header(
@@ -354,7 +375,7 @@ pub async fn mock_slack_reactions_remove(
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("content-type", "application/json")
-                .set_body_json(json!({ "ok": true })),
+                .set_body_json(response_body),
         )
         .mount(slack_mock_server)
         .await;
