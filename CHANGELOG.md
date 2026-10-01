@@ -46,6 +46,7 @@
 - Preserve integration-connection context when updating its configuration
 - Preserve precision of numeric-looking environment variables in the config loader
 - Scope the `slack:list_emojis` Redis cache entry by workspace team id so custom emojis from one workspace are no longer served to users of other workspaces
+- Completing a Slack-sourced task no longer fails when its Slack reaction was already removed
 
 ## 2026-03-17
 

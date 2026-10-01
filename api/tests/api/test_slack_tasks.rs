@@ -39,7 +39,8 @@ use crate::helpers::{
             mock_slack_fetch_channel, mock_slack_fetch_reply, mock_slack_fetch_team,
             mock_slack_fetch_user, mock_slack_get_chat_permalink, mock_slack_list_emojis,
             mock_slack_list_usergroups, mock_slack_list_users_in_usergroup,
-            mock_slack_reactions_add, mock_slack_reactions_remove, slack_push_reaction_added_event,
+            mock_slack_reactions_add, mock_slack_reactions_remove,
+            mock_slack_reactions_remove_with_error, slack_push_reaction_added_event,
             slack_push_reaction_removed_event, slack_reacted_message,
         },
     },
@@ -464,8 +465,12 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
 }
 
 #[rstest]
+#[case::reaction_removed(None)]
+// Reaction already removed in Slack: completing the task must not fail
+#[case::reaction_already_removed(Some("no_reaction"))]
 #[tokio::test]
 async fn test_patch_slack_task_status_as_done(
+    #[case] reactions_remove_error: Option<&str>,
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     slack_push_reaction_added_event: Box<SlackPushEvent>,
@@ -576,11 +581,12 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         &exiting_task.sink_item.as_ref().unwrap().source_id,
     )
     .await;
-    let _slack_reaction_remove_mock = mock_slack_reactions_remove(
+    let _slack_reaction_remove_mock = mock_slack_reactions_remove_with_error(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
         "eyes",
+        reactions_remove_error,
     )
     .await;
 
