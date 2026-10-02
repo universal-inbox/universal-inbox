@@ -44,7 +44,7 @@ use crate::{
         integration_connection::{
             IntegrationConnectionRepository, IntegrationConnectionSyncStatusUpdate,
             IntegrationConnectionSyncedBeforeFilter, OAUTH_INVALID_GRANT_ERROR_MESSAGE,
-            OAUTH_MISSING_REFRESH_TOKEN_ERROR_MESSAGE,
+            OAUTH_MISSING_REFRESH_TOKEN_ERROR_MESSAGE, SLACK_ACCESS_REVOKED_ERROR_MESSAGE,
         },
         notification::NotificationRepository,
         oauth_credential::OAuthCredentialRepository,
@@ -855,6 +855,78 @@ impl IntegrationConnectionService {
                 integration_connection.id
             ),
         }
+    }
+
+    /// Mark the Slack connections whose access Slack revoked (`tokens_revoked`
+    /// for `provider_user_ids`, `app_uninstalled` for a whole workspace when
+    /// `None`) as `Failing` and drop their now dead credential.
+    ///
+    /// Idempotent, as Slack may replay events and does not order them: a
+    /// disconnected (`Created`) connection is left alone, and so is one whose
+    /// credential was minted after `revoked_at` (the user reconnected since).
+    /// Returns the number of connections that changed.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(team_id, provider_user_ids = ?provider_user_ids, revoked_at = revoked_at.to_rfc3339()),
+        err
+    )]
+    pub async fn revoke_slack_access(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        team_id: &str,
+        provider_user_ids: Option<&[String]>,
+        revoked_at: DateTime<Utc>,
+    ) -> Result<usize, UniversalInboxError> {
+        let integration_connections = self
+            .repository
+            .find_slack_integration_connections_per_team(executor, team_id, provider_user_ids)
+            .await?;
+
+        let mut revoked = 0;
+        for integration_connection in integration_connections {
+            if integration_connection.status == IntegrationConnectionStatus::Created {
+                continue;
+            }
+            let credential = self
+                .repository
+                .get_oauth_credential(executor, integration_connection.id)
+                .await?;
+            if let Some(credential) = &credential {
+                // Slack event times only have a one-second precision
+                if credential.created_at.timestamp() > revoked_at.timestamp() {
+                    debug!(
+                        "Ignoring Slack revocation of integration connection {}: its credential is newer",
+                        integration_connection.id
+                    );
+                    continue;
+                }
+                self.repository
+                    .delete_oauth_credential(executor, integration_connection.id)
+                    .await?;
+            }
+
+            let update = self
+                .repository
+                .update_integration_connection_status(
+                    executor,
+                    integration_connection.id,
+                    IntegrationConnectionStatus::Failing,
+                    Some(SLACK_ACCESS_REVOKED_ERROR_MESSAGE.to_string()),
+                    None,
+                    integration_connection.user_id,
+                )
+                .await?;
+            if credential.is_some() || update.updated {
+                info!(
+                    "Slack access of integration connection {} was revoked, marked as Failing",
+                    integration_connection.id
+                );
+                revoked += 1;
+            }
+        }
+
+        Ok(revoked)
     }
 
     /// Revoke, at the providers, every OAuth grant of a user (account

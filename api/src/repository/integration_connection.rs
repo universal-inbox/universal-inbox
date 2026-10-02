@@ -73,6 +73,15 @@ pub trait IntegrationConnectionRepository {
         required_oauth_scopes: &[String],
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
+    /// Every Slack connection of the workspace `team_id`, whatever its status,
+    /// optionally narrowed to the given Slack user ids.
+    async fn find_slack_integration_connections_per_team(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        team_id: &str,
+        provider_user_ids: Option<&[String]>,
+    ) -> Result<Vec<IntegrationConnection>, UniversalInboxError>;
+
     async fn update_integration_connection_status(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -225,6 +234,9 @@ pub const TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE: &str = "♻️ Synchronization h
 
 pub const OAUTH_INVALID_GRANT_ERROR_MESSAGE: &str =
     "🔌 Authorization has expired or been revoked. Please reconnect this integration.";
+
+pub const SLACK_ACCESS_REVOKED_ERROR_MESSAGE: &str =
+    "🔌 Slack access was revoked. Please reconnect this integration.";
 
 pub const OAUTH_MISSING_REFRESH_TOKEN_ERROR_MESSAGE: &str =
     "🔌 Authorization is missing a refresh token. Please reconnect this integration.";
@@ -718,6 +730,68 @@ impl IntegrationConnectionRepository for Repository {
             })?;
 
         row.map(|r| r.try_into()).transpose()
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(team_id, provider_user_ids), err)]
+    async fn find_slack_integration_connections_per_team(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        team_id: &str,
+        provider_user_ids: Option<&[String]>,
+    ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
+        let rows = sqlx::query_as!(
+            IntegrationConnectionRow,
+            r#"
+                SELECT
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.provider_user_id,
+                  integration_connection.status as "status: _",
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
+                  integration_connection.last_notifications_sync_started_at,
+                  integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
+                  integration_connection.last_notifications_sync_failure_message,
+                  integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
+                  integration_connection.last_tasks_sync_started_at,
+                  integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
+                  integration_connection.last_tasks_sync_failure_message,
+                  integration_connection.tasks_sync_failures,
+                  integration_connection.first_notifications_sync_failed_at,
+                  integration_connection.first_tasks_sync_failed_at,
+                  integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
+                  integration_connection.context as "context: Json<IntegrationConnectionContext>",
+                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
+                  integration_connection.auto_paused_by_plan_at,
+                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>"
+                FROM integration_connection
+                INNER JOIN integration_connection_config
+                  ON integration_connection.id = integration_connection_config.integration_connection_id
+                WHERE
+                    integration_connection.context->'content'->>'team_id' = $1
+                    AND integration_connection.provider_kind::TEXT = 'Slack'
+                    AND ($2::TEXT[] IS NULL OR integration_connection.provider_user_id = ANY($2))
+            "#,
+            team_id,
+            provider_user_ids
+        )
+            .fetch_all(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to fetch Slack integration connections of team {team_id} from storage: {err}"
+                );
+                UniversalInboxError::DatabaseError { source: err, message }
+            })?;
+
+        rows.iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<IntegrationConnection>, UniversalInboxError>>()
     }
 
     #[tracing::instrument(
