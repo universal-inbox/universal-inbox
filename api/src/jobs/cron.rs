@@ -8,9 +8,14 @@ use redis_apalis::Script;
 use tracing::{info, warn};
 
 use crate::{
-    configuration::{RefreshOAuthTokensCronSettings, VacuumJobsCronSettings},
+    configuration::{
+        RefreshOAuthTokensCronSettings, RetryOAuthGrantRevocationsCronSettings,
+        VacuumJobsCronSettings,
+    },
     jobs::UniversalInboxJob,
-    universal_inbox::UniversalInboxError,
+    universal_inbox::{
+        UniversalInboxError, integration_connection::service::GrantRevocationRetryPolicy,
+    },
     utils::cache::Cache,
 };
 
@@ -56,6 +61,57 @@ pub async fn handle_refresh_oauth_tokens_cron_tick(
         .await
         .context("Failed to enqueue RefreshOAuthTokens job")?;
     info!("Enqueued RefreshOAuthTokens job");
+    Ok(())
+}
+
+/// Cron tick request for the `retry-oauth-grant-revocations` job. Carries no
+/// data; the scheduled tick timestamp is injected via [`CronContext`].
+#[derive(Debug, Clone, Default)]
+pub struct RetryOAuthGrantRevocationsCronTick;
+
+/// Handles a cron tick by electing a single winner across all worker processes
+/// (per-tick Redis lock) and enqueuing a durable `RetryOAuthGrantRevocations`
+/// job on the shared Redis-backed queue, executed once by the regular worker
+/// pool.
+#[tracing::instrument(
+    name = "retry-oauth-grant-revocations-cron-tick",
+    level = "info",
+    skip_all,
+    fields(cron.tick = %ctx.get_timestamp()),
+    err
+)]
+pub async fn handle_retry_oauth_grant_revocations_cron_tick(
+    _tick: RetryOAuthGrantRevocationsCronTick,
+    ctx: CronContext<Utc>,
+    storage: Data<RedisStorage<UniversalInboxJob>>,
+    cache: Data<Cache>,
+    settings: Data<RetryOAuthGrantRevocationsCronSettings>,
+) -> Result<(), UniversalInboxError> {
+    if !try_acquire_cron_tick_lock(
+        &cache,
+        &queue_scoped_cron_job_name(&storage, "retry-oauth-grant-revocations"),
+        ctx.get_timestamp(),
+        settings.lock_ttl_seconds,
+    )
+    .await?
+    {
+        info!("Tick already handled by another worker process, skipping");
+        return Ok(());
+    }
+
+    let mut storage = (*storage).clone();
+    storage
+        .push(UniversalInboxJob::RetryOAuthGrantRevocations {
+            max_revocations: settings.batch_size,
+            retry_policy: GrantRevocationRetryPolicy {
+                base_delay_in_seconds: settings.base_delay_in_seconds,
+                max_delay_in_seconds: settings.max_delay_in_seconds,
+                max_attempts: settings.max_attempts,
+            },
+        })
+        .await
+        .context("Failed to enqueue RetryOAuthGrantRevocations job")?;
+    info!("Enqueued RetryOAuthGrantRevocations job");
     Ok(())
 }
 

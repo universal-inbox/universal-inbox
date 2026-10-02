@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE oauth_grant_revocation\n                SET status = $2::oauth_grant_revocation_status,\n                    encrypted_access_token = NULL,\n                    encrypted_refresh_token = NULL,\n                    last_error = COALESCE($3, last_error),\n                    completed_at = NOW(),\n                    updated_at = NOW()\n                WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "oauth_grant_revocation_status",
+            "kind": {
+              "Enum": [
+                "Pending",
+                "Revoked",
+                "Cancelled",
+                "Abandoned"
+              ]
+            }
+          }
+        },
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c3da25562b793470fe673954e685e6622842fc31ad2e72a8f5a9e7aef2640372"
+}

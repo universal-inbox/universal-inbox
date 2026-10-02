@@ -1,0 +1,107 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                  id,\n                  provider_kind::TEXT AS \"provider_kind!\",\n                  integration_connection_id,\n                  provider_user_id,\n                  encrypted_access_token AS \"encrypted_access_token!\",\n                  encrypted_refresh_token,\n                  access_token_expires_at,\n                  attempts\n                FROM oauth_grant_revocation\n                WHERE status = 'Pending'\n                  AND next_attempt_at <= $1\n                  AND encrypted_access_token IS NOT NULL\n                ORDER BY next_attempt_at\n                LIMIT 1\n                FOR UPDATE SKIP LOCKED\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_grant_revocation",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "integration_connection_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_grant_revocation",
+            "name": "integration_connection_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "provider_user_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_grant_revocation",
+            "name": "provider_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "encrypted_access_token!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "oauth_grant_revocation",
+            "name": "encrypted_access_token"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "encrypted_refresh_token",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "oauth_grant_revocation",
+            "name": "encrypted_refresh_token"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "access_token_expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_grant_revocation",
+            "name": "access_token_expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oauth_grant_revocation",
+            "name": "attempts"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "8aaa1a79e6b972f92bd7980fabb0ba63d05e3fcfa52a7289405b145a86e8bc3d"
+}

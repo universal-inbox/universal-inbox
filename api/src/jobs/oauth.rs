@@ -7,7 +7,8 @@ use tracing::{error, info};
 use universal_inbox::integration_connection::provider::IntegrationProviderKind;
 
 use crate::universal_inbox::{
-    UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+    UniversalInboxError,
+    integration_connection::service::{GrantRevocationRetryPolicy, IntegrationConnectionService},
 };
 
 #[tracing::instrument(
@@ -57,4 +58,23 @@ pub async fn refresh_oauth_tokens(
             Err(err)
         }
     }
+}
+
+#[tracing::instrument(
+    name = "retry-oauth-grant-revocations",
+    level = "info",
+    skip(integration_connection_service),
+    err
+)]
+pub async fn retry_oauth_grant_revocations(
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    max_revocations: usize,
+    retry_policy: GrantRevocationRetryPolicy,
+) -> Result<(), UniversalInboxError> {
+    let service = integration_connection_service.read().await;
+    let (completed, failed) = service
+        .retry_due_grant_revocations(max_revocations, &retry_policy)
+        .await?;
+    info!("OAuth grant revocation retries complete: {completed} completed, {failed} failed");
+    Ok(())
 }

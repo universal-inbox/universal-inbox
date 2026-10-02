@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT EXISTS (\n                  SELECT 1\n                  FROM oauth_credential oc\n                  JOIN integration_connection ic ON ic.id = oc.integration_connection_id\n                  WHERE ic.id = $2\n                     OR (ic.provider_kind::TEXT = $1 AND ic.provider_user_id = $3)\n                ) AS \"reconnected!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reconnected!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d4066bd2670dc42e2e080756c5c7d859c696cf03b87461203ef8c477c52a6d1e"
+}
