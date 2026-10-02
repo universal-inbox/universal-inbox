@@ -39,6 +39,20 @@ batch_size = 1000
 max_batches_per_tick = 200
 lock_ttl_seconds = 300
 
+# Retry the OAuth grant revocations that failed on disconnect or account
+# deletion. Enabled by default: otherwise such a grant stays valid at its
+# provider forever (for Slack, its events keep coming).
+[application.cron.retry_oauth_grant_revocations]
+is_enabled = true
+# Cron expression with a seconds field
+schedule = "0 */5 * * * *"
+batch_size = 100
+# Exponential backoff: 5 minutes, doubled after each failure, capped at 1 day
+base_delay_in_seconds = 300
+max_delay_in_seconds = 86400
+max_attempts = 20
+lock_ttl_seconds = 60
+
 [application.email]
 smtp_server = "smtp.example.com"
 smtp_port = 465

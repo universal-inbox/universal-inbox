@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO oauth_grant_revocation\n                  (id, provider_kind, integration_connection_id, provider_user_id,\n                   provider_context, encrypted_access_token, encrypted_refresh_token,\n                   access_token_expires_at, attempts, last_error, next_attempt_at)\n                VALUES\n                  ($1, $2::integration_provider_kind, $3, $4, $5, $6, $7, $8, 1, $9, $10)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "integration_provider_kind",
+            "kind": {
+              "Enum": [
+                "Github",
+                "Todoist",
+                "Linear",
+                "GoogleMail",
+                "Slack",
+                "TickTick",
+                "GoogleCalendar",
+                "API",
+                "GoogleDrive"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Text",
+        "Jsonb",
+        "Bytea",
+        "Bytea",
+        "Timestamptz",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f26912120d84e0efc547c41dd578ca7204e9d2e914ca5da4741ad5c7dd8fdd06"
+}
