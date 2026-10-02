@@ -66,6 +66,19 @@ because the test reads `web/public/` (gitignored), not your `.rs` source. Don't 
 `cargo nextest` directly: from the workspace root the root `.config/nextest.toml` filters out
 `binary(browser)` (0 tests), and you'd skip the frontend rebuild.
 
+## Committing — pre-commit hook needs Postgres + Redis
+
+The pre-commit hook (`.pre-commit-config.yaml`) runs `just format`, `just check` and `just test`
+when `.rs` files are staged. `just test` includes integration tests, so **Postgres and Redis
+must be running or the commit fails**.
+
+```bash
+direnv exec . just run-detached            # pg + redis (idempotent)
+direnv exec . git commit -m "..."          # hook uses this worktree's ports
+```
+
+Don't skip the hook with `--no-verify`.
+
 ## Test Data
 
 ```bash
@@ -90,6 +103,11 @@ Each worktree gets **its own ports**, NOT 5432/6379. On create, worktrunk
 - **Always prefix with `direnv exec .`.** Bare `devbox run` does NOT source `.local_envrc`,
   so it silently falls back to ports 5432/6379 — wrong DB, and it collides with any local
   Docker postgres on 5432.
+- **Stop the branch's services before `wt remove` or `wt merge`.** Run from the worktree:
+  `direnv exec . just down` (stops pg, redis and app services on this worktree's
+  `PROCESS_COMPOSE_PORT`), then `direnv exec . just status` to confirm nothing runs. The
+  `.config/wt.toml` pre-remove hook is only a best-effort fallback (`|| true`); don't rely on
+  it. Leftover processes keep ports and the removed worktree's data dir busy.
 
 ## Required Env
 
