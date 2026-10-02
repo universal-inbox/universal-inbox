@@ -15,8 +15,12 @@ use universal_inbox::{
 use crate::{
     integrations::slack::SlackService,
     universal_inbox::{
-        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, task::service::TaskService,
+        UniversalInboxError,
+        integration_connection::service::{
+            GrantRevocationRetryPolicy, IntegrationConnectionService,
+        },
+        notification::service::NotificationService,
+        task::service::TaskService,
         third_party::service::ThirdPartyItemService,
     },
 };
@@ -40,6 +44,10 @@ pub enum UniversalInboxJob {
     RefreshOAuthTokens {
         minutes_before_expiry: i64,
     },
+    RetryOAuthGrantRevocations {
+        max_revocations: usize,
+        retry_policy: GrantRevocationRetryPolicy,
+    },
 }
 
 impl UniversalInboxJob {
@@ -50,6 +58,7 @@ impl UniversalInboxJob {
             Self::SlackPushEventCallback(_) => "SlackPushEventCallback",
             Self::ProcessNotificationSideEffects { .. } => "ProcessNotificationSideEffects",
             Self::RefreshOAuthTokens { .. } => "RefreshOAuthTokens",
+            Self::RetryOAuthGrantRevocations { .. } => "RetryOAuthGrantRevocations",
         }
     }
 }
@@ -123,6 +132,17 @@ pub async fn handle_universal_inbox_job(
                 (*integration_connection_service).clone(),
                 None,
                 minutes_before_expiry,
+            )
+            .await
+        }
+        UniversalInboxJob::RetryOAuthGrantRevocations {
+            max_revocations,
+            retry_policy,
+        } => {
+            oauth::retry_oauth_grant_revocations(
+                (*integration_connection_service).clone(),
+                max_revocations,
+                retry_policy,
             )
             .await
         }

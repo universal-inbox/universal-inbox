@@ -51,6 +51,15 @@ pub trait OAuthCredentialRepository {
         integration_connection_id: IntegrationConnectionId,
     ) -> Result<Option<StoredOAuthCredential>, UniversalInboxError>;
 
+    /// Same as [`Self::get_oauth_credential`], but locks the row until the
+    /// transaction ends, so the refresh cron (`FOR UPDATE SKIP LOCKED`) cannot
+    /// rotate the tokens while they are being revoked.
+    async fn lock_oauth_credential(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+    ) -> Result<Option<StoredOAuthCredential>, UniversalInboxError>;
+
     async fn delete_oauth_credential(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -160,6 +169,51 @@ impl OAuthCredentialRepository for Repository {
         .map_err(|err| {
             let message = format!(
                 "Failed to fetch OAuth credential for integration connection {integration_connection_id}: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        Ok(row.map(|row| StoredOAuthCredential {
+            integration_connection_id: IntegrationConnectionId(row.integration_connection_id),
+            encrypted_access_token: row.encrypted_access_token,
+            encrypted_refresh_token: row.encrypted_refresh_token,
+            access_token_expires_at: row.access_token_expires_at,
+            raw_token_response: row.raw_token_response,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        }))
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, err)]
+    async fn lock_oauth_credential(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+    ) -> Result<Option<StoredOAuthCredential>, UniversalInboxError> {
+        let row = sqlx::query!(
+            r#"
+                SELECT
+                  integration_connection_id,
+                  encrypted_access_token,
+                  encrypted_refresh_token,
+                  access_token_expires_at,
+                  raw_token_response,
+                  created_at,
+                  updated_at
+                FROM oauth_credential
+                WHERE integration_connection_id = $1
+                FOR UPDATE
+            "#,
+            Uuid::from(integration_connection_id),
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to lock OAuth credential for integration connection {integration_connection_id}: {err}"
             );
             UniversalInboxError::DatabaseError {
                 source: err,

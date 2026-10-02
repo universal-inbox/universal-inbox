@@ -78,6 +78,68 @@ pub struct CronSettings {
     pub refresh_oauth_tokens: RefreshOAuthTokensCronSettings,
     #[serde(default)]
     pub vacuum_jobs: VacuumJobsCronSettings,
+    #[serde(default)]
+    pub retry_oauth_grant_revocations: RetryOAuthGrantRevocationsCronSettings,
+}
+
+/// Configuration for the `retry-oauth-grant-revocations` cron, retrying the
+/// OAuth grant revocations that failed on disconnect or account deletion.
+/// Enabled by default: without it, a grant whose revocation failed once stays
+/// valid at its provider forever.
+#[derive(Deserialize, Clone, Debug)]
+pub struct RetryOAuthGrantRevocationsCronSettings {
+    #[serde(default = "yes")]
+    pub is_enabled: bool,
+    /// Cron expression with a seconds field, e.g. `0 */5 * * * *`
+    #[serde(default = "default_retry_oauth_grant_revocations_schedule")]
+    pub schedule: String,
+    /// Maximum number of revocations retried per tick
+    #[serde(default = "default_retry_oauth_grant_revocations_batch_size")]
+    pub batch_size: usize,
+    /// Delay before the second retry, doubled after each failed attempt
+    #[serde(default = "default_retry_oauth_grant_revocations_base_delay_in_seconds")]
+    pub base_delay_in_seconds: u64,
+    #[serde(default = "default_retry_oauth_grant_revocations_max_delay_in_seconds")]
+    pub max_delay_in_seconds: u64,
+    /// Abandon a revocation after this many failed attempts
+    #[serde(default = "default_retry_oauth_grant_revocations_max_attempts")]
+    pub max_attempts: u32,
+    /// TTL of the per-tick deduplication lock key in Redis
+    #[serde(default = "default_retry_oauth_grant_revocations_lock_ttl_seconds")]
+    pub lock_ttl_seconds: u64,
+}
+
+impl Default for RetryOAuthGrantRevocationsCronSettings {
+    fn default() -> Self {
+        Self {
+            is_enabled: yes(),
+            schedule: default_retry_oauth_grant_revocations_schedule(),
+            batch_size: default_retry_oauth_grant_revocations_batch_size(),
+            base_delay_in_seconds: default_retry_oauth_grant_revocations_base_delay_in_seconds(),
+            max_delay_in_seconds: default_retry_oauth_grant_revocations_max_delay_in_seconds(),
+            max_attempts: default_retry_oauth_grant_revocations_max_attempts(),
+            lock_ttl_seconds: default_retry_oauth_grant_revocations_lock_ttl_seconds(),
+        }
+    }
+}
+
+fn default_retry_oauth_grant_revocations_schedule() -> String {
+    "0 */5 * * * *".to_string()
+}
+fn default_retry_oauth_grant_revocations_batch_size() -> usize {
+    100
+}
+fn default_retry_oauth_grant_revocations_base_delay_in_seconds() -> u64 {
+    300
+}
+fn default_retry_oauth_grant_revocations_max_delay_in_seconds() -> u64 {
+    86_400
+}
+fn default_retry_oauth_grant_revocations_max_attempts() -> u32 {
+    20
+}
+fn default_retry_oauth_grant_revocations_lock_ttl_seconds() -> u64 {
+    60
 }
 
 #[derive(Deserialize, Clone, Debug)]

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE oauth_grant_revocation\n                SET attempts = attempts + 1,\n                    encrypted_access_token = $2,\n                    encrypted_refresh_token = $3,\n                    access_token_expires_at = $4,\n                    last_error = $5,\n                    next_attempt_at = COALESCE($6, next_attempt_at),\n                    status = CASE WHEN $6::TIMESTAMPTZ IS NULL\n                      THEN 'Abandoned'::oauth_grant_revocation_status\n                      ELSE status\n                    END,\n                    completed_at = CASE WHEN $6::TIMESTAMPTZ IS NULL THEN NOW() ELSE NULL END,\n                    updated_at = NOW()\n                WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Timestamptz",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0d5f3f013bb9ef0652f5f7b08677e990744170545a75e7ea4b8ff67784953476"
+}

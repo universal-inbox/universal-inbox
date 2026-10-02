@@ -73,7 +73,10 @@ use crate::{
         todoist_oauth::TodoistOAuth2Provider,
     },
     jobs::{
-        cron::{handle_refresh_oauth_tokens_cron_tick, handle_vacuum_jobs_cron_tick},
+        cron::{
+            handle_refresh_oauth_tokens_cron_tick, handle_retry_oauth_grant_revocations_cron_tick,
+            handle_vacuum_jobs_cron_tick,
+        },
         handle_universal_inbox_job,
     },
     observability::AuthenticatedRootSpanBuilder,
@@ -644,6 +647,30 @@ pub async fn run_worker(
         );
     }
 
+    let retry_oauth_grant_revocations_settings = cron_settings.retry_oauth_grant_revocations;
+    if retry_oauth_grant_revocations_settings.is_enabled {
+        let schedule = Schedule::from_str(&retry_oauth_grant_revocations_settings.schedule)
+            .expect("Invalid cron schedule for the retry-oauth-grant-revocations job");
+        info!(
+            "Registering retry-oauth-grant-revocations cron worker with schedule `{}`",
+            retry_oauth_grant_revocations_settings.schedule
+        );
+        monitor = monitor.register(
+            WorkerBuilder::new("universal-inbox-cron-retry-oauth-grant-revocations")
+                .layer(
+                    TraceLayer::new()
+                        .on_request(DefaultOnRequest::default().level(Level::INFO))
+                        .on_response(DefaultOnResponse::default().level(Level::INFO))
+                        .on_failure(WorkerOnFailure {}),
+                )
+                .data(redis_storage.clone())
+                .data(cache.clone())
+                .data(retry_oauth_grant_revocations_settings)
+                .backend(CronStream::new_with_timezone(schedule, Utc))
+                .build_fn(handle_retry_oauth_grant_revocations_cron_tick),
+        );
+    }
+
     let vacuum_jobs_settings = cron_settings.vacuum_jobs;
     if vacuum_jobs_settings.is_enabled {
         let schedule = Schedule::from_str(&vacuum_jobs_settings.schedule)
@@ -794,18 +821,19 @@ pub async fn build_services(
         );
     }
     if let Some(slack_settings) = settings.integrations.get("slack") {
-        oauth2_providers.insert(
-            IntegrationProviderKind::Slack,
-            Arc::new(with_revocation_url_override(
-                SlackOAuth2Provider::new(
-                    slack_settings.oauth_client_id.clone(),
-                    SecretBox::new(Box::new(slack_settings.oauth_client_secret.clone())),
-                    slack_settings.required_oauth_scopes.clone(),
-                ),
-                slack_settings,
-                SlackOAuth2Provider::with_revocation_url,
-            )),
+        let mut provider = with_revocation_url_override(
+            SlackOAuth2Provider::new(
+                slack_settings.oauth_client_id.clone(),
+                SecretBox::new(Box::new(slack_settings.oauth_client_secret.clone())),
+                slack_settings.required_oauth_scopes.clone(),
+            ),
+            slack_settings,
+            SlackOAuth2Provider::with_revocation_url,
         );
+        if let Some(token_url) = &slack_settings.oauth_token_url {
+            provider = provider.with_token_url(token_url.clone());
+        }
+        oauth2_providers.insert(IntegrationProviderKind::Slack, Arc::new(provider));
     }
     if let Some(todoist_settings) = settings.integrations.get("todoist") {
         oauth2_providers.insert(

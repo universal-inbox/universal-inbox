@@ -26,7 +26,7 @@
 
 ### Security
 
-- Revoke the provider OAuth grant (Google, GitHub, Slack, Linear, Todoist, TickTick) when an integration is disconnected or the account is deleted (best effort)
+- Revoke the provider OAuth grant (Google, GitHub, Slack, Linear, Todoist, TickTick) when an integration is disconnected or the account is deleted; a failed revocation is retried in the background until the provider accepts it
 - Stop sending personal data to the tracing backend: no email address or passkey username in span fields, log messages or error messages, and an exporter-side filter redacts any email address left in spans / log bodies and drops the client IP (`http.client_ip`)
 - Email-verification links now expire (`application.security.email_verification_token_validity_in_hours`, 24 h by default) and can only be used once
 - Verify Slack webhook signatures and require explicit user consent in the OAuth2 authorization code flow

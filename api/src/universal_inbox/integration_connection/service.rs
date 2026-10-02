@@ -18,6 +18,7 @@ use tokio_retry::{
 };
 use tracing::{debug, error, info, warn};
 use url::Url;
+use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
@@ -33,7 +34,7 @@ use universal_inbox::{
 use crate::{
     integrations::oauth2::{
         AccessToken, AuthorizationCode, PkceVerifier, RefreshToken,
-        provider::{OAuth2FlowService, OAuth2Provider},
+        provider::{OAuth2FlowService, OAuth2Provider, TokenRevocationError},
     },
     jobs::{
         UniversalInboxJob,
@@ -48,6 +49,9 @@ use crate::{
         },
         notification::NotificationRepository,
         oauth_credential::OAuthCredentialRepository,
+        oauth_grant_revocation::{
+            NewOAuthGrantRevocation, OAuthGrantRevocationRepository, PendingOAuthGrantRevocation,
+        },
     },
     universal_inbox::{UniversalInboxError, UpdateStatus, retry_on_transient_database_error},
     utils::{
@@ -55,6 +59,71 @@ use crate::{
         crypto::{TokenEncryptionKey, decrypt_token, encrypt_token},
     },
 };
+
+/// Exponential backoff of the `retry-oauth-grant-revocations` cron.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrantRevocationRetryPolicy {
+    pub base_delay_in_seconds: u64,
+    pub max_delay_in_seconds: u64,
+    /// After this many failed attempts, the revocation is abandoned.
+    pub max_attempts: u32,
+}
+
+impl GrantRevocationRetryPolicy {
+    /// When to retry after `attempts` failed attempts, `None` once they are
+    /// exhausted.
+    pub fn next_attempt_at(&self, attempts: u32) -> Option<DateTime<Utc>> {
+        if attempts >= self.max_attempts {
+            return None;
+        }
+        let delay_in_seconds = self
+            .base_delay_in_seconds
+            .saturating_mul(2u64.saturating_pow(attempts.saturating_sub(1)))
+            .min(self.max_delay_in_seconds);
+        Some(Utc::now() + TimeDelta::seconds(delay_in_seconds.try_into().unwrap_or(i64::MAX)))
+    }
+}
+
+struct GrantTokens {
+    access_token: AccessToken,
+    refresh_token: Option<RefreshToken>,
+    access_token_expires_at: Option<DateTime<Utc>>,
+}
+
+enum GrantRevocationAttempt {
+    Revoked,
+    /// The provider no longer accepts the token: nothing left to revoke.
+    AlreadyDead(String),
+    /// Retry later with these tokens (a refresh may have rotated them).
+    Failed {
+        tokens: GrantTokens,
+        error: String,
+    },
+}
+
+/// What to store after a failed retry.
+struct FailedGrantRevocation {
+    encrypted_access_token: Vec<u8>,
+    encrypted_refresh_token: Option<Vec<u8>>,
+    access_token_expires_at: Option<DateTime<Utc>>,
+    error: String,
+    /// Retrying cannot succeed: abandon the revocation now.
+    abandon: bool,
+}
+
+enum RefreshFailure {
+    Dead(String),
+    Failed(String),
+}
+
+impl RefreshFailure {
+    fn with_tokens(self, tokens: GrantTokens) -> GrantRevocationAttempt {
+        match self {
+            Self::Dead(detail) => GrantRevocationAttempt::AlreadyDead(detail),
+            Self::Failed(error) => GrantRevocationAttempt::Failed { tokens, error },
+        }
+    }
+}
 
 const OAUTH_STATE_PREFIX: &str = "universal-inbox::oauth-state::";
 const OAUTH_STATE_TTL_SECONDS: u64 = 600;
@@ -783,78 +852,93 @@ impl IntegrationConnectionService {
     }
 
     /// Revoke, at the provider, the OAuth grant behind an integration
-    /// connection, using its stored credential. Best effort: failures (no
-    /// credential, undecryptable token, provider error) are logged and
-    /// swallowed.
+    /// connection, using its stored credential, before that credential is
+    /// deleted. When the provider does not accept the revocation, the tokens
+    /// are queued in `oauth_grant_revocation` and retried by the
+    /// `retry-oauth-grant-revocations` cron, so a token is never lost before
+    /// it is revoked. Only a credential that cannot be decrypted is dropped:
+    /// nothing could revoke it.
     #[tracing::instrument(
         level = "debug",
         skip_all,
         fields(
             integration_connection_id = integration_connection.id.to_string(),
             provider_kind = integration_connection.provider.kind().to_string()
-        )
+        ),
+        err
     )]
     pub async fn revoke_provider_grant(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         integration_connection: &IntegrationConnection,
-    ) {
+    ) -> Result<(), UniversalInboxError> {
         let provider_kind = integration_connection.provider.kind();
         let Some(provider) = self.get_oauth2_provider(&provider_kind) else {
-            return;
+            return Ok(());
         };
-        let credential = match self
+        // The lock keeps the refresh cron from rotating the tokens under us.
+        let Some(credential) = self
             .repository
-            .get_oauth_credential(executor, integration_connection.id)
-            .await
-        {
-            Ok(Some(credential)) => credential,
-            Ok(None) => return,
-            Err(err) => {
-                warn!(
-                    "Failed to read the OAuth credential of integration connection {} to revoke it: {err:?}",
-                    integration_connection.id
-                );
-                return;
-            }
+            .lock_oauth_credential(executor, integration_connection.id)
+            .await?
+        else {
+            return Ok(());
         };
 
-        let token_encryption_key = self.token_encryption_key.expose_secret();
-        let aad_context = integration_connection.id.0.as_bytes();
-        let access_token = match decrypt_token(
+        let tokens = match self.decrypt_grant_tokens(
             &credential.encrypted_access_token,
-            aad_context,
-            token_encryption_key,
+            credential.encrypted_refresh_token.as_deref(),
+            credential.access_token_expires_at,
+            integration_connection.id.0.as_bytes(),
         ) {
-            Ok(token) => AccessToken(token),
+            Ok(tokens) => tokens,
             Err(err) => {
                 warn!(
-                    "Failed to decrypt the access token of integration connection {} to revoke it: {err:?}",
+                    "Failed to decrypt the OAuth credential of integration connection {} to revoke it: {err:?}",
                     integration_connection.id
                 );
-                return;
+                return Ok(());
             }
         };
-        let refresh_token = credential
-            .encrypted_refresh_token
-            .as_ref()
-            .and_then(|encrypted| decrypt_token(encrypted, aad_context, token_encryption_key).ok())
-            .map(RefreshToken);
 
-        match self
-            .oauth2_flow_service
-            .revoke_token(provider, &access_token, refresh_token.as_ref())
-            .await
-        {
-            Ok(()) => info!(
+        match self.attempt_grant_revocation(provider, tokens).await {
+            GrantRevocationAttempt::Revoked => info!(
                 "Revoked the {provider_kind} OAuth grant of integration connection {}",
                 integration_connection.id
             ),
-            Err(err) => warn!(
-                "Failed to revoke the {provider_kind} OAuth grant of integration connection {}: {err:?}",
+            GrantRevocationAttempt::AlreadyDead(detail) => info!(
+                "The {provider_kind} OAuth grant of integration connection {} was already dead: {detail}",
                 integration_connection.id
             ),
+            GrantRevocationAttempt::Failed { tokens, error } => {
+                warn!(
+                    "Failed to revoke the {provider_kind} OAuth grant of integration connection {}, queuing it for retry: {error}",
+                    integration_connection.id
+                );
+                let id = Uuid::new_v4();
+                let (encrypted_access_token, encrypted_refresh_token) =
+                    self.encrypt_grant_tokens(&tokens, id.as_bytes())?;
+                self.repository
+                    .create_oauth_grant_revocation(
+                        executor,
+                        NewOAuthGrantRevocation {
+                            id,
+                            provider_kind,
+                            integration_connection_id: Some(integration_connection.id),
+                            provider_user_id: integration_connection.provider_user_id.clone(),
+                            provider_context: integration_connection.provider.context(),
+                            encrypted_access_token,
+                            encrypted_refresh_token,
+                            access_token_expires_at: tokens.access_token_expires_at,
+                            last_error: error,
+                            next_attempt_at: Utc::now(),
+                        },
+                    )
+                    .await?;
+            }
         }
+
+        Ok(())
     }
 
     /// Mark the Slack connections whose access Slack revoked (`tokens_revoked`
@@ -930,7 +1014,7 @@ impl IntegrationConnectionService {
     }
 
     /// Revoke, at the providers, every OAuth grant of a user (account
-    /// deletion). Best effort, see [`Self::revoke_provider_grant`].
+    /// deletion). See [`Self::revoke_provider_grant`].
     #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
     pub async fn revoke_all_provider_grants(
         &self,
@@ -943,9 +1027,304 @@ impl IntegrationConnectionService {
             .await?;
         for integration_connection in &integration_connections {
             self.revoke_provider_grant(executor, integration_connection)
-                .await;
+                .await?;
         }
         Ok(())
+    }
+
+    /// Retry the queued OAuth grant revocations that are due, up to
+    /// `max_revocations`. Each one runs in its own transaction, holding its
+    /// row lock (`FOR UPDATE SKIP LOCKED`) during the provider calls, so
+    /// concurrent workers never retry the same grant.
+    /// Returns `(completed_count, failed_count)`.
+    #[tracing::instrument(level = "info", skip(self), err)]
+    pub async fn retry_due_grant_revocations(
+        &self,
+        max_revocations: usize,
+        retry_policy: &GrantRevocationRetryPolicy,
+    ) -> Result<(usize, usize), UniversalInboxError> {
+        let mut completed = 0usize;
+        let mut failed = 0usize;
+
+        for _ in 0..max_revocations {
+            let mut transaction = self.begin().await?;
+            let Some(revocation) = self
+                .repository
+                .claim_due_oauth_grant_revocation(&mut transaction, Utc::now())
+                .await?
+            else {
+                break;
+            };
+            let revocation_id = revocation.id;
+
+            if self
+                .retry_grant_revocation(&mut transaction, revocation, retry_policy)
+                .await?
+            {
+                completed += 1;
+            } else {
+                failed += 1;
+            }
+
+            transaction.commit().await.context(format!(
+                "Failed to commit the retry of the OAuth grant revocation {revocation_id}"
+            ))?;
+        }
+
+        Ok((completed, failed))
+    }
+
+    /// Retry one claimed revocation. Returns whether it left the Pending
+    /// status for good (revoked, already dead or cancelled).
+    async fn retry_grant_revocation(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        revocation: PendingOAuthGrantRevocation,
+        retry_policy: &GrantRevocationRetryPolicy,
+    ) -> Result<bool, UniversalInboxError> {
+        let id = revocation.id;
+        let provider_kind = revocation.provider_kind;
+
+        // GitHub and Google revoke the whole grant, and Slack may hand the
+        // same token back on reconnect: revoking now would kill the grant the
+        // user just gave again.
+        if self
+            .repository
+            .has_oauth_credential_for_provider_account(
+                executor,
+                provider_kind,
+                revocation.integration_connection_id,
+                revocation.provider_user_id.as_deref(),
+            )
+            .await?
+        {
+            info!(
+                "The {provider_kind} account of OAuth grant revocation {id} was connected again, cancelling the revocation"
+            );
+            self.repository
+                .complete_oauth_grant_revocation(
+                    executor,
+                    id,
+                    true,
+                    Some("The provider account was connected again".to_string()),
+                )
+                .await?;
+            return Ok(true);
+        }
+
+        // Without a provider or a decryptable token, the stored tokens are
+        // kept as they are.
+        let unchanged = |error: String, abandon: bool| FailedGrantRevocation {
+            encrypted_access_token: revocation.encrypted_access_token.clone(),
+            encrypted_refresh_token: revocation.encrypted_refresh_token.clone(),
+            access_token_expires_at: revocation.access_token_expires_at,
+            error,
+            abandon,
+        };
+        let failure = match self.get_oauth2_provider(&provider_kind) {
+            // The provider may be configured again later: keep retrying.
+            None => unchanged(
+                format!("No OAuth2 provider configured for {provider_kind}"),
+                false,
+            ),
+            Some(provider) => match self.decrypt_grant_tokens(
+                &revocation.encrypted_access_token,
+                revocation.encrypted_refresh_token.as_deref(),
+                revocation.access_token_expires_at,
+                id.as_bytes(),
+            ) {
+                // Undecryptable now means undecryptable forever.
+                Err(err) => unchanged(format!("Failed to decrypt the tokens: {err:?}"), true),
+                Ok(tokens) => match self.attempt_grant_revocation(provider, tokens).await {
+                    GrantRevocationAttempt::Revoked => {
+                        info!("Revoked the {provider_kind} OAuth grant of revocation {id}");
+                        self.repository
+                            .complete_oauth_grant_revocation(executor, id, false, None)
+                            .await?;
+                        return Ok(true);
+                    }
+                    GrantRevocationAttempt::AlreadyDead(detail) => {
+                        info!(
+                            "The {provider_kind} OAuth grant of revocation {id} was already dead: {detail}"
+                        );
+                        self.repository
+                            .complete_oauth_grant_revocation(executor, id, false, Some(detail))
+                            .await?;
+                        return Ok(true);
+                    }
+                    GrantRevocationAttempt::Failed { tokens, error } => {
+                        let (encrypted_access_token, encrypted_refresh_token) =
+                            self.encrypt_grant_tokens(&tokens, id.as_bytes())?;
+                        FailedGrantRevocation {
+                            encrypted_access_token,
+                            encrypted_refresh_token,
+                            access_token_expires_at: tokens.access_token_expires_at,
+                            error,
+                            abandon: false,
+                        }
+                    }
+                },
+            },
+        };
+
+        let attempts = revocation.attempts + 1;
+        let next_attempt_at = if failure.abandon {
+            None
+        } else {
+            retry_policy.next_attempt_at(attempts)
+        };
+        let error = failure.error;
+        if next_attempt_at.is_some() {
+            warn!(
+                "Failed attempt {attempts} to revoke the {provider_kind} OAuth grant of revocation {id}: {error}"
+            );
+        } else {
+            error!(
+                "Abandoning the revocation of the {provider_kind} OAuth grant of revocation {id} after {attempts} attempt(s): {error}"
+            );
+        }
+        self.repository
+            .record_oauth_grant_revocation_failure(
+                executor,
+                id,
+                failure.encrypted_access_token,
+                failure.encrypted_refresh_token,
+                failure.access_token_expires_at,
+                error,
+                next_attempt_at,
+            )
+            .await?;
+        Ok(false)
+    }
+
+    /// Revoke a grant at its provider. An expired access token is refreshed
+    /// first when a refresh token exists, as some providers (Slack) only
+    /// revoke with a live access token. A token the provider no longer
+    /// accepts counts as done: there is nothing left to revoke.
+    async fn attempt_grant_revocation(
+        &self,
+        provider: &dyn OAuth2Provider,
+        mut tokens: GrantTokens,
+    ) -> GrantRevocationAttempt {
+        let mut refreshed = false;
+        if tokens.refresh_token.is_some()
+            && tokens
+                .access_token_expires_at
+                .is_some_and(|expires_at| expires_at <= Utc::now())
+        {
+            match self.refresh_grant_tokens(provider, &mut tokens).await {
+                Ok(()) => refreshed = true,
+                Err(attempt) => return attempt.with_tokens(tokens),
+            }
+        }
+
+        loop {
+            match self
+                .oauth2_flow_service
+                .revoke_token(
+                    provider,
+                    &tokens.access_token,
+                    tokens.refresh_token.as_ref(),
+                )
+                .await
+            {
+                Ok(()) => return GrantRevocationAttempt::Revoked,
+                Err(TokenRevocationError::TokenDead(detail)) => {
+                    return GrantRevocationAttempt::AlreadyDead(detail);
+                }
+                Err(TokenRevocationError::AccessTokenExpired(_))
+                    if !refreshed && tokens.refresh_token.is_some() =>
+                {
+                    match self.refresh_grant_tokens(provider, &mut tokens).await {
+                        Ok(()) => refreshed = true,
+                        Err(attempt) => return attempt.with_tokens(tokens),
+                    }
+                }
+                Err(err) => {
+                    return GrantRevocationAttempt::Failed {
+                        tokens,
+                        error: err.to_string(),
+                    };
+                }
+            }
+        }
+    }
+
+    /// Refresh `tokens` in place. A refresh token the provider rejects means
+    /// the grant is already dead.
+    async fn refresh_grant_tokens(
+        &self,
+        provider: &dyn OAuth2Provider,
+        tokens: &mut GrantTokens,
+    ) -> Result<(), RefreshFailure> {
+        let Some(refresh_token) = &tokens.refresh_token else {
+            return Err(RefreshFailure::Failed("No refresh token".to_string()));
+        };
+        match self
+            .oauth2_flow_service
+            .refresh_access_token(provider, refresh_token)
+            .await
+        {
+            Ok(response) => {
+                tokens.access_token = response.access_token.expose_secret().clone();
+                if let Some(refresh_token) = &response.refresh_token {
+                    tokens.refresh_token = Some(refresh_token.expose_secret().clone());
+                }
+                tokens.access_token_expires_at = response.expires_at();
+                Ok(())
+            }
+            Err(UniversalInboxError::OAuth2InvalidGrant(detail)) => Err(RefreshFailure::Dead(
+                format!("refresh token rejected: {detail}"),
+            )),
+            Err(err) => Err(RefreshFailure::Failed(format!(
+                "Failed to refresh the access token: {err:?}"
+            ))),
+        }
+    }
+
+    fn decrypt_grant_tokens(
+        &self,
+        encrypted_access_token: &[u8],
+        encrypted_refresh_token: Option<&[u8]>,
+        access_token_expires_at: Option<DateTime<Utc>>,
+        aad_context: &[u8],
+    ) -> Result<GrantTokens, UniversalInboxError> {
+        let token_encryption_key = self.token_encryption_key.expose_secret();
+        let access_token = AccessToken(decrypt_token(
+            encrypted_access_token,
+            aad_context,
+            token_encryption_key,
+        )?);
+        let refresh_token = encrypted_refresh_token
+            .map(|encrypted| decrypt_token(encrypted, aad_context, token_encryption_key))
+            .transpose()?
+            .map(RefreshToken);
+        Ok(GrantTokens {
+            access_token,
+            refresh_token,
+            access_token_expires_at,
+        })
+    }
+
+    fn encrypt_grant_tokens(
+        &self,
+        tokens: &GrantTokens,
+        aad_context: &[u8],
+    ) -> Result<(Vec<u8>, Option<Vec<u8>>), UniversalInboxError> {
+        let token_encryption_key = self.token_encryption_key.expose_secret();
+        let encrypted_access_token = encrypt_token(
+            tokens.access_token.as_str(),
+            aad_context,
+            token_encryption_key,
+        )?;
+        let encrypted_refresh_token = tokens
+            .refresh_token
+            .as_ref()
+            .map(|refresh_token| {
+                encrypt_token(refresh_token.as_str(), aad_context, token_encryption_key)
+            })
+            .transpose()?;
+        Ok((encrypted_access_token, encrypted_refresh_token))
     }
 
     #[tracing::instrument(
@@ -974,11 +1353,12 @@ impl IntegrationConnectionService {
                 )));
             }
 
-            // Best effort: tell the provider to drop the grant too, so it no
-            // longer lists Universal Inbox as authorized and the refresh
-            // token dies on its side. A failure never blocks the disconnect.
+            // Tell the provider to drop the grant too, so it no longer lists
+            // Universal Inbox as authorized and the refresh token dies on its
+            // side. A provider failure never blocks the disconnect: the grant
+            // is queued for retry instead.
             self.revoke_provider_grant(executor, &integration_connection)
-                .await;
+                .await?;
 
             self.repository
                 .delete_oauth_credential(executor, integration_connection_id)
@@ -2177,4 +2557,32 @@ async fn cached_get_integration_connection_config_for_provider_user_id(
             connection.provider.config()
         }
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_grant_revocation_retry_policy_backs_off_exponentially() {
+        let policy = GrantRevocationRetryPolicy {
+            base_delay_in_seconds: 60,
+            max_delay_in_seconds: 300,
+            max_attempts: 5,
+        };
+        let delay = |attempts| {
+            policy
+                .next_attempt_at(attempts)
+                .map(|next_attempt_at| (next_attempt_at - Utc::now()).num_seconds())
+        };
+
+        assert!(matches!(delay(1), Some(59..=60)));
+        assert!(matches!(delay(2), Some(119..=120)));
+        assert!(matches!(delay(3), Some(239..=240)));
+        assert!(
+            matches!(delay(4), Some(299..=300)),
+            "capped at the max delay"
+        );
+        assert_eq!(delay(5), None, "abandoned after max_attempts");
+    }
 }

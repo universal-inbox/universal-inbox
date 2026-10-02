@@ -747,7 +747,12 @@ mod revoke_provider_grants {
     use universal_inbox::integration_connection::integrations::{
         linear::LinearConfig, ticktick::TickTickConfig,
     };
-    use universal_inbox_api::configuration::Settings;
+    use universal_inbox_api::{
+        configuration::Settings, integrations::oauth2::RefreshToken,
+        repository::oauth_credential::OAuthCredentialRepository,
+        universal_inbox::integration_connection::service::GrantRevocationRetryPolicy,
+    };
+    use uuid::Uuid;
     use wiremock::{
         Mock, MockGuard, MockServer, ResponseTemplate,
         matchers::{basic_auth, body_json, body_string_contains, header, method, path},
@@ -814,6 +819,148 @@ mod revoke_provider_grants {
             .respond_with(ResponseTemplate::new(200))
             .mount_as_scoped(server)
             .await
+    }
+
+    /// A row of `oauth_grant_revocation`, as the tests need it.
+    #[derive(Debug, PartialEq)]
+    struct Revocation {
+        status: String,
+        attempts: i32,
+        has_tokens: bool,
+        integration_connection_id: Option<Uuid>,
+    }
+
+    async fn revocations(app: &AuthenticatedApp) -> Vec<Revocation> {
+        sqlx::query_as::<_, (String, i32, bool, Option<Uuid>)>(
+            "SELECT status::TEXT, attempts, encrypted_access_token IS NOT NULL, integration_connection_id \
+             FROM oauth_grant_revocation ORDER BY created_at",
+        )
+        .fetch_all(&*app.app.repository.pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(
+            |(status, attempts, has_tokens, integration_connection_id)| Revocation {
+                status,
+                attempts,
+                has_tokens,
+                integration_connection_id,
+            },
+        )
+        .collect()
+    }
+
+    fn pending(attempts: i32, integration_connection_id: Option<Uuid>) -> Revocation {
+        Revocation {
+            status: "Pending".to_string(),
+            attempts,
+            has_tokens: true,
+            integration_connection_id,
+        }
+    }
+
+    fn completed(
+        status: &str,
+        attempts: i32,
+        integration_connection_id: Option<Uuid>,
+    ) -> Revocation {
+        Revocation {
+            status: status.to_string(),
+            attempts,
+            has_tokens: false,
+            integration_connection_id,
+        }
+    }
+
+    /// Run the `retry-oauth-grant-revocations` job body.
+    async fn retry_due_revocations(app: &AuthenticatedApp, max_attempts: u32) -> (usize, usize) {
+        app.app
+            .integration_connection_service
+            .read()
+            .await
+            .retry_due_grant_revocations(
+                10,
+                &GrantRevocationRetryPolicy {
+                    base_delay_in_seconds: 60,
+                    max_delay_in_seconds: 3600,
+                    max_attempts,
+                },
+            )
+            .await
+            .unwrap()
+    }
+
+    /// Skip the backoff delay of every pending revocation.
+    async fn make_revocations_due(app: &AuthenticatedApp) {
+        sqlx::query("UPDATE oauth_grant_revocation SET next_attempt_at = NOW()")
+            .execute(&*app.app.repository.pool)
+            .await
+            .unwrap();
+    }
+
+    async fn github_revocation_failure(server: &MockServer, settings: &Settings) -> MockGuard {
+        let client_id = &settings.integrations["github"].oauth_client_id;
+        Mock::given(method("DELETE"))
+            .and(path(format!("/applications/{client_id}/grant")))
+            .respond_with(ResponseTemplate::new(500))
+            .mount_as_scoped(server)
+            .await
+    }
+
+    async fn slack_revocation(
+        server: &MockServer,
+        access_token: &str,
+        response: serde_json::Value,
+    ) -> MockGuard {
+        Mock::given(method("POST"))
+            .and(path("/auth.revoke"))
+            .and(header(
+                "authorization",
+                format!("Bearer {access_token}").as_str(),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .mount_as_scoped(server)
+            .await
+    }
+
+    /// Slack token rotation: the refresh token yields a new access token.
+    async fn slack_token_refresh(server: &MockServer) -> MockGuard {
+        Mock::given(method("POST"))
+            .and(path("/oauth.v2.access"))
+            .and(body_string_contains("grant_type=refresh_token"))
+            .and(body_string_contains(
+                "refresh_token=xoxe-1-old-refresh-token",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "ok": true,
+                "access_token": "xoxe.xoxp-new-access-token",
+                "refresh_token": "xoxe-1-new-refresh-token",
+                "expires_in": 43200,
+                "token_type": "user"
+            })))
+            .mount_as_scoped(server)
+            .await
+    }
+
+    fn rotating_slack_oauth_credential() -> OAuthCredentialFixture {
+        OAuthCredentialFixture {
+            refresh_token: Some(RefreshToken("xoxe-1-old-refresh-token".to_string())),
+            ..slack_oauth_credential()
+        }
+    }
+
+    async fn expire_access_token(
+        app: &AuthenticatedApp,
+        integration_connection: &IntegrationConnection,
+    ) {
+        sqlx::query(
+            "UPDATE oauth_credential SET access_token_expires_at = NOW() - INTERVAL '1 hour' \
+             WHERE integration_connection_id = $1",
+        )
+        .bind(integration_connection.id.0)
+        .execute(&*app.app.repository.pool)
+        .await
+        .unwrap();
     }
 
     async fn assert_called_once(guard: &MockGuard, provider: &str) {
@@ -956,7 +1103,7 @@ mod revoke_provider_grants {
 
     #[rstest]
     #[tokio::test]
-    async fn test_a_failed_revocation_does_not_block_the_disconnect(
+    async fn test_a_failed_revocation_is_queued_then_retried(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
     ) {
@@ -968,16 +1115,260 @@ mod revoke_provider_grants {
             github_oauth_credential(),
         )
         .await;
-        let client_id = &settings.integrations["github"].oauth_client_id;
-        let guard = Mock::given(method("DELETE"))
-            .and(path(format!("/applications/{client_id}/grant")))
-            .respond_with(ResponseTemplate::new(500))
-            .mount_as_scoped(&app.app.github_mock_server)
-            .await;
+        let failure_guard = github_revocation_failure(&app.app.github_mock_server, &settings).await;
+
+        // The provider failure does not block the disconnect...
+        disconnect(&app, &connection).await;
+
+        assert_called_once(&failure_guard, "GitHub").await;
+        // ...the token is queued instead of being lost with the credential.
+        assert_eq!(
+            revocations(&app).await,
+            vec![pending(1, Some(connection.id.0))]
+        );
+        drop(failure_guard);
+
+        let guard = github_revocation(&app.app.github_mock_server, &settings).await;
+        make_revocations_due(&app).await;
+        assert_eq!(retry_due_revocations(&app, 20).await, (1, 0));
+
+        assert_called_once(&guard, "GitHub").await;
+        assert_eq!(
+            revocations(&app).await,
+            vec![completed("Revoked", 1, Some(connection.id.0))]
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_failing_revocation_backs_off_then_is_abandoned(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            github_oauth_credential(),
+        )
+        .await;
+        let _failure_guard =
+            github_revocation_failure(&app.app.github_mock_server, &settings).await;
+        disconnect(&app, &connection).await;
+
+        make_revocations_due(&app).await;
+        assert_eq!(retry_due_revocations(&app, 3).await, (0, 1));
+        assert_eq!(
+            revocations(&app).await,
+            vec![pending(2, Some(connection.id.0))]
+        );
+
+        // Backing off: not due again yet.
+        assert_eq!(retry_due_revocations(&app, 3).await, (0, 0));
+
+        make_revocations_due(&app).await;
+        assert_eq!(retry_due_revocations(&app, 3).await, (0, 1));
+        assert_eq!(
+            revocations(&app).await,
+            vec![Revocation {
+                status: "Abandoned".to_string(),
+                attempts: 3,
+                // Kept, so an operator can still retry by hand.
+                has_tokens: true,
+                integration_connection_id: Some(connection.id.0),
+            }]
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_an_expired_slack_token_is_refreshed_then_revoked(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Slack(SlackConfig::default()),
+            rotating_slack_oauth_credential(),
+        )
+        .await;
+        expire_access_token(&app, &connection).await;
+        let refresh_guard = slack_token_refresh(&app.app.slack_mock_server).await;
+        let revoke_guard = slack_revocation(
+            &app.app.slack_mock_server,
+            "xoxe.xoxp-new-access-token",
+            json!({ "ok": true, "revoked": true }),
+        )
+        .await;
 
         disconnect(&app, &connection).await;
 
+        assert_called_once(&refresh_guard, "Slack refresh").await;
+        assert_called_once(&revoke_guard, "Slack").await;
+        assert_eq!(revocations(&app).await, vec![]);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_queued_slack_token_expired_at_retry_is_refreshed_then_revoked(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Slack(SlackConfig::default()),
+            rotating_slack_oauth_credential(),
+        )
+        .await;
+        let failure_guard = Mock::given(method("POST"))
+            .and(path("/auth.revoke"))
+            .respond_with(ResponseTemplate::new(503))
+            .mount_as_scoped(&app.app.slack_mock_server)
+            .await;
+        disconnect(&app, &connection).await;
+        assert_eq!(
+            revocations(&app).await,
+            vec![pending(1, Some(connection.id.0))]
+        );
+        drop(failure_guard);
+
+        // Meanwhile the access token expired, which only Slack knows.
+        let expired_guard = slack_revocation(
+            &app.app.slack_mock_server,
+            "slack_test_user_access_token",
+            json!({ "ok": false, "error": "token_expired" }),
+        )
+        .await;
+        let refresh_guard = slack_token_refresh(&app.app.slack_mock_server).await;
+        let revoke_guard = slack_revocation(
+            &app.app.slack_mock_server,
+            "xoxe.xoxp-new-access-token",
+            json!({ "ok": true, "revoked": true }),
+        )
+        .await;
+        make_revocations_due(&app).await;
+        assert_eq!(retry_due_revocations(&app, 20).await, (1, 0));
+
+        assert_called_once(&expired_guard, "Slack (expired)").await;
+        assert_called_once(&refresh_guard, "Slack refresh").await;
+        assert_called_once(&revoke_guard, "Slack").await;
+        assert_eq!(
+            revocations(&app).await,
+            vec![completed("Revoked", 1, Some(connection.id.0))]
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_an_already_dead_slack_token_counts_as_revoked(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Slack(SlackConfig::default()),
+            slack_oauth_credential(),
+        )
+        .await;
+        let guard = slack_revocation(
+            &app.app.slack_mock_server,
+            "slack_test_user_access_token",
+            json!({ "ok": false, "error": "token_revoked" }),
+        )
+        .await;
+
+        disconnect(&app, &connection).await;
+
+        assert_called_once(&guard, "Slack").await;
+        assert_eq!(revocations(&app).await, vec![]);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_reconnect_cancels_the_pending_revocation(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            github_oauth_credential(),
+        )
+        .await;
+        let failure_guard = github_revocation_failure(&app.app.github_mock_server, &settings).await;
+        disconnect(&app, &connection).await;
+        drop(failure_guard);
+
+        // The user connects GitHub again: GitHub revokes the whole grant, so
+        // the queued revocation would kill the new token too.
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        app.app
+            .repository
+            .store_oauth_credential(
+                &mut transaction,
+                connection.id,
+                b"new encrypted token".to_vec(),
+                None,
+                None,
+                json!({}),
+            )
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+        let guard = github_revocation(&app.app.github_mock_server, &settings).await;
+
+        make_revocations_due(&app).await;
+        assert_eq!(retry_due_revocations(&app, 20).await, (1, 0));
+
+        assert!(
+            guard.received_requests().await.is_empty(),
+            "the reconnected GitHub grant must not be revoked"
+        );
+        assert_eq!(
+            revocations(&app).await,
+            vec![completed("Cancelled", 1, Some(connection.id.0))]
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_account_deletion_queues_the_failed_revocations(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            github_oauth_credential(),
+        )
+        .await;
+        let failure_guard = github_revocation_failure(&app.app.github_mock_server, &settings).await;
+
+        let email = app.user.email.as_ref().unwrap().to_string();
+        let response = delete_current_user_response(&app.client, &app.app, &email).await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // The connection is gone with the user, the queued token is not.
+        assert_eq!(revocations(&app).await, vec![pending(1, None)]);
+        drop(failure_guard);
+
+        let guard = github_revocation(&app.app.github_mock_server, &settings).await;
+        make_revocations_due(&app).await;
+        assert_eq!(retry_due_revocations(&app, 20).await, (1, 0));
+
         assert_called_once(&guard, "GitHub").await;
+        assert_eq!(revocations(&app).await, vec![completed("Revoked", 1, None)]);
     }
 
     #[rstest]

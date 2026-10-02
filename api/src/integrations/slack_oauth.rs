@@ -11,10 +11,14 @@ use url::Url;
 use crate::{
     integrations::oauth2::{
         AccessToken, ClientSecret, RefreshToken,
-        provider::{OAuth2Provider, OAuthTokenResponse},
+        provider::{OAuth2Provider, OAuthTokenResponse, TokenRevocationError},
     },
     universal_inbox::UniversalInboxError,
 };
+
+/// `auth.revoke` errors meaning the token no longer works, so there is nothing
+/// left to revoke.
+const SLACK_DEAD_TOKEN_ERRORS: [&str; 3] = ["invalid_auth", "token_revoked", "account_inactive"];
 
 pub struct SlackOAuth2Provider {
     authorize_url: Url,
@@ -60,6 +64,12 @@ impl SlackOAuth2Provider {
         self.revocation_url = revocation_url;
         self
     }
+
+    /// Override the token endpoint (tests point it at a mock).
+    pub fn with_token_url(mut self, token_url: Url) -> Self {
+        self.token_url = token_url;
+        self
+    }
 }
 
 impl OAuth2Provider for SlackOAuth2Provider {
@@ -85,18 +95,27 @@ impl OAuth2Provider for SlackOAuth2Provider {
         &self,
         status: http::StatusCode,
         body: &str,
-    ) -> Result<(), UniversalInboxError> {
-        let ok = status.is_success()
-            && serde_json::from_str::<Value>(body)
-                .ok()
-                .and_then(|response| response.get("ok").and_then(Value::as_bool))
-                .unwrap_or(false);
-        if ok {
-            Ok(())
-        } else {
-            Err(UniversalInboxError::Unexpected(anyhow::anyhow!(
-                "Slack token revocation failed with status {status}: {body}"
-            )))
+    ) -> Result<(), TokenRevocationError> {
+        let response = serde_json::from_str::<Value>(body).ok();
+        let ok = response
+            .as_ref()
+            .and_then(|response| response.get("ok").and_then(Value::as_bool))
+            .unwrap_or(false);
+        if status.is_success() && ok {
+            return Ok(());
+        }
+        let detail = format!("Slack token revocation failed with status {status}: {body}");
+        match response
+            .as_ref()
+            .and_then(|response| response.get("error").and_then(Value::as_str))
+        {
+            Some(error) if SLACK_DEAD_TOKEN_ERRORS.contains(&error) => {
+                Err(TokenRevocationError::TokenDead(detail))
+            }
+            Some("token_expired") => Err(TokenRevocationError::AccessTokenExpired(detail)),
+            _ => Err(TokenRevocationError::Failed(
+                UniversalInboxError::Unexpected(anyhow::anyhow!(detail)),
+            )),
         }
     }
     fn provider_kind(&self) -> IntegrationProviderKind {
@@ -348,5 +367,33 @@ mod tests {
     fn test_parse_token_response_errors_when_not_ok() {
         let body = r#"{ "ok": false, "error": "invalid_code" }"#;
         assert!(provider().parse_token_response(body).is_err());
+    }
+
+    #[test]
+    fn test_check_revocation_response_classifies_slack_errors() {
+        let check = |body: &str| provider().check_revocation_response(http::StatusCode::OK, body);
+
+        assert!(check(r#"{ "ok": true, "revoked": true }"#).is_ok());
+        for error in ["invalid_auth", "token_revoked", "account_inactive"] {
+            assert!(
+                matches!(
+                    check(&format!(r#"{{ "ok": false, "error": "{error}" }}"#)),
+                    Err(TokenRevocationError::TokenDead(_))
+                ),
+                "{error} means the token is already dead"
+            );
+        }
+        assert!(matches!(
+            check(r#"{ "ok": false, "error": "token_expired" }"#),
+            Err(TokenRevocationError::AccessTokenExpired(_))
+        ));
+        assert!(matches!(
+            check(r#"{ "ok": false, "error": "ratelimited" }"#),
+            Err(TokenRevocationError::Failed(_))
+        ));
+        assert!(matches!(
+            provider().check_revocation_response(http::StatusCode::BAD_GATEWAY, ""),
+            Err(TokenRevocationError::Failed(_))
+        ));
     }
 }

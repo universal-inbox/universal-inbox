@@ -58,6 +58,28 @@ impl OAuthTokenResponse {
     }
 }
 
+/// Why a grant revocation did not go through.
+#[derive(Debug)]
+pub enum TokenRevocationError {
+    /// The provider no longer accepts the token (already revoked, invalid,
+    /// account deactivated): there is nothing left to revoke.
+    TokenDead(String),
+    /// The access token expired: refresh it, then revoke again.
+    AccessTokenExpired(String),
+    /// Any other failure (network, provider outage): retry later.
+    Failed(UniversalInboxError),
+}
+
+impl std::fmt::Display for TokenRevocationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TokenDead(detail) => write!(f, "token already dead: {detail}"),
+            Self::AccessTokenExpired(detail) => write!(f, "access token expired: {detail}"),
+            Self::Failed(err) => write!(f, "{err:?}"),
+        }
+    }
+}
+
 /// Configuration for an OAuth2 provider that manages its own token lifecycle.
 pub trait OAuth2Provider: Send + Sync + std::fmt::Debug {
     fn provider_kind(&self) -> IntegrationProviderKind;
@@ -129,8 +151,9 @@ pub trait OAuth2Provider: Send + Sync + std::fmt::Debug {
             .map_err(|err| UniversalInboxError::from_json_serde_error(err, body.to_string()))
     }
 
-    /// Endpoint revoking a grant at the provider, called (best effort) when a
-    /// user disconnects the integration or deletes their account.
+    /// Endpoint revoking a grant at the provider, called when a user
+    /// disconnects the integration or deletes their account (retried until
+    /// done, see `oauth_grant_revocation`).
     fn revocation_url(&self) -> &Url;
 
     /// Build the revocation request sent to [`Self::revocation_url`].
@@ -153,20 +176,31 @@ pub trait OAuth2Provider: Send + Sync + std::fmt::Debug {
             .form(&[("token", token), ("token_type_hint", token_type_hint)])
     }
 
-    /// Whether the provider accepted the revocation. Default: any 2xx status.
-    /// Providers answering errors with a 200 (e.g. Slack) override.
+    /// Whether the provider accepted the revocation. Default: any 2xx status,
+    /// and an RFC 6749 `invalid_grant` / `invalid_token` error means the token
+    /// is already dead. Providers answering errors with a 200 (e.g. Slack)
+    /// override.
     fn check_revocation_response(
         &self,
         status: http::StatusCode,
         body: &str,
-    ) -> Result<(), UniversalInboxError> {
+    ) -> Result<(), TokenRevocationError> {
         if status.is_success() {
-            Ok(())
-        } else {
-            Err(UniversalInboxError::Unexpected(anyhow::anyhow!(
-                "Token revocation failed with status {status}: {body}"
-            )))
+            return Ok(());
         }
+        if (status == http::StatusCode::BAD_REQUEST || status == http::StatusCode::UNAUTHORIZED)
+            && let Ok(error_body) = serde_json::from_str::<OAuth2ErrorBody>(body)
+            && (error_body.error == "invalid_grant" || error_body.error == "invalid_token")
+        {
+            return Err(TokenRevocationError::TokenDead(format!(
+                "Token revocation answered with status {status}: {body}"
+            )));
+        }
+        Err(TokenRevocationError::Failed(
+            UniversalInboxError::Unexpected(anyhow::anyhow!(
+                "Token revocation failed with status {status}: {body}"
+            )),
+        ))
     }
 
     /// Return a copy of the raw provider response with secret material stripped
@@ -321,7 +355,7 @@ impl OAuth2FlowService {
         provider: &dyn OAuth2Provider,
         access_token: &AccessToken,
         refresh_token: Option<&RefreshToken>,
-    ) -> Result<(), UniversalInboxError> {
+    ) -> Result<(), TokenRevocationError> {
         let revocation_url = provider.revocation_url();
 
         debug!(
@@ -333,12 +367,14 @@ impl OAuth2FlowService {
             .build_revocation_request(&self.client, revocation_url, access_token, refresh_token)
             .send()
             .await
-            .context("Failed to send the token revocation request")?;
+            .context("Failed to send the token revocation request")
+            .map_err(|err| TokenRevocationError::Failed(err.into()))?;
         let status = response.status();
         let body = response
             .text()
             .await
-            .context("Failed to read token revocation response body")?;
+            .context("Failed to read token revocation response body")
+            .map_err(|err| TokenRevocationError::Failed(err.into()))?;
 
         provider.check_revocation_response(status, &body)
     }
@@ -560,6 +596,37 @@ mod tests {
             matches!(err, UniversalInboxError::Unexpected(_)),
             "5xx must not flip to OAuth2InvalidGrant, got {err:?}"
         );
+    }
+
+    #[test]
+    fn test_default_check_revocation_response() {
+        let provider = StubProvider::new(Url::parse("https://example.com/token").unwrap());
+
+        assert!(
+            provider
+                .check_revocation_response(http::StatusCode::OK, "")
+                .is_ok()
+        );
+        for error in ["invalid_grant", "invalid_token"] {
+            assert!(matches!(
+                provider.check_revocation_response(
+                    http::StatusCode::BAD_REQUEST,
+                    &format!(r#"{{"error":"{error}"}}"#)
+                ),
+                Err(TokenRevocationError::TokenDead(_))
+            ));
+        }
+        assert!(matches!(
+            provider.check_revocation_response(
+                http::StatusCode::BAD_REQUEST,
+                r#"{"error":"invalid_client"}"#
+            ),
+            Err(TokenRevocationError::Failed(_))
+        ));
+        assert!(matches!(
+            provider.check_revocation_response(http::StatusCode::SERVICE_UNAVAILABLE, ""),
+            Err(TokenRevocationError::Failed(_))
+        ));
     }
 
     #[test]

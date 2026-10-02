@@ -152,8 +152,8 @@ pub struct TestServices {
     pub oauth2_service: Arc<OAuth2Service>,
 }
 
-/// Point every provider's OAuth grant revocation endpoint (and Google's token
-/// endpoint) at its mock server so disconnect / account deletion / OAuth
+/// Point every provider's OAuth grant revocation endpoint (and the Google and
+/// Slack token endpoints) at its mock server so disconnect / account deletion / OAuth
 /// callbacks never call a real provider.
 pub fn with_mocked_oauth_urls(settings: &Settings, mock_servers: &MockServers) -> Settings {
     let mut settings = settings.clone();
@@ -176,18 +176,16 @@ pub fn with_mocked_oauth_urls(settings: &Settings, mock_servers: &MockServers) -
         integration.oauth_revocation_url =
             Some(revocation_url.parse().expect("valid mock revocation URL"));
 
-        // Google code exchanges hit the integration's mock server too.
-        let google_mock_server = match name.as_str() {
-            "google_mail" => &mock_servers.google_mail,
-            "google_calendar" => &mock_servers.google_calendar,
-            "google_drive" => &mock_servers.google_drive,
+        // Google code exchanges and Slack token refreshes hit the
+        // integration's mock server too.
+        let token_url = match name.as_str() {
+            "google_mail" => format!("{}/token", mock_servers.google_mail.uri()),
+            "google_calendar" => format!("{}/token", mock_servers.google_calendar.uri()),
+            "google_drive" => format!("{}/token", mock_servers.google_drive.uri()),
+            "slack" => format!("{}/oauth.v2.access", mock_servers.slack.uri()),
             _ => continue,
         };
-        integration.oauth_token_url = Some(
-            format!("{}/token", google_mock_server.uri())
-                .parse()
-                .expect("valid mock token URL"),
-        );
+        integration.oauth_token_url = Some(token_url.parse().expect("valid mock token URL"));
     }
     settings
 }
