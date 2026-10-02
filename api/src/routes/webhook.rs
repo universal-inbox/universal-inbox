@@ -6,6 +6,7 @@ use apalis::prelude::Storage;
 use apalis_redis::RedisStorage;
 use ring::hmac;
 use secrecy::{ExposeSecret, SecretBox};
+use serde::Deserialize;
 use serde_json::json;
 use slack_morphism::prelude::*;
 use subtle::ConstantTimeEq;
@@ -248,6 +249,62 @@ pub async fn push_slack_event(
             );
         }
         SlackPushEvent::EventCallback(SlackPushEventCallback {
+            ref team_id,
+            ref event_id,
+            ref event_time,
+            event: SlackEventCallbackBody::AppUninstalled(_),
+            ..
+        }) => {
+            current_span.set_attribute("slack.event_type", "app_uninstalled");
+            current_span.set_attribute("slack.team_id", team_id.to_string());
+            current_span.set_attribute("slack.event_id", event_id.to_string());
+            revoke_slack_access(
+                integration_connection_service.as_ref(),
+                team_id,
+                None,
+                event_time,
+            )
+            .await?;
+        }
+        SlackPushEvent::EventCallback(SlackPushEventCallback {
+            ref team_id,
+            ref event_id,
+            ref event_time,
+            event: SlackEventCallbackBody::Unknown(ref body),
+            ..
+        }) if body.get("type").and_then(|t| t.as_str()) == Some("tokens_revoked") => {
+            current_span.set_attribute("slack.event_type", "tokens_revoked");
+            current_span.set_attribute("slack.team_id", team_id.to_string());
+            current_span.set_attribute("slack.event_id", event_id.to_string());
+            match serde_json::from_value::<SlackTokensRevokedEvent>(body.clone()) {
+                Ok(SlackTokensRevokedEvent {
+                    tokens: SlackRevokedTokens { oauth },
+                }) if !oauth.is_empty() => {
+                    revoke_slack_access(
+                        integration_connection_service.as_ref(),
+                        team_id,
+                        Some(&oauth),
+                        event_time,
+                    )
+                    .await?;
+                }
+                Ok(_) => {
+                    current_span.set_attribute("slack.event.outcome", "discarded");
+                    current_span
+                        .set_attribute("slack.event.discard_reason", "no_user_token_revoked");
+                }
+                Err(err) => {
+                    current_span.set_attribute("slack.event.outcome", "discarded");
+                    current_span.set_attribute("slack.event.discard_reason", "invalid_payload");
+                    warn!(
+                        ?team_id,
+                        ?event_id,
+                        "Failed to parse Slack tokens_revoked event: {err}"
+                    );
+                }
+            }
+        }
+        SlackPushEvent::EventCallback(SlackPushEventCallback {
             team_id,
             api_app_id,
             event_id,
@@ -268,6 +325,47 @@ pub async fn push_slack_event(
     }
 
     Ok(HttpResponse::Ok().finish())
+}
+
+/// `tokens_revoked` event payload, which slack-morphism does not model.
+/// See <https://docs.slack.dev/reference/events/tokens_revoked>.
+#[derive(Deserialize)]
+struct SlackTokensRevokedEvent {
+    tokens: SlackRevokedTokens,
+}
+
+#[derive(Deserialize)]
+struct SlackRevokedTokens {
+    /// Ids of the Slack users whose user token was revoked.
+    #[serde(default)]
+    oauth: Vec<String>,
+}
+
+async fn revoke_slack_access(
+    integration_connection_service: &RwLock<IntegrationConnectionService>,
+    team_id: &SlackTeamId,
+    provider_user_ids: Option<&[String]>,
+    revoked_at: &SlackDateTime,
+) -> Result<(), UniversalInboxError> {
+    let current_span = tracing::Span::current();
+    let service = integration_connection_service.read().await;
+    // No `.context()`: keep a pool timeout as `DatabaseUnavailable` (503).
+    let mut transaction = service.begin().await?;
+    let revoked = service
+        .revoke_slack_access(
+            &mut transaction,
+            &team_id.0,
+            provider_user_ids,
+            revoked_at.0,
+        )
+        .await?;
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit Slack access revocation")?;
+    current_span.set_attribute("slack.event.outcome", "access_revoked");
+    current_span.set_attribute("slack.revoked_connections", revoked as i64);
+    Ok(())
 }
 
 async fn send_slack_push_event_callback_job(
