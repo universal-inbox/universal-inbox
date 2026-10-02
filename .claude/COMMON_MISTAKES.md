@@ -1,6 +1,6 @@
 # Common Mistakes — READ FIRST (auto-loaded at session start)
 
-> CRITICAL. These five bite every session on this all-Rust stack. Scan before you build, test, or run anything.
+> CRITICAL. These six bite every session on this all-Rust stack. Scan before you build, test, or run anything.
 
 ## 1. Tests overflow the stack (missing RUST_MIN_STACK)
 - **Symptom:** Tests crash with `thread 'main' has overflowed its stack` / SIGABRT on big nested structs.
@@ -21,11 +21,17 @@
 - **Symptom:** Connection refused, or you mutate the main checkout's DB from a worktree.
 - **Check:** Did you prefix with `direnv exec .`? Per-branch ports live in `.local_envrc` (PGPORT/REDIS_PORT/…, NOT 5432/6379). Bare `devbox run` skips `.local_envrc` → wrong ports.
 - **Fix:** `cd /abs/path/to/worktree && direnv exec . just <cmd>`. Shell state doesn't persist across agent calls. See QUICK_START.md "Worktree".
+- **Before `wt remove` / `wt merge`:** stop that worktree's services first: `direnv exec . just down`, then `direnv exec . just status` to confirm. Orphaned pg/redis/API processes hold the branch ports.
 
 ## 5. Frontend styling drift (hardcoded values / stray CSS)
 - **Symptom:** `bg-[#388fef]`, inline px radii, or a new `.foo-bar` class in `universal-inbox.css`.
 - **Check:** Does a `@theme` token, FlyonUI class, or `web/src/components/ui/` component already cover it?
 - **Fix:** Use `bg-ui-primary`, `rounded-ui-md`, `shadow-ui-sm`, `font-ui` — add a token before inlining. Custom CSS only for pseudo-elements/keyframes/sibling cascades/scrollbars.
+
+## 6. `git commit` fails in the pre-commit hook (services not running)
+- **Symptom:** Commit aborts in the `Test Rust code` hook with DB/Redis connection errors (connection refused, pool timeout).
+- **Check:** The pre-commit hook (`.pre-commit-config.yaml`) runs `just test` — integration tests included — whenever a `.rs` file is staged. Are Postgres and Redis up? `direnv exec . just status`.
+- **Fix:** `direnv exec . just run-detached` before committing, then commit through `direnv exec .` so the hook sees this worktree's ports. Never bypass with `--no-verify`.
 
 ## Before you finish
 - Run `just check` and `just test` from the project you touched (api/web/root).

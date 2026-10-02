@@ -12,7 +12,7 @@ a Dioxus WASM frontend (`web/`).
 
 At the start of each session, read these 3 files:
 
-- `.claude/COMMON_MISTAKES.md` — the five failures that recur on this stack
+- `.claude/COMMON_MISTAKES.md` — the six failures that recur on this stack
 - `.claude/QUICK_START.md` — build/test/DB/service commands + required env
 - `.claude/ARCHITECTURE_MAP.md` — directory map + "where to find X"
 
@@ -32,7 +32,7 @@ asked: they are historical records, not current guidance.
 
 | File | Purpose |
 |------|---------|
-| [`.claude/COMMON_MISTAKES.md`](.claude/COMMON_MISTAKES.md) | ⚠️ Top-5 critical mistakes (auto-load) |
+| [`.claude/COMMON_MISTAKES.md`](.claude/COMMON_MISTAKES.md) | ⚠️ Top-6 critical mistakes (auto-load) |
 | [`.claude/QUICK_START.md`](.claude/QUICK_START.md) | Commands: build/test, DB, services, env (auto-load) |
 | [`.claude/ARCHITECTURE_MAP.md`](.claude/ARCHITECTURE_MAP.md) | Directory map + file locations (auto-load) |
 | [`.claude/LEARNINGS_INDEX.md`](.claude/LEARNINGS_INDEX.md) | Pointers to topic docs |
