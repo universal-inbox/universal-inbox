@@ -511,6 +511,7 @@ fn test_pause_slack_connections_cron_settings(settings: Settings) {
     assert!(!cron_settings.is_enabled);
     assert_eq!(cron_settings.schedule, "0 0 3 * * *");
     assert_eq!(cron_settings.inactivity_threshold_days, 90);
+    assert_eq!(cron_settings.inactivity_warning_days, 7);
     assert_eq!(cron_settings.failing_threshold_days, 30);
     assert_eq!(cron_settings.lock_ttl_seconds, 300);
 }

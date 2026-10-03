@@ -239,13 +239,38 @@ pub trait IntegrationConnectionRepository {
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 
     /// List the `Validated` connections of `provider_kind` whose owner has not
-    /// been active since `inactive_before`.
+    /// been active since `inactive_before`. With `warned_before`, only those
+    /// whose owner was warned of the pause before `warned_before`, and not
+    /// active since (see [`Self::mark_inactivity_warning_sent`]).
     async fn find_validated_integration_connections_of_inactive_users(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         provider_kind: IntegrationProviderKind,
         inactive_before: DateTime<Utc>,
+        warned_before: Option<DateTime<Utc>>,
     ) -> Result<Vec<IntegrationConnectionId>, UniversalInboxError>;
+
+    /// List the `Validated` connections of `provider_kind` whose owner has not
+    /// been active since `inactive_before` and was not warned yet of their
+    /// pause since their last activity.
+    async fn find_integration_connections_to_warn_of_inactivity(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        provider_kind: IntegrationProviderKind,
+        inactive_before: DateTime<Utc>,
+    ) -> Result<Vec<IntegrationConnectionId>, UniversalInboxError>;
+
+    /// Record that the owner of the connection was warned of its pause, if it
+    /// is still to be warned (see
+    /// [`Self::find_integration_connections_to_warn_of_inactivity`]). The row
+    /// stays locked until the transaction ends. Returns whether it was marked.
+    async fn mark_inactivity_warning_sent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        inactive_before: DateTime<Utc>,
+        sent_at: DateTime<Utc>,
+    ) -> Result<bool, UniversalInboxError>;
 
     /// List the `Failing` connections of `provider_kind` failing since before
     /// `failing_before`. A connection marked `Failing` by its syncs is failing
@@ -1925,7 +1950,10 @@ impl IntegrationConnectionRepository for Repository {
         executor: &mut Transaction<'_, Postgres>,
         provider_kind: IntegrationProviderKind,
         inactive_before: DateTime<Utc>,
+        warned_before: Option<DateTime<Utc>>,
     ) -> Result<Vec<IntegrationConnectionId>, UniversalInboxError> {
+        // A warning sent before the user's last activity belongs to a previous
+        // inactivity period and does not count.
         let ids = sqlx::query_scalar!(
             r#"
                 SELECT integration_connection.id
@@ -1934,10 +1962,18 @@ impl IntegrationConnectionRepository for Repository {
                 WHERE integration_connection.provider_kind::TEXT = $1
                   AND integration_connection.status = 'Validated'
                   AND "user".last_active_at < $2
+                  AND (
+                    $3::TIMESTAMP IS NULL
+                    OR (
+                      integration_connection.inactivity_warning_sent_at >= "user".last_active_at
+                      AND integration_connection.inactivity_warning_sent_at < $3
+                    )
+                  )
                 ORDER BY "user".last_active_at
             "#,
             provider_kind.to_string(),
             inactive_before.naive_utc(),
+            warned_before.map(|warned_before| warned_before.naive_utc()) as Option<NaiveDateTime>,
         )
         .fetch_all(&mut **executor)
         .await
@@ -1952,6 +1988,99 @@ impl IntegrationConnectionRepository for Repository {
         })?;
 
         Ok(ids.into_iter().map(IntegrationConnectionId).collect())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            provider_kind = provider_kind.to_string(),
+            inactive_before = inactive_before.to_rfc3339()
+        ),
+        err
+    )]
+    async fn find_integration_connections_to_warn_of_inactivity(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        provider_kind: IntegrationProviderKind,
+        inactive_before: DateTime<Utc>,
+    ) -> Result<Vec<IntegrationConnectionId>, UniversalInboxError> {
+        let ids = sqlx::query_scalar!(
+            r#"
+                SELECT integration_connection.id
+                FROM integration_connection
+                INNER JOIN "user" ON "user".id = integration_connection.user_id
+                WHERE integration_connection.provider_kind::TEXT = $1
+                  AND integration_connection.status = 'Validated'
+                  AND "user".last_active_at < $2
+                  AND (
+                    integration_connection.inactivity_warning_sent_at IS NULL
+                    OR integration_connection.inactivity_warning_sent_at < "user".last_active_at
+                  )
+                ORDER BY "user".last_active_at
+            "#,
+            provider_kind.to_string(),
+            inactive_before.naive_utc(),
+        )
+        .fetch_all(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to list {provider_kind} integration connections to warn of inactivity: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        Ok(ids.into_iter().map(IntegrationConnectionId).collect())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection_id = integration_connection_id.to_string(),
+            inactive_before = inactive_before.to_rfc3339()
+        ),
+        err
+    )]
+    async fn mark_inactivity_warning_sent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        inactive_before: DateTime<Utc>,
+        sent_at: DateTime<Utc>,
+    ) -> Result<bool, UniversalInboxError> {
+        let result = sqlx::query!(
+            r#"
+                UPDATE integration_connection
+                SET inactivity_warning_sent_at = $3
+                FROM "user"
+                WHERE integration_connection.id = $1
+                  AND "user".id = integration_connection.user_id
+                  AND integration_connection.status = 'Validated'
+                  AND "user".last_active_at < $2
+                  AND (
+                    integration_connection.inactivity_warning_sent_at IS NULL
+                    OR integration_connection.inactivity_warning_sent_at < "user".last_active_at
+                  )
+            "#,
+            integration_connection_id.0,
+            inactive_before.naive_utc(),
+            sent_at.naive_utc(),
+        )
+        .execute(&mut **executor)
+        .await
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            message: format!(
+                "Failed to mark the inactivity warning of integration connection {integration_connection_id} as sent: {err}"
+            ),
+            source: err,
+        })?;
+
+        Ok(result.rows_affected() == 1)
     }
 
     #[tracing::instrument(
@@ -2021,6 +2150,7 @@ impl IntegrationConnectionRepository for Repository {
                     failure_message = NULL,
                     paused_at = $2,
                     paused_reason = $3,
+                    inactivity_warning_sent_at = NULL,
                     updated_at = (now() at time zone 'utc')
                 WHERE id = $1
             "#,
