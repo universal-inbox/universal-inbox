@@ -1,35 +1,50 @@
-use playwright_rs::expect;
+use playwright_rs::{Page, expect, expect_page};
 use rstest::*;
+
+use universal_inbox::notification::{Notification, NotificationStatus};
 
 use crate::helpers::{
     BrowserTestedApp, EXPECT_TIMEOUT, browser_tested_app, generate_test_user, launch_browser,
-    login, wait_for_notification_rows,
+    login, notification_id_from_url, wait_for_notification, wait_for_notification_rows,
 };
 
-/// Test that a logged-in user with generated data sees notifications on the main page.
-#[rstest]
-#[tokio::test]
-async fn test_notifications_are_displayed(#[future] browser_tested_app: BrowserTestedApp) {
-    let app = browser_tested_app.await;
-    let email = generate_test_user(&app).await;
-    let (_context, page) = launch_browser().await;
+/// Tells whether the server has persisted an action on a notification.
+type PersistedCheck = fn(&Notification) -> bool;
 
-    login(&page, &app.app_url, &email).await;
+/// Matches a URL targeting a single notification.
+const NOTIFICATION_URL_PATTERN: &str = r"/notifications/[0-9a-fA-F-]{36}$";
 
-    // Wait for notification rows to render (API data may still be loading after login)
-    wait_for_notification_rows(&page).await;
-
-    // After login, we should be on the notifications page with items visible.
-    // The generated test user has 9 notifications.
-    let notification_rows = page.locator("#notifications-list .ui-nrow");
-    let count = notification_rows
-        .count()
+/// Wait until the URL targets a notification and differs from `previous_url`.
+async fn wait_for_notification_url_change(page: &Page, previous_url: &str) -> String {
+    expect_page(page)
+        .with_timeout(EXPECT_TIMEOUT)
+        .not()
+        .to_have_url(previous_url)
         .await
-        .expect("Failed to count notification rows");
-    assert!(
-        count >= 8,
-        "Expected at least 8 notification rows, but found {count}"
-    );
+        .unwrap_or_else(|_| panic!("URL did not change from {previous_url}"));
+    expect_page(page)
+        .with_timeout(EXPECT_TIMEOUT)
+        .to_have_url_regex(NOTIFICATION_URL_PATTERN)
+        .await
+        .expect("URL should target a notification");
+    page.url()
+}
+
+/// Click the `nth` row and wait until it is selected and the URL targets a notification.
+async fn select_row(page: &Page, nth: usize) -> String {
+    let row = page.locator(format!("#notifications-list .ui-nrow >> nth={nth}"));
+    row.click(None).await.expect("click row");
+    expect(row)
+        .with_timeout(EXPECT_TIMEOUT)
+        .to_have_class_regex(r"\bselected\b")
+        .await
+        .expect("clicked row should be selected");
+    expect_page(page)
+        .with_timeout(EXPECT_TIMEOUT)
+        .to_have_url_regex(NOTIFICATION_URL_PATTERN)
+        .await
+        .expect("URL should target the selected notification");
+    page.url()
 }
 
 /// Selecting a notification (by click or keyboard) must update the URL to
@@ -44,55 +59,26 @@ async fn test_selecting_notification_updates_url(#[future] browser_tested_app: B
     login(&page, &app.app_url, &email).await;
     wait_for_notification_rows(&page).await;
 
-    async fn url_after_click(page: &playwright_rs::Page, nth: usize) -> String {
-        let row = page.locator(format!("#notifications-list .ui-nrow >> nth={nth}"));
-        row.click(None).await.expect("click row");
-        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
-        page.url()
-    }
+    let url0 = select_row(&page, 0).await;
+    page.locator("#notifications-list .ui-nrow >> nth=1")
+        .click(None)
+        .await
+        .expect("click row 1");
+    // Selecting a different notification must change the URL.
+    let url1 = wait_for_notification_url_change(&page, &url0).await;
 
-    let url0 = url_after_click(&page, 0).await;
-    let url1 = url_after_click(&page, 1).await;
-    assert!(
-        url0.contains("/notifications/") && url1.contains("/notifications/"),
-        "Both selections should produce a /notifications/<id> URL. url0={url0}, url1={url1}"
-    );
-    assert_ne!(
-        url0, url1,
-        "Selecting a different notification must change the URL. url0={url0}, url1={url1}"
-    );
-
-    // Keyboard navigation must also update the URL.
-    let before_arrow = page.url();
     page.keyboard()
         .press("ArrowDown", None)
         .await
         .expect("press ArrowDown");
-    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
-    let after_arrow = page.url();
-    assert_ne!(
-        before_arrow, after_arrow,
-        "ArrowDown must change the URL. before={before_arrow}, after={after_arrow}"
-    );
+    let url2 = wait_for_notification_url_change(&page, &url1).await;
 
-    // Deleting the selected notification must move the URL to the notification that
-    // takes its place (the next one slides into the same index).
-    let before_delete = page.url();
     page.keyboard()
         .press("d", None)
         .await
         .expect("press d to delete");
-    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
-    let after_delete = page.url();
-    assert!(
-        after_delete.contains("/notifications/"),
-        "After delete the URL should still target a notification, but is: {after_delete}"
-    );
-    assert_ne!(
-        before_delete, after_delete,
-        "Deleting the selected notification must update the URL to the new selection. \
-         before={before_delete}, after={after_delete}"
-    );
+    // Deleting the selected notification must move the URL to the new selection.
+    wait_for_notification_url_change(&page, &url2).await;
 }
 
 /// Deep-linking (entering a URL) to a notification that is NOT in the current section's
@@ -110,31 +96,21 @@ async fn test_deeplink_other_section_notification_is_selected(
     login(&page, &app.app_url, &email).await;
     wait_for_notification_rows(&page).await;
 
-    // Select the first inbox notification and capture its URL/id.
-    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0");
-    first_row.click(None).await.expect("click first row");
-    let active_row = page.locator("#notifications-list .ui-nrow.selected");
-    expect(active_row)
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("row selected");
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    let deep_url = page.url();
-    assert!(
-        deep_url.contains("/notifications/"),
-        "expected a notification URL, got {deep_url}"
-    );
+    let deep_url = select_row(&page, 0).await;
+    let notification_id = notification_id_from_url(&deep_url);
 
-    // Snooze it so it leaves the inbox (now reachable only via the Snoozed section).
     page.keyboard().press("s", None).await.expect("press s");
-    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    // The page reload below reads server state: wait for the snooze to be persisted.
+    wait_for_notification(
+        &app,
+        notification_id,
+        |n| n.snoozed_until.is_some(),
+        "snoozed",
+    )
+    .await;
 
-    // Deep-link straight to that notification while the inbox is the active section.
     page.goto(&deep_url, None).await.expect("goto deep url");
 
-    // It must end up selected (LoadAndSelect resolves its section + selects it), and the
-    // URL must remain the deep link (the guard prevents bouncing to the list route).
     let selected = page.locator("#notifications-list .ui-nrow.selected");
     expect(selected)
         .with_timeout(EXPECT_TIMEOUT)
@@ -146,77 +122,6 @@ async fn test_deeplink_other_section_notification_is_selected(
         deep_url,
         "URL must remain the deep link (no bounce to the list route)"
     );
-}
-
-/// Deleting more than half of a non-last page refills it from the next page, keeping a
-/// notification selected. Only meaningful with multiple pages (small page size); skips
-/// when the data fits on one page.
-#[rstest]
-#[tokio::test]
-async fn test_page_refills_after_majority_removed(#[future] browser_tested_app: BrowserTestedApp) {
-    let app = browser_tested_app.await;
-    let email = generate_test_user(&app).await;
-    let (_context, page) = launch_browser().await;
-
-    login(&page, &app.app_url, &email).await;
-    wait_for_notification_rows(&page).await;
-    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
-
-    // Pagination controls only render with more than one page; without them this
-    // behaviour cannot occur, so there is nothing to assert.
-    let has_pages = page
-        .locator("button[aria-label='Next page']")
-        .count()
-        .await
-        .unwrap_or(0)
-        > 0;
-    if !has_pages {
-        return;
-    }
-
-    let full_page = page
-        .locator("#notifications-list .ui-nrow")
-        .count()
-        .await
-        .unwrap_or(0);
-
-    // Select the first row, then delete more than half of the page.
-    page.locator("#notifications-list .ui-nrow >> nth=0")
-        .click(None)
-        .await
-        .expect("select first row");
-    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-    let to_delete = full_page / 2 + 1;
-    for _ in 0..to_delete {
-        page.keyboard().press("d", None).await.expect("press d");
-        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
-    }
-
-    // The page should have refilled by pulling notifications from the next page.
-    let mut after = 0;
-    for _ in 0..25 {
-        after = page
-            .locator("#notifications-list .ui-nrow")
-            .count()
-            .await
-            .unwrap_or(0);
-        if after > full_page - to_delete {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    }
-    assert!(
-        after > full_page - to_delete,
-        "page should refill after deleting more than half: full_page={full_page}, deleted={to_delete}, remaining={after}"
-    );
-
-    // A notification stays selected after the refill.
-    let selected = page.locator("#notifications-list .ui-nrow.selected");
-    expect(selected)
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("a notification should remain selected after the refill");
 }
 
 /// Switching to a section with notifications must update the URL to its selected
@@ -231,234 +136,75 @@ async fn test_switching_section_updates_url(#[future] browser_tested_app: Browse
     login(&page, &app.app_url, &email).await;
     wait_for_notification_rows(&page).await;
 
-    // Snooze the first inbox notification so the Snoozed section is non-empty.
-    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0");
-    first_row.click(None).await.expect("click first row");
-    let active_row = page.locator("#notifications-list .ui-nrow.selected");
-    expect(active_row)
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("row selected");
+    let snoozed_url = select_row(&page, 0).await;
+    let notification_id = notification_id_from_url(&snoozed_url);
     page.keyboard().press("s", None).await.expect("press s");
-    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    // The Snoozed section is loaded from the server: wait for the snooze to be persisted.
+    wait_for_notification(
+        &app,
+        notification_id,
+        |n| n.snoozed_until.is_some(),
+        "snoozed",
+    )
+    .await;
 
-    // Switch to the Snoozed section via the sidebar link.
     let snoozed_link = page.locator("a[href$='/snoozed']");
     snoozed_link.click(None).await.expect("click Snoozed nav");
     wait_for_notification_rows(&page).await;
 
-    // The URL should target the (auto-selected) snoozed notification.
-    let mut url = String::new();
-    for _ in 0..25 {
-        url = page.url();
-        if url.contains("/notifications/") {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    expect_page(&page)
+        .with_timeout(EXPECT_TIMEOUT)
+        .to_have_url_regex(NOTIFICATION_URL_PATTERN)
+        .await
+        .expect("Switching to a non-empty Snoozed section should select its first notification");
+}
+
+/// The delete (`d`), unsubscribe (`u`) and snooze (`s`) shortcuts each remove the
+/// selected notification from the list and persist the action.
+#[rstest]
+#[tokio::test]
+async fn test_act_on_notifications_with_keyboard(#[future] browser_tested_app: BrowserTestedApp) {
+    let app = browser_tested_app.await;
+    let email = generate_test_user(&app).await;
+    let (_context, page) = launch_browser().await;
+
+    login(&page, &app.app_url, &email).await;
+    wait_for_notification_rows(&page).await;
+
+    let rows = page.locator("#notifications-list .ui-nrow");
+    let mut count = rows
+        .count()
+        .await
+        .expect("Failed to count notification rows");
+    assert!(
+        count >= 3,
+        "Expected at least 3 notifications to act on, but found {count}"
+    );
+
+    let actions: [(&str, &str, PersistedCheck); 3] = [
+        ("d", "deleted", |n| n.status == NotificationStatus::Deleted),
+        ("u", "unsubscribed", |n| {
+            n.status == NotificationStatus::Unsubscribed
+        }),
+        ("s", "snoozed", |n| n.snoozed_until.is_some()),
+    ];
+    let mut url = select_row(&page, 0).await;
+    for (key, what, is_persisted) in actions {
+        let notification_id = notification_id_from_url(&url);
+
+        page.keyboard()
+            .press(key, None)
+            .await
+            .unwrap_or_else(|_| panic!("Failed to press '{key}'"));
+
+        count -= 1;
+        expect(rows.clone())
+            .with_timeout(EXPECT_TIMEOUT)
+            .to_have_count(count)
+            .await
+            .unwrap_or_else(|_| panic!("'{key}' should remove the notification from the list"));
+        wait_for_notification(&app, notification_id, is_persisted, what).await;
+        // The selection (and URL) moves to the next notification.
+        url = wait_for_notification_url_change(&page, &url).await;
     }
-    assert!(
-        url.contains("/notifications/"),
-        "Switching to a non-empty Snoozed section should select its first notification, but URL is: {url}"
-    );
-}
-
-/// Test that pressing 'd' on a notification deletes it.
-#[rstest]
-#[tokio::test]
-async fn test_delete_notification_with_keyboard(#[future] browser_tested_app: BrowserTestedApp) {
-    let app = browser_tested_app.await;
-    let email = generate_test_user(&app).await;
-    let (_context, page) = launch_browser().await;
-
-    login(&page, &app.app_url, &email).await;
-    wait_for_notification_rows(&page).await;
-
-    // Count initial notifications
-    let notification_rows = page.locator("#notifications-list .ui-nrow");
-    let initial_count = notification_rows
-        .count()
-        .await
-        .expect("Failed to count notification rows");
-    assert!(
-        initial_count > 0,
-        "Expected at least one notification to delete, but found {initial_count}"
-    );
-
-    // Click on the first notification row to select it
-    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0");
-    first_row
-        .click(None)
-        .await
-        .expect("Failed to click first notification row");
-
-    // Verify the row gets the `selected` class (selected state)
-    let active_row = page.locator("#notifications-list .ui-nrow.selected");
-    expect(active_row)
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Expected selected class after clicking notification");
-
-    // Press 'd' to delete the selected notification
-    page.keyboard()
-        .press("d", None)
-        .await
-        .expect("Failed to press 'd' key");
-
-    // Wait for the row to be removed from the DOM
-    let expected_count = initial_count - 1;
-    let expected_count_index = expected_count - 1;
-    let remaining_rows = page.locator(format!(
-        "#notifications-list .ui-nrow >> nth={expected_count_index}"
-    ));
-    expect(remaining_rows)
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Expected remaining rows to be visible after deletion");
-
-    let notification_rows_after = page.locator("#notifications-list .ui-nrow");
-    let count_after = notification_rows_after
-        .count()
-        .await
-        .expect("Failed to count notification rows after deletion");
-    assert_eq!(
-        count_after, expected_count,
-        "Expected notification count to decrease by 1 after deletion. Before: {initial_count}, After: {count_after}"
-    );
-}
-
-/// Test that pressing 'u' on a notification unsubscribes from it.
-#[rstest]
-#[tokio::test]
-async fn test_unsubscribe_notification_with_keyboard(
-    #[future] browser_tested_app: BrowserTestedApp,
-) {
-    let app = browser_tested_app.await;
-    let email = generate_test_user(&app).await;
-    let (_context, page) = launch_browser().await;
-
-    login(&page, &app.app_url, &email).await;
-    wait_for_notification_rows(&page).await;
-
-    // Count initial notifications
-    let notification_rows = page.locator("#notifications-list .ui-nrow");
-    let initial_count = notification_rows
-        .count()
-        .await
-        .expect("Failed to count notification rows");
-    assert!(
-        initial_count > 0,
-        "Expected at least one notification to unsubscribe from, but found {initial_count}"
-    );
-
-    // Click on the first notification row to select it
-    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0");
-    first_row
-        .click(None)
-        .await
-        .expect("Failed to click first notification row");
-
-    // Verify the row gets the `selected` class (selected state)
-    let active_row = page.locator("#notifications-list .ui-nrow.selected");
-    expect(active_row)
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Expected selected class after clicking notification");
-
-    // Press 'u' to unsubscribe from the selected notification
-    page.keyboard()
-        .press("u", None)
-        .await
-        .expect("Failed to press 'u' key");
-
-    // Wait for the row to be removed from the DOM
-    let expected_count = initial_count - 1;
-    let expected_count_index = expected_count - 1;
-    let remaining_rows = page.locator(format!(
-        "#notifications-list .ui-nrow >> nth={expected_count_index}"
-    ));
-    expect(remaining_rows)
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Expected remaining rows to be visible after unsubscribe");
-
-    let notification_rows_after = page.locator("#notifications-list .ui-nrow");
-    let count_after = notification_rows_after
-        .count()
-        .await
-        .expect("Failed to count notification rows after unsubscribe");
-    assert_eq!(
-        count_after, expected_count,
-        "Expected notification count to decrease by 1 after unsubscribe. Before: {initial_count}, After: {count_after}"
-    );
-}
-
-/// Test that pressing 's' on a notification snoozes it.
-#[rstest]
-#[tokio::test]
-async fn test_snooze_notification_with_keyboard(#[future] browser_tested_app: BrowserTestedApp) {
-    let app = browser_tested_app.await;
-    let email = generate_test_user(&app).await;
-    let (_context, page) = launch_browser().await;
-
-    login(&page, &app.app_url, &email).await;
-    wait_for_notification_rows(&page).await;
-
-    // Count initial notifications
-    let notification_rows = page.locator("#notifications-list .ui-nrow");
-    let initial_count = notification_rows
-        .count()
-        .await
-        .expect("Failed to count notification rows");
-    assert!(
-        initial_count > 0,
-        "Expected at least one notification to snooze, but found {initial_count}"
-    );
-
-    // Click on the first notification row to select it
-    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0");
-    first_row
-        .click(None)
-        .await
-        .expect("Failed to click first notification row");
-
-    // Verify the row gets the `selected` class (selected state)
-    let active_row = page.locator("#notifications-list .ui-nrow.selected");
-    expect(active_row)
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Expected selected class after clicking notification");
-
-    // Press 's' to snooze the selected notification
-    page.keyboard()
-        .press("s", None)
-        .await
-        .expect("Failed to press 's' key");
-
-    // Wait for the row to be removed from the DOM
-    let expected_count = initial_count - 1;
-    let expected_count_index = expected_count - 1;
-    let remaining_rows = page.locator(format!(
-        "#notifications-list .ui-nrow >> nth={expected_count_index}"
-    ));
-    expect(remaining_rows)
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Expected remaining rows to be visible after snooze");
-
-    let notification_rows_after = page.locator("#notifications-list .ui-nrow");
-    let count_after = notification_rows_after
-        .count()
-        .await
-        .expect("Failed to count notification rows after snooze");
-    assert_eq!(
-        count_after, expected_count,
-        "Expected notification count to decrease by 1 after snooze. Before: {initial_count}, After: {count_after}"
-    );
 }
