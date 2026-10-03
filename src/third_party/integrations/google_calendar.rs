@@ -95,6 +95,24 @@ pub struct GoogleCalendarEvent {
         rename = "originalStartTime"
     )]
     pub original_start_time: Option<EventDateTime>,
+    /// Attendee answer carried by an iCalendar `METHOD:REPLY` email.
+    /// Not part of the Google Calendar API payload.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply: Option<EventReply>,
+}
+
+/// An attendee's answer to an invitation, as sent in a `METHOD:REPLY` email
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct EventReply {
+    pub attendee_email: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attendee_display_name: Option<String>,
+    pub response_status: GoogleCalendarEventAttendeeResponseStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    /// Start of the answered occurrence (`RECURRENCE-ID`, or `DTSTART` when absent)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub occurrence_start: Option<EventDateTime>,
 }
 
 pub type GoogleCalendarEventId = TypedId<String, GoogleCalendarEvent>;

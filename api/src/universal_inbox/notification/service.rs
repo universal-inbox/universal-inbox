@@ -31,7 +31,10 @@ use universal_inbox::{
     },
     task::{DueDate, Task, TaskCreation, TaskId, TaskStatus, service::TaskPatch},
     third_party::{
-        integrations::slack::{SlackReaction, SlackThread},
+        integrations::{
+            google_calendar::EventMethod,
+            slack::{SlackReaction, SlackThread},
+        },
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId, ThirdPartyItemKind},
     },
     user::UserId,
@@ -1745,6 +1748,14 @@ impl NotificationService {
         if notification.kind != NotificationSourceKind::GoogleCalendar {
             return Err(UniversalInboxError::UnsupportedAction(format!(
                 "Cannot update invitation from notification {notification_id}, expected GoogleCalendar notification"
+            )));
+        }
+
+        if let ThirdPartyItemData::GoogleCalendarEvent(event) = &notification.source_item.data
+            && event.method == EventMethod::Reply
+        {
+            return Err(UniversalInboxError::UnsupportedAction(format!(
+                "Cannot answer notification {notification_id}: it is an attendee reply, not an invitation"
             )));
         }
 
