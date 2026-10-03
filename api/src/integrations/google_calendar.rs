@@ -178,8 +178,7 @@ impl GoogleCalendarService {
             { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
             { attr::GOOGLE_CALENDAR_RESPONSE_STATUS } = serde_json::to_string(&response_status).unwrap(),
             { attr::USER_ID } = user_id.to_string(),
-        ),
-        err
+        )
     )]
     pub async fn answer_invitation(
         &self,
@@ -290,16 +289,6 @@ pub enum GoogleCalendarAccessRole {
 
 #[async_trait]
 impl ThirdPartyNotificationSourceService<GoogleCalendarEvent> for GoogleCalendarService {
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
-            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
-            { attr::USER_ID } = user_id.to_string(),
-        ),
-        err
-    )]
     async fn third_party_item_into_notification(
         &self,
         source: &GoogleCalendarEvent,
@@ -357,8 +346,7 @@ impl ThirdPartyNotificationSourceService<GoogleCalendarEvent> for GoogleCalendar
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string())
     )]
     async fn unsubscribe_notification_from_source(
         &self,

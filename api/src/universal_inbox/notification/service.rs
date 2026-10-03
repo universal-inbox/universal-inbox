@@ -41,6 +41,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::{
     integrations::{
@@ -130,14 +131,14 @@ impl NotificationService {
         self.repository.begin().await
     }
     #[tracing::instrument(
-        level = "debug",
+        level = "info",
         skip_all,
         fields(
             { attr::NOTIFICATION_ID } = notification.id.to_string(),
             { attr::NOTIFICATION_APPLY_TASK_SIDE_EFFECTS } = apply_task_side_effects,
-            { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+            { attr::USER_ID } = for_user_id.to_string(),
+            { attr::ERROR_TYPE } = tracing::field::Empty
+        )
     )]
     pub async fn apply_notification_side_effects(
         &self,
@@ -147,166 +148,172 @@ impl NotificationService {
         apply_task_side_effects: bool,
         for_user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        // Skip side effects for test accounts
-        let user = self.user_service.get_user(executor, for_user_id).await?;
-        if let Some(user) = user
-            && user.is_testing
-        {
-            debug!("Skipping notification side effects for test account {for_user_id}");
-            return Ok(());
-        }
+        let result: Result<(), UniversalInboxError> = async move {
+            // Skip side effects for test accounts
+            let user = self.user_service.get_user(executor, for_user_id).await?;
+            if let Some(user) = user
+                && user.is_testing
+            {
+                debug!("Skipping notification side effects for test account {for_user_id}");
+                return Ok(());
+            }
 
-        debug!(
-            "Applying {} side effects for updated notification from third party item {}",
-            notification.kind, notification.source_item.id
-        );
-        // tag: New notification integration
-        match notification.kind {
-            NotificationSourceKind::Github => {
-                self.apply_updated_notification_side_effect(
-                    executor,
-                    self.github_service.clone(),
-                    patch,
-                    &mut notification.source_item,
-                    for_user_id,
-                )
-                .await?;
-            }
-            NotificationSourceKind::Linear => {
-                self.apply_updated_notification_side_effect(
-                    executor,
-                    self.linear_service.clone(),
-                    patch,
-                    &mut notification.source_item,
-                    for_user_id,
-                )
-                .await?
-            }
-            NotificationSourceKind::GoogleCalendar => {
-                // Google Calendar events are derived from Google Mail threads
-                if let Some(ref mut source_item) = notification.source_item.source_item
-                    && source_item.kind() == ThirdPartyItemKind::GoogleMailThread
-                {
+            debug!(
+                "Applying {} side effects for updated notification from third party item {}",
+                notification.kind, notification.source_item.id
+            );
+            // tag: New notification integration
+            match notification.kind {
+                NotificationSourceKind::Github => {
+                    self.apply_updated_notification_side_effect(
+                        executor,
+                        self.github_service.clone(),
+                        patch,
+                        &mut notification.source_item,
+                        for_user_id,
+                    )
+                    .await?;
+                }
+                NotificationSourceKind::Linear => {
+                    self.apply_updated_notification_side_effect(
+                        executor,
+                        self.linear_service.clone(),
+                        patch,
+                        &mut notification.source_item,
+                        for_user_id,
+                    )
+                    .await?
+                }
+                NotificationSourceKind::GoogleCalendar => {
+                    // Google Calendar events are derived from Google Mail threads
+                    if let Some(ref mut source_item) = notification.source_item.source_item
+                        && source_item.kind() == ThirdPartyItemKind::GoogleMailThread
+                    {
+                        self.apply_updated_notification_side_effect(
+                            executor,
+                            (*self.google_mail_service.read().await).clone().into(),
+                            patch,
+                            source_item,
+                            for_user_id,
+                        )
+                        .await?
+                    }
+
+                    self.apply_updated_notification_side_effect(
+                        executor,
+                        self.google_calendar_service.clone(),
+                        patch,
+                        &mut notification.source_item,
+                        for_user_id,
+                    )
+                    .await?
+                }
+                NotificationSourceKind::GoogleDrive => {
+                    self.apply_updated_notification_side_effect(
+                        executor,
+                        (*self.google_drive_service.read().await).clone().into(),
+                        patch,
+                        &mut notification.source_item,
+                        for_user_id,
+                    )
+                    .await?
+                }
+                NotificationSourceKind::GoogleMail => {
                     self.apply_updated_notification_side_effect(
                         executor,
                         (*self.google_mail_service.read().await).clone().into(),
                         patch,
-                        source_item,
-                        for_user_id,
-                    )
-                    .await?
-                }
-
-                self.apply_updated_notification_side_effect(
-                    executor,
-                    self.google_calendar_service.clone(),
-                    patch,
-                    &mut notification.source_item,
-                    for_user_id,
-                )
-                .await?
-            }
-            NotificationSourceKind::GoogleDrive => {
-                self.apply_updated_notification_side_effect(
-                    executor,
-                    (*self.google_drive_service.read().await).clone().into(),
-                    patch,
-                    &mut notification.source_item,
-                    for_user_id,
-                )
-                .await?
-            }
-            NotificationSourceKind::GoogleMail => {
-                self.apply_updated_notification_side_effect(
-                    executor,
-                    (*self.google_mail_service.read().await).clone().into(),
-                    patch,
-                    &mut notification.source_item,
-                    for_user_id,
-                )
-                .await?
-            }
-            NotificationSourceKind::Slack => match notification.source_item.data {
-                ThirdPartyItemData::SlackReaction(_) => {
-                    self.apply_updated_notification_side_effect::<SlackReaction, SlackService>(
-                        executor,
-                        self.slack_service.clone(),
-                        patch,
                         &mut notification.source_item,
                         for_user_id,
                     )
                     .await?
                 }
-                ThirdPartyItemData::SlackThread(_) => {
-                    self.apply_updated_notification_side_effect::<SlackThread, SlackService>(
-                        executor,
-                        self.slack_service.clone(),
-                        patch,
-                        &mut notification.source_item,
-                        for_user_id,
-                    )
-                    .await?
-                }
-                _ => {
-                    return Err(UniversalInboxError::Unexpected(anyhow!(
-                        "Unsupported Slack notification data type for third party item {}",
-                        notification.source_item.id
-                    )));
-                }
-            },
-            NotificationSourceKind::Todoist | NotificationSourceKind::TickTick => {
-                if let Some(NotificationStatus::Deleted) = patch.status {
-                    if let Some(task_id) = notification.task_id {
-                        if apply_task_side_effects {
-                            self.task_service
-                                .upgrade()
-                                .context("Unable to access task_service from notification_service")?
-                                .read()
-                                .await
-                                .patch_task(
-                                    executor,
-                                    task_id,
-                                    &TaskPatch {
-                                        status: Some(TaskStatus::Deleted),
-                                        ..Default::default()
-                                    },
-                                    for_user_id,
-                                )
-                                .await?;
+                NotificationSourceKind::Slack => {
+                    match notification.source_item.data {
+                        ThirdPartyItemData::SlackReaction(_) => self
+                            .apply_updated_notification_side_effect::<SlackReaction, SlackService>(
+                                executor,
+                                self.slack_service.clone(),
+                                patch,
+                                &mut notification.source_item,
+                                for_user_id,
+                            )
+                            .await?,
+                        ThirdPartyItemData::SlackThread(_) => self
+                            .apply_updated_notification_side_effect::<SlackThread, SlackService>(
+                                executor,
+                                self.slack_service.clone(),
+                                patch,
+                                &mut notification.source_item,
+                                for_user_id,
+                            )
+                            .await?,
+                        _ => {
+                            return Err(UniversalInboxError::Unexpected(anyhow!(
+                                "Unsupported Slack notification data type for third party item {}",
+                                notification.source_item.id
+                            )));
                         }
-                    } else {
-                        return Err(UniversalInboxError::Unexpected(anyhow!(
-                            "{} notification {} is expected to be linked to a task",
-                            notification.kind,
-                            notification.id
+                    }
+                }
+                NotificationSourceKind::Todoist | NotificationSourceKind::TickTick => {
+                    if let Some(NotificationStatus::Deleted) = patch.status {
+                        if let Some(task_id) = notification.task_id {
+                            if apply_task_side_effects {
+                                self.task_service
+                                    .upgrade()
+                                    .context(
+                                        "Unable to access task_service from notification_service",
+                                    )?
+                                    .read()
+                                    .await
+                                    .patch_task(
+                                        executor,
+                                        task_id,
+                                        &TaskPatch {
+                                            status: Some(TaskStatus::Deleted),
+                                            ..Default::default()
+                                        },
+                                        for_user_id,
+                                    )
+                                    .await?;
+                            }
+                        } else {
+                            return Err(UniversalInboxError::Unexpected(anyhow!(
+                                "{} notification {} is expected to be linked to a task",
+                                notification.kind,
+                                notification.id
+                            )));
+                        }
+                        // Other actions than delete or snoozing is not supported
+                    } else if patch.snoozed_until.is_none() {
+                        return Err(UniversalInboxError::UnsupportedAction(format!(
+                            "Cannot update the status of {} notification {}, update task's project",
+                            notification.kind, notification.id
                         )));
                     }
-                    // Other actions than delete or snoozing is not supported
-                } else if patch.snoozed_until.is_none() {
-                    return Err(UniversalInboxError::UnsupportedAction(format!(
-                        "Cannot update the status of {} notification {}, update task's project",
-                        notification.kind, notification.id
-                    )));
                 }
-            }
-            NotificationSourceKind::API => {
-                // API notifications do not have side effects
-            }
-        };
+                NotificationSourceKind::API => {
+                    // API notifications do not have side effects
+                }
+            };
 
-        if let Some(task_id) = patch.task_id
-            && apply_task_side_effects
-        {
-            self.task_service
-                .upgrade()
-                .context("Unable to access task_service from notification_service")?
-                .read()
-                .await
-                .link_notification_with_task(executor, notification, task_id, for_user_id)
-                .await?;
+            if let Some(task_id) = patch.task_id
+                && apply_task_side_effects
+            {
+                self.task_service
+                    .upgrade()
+                    .context("Unable to access task_service from notification_service")?
+                    .read()
+                    .await
+                    .link_notification_with_task(executor, notification, task_id, for_user_id)
+                    .await?;
+            }
+
+            Ok(())
         }
-
-        Ok(())
+        .await;
+        result.record_span_error()
     }
 
     #[tracing::instrument(
@@ -315,8 +322,7 @@ impl NotificationService {
         fields(
             { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn apply_updated_notification_side_effect<T, U>(
         &self,
@@ -413,8 +419,7 @@ impl NotificationService {
             { attr::NOTIFICATION_LIST_ORDER_BY } = ?order_by,
             { attr::NOTIFICATION_LIST_SOURCES } = ?from_sources,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::too_many_arguments)]
@@ -455,8 +460,7 @@ impl NotificationService {
         fields(
             { attr::NOTIFICATION_ID } = notification_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn get_notification(
         &self,
@@ -486,8 +490,7 @@ impl NotificationService {
         fields(
             { attr::NOTIFICATION_ID } = notification_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn get_notification_with_task(
         &self,
@@ -517,8 +520,7 @@ impl NotificationService {
         fields(
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = %source_id,
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn get_notification_for_source_id(
         &self,
@@ -537,8 +539,7 @@ impl NotificationService {
         fields(
             { attr::NOTIFICATION_ID } = notification.id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn create_notification(
         &self,
@@ -564,8 +565,7 @@ impl NotificationService {
             { attr::NOTIFICATION_ID } = notification.id.to_string(),
             { attr::SYNC_SOURCE_KIND } = notification_source_kind.to_string(),
             { attr::NOTIFICATION_UPDATE_SNOOZED_UNTIL } = update_snoozed_until
-        ),
-        err
+        )
     )]
     pub async fn create_or_update_notification(
         &self,
@@ -591,8 +591,7 @@ impl NotificationService {
             { attr::SYNC_SOURCE_KIND } = notification_source_kind.to_string(),
             { attr::USER_ID } = user_id.to_string(),
             { attr::SYNC_DELETED_ITEMS_COUNT } = tracing::field::Empty
-        ),
-        err
+        )
     )]
     pub async fn delete_stale_notifications_status_from_source_ids(
         &self,
@@ -622,15 +621,15 @@ impl NotificationService {
     }
 
     #[tracing::instrument(
-        level = "debug",
+        level = "info",
         skip_all,
         fields(
             { attr::SYNC_SOURCE_KIND } = source.to_string(),
             { attr::USER_ID } = user_id.to_string(),
             { attr::SYNC_FORCE } = force_sync,
-            { attr::SYNC_ITEMS_COUNT } = tracing::field::Empty
-        ),
-        err
+            { attr::SYNC_ITEMS_COUNT } = tracing::field::Empty,
+            { attr::ERROR_TYPE } = tracing::field::Empty
+        )
     )]
     async fn sync_notifications_for_source(
         &self,
@@ -638,70 +637,78 @@ impl NotificationService {
         user_id: UserId,
         force_sync: bool,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
-        // tag: New notification integration
-        match source {
-            NotificationSyncSourceKind::Github => {
-                self.sync_third_party_notifications(
-                    self.github_service.clone(),
-                    user_id,
-                    force_sync,
-                )
-                .await
-            }
-            NotificationSyncSourceKind::Linear => {
-                self.sync_third_party_notifications(
-                    self.linear_service.clone(),
-                    user_id,
-                    force_sync,
-                )
-                .await
-            }
-            NotificationSyncSourceKind::GoogleDrive => {
-                self.sync_third_party_notifications(
-                    (*self.google_drive_service.read().await).clone().into(),
-                    user_id,
-                    force_sync,
-                )
-                .await
-            }
-            NotificationSyncSourceKind::GoogleMail => {
-                self.sync_third_party_notifications(
-                    (*self.google_mail_service.read().await).clone().into(),
-                    user_id,
-                    force_sync,
-                )
-                .await
-            }
-            NotificationSyncSourceKind::Slack => {
-                self.sync_third_party_notifications(self.slack_service.clone(), user_id, force_sync)
+        let result: Result<Vec<Notification>, UniversalInboxError> = async move {
+            // tag: New notification integration
+            match source {
+                NotificationSyncSourceKind::Github => {
+                    self.sync_third_party_notifications(
+                        self.github_service.clone(),
+                        user_id,
+                        force_sync,
+                    )
                     .await
-            }
-            // Todoist and TickTick notifications are produced as a side effect
-            // of task sync (see `create_notification_from_inbox_task`), so
-            // delegate to the task service here. This now runs in the task
-            // service's own transaction(s) rather than sharing this one — see
-            // `sync_third_party_notifications` for why sharing a transaction across a
-            // whole sync (including third-party network I/O) is what this refactor
-            // moves away from. The two are no longer atomic with each other, but the
-            // `Recoverable` path already meant a failed sync could commit partial
-            // work, so this was never a hard atomicity guarantee.
-            NotificationSyncSourceKind::Todoist | NotificationSyncSourceKind::TickTick => {
-                let task_sync_source = source
-                    .try_into()
-                    .context("Unable to convert notification source to task sync source")?;
-                self.task_service
-                    .upgrade()
-                    .context("Unable to access task_service from notification_service")?
-                    .read()
+                }
+                NotificationSyncSourceKind::Linear => {
+                    self.sync_third_party_notifications(
+                        self.linear_service.clone(),
+                        user_id,
+                        force_sync,
+                    )
                     .await
-                    .sync_tasks_with_transaction(task_sync_source, user_id, force_sync)
-                    .await?;
-                // Notifications have been upserted by the task sync; the
-                // current API contract returns the list of notifications, but
-                // for task-derived notifications we don't enumerate them here.
-                Ok(vec![])
+                }
+                NotificationSyncSourceKind::GoogleDrive => {
+                    self.sync_third_party_notifications(
+                        (*self.google_drive_service.read().await).clone().into(),
+                        user_id,
+                        force_sync,
+                    )
+                    .await
+                }
+                NotificationSyncSourceKind::GoogleMail => {
+                    self.sync_third_party_notifications(
+                        (*self.google_mail_service.read().await).clone().into(),
+                        user_id,
+                        force_sync,
+                    )
+                    .await
+                }
+                NotificationSyncSourceKind::Slack => {
+                    self.sync_third_party_notifications(
+                        self.slack_service.clone(),
+                        user_id,
+                        force_sync,
+                    )
+                    .await
+                }
+                // Todoist and TickTick notifications are produced as a side effect
+                // of task sync (see `create_notification_from_inbox_task`), so
+                // delegate to the task service here. This now runs in the task
+                // service's own transaction(s) rather than sharing this one — see
+                // `sync_third_party_notifications` for why sharing a transaction across a
+                // whole sync (including third-party network I/O) is what this refactor
+                // moves away from. The two are no longer atomic with each other, but the
+                // `Recoverable` path already meant a failed sync could commit partial
+                // work, so this was never a hard atomicity guarantee.
+                NotificationSyncSourceKind::Todoist | NotificationSyncSourceKind::TickTick => {
+                    let task_sync_source = source
+                        .try_into()
+                        .context("Unable to convert notification source to task sync source")?;
+                    self.task_service
+                        .upgrade()
+                        .context("Unable to access task_service from notification_service")?
+                        .read()
+                        .await
+                        .sync_tasks_with_transaction(task_sync_source, user_id, force_sync)
+                        .await?;
+                    // Notifications have been upserted by the task sync; the
+                    // current API contract returns the list of notifications, but
+                    // for task-derived notifications we don't enumerate them here.
+                    Ok(vec![])
+                }
             }
         }
+        .await;
+        result.record_span_error()
     }
 
     pub async fn sync_notifications_with_transaction(
@@ -857,8 +864,7 @@ impl NotificationService {
             { attr::NOTIFICATION_APPLY_TASK_SIDE_EFFECTS } = apply_task_side_effects,
             { attr::NOTIFICATION_APPLY_SIDE_EFFECTS } = apply_notification_side_effects,
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn patch_notification(
         &self,
@@ -921,8 +927,7 @@ impl NotificationService {
         fields(
             { attr::TASK_ID } = task_id.to_string(),
             { attr::NOTIFICATION_KIND } = notification_kind.map(|k| k.to_string())
-        ),
-        err
+        )
     )]
     pub async fn patch_notifications_for_task(
         &self,
@@ -942,8 +947,7 @@ impl NotificationService {
         fields(
             { attr::LINEAR_ISSUE_ID } = %linear_issue_id,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn delete_notifications_for_linear_issue(
         &self,
@@ -963,8 +967,7 @@ impl NotificationService {
             { attr::NOTIFICATION_STATUS } = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
             { attr::NOTIFICATION_LIST_SOURCES } = ?from_sources,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn patch_notifications_bulk(
         &self,
@@ -999,8 +1002,7 @@ impl NotificationService {
         fields(
             { attr::NOTIFICATION_COUNT } = patches.len(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn patch_notifications_by_ids(
         &self,
@@ -1079,8 +1081,7 @@ impl NotificationService {
             { attr::NOTIFICATION_ID } = notification_id.to_string(),
             { attr::NOTIFICATION_APPLY_SIDE_EFFECTS } = apply_notification_side_effects,
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn create_task_from_notification(
         &self,
@@ -1239,14 +1240,13 @@ impl NotificationService {
     }
 
     #[tracing::instrument(
-        level = "debug",
+        level = "info",
         skip_all,
         fields(
             { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn create_notification_from_third_party_item<T, U>(
         &self,
@@ -1567,17 +1567,6 @@ impl NotificationService {
         Ok(notification_creation_results)
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
-            { attr::TASK_ID } = task_id.map(|id| id.to_string()),
-            { attr::USER_ID } = user_id.to_string()
-        ),
-        err
-    )]
     pub async fn save_third_party_item_as_notification<T, U>(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1658,19 +1647,6 @@ impl NotificationService {
         Ok(cancellation_status)
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::TASK_ID } = task.id.to_string(),
-            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
-            { attr::INTEGRATION_PROVIDER_KIND } = integration_connection_provider.kind().to_string(),
-            { attr::SYNC_INCREMENTAL } = _is_incremental_update,
-            { attr::USER_ID } = user_id.to_string()
-        ),
-        err
-    )]
     #[allow(clippy::too_many_arguments)]
     pub async fn save_task_as_notification<T, U>(
         &self,
@@ -1783,8 +1759,7 @@ impl NotificationService {
         fields(
             { attr::NOTIFICATION_ID } = notification_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn update_invitation_from_notification(
         &self,

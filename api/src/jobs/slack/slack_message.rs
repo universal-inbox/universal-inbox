@@ -16,6 +16,7 @@ use universal_inbox::{
     third_party::item::{ThirdPartyItem, ThirdPartyItemKind},
 };
 
+use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::{
     integrations::slack::{SlackService, find_slack_references_in_message},
@@ -27,7 +28,7 @@ use crate::{
     },
 };
 
-#[tracing::instrument(level = "debug", skip_all, err)]
+#[tracing::instrument(level = "info", skip_all, fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
 pub async fn handle_slack_message_push_event(
     executor: &mut Transaction<'_, Postgres>,
     event: &SlackPushEventCallback,
@@ -36,139 +37,148 @@ pub async fn handle_slack_message_push_event(
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     slack_service: Arc<SlackService>,
 ) -> Result<(), UniversalInboxError> {
-    let current_span = tracing::Span::current();
+    let result: Result<(), UniversalInboxError> = async move {
+        let current_span = tracing::Span::current();
 
-    let (provider_user_ids, thread_ts) = match event {
-        SlackPushEventCallback {
-            team_id,
-            event:
-                SlackEventCallbackBody::Message(SlackMessageEvent {
-                    origin: SlackMessageOrigin { thread_ts, .. },
-                    content: Some(content),
-                    ..
-                }),
-            ..
-        } => {
-            let references = find_slack_references_in_message(content);
-            let mut user_ids: Vec<String> =
-                references.users.keys().map(|id| id.to_string()).collect();
-
-            if let Some((access_token, _)) = integration_connection_service
-                .read()
-                .await
-                .find_slack_access_token(
-                    executor,
-                    IntegrationConnectionContext::Slack(SlackContext {
-                        team_id: team_id.clone(),
-                        extension_credentials: vec![],
-                        last_extension_heartbeat_at: None,
+        let (provider_user_ids, thread_ts) = match event {
+            SlackPushEventCallback {
+                team_id,
+                event:
+                    SlackEventCallbackBody::Message(SlackMessageEvent {
+                        origin: SlackMessageOrigin { thread_ts, .. },
+                        content: Some(content),
+                        ..
                     }),
-                )
-                .await?
-            {
-                let slack_api_token =
-                    SlackApiToken::new(SlackApiTokenValue(access_token.as_str().to_string()))
-                        .with_team_id(team_id.clone());
-                for usergroup_id in references.usergroups.keys() {
-                    let usergroup_users = slack_service
-                        .list_users_in_usergroup(usergroup_id, &slack_api_token)
-                        .await?;
-                    user_ids.extend(
-                        usergroup_users
-                            .iter()
-                            .map(|user_id| user_id.to_string())
-                            .collect::<Vec<String>>(),
-                    );
+                ..
+            } => {
+                let references = find_slack_references_in_message(content);
+                let mut user_ids: Vec<String> =
+                    references.users.keys().map(|id| id.to_string()).collect();
+
+                if let Some((access_token, _)) = integration_connection_service
+                    .read()
+                    .await
+                    .find_slack_access_token(
+                        executor,
+                        IntegrationConnectionContext::Slack(SlackContext {
+                            team_id: team_id.clone(),
+                            extension_credentials: vec![],
+                            last_extension_heartbeat_at: None,
+                        }),
+                    )
+                    .await?
+                {
+                    let slack_api_token =
+                        SlackApiToken::new(SlackApiTokenValue(access_token.as_str().to_string()))
+                            .with_team_id(team_id.clone());
+                    for usergroup_id in references.usergroups.keys() {
+                        let usergroup_users = slack_service
+                            .list_users_in_usergroup(usergroup_id, &slack_api_token)
+                            .await?;
+                        user_ids.extend(
+                            usergroup_users
+                                .iter()
+                                .map(|user_id| user_id.to_string())
+                                .collect::<Vec<String>>(),
+                        );
+                    }
                 }
+
+                (user_ids, thread_ts.clone())
             }
+            _ => {
+                current_span.set_attribute(attr::SLACK_MESSAGE_OUTCOME, "discarded");
+                current_span
+                    .set_attribute(attr::SLACK_MESSAGE_DISCARD_REASON, "not_a_message_event");
+                warn!("Slack push event is not a message event");
+                return Ok(());
+            }
+        };
 
-            (user_ids, thread_ts.clone())
-        }
-        _ => {
-            current_span.set_attribute(attr::SLACK_MESSAGE_OUTCOME, "discarded");
-            current_span.set_attribute(attr::SLACK_MESSAGE_DISCARD_REASON, "not_a_message_event");
-            warn!("Slack push event is not a message event");
-            return Ok(());
-        }
-    };
+        current_span.set_attribute(
+            attr::SLACK_REFERENCED_USERS_COUNT,
+            provider_user_ids.len() as i64,
+        );
 
-    current_span.set_attribute(
-        attr::SLACK_REFERENCED_USERS_COUNT,
-        provider_user_ids.len() as i64,
-    );
+        let integration_connections = integration_connection_service
+            .read()
+            .await
+            .find_integration_connection_per_provider_user_ids(
+                executor,
+                IntegrationProviderKind::Slack,
+                provider_user_ids,
+            )
+            .await?;
+        let handled_integration_connection_ids = integration_connections
+            .iter()
+            .map(|integration_connection| integration_connection.id)
+            .collect::<Vec<_>>();
 
-    let integration_connections = integration_connection_service
-        .read()
-        .await
-        .find_integration_connection_per_provider_user_ids(
-            executor,
-            IntegrationProviderKind::Slack,
-            provider_user_ids,
-        )
-        .await?;
-    let handled_integration_connection_ids = integration_connections
-        .iter()
-        .map(|integration_connection| integration_connection.id)
-        .collect::<Vec<_>>();
+        current_span.set_attribute(
+            attr::SLACK_MATCHED_INTEGRATION_CONNECTIONS_COUNT,
+            integration_connections.len() as i64,
+        );
 
-    current_span.set_attribute(
-        attr::SLACK_MATCHED_INTEGRATION_CONNECTIONS_COUNT,
-        integration_connections.len() as i64,
-    );
-
-    for integration_connection in integration_connections {
-        handle_slack_message_push_event_if_enabled(
-            executor,
-            event,
-            integration_connection,
-            None,
-            notification_service.clone(),
-        )
-        .await?;
-    }
-
-    let Some(thread_ts) = thread_ts else {
-        return Ok(());
-    };
-    let third_party_items = third_party_item_service
-        .read()
-        .await
-        .find_third_party_items_for_source_id(
-            executor,
-            ThirdPartyItemKind::SlackThread,
-            thread_ts.as_ref(),
-            None,
-        )
-        .await?;
-
-    current_span.set_attribute(
-        attr::SLACK_KNOWN_THREAD_ITEMS_COUNT,
-        third_party_items.len() as i64,
-    );
-
-    for third_party_item in third_party_items.iter() {
-        if !handled_integration_connection_ids.contains(&third_party_item.integration_connection_id)
-            && let Some(integration_connection) = integration_connection_service
-                .read()
-                .await
-                .get_integration_connection(executor, third_party_item.integration_connection_id)
-                .await?
-        {
+        for integration_connection in integration_connections {
             handle_slack_message_push_event_if_enabled(
                 executor,
                 event,
                 integration_connection,
-                Some(third_party_item),
+                None,
                 notification_service.clone(),
             )
             .await?;
         }
-    }
 
-    Ok(())
+        let Some(thread_ts) = thread_ts else {
+            return Ok(());
+        };
+        let third_party_items = third_party_item_service
+            .read()
+            .await
+            .find_third_party_items_for_source_id(
+                executor,
+                ThirdPartyItemKind::SlackThread,
+                thread_ts.as_ref(),
+                None,
+            )
+            .await?;
+
+        current_span.set_attribute(
+            attr::SLACK_KNOWN_THREAD_ITEMS_COUNT,
+            third_party_items.len() as i64,
+        );
+
+        for third_party_item in third_party_items.iter() {
+            if !handled_integration_connection_ids
+                .contains(&third_party_item.integration_connection_id)
+                && let Some(integration_connection) = integration_connection_service
+                    .read()
+                    .await
+                    .get_integration_connection(
+                        executor,
+                        third_party_item.integration_connection_id,
+                    )
+                    .await?
+            {
+                handle_slack_message_push_event_if_enabled(
+                    executor,
+                    event,
+                    integration_connection,
+                    Some(third_party_item),
+                    notification_service.clone(),
+                )
+                .await?;
+            }
+        }
+
+        Ok(())
+    }
+    .await;
+    result.record_span_error()
 }
 
-#[tracing::instrument(level = "debug", skip_all, err)]
+#[tracing::instrument(level = "info", skip_all)]
 async fn handle_slack_message_push_event_if_enabled(
     executor: &mut Transaction<'_, Postgres>,
     event: &SlackPushEventCallback,

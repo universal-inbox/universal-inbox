@@ -65,7 +65,7 @@ impl OAuth2Service {
         self.repository.begin().await
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn register_client(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -93,7 +93,7 @@ impl OAuth2Service {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id))]
     pub async fn get_client(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -114,7 +114,7 @@ impl OAuth2Service {
     /// TTL avoid the network round-trip entirely. The resulting `OAuth2Client`
     /// is synthesised from the document — there is no row in `oauth2_client`
     /// for CIMD clients.
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id))]
     pub async fn resolve_client(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -184,8 +184,7 @@ impl OAuth2Service {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
     )]
     #[allow(clippy::too_many_arguments)]
     pub async fn create_authorization_code(
@@ -251,7 +250,7 @@ impl OAuth2Service {
         Ok(code)
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id))]
     pub async fn exchange_code(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -353,7 +352,7 @@ impl OAuth2Service {
     /// including any token freshly minted by the legitimate winning branch.
     /// The expiry check is folded into the same SQL so an expired row is
     /// never claimed.
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id))]
     pub async fn refresh_token(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -470,8 +469,7 @@ impl OAuth2Service {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn list_authorized_clients(
         &self,
@@ -486,8 +484,7 @@ impl OAuth2Service {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
     )]
     pub async fn revoke_client_authorization(
         &self,
@@ -508,8 +505,7 @@ impl OAuth2Service {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
     )]
     pub async fn get_user_consent(
         &self,
@@ -525,8 +521,7 @@ impl OAuth2Service {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
     )]
     pub async fn record_user_consent(
         &self,

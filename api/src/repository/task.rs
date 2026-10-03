@@ -91,8 +91,7 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::TASK_ID } = id.to_string()),
-        err
+        fields({ attr::TASK_ID } = id.to_string())
     )]
     async fn get_one_task(
         &self,
@@ -154,8 +153,7 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::TASK_ID } = id.to_string()),
-        err
+        fields({ attr::TASK_ID } = id.to_string())
     )]
     async fn does_task_exist(
         &self,
@@ -180,7 +178,7 @@ impl TaskRepository for Repository {
         return Ok(false);
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn get_tasks(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -249,8 +247,7 @@ impl TaskRepository for Repository {
             { attr::TASK_STATUS } = status.to_string(),
             { attr::TASK_LIST_ONLY_SYNCED } = only_synced_tasks,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn fetch_all_tasks(
         &self,
@@ -372,8 +369,7 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     async fn search_tasks(
         &self,
@@ -438,8 +434,7 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::TASK_ID } = task.id.to_string()),
-        err
+        fields({ attr::TASK_ID } = task.id.to_string())
     )]
     async fn create_task(
         &self,
@@ -527,8 +522,7 @@ impl TaskRepository for Repository {
             { attr::SYNC_SOURCE_KIND } = kind.to_string(),
             { attr::TASK_STATUS } = status.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn update_stale_tasks_status_from_source_ids(
         &self,
@@ -640,8 +634,7 @@ impl TaskRepository for Repository {
             { attr::TASK_KIND } = task_request.kind.to_string(),
             { attr::THIRD_PARTY_ITEM_ID } = task_request.source_item.id.to_string(),
             { attr::USER_ID } = task_request.user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn create_or_update_task(
         &self,
@@ -939,8 +932,7 @@ impl TaskRepository for Repository {
         fields(
             { attr::TASK_ID } = task_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn update_task(
         &self,
@@ -1136,8 +1128,7 @@ impl TaskRepository for Repository {
         fields(
             { attr::THIRD_PARTY_ITEM_ID } = source_item_id.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn get_task_for_source_item_id(
         &self,

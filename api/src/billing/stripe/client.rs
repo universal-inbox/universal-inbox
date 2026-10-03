@@ -7,6 +7,8 @@
 //! ([`StripeApiClient`]). Tests can stub the trait directly without touching
 //! HTTP.
 
+use std::future::Future;
+
 use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
@@ -32,6 +34,7 @@ use url::Url;
 
 use crate::{
     configuration::{StripeApiKey, StripeWebhookSecret},
+    observability::{http_client_span, instrument_client_call, spans::OTHER_ERROR_TYPE},
     universal_inbox::{UniversalInboxError, UpstreamErrorKind},
 };
 
@@ -111,6 +114,24 @@ impl From<StripeError> for UniversalInboxError {
             message: format!("Stripe request failed: {err}"),
         }
     }
+}
+
+/// Run a Stripe API call inside an INFO client span: async-stripe uses its own
+/// hyper client, which the reqwest tracing middleware does not cover.
+async fn stripe_api_call<T>(
+    method: &'static str,
+    route: &str,
+    call: impl Future<Output = Result<T, SdkError>>,
+) -> Result<T, SdkError> {
+    instrument_client_call(
+        http_client_span(method, "api.stripe.com", route),
+        call,
+        |error| match error {
+            SdkError::Stripe(_, status) => status.to_string(),
+            _ => OTHER_ERROR_TYPE.to_string(),
+        },
+    )
+    .await
 }
 
 /// Subset of fields we persist from a Stripe Subscription. Defined here so
@@ -317,7 +338,7 @@ impl StripeClient for StripeApiClient {
             request = request.email(email.to_string());
         }
 
-        let customer = request.send(&self.inner).await?;
+        let customer = stripe_api_call("POST", "/v1/customers", request.send(&self.inner)).await?;
         Ok(customer.id.to_string())
     }
 
@@ -350,9 +371,9 @@ impl StripeClient for StripeApiClient {
             .line_items(line_items)
             .automatic_tax(CreateCheckoutSessionAutomaticTax::new(true))
             .customer_update(customer_update)
-            .metadata(metadata)
-            .send(&self.inner)
-            .await?;
+            .metadata(metadata);
+        let session =
+            stripe_api_call("POST", "/v1/checkout/sessions", session.send(&self.inner)).await?;
 
         let url = session.url.ok_or(StripeError::MissingCheckoutUrl)?;
         Url::parse(&url)
@@ -362,9 +383,13 @@ impl StripeClient for StripeApiClient {
     async fn create_portal_session(&self, params: PortalSessionParams) -> Result<Url, StripeError> {
         let session = CreateBillingPortalSession::new()
             .customer(params.customer_id.0.clone())
-            .return_url(params.return_url.as_str())
-            .send(&self.inner)
-            .await?;
+            .return_url(params.return_url.as_str());
+        let session = stripe_api_call(
+            "POST",
+            "/v1/billing_portal/sessions",
+            session.send(&self.inner),
+        )
+        .await?;
         Url::parse(&session.url)
             .map_err(|err| StripeError::Other(anyhow!("Stripe returned an unparseable URL: {err}")))
     }
@@ -373,9 +398,12 @@ impl StripeClient for StripeApiClient {
         &self,
         subscription_id: &str,
     ) -> Result<RawSubscription, StripeError> {
-        let sub = RetrieveSubscription::new(subscription_id)
-            .send(&self.inner)
-            .await?;
+        let sub = stripe_api_call(
+            "GET",
+            "/v1/subscriptions/{subscription_id}",
+            RetrieveSubscription::new(subscription_id).send(&self.inner),
+        )
+        .await?;
         Ok(RawSubscription::from(&sub))
     }
 
@@ -386,9 +414,8 @@ impl StripeClient for StripeApiClient {
         let list = ListSubscription::new()
             .customer(customer_id)
             .status(ListSubscriptionStatus::All)
-            .limit(CUSTOMER_SUBSCRIPTIONS_PAGE_SIZE)
-            .send(&self.inner)
-            .await?;
+            .limit(CUSTOMER_SUBSCRIPTIONS_PAGE_SIZE);
+        let list = stripe_api_call("GET", "/v1/subscriptions", list.send(&self.inner)).await?;
         Ok(list.data.iter().map(RawSubscription::from).collect())
     }
 
@@ -396,9 +423,12 @@ impl StripeClient for StripeApiClient {
         &self,
         subscription_id: &str,
     ) -> Result<RawSubscription, StripeError> {
-        let sub = CancelSubscription::new(subscription_id)
-            .send(&self.inner)
-            .await?;
+        let sub = stripe_api_call(
+            "DELETE",
+            "/v1/subscriptions/{subscription_id}",
+            CancelSubscription::new(subscription_id).send(&self.inner),
+        )
+        .await?;
         Ok(RawSubscription::from(&sub))
     }
 
@@ -406,10 +436,13 @@ impl StripeClient for StripeApiClient {
         // Setting a metadata key to an empty string removes it on Stripe's side.
         let mut metadata = std::collections::HashMap::new();
         metadata.insert("user_id".to_string(), String::new());
-        UpdateCustomer::new(customer_id)
-            .metadata(metadata)
-            .send(&self.inner)
-            .await?;
+        let request = UpdateCustomer::new(customer_id).metadata(metadata);
+        stripe_api_call(
+            "POST",
+            "/v1/customers/{customer_id}",
+            request.send(&self.inner),
+        )
+        .await?;
         Ok(())
     }
 

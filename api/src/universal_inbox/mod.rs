@@ -166,6 +166,35 @@ pub enum UpstreamErrorKind {
 }
 
 impl UniversalInboxError {
+    /// True when the error is the caller's fault (mapped to a 4xx HTTP status):
+    /// an expected outcome, logged at `warn` and never marking a span as Error.
+    /// Must stay in sync with the `ResponseError` status mapping in `routes`.
+    pub fn is_client_error(&self) -> bool {
+        match self {
+            UniversalInboxError::UpstreamServiceError { kind, .. } => {
+                *kind != UpstreamErrorKind::Internal
+            }
+            UniversalInboxError::InvalidInputData { .. }
+            | UniversalInboxError::InvalidParameters(_)
+            | UniversalInboxError::AlreadyExists { .. }
+            | UniversalInboxError::Conflict(_)
+            | UniversalInboxError::UnsupportedAction(_)
+            | UniversalInboxError::ItemNotFound(_)
+            | UniversalInboxError::Unauthorized(_)
+            | UniversalInboxError::Forbidden(_)
+            | UniversalInboxError::TooManyLoginAttempts { .. }
+            | UniversalInboxError::TooManyRequests { .. }
+            | UniversalInboxError::PaymentRequired { .. } => true,
+            UniversalInboxError::InvalidEnumData { .. }
+            | UniversalInboxError::InvalidUrlData { .. }
+            | UniversalInboxError::DatabaseError { .. }
+            | UniversalInboxError::DatabaseUnavailable { .. }
+            | UniversalInboxError::Recoverable(_)
+            | UniversalInboxError::OAuth2InvalidGrant(_)
+            | UniversalInboxError::Unexpected(_) => false,
+        }
+    }
+
     pub fn from_json_serde_error(serde_error: serde_json::Error, input: String) -> Self {
         if serde_error.to_string().starts_with("missing field") {
             UniversalInboxError::Unexpected(anyhow!("{serde_error}: {input}"))

@@ -23,6 +23,8 @@ use tracing::{info, warn};
 use universal_inbox::{integration_connection::provider::IntegrationProviderKind, user::UserId};
 use uuid::Uuid;
 
+use crate::observability::RecordSpanError;
+use crate::observability::attr;
 use crate::{
     commands::{
         generate::{self, DEFAULT_PASSWORD},
@@ -252,7 +254,7 @@ const SCENARIO: &[ScenarioBeat] = &[
         third_party_item_service,
         settings,
     ),
-    err
+    fields({ attr::ERROR_TYPE } = tracing::field::Empty)
 )]
 #[allow(clippy::too_many_arguments)]
 pub async fn record_landing_screencast(
@@ -266,52 +268,58 @@ pub async fn record_landing_screencast(
     output: PathBuf,
     keep_user: bool,
 ) -> Result<(), UniversalInboxError> {
-    info!("Generating fresh empty user for the recording…");
-    let email = generate::generate_empty_user(user_service.clone())
-        .await
-        .context("Failed to generate empty user")?;
-    info!("Empty user generated: {email}");
+    let result: Result<(), UniversalInboxError> = async move {
+        info!("Generating fresh empty user for the recording…");
+        let email = generate::generate_empty_user(user_service.clone())
+            .await
+            .context("Failed to generate empty user")?;
+        info!("Empty user generated: {email}");
 
-    let user_id = lookup_user_id(&user_service, &email)
-        .await
-        .context("Failed to look up freshly-generated empty user")?;
+        let user_id = lookup_user_id(&user_service, &email)
+            .await
+            .context("Failed to look up freshly-generated empty user")?;
 
-    let recording_dir =
-        std::env::temp_dir().join(format!("universal-inbox-screencast-{}", Uuid::new_v4()));
-    tokio::fs::create_dir_all(&recording_dir)
-        .await
-        .with_context(|| format!("Failed to create recording dir {}", recording_dir.display()))?;
+        let recording_dir =
+            std::env::temp_dir().join(format!("universal-inbox-screencast-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&recording_dir)
+            .await
+            .with_context(|| {
+                format!("Failed to create recording dir {}", recording_dir.display())
+            })?;
 
-    let outcome = run_recording(
-        &base_url,
-        &email,
-        user_id,
-        user_service.clone(),
-        integration_connection_service,
-        notification_service,
-        task_service,
-        third_party_item_service,
-        settings,
-        &recording_dir,
-        &output,
-    )
-    .await;
+        let outcome = run_recording(
+            &base_url,
+            &email,
+            user_id,
+            user_service.clone(),
+            integration_connection_service,
+            notification_service,
+            task_service,
+            third_party_item_service,
+            settings,
+            &recording_dir,
+            &output,
+        )
+        .await;
 
-    // Best-effort cleanup of the temp recording dir (the .webm has been moved out already).
-    let _ = tokio::fs::remove_dir_all(&recording_dir).await;
+        // Best-effort cleanup of the temp recording dir (the .webm has been moved out already).
+        let _ = tokio::fs::remove_dir_all(&recording_dir).await;
 
-    if !keep_user {
-        info!("Deleting recording user {user_id}");
-        // The throwaway screenshot user never starts a Stripe checkout, so
-        // there is no subscription to cancel.
-        if let Err(err) = user::delete_user(user_service, None, user_id).await {
-            warn!("Failed to delete recording user {user_id}: {err:?}");
+        if !keep_user {
+            info!("Deleting recording user {user_id}");
+            // The throwaway screenshot user never starts a Stripe checkout, so
+            // there is no subscription to cancel.
+            if let Err(err) = user::delete_user(user_service, None, user_id).await {
+                warn!("Failed to delete recording user {user_id}: {err:?}");
+            }
+        } else {
+            warn!("--keep-user set: leaving recording user {email} in the database");
         }
-    } else {
-        warn!("--keep-user set: leaving recording user {email} in the database");
-    }
 
-    outcome
+        outcome
+    }
+    .await;
+    result.record_span_error()
 }
 
 #[allow(clippy::too_many_arguments)]

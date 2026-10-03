@@ -103,8 +103,7 @@ impl BillingRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     async fn get_user_subscription(
         &self,
@@ -132,7 +131,7 @@ impl BillingRepository for Repository {
         row.map(user_subscription_from_row).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn get_user_subscription_by_customer_id(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -161,7 +160,7 @@ impl BillingRepository for Repository {
         row.map(user_subscription_from_row).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn get_user_subscription_by_subscription_id(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -193,8 +192,7 @@ impl BillingRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = subscription.user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = subscription.user_id.to_string())
     )]
     async fn upsert_user_subscription(
         &self,
@@ -292,8 +290,7 @@ impl BillingRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     async fn set_over_limit_grace_deadline(
         &self,
@@ -323,8 +320,7 @@ impl BillingRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::STRIPE_EVENT_ID } = event_id),
-        err
+        fields({ attr::STRIPE_EVENT_ID } = event_id)
     )]
     async fn record_stripe_event(
         &self,
@@ -353,7 +349,7 @@ impl BillingRepository for Repository {
         Ok(row.is_some())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::STRIPE_EVENT_RETENTION_DAYS } = days), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::STRIPE_EVENT_RETENTION_DAYS } = days))]
     async fn prune_stripe_events_older_than_days(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -375,7 +371,7 @@ impl BillingRepository for Repository {
         Ok(result.rows_affected())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn list_subscriptions_needing_reconciliation(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -409,7 +405,7 @@ impl BillingRepository for Repository {
         rows.into_iter().map(user_subscription_from_row).collect()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn list_subscriptions_with_expired_grace_deadline(
         &self,
         executor: &mut Transaction<'_, Postgres>,

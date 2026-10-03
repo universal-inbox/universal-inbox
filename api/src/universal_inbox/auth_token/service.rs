@@ -66,8 +66,7 @@ impl AuthenticationTokenService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::AUTH_TOKEN_IS_SESSION } = is_session_token, { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::AUTH_TOKEN_IS_SESSION } = is_session_token, { attr::USER_ID } = user_id.to_string())
     )]
     pub async fn create_auth_token(
         &self,
@@ -119,8 +118,7 @@ impl AuthenticationTokenService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn fetch_auth_tokens_for_user(
         &self,
@@ -135,8 +133,7 @@ impl AuthenticationTokenService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string(), { attr::AUTH_TOKEN_ID } = auth_token_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string(), { attr::AUTH_TOKEN_ID } = auth_token_id.to_string())
     )]
     pub async fn revoke_auth_token(
         &self,
@@ -155,7 +152,7 @@ impl AuthenticationTokenService {
     /// looked up by digest and must be neither revoked nor expired. Tokens
     /// that were never stored (session JWTs, short-lived OAuth2 access
     /// tokens) are accepted on their signature and `exp` alone, as before.
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn is_bearer_token_active(&self, jwt: &JWT) -> Result<bool, UniversalInboxError> {
         let mut transaction = self.repository.begin().await?;
         let status = self

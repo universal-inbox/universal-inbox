@@ -139,8 +139,7 @@ impl NotificationRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::NOTIFICATION_ID } = id.to_string()),
-        err
+        fields({ attr::NOTIFICATION_ID } = id.to_string())
     )]
     async fn get_one_notification(
         &self,
@@ -198,8 +197,7 @@ impl NotificationRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::NOTIFICATION_ID } = id.to_string()),
-        err
+        fields({ attr::NOTIFICATION_ID } = id.to_string())
     )]
     async fn get_one_notification_with_task(
         &self,
@@ -292,8 +290,7 @@ impl NotificationRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_id.to_string(), { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_id.to_string(), { attr::USER_ID } = user_id.to_string())
     )]
     async fn get_notification_for_source_id(
         &self,
@@ -354,8 +351,7 @@ impl NotificationRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::NOTIFICATION_ID } = id.to_string()),
-        err
+        fields({ attr::NOTIFICATION_ID } = id.to_string())
     )]
     async fn does_notification_exist(
         &self,
@@ -390,8 +386,7 @@ impl NotificationRepository for Repository {
             { attr::NOTIFICATION_LIST_ORDER_BY } = ?order_by,
             { attr::NOTIFICATION_LIST_SOURCES } = ?from_sources,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     #[allow(clippy::too_many_arguments)]
     async fn fetch_all_notifications(
@@ -663,8 +658,7 @@ impl NotificationRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::NOTIFICATION_ID } = notification.id.to_string()),
-        err
+        fields({ attr::NOTIFICATION_ID } = notification.id.to_string())
     )]
     async fn create_notification(
         &self,
@@ -733,8 +727,7 @@ impl NotificationRepository for Repository {
             { attr::SYNC_SOURCE_KIND } = kind.to_string(),
             { attr::NOTIFICATION_STATUS } = status.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn update_stale_notifications_status_from_source_ids(
         &self,
@@ -835,8 +828,7 @@ impl NotificationRepository for Repository {
             { attr::NOTIFICATION_ID } = notification.id.to_string(),
             { attr::SYNC_SOURCE_KIND } = kind.to_string(),
             { attr::NOTIFICATION_UPDATE_SNOOZED_UNTIL } = update_snoozed_until
-        ),
-        err
+        )
     )]
     async fn create_or_update_notification(
         &self,
@@ -1054,8 +1046,7 @@ impl NotificationRepository for Repository {
         fields(
             { attr::NOTIFICATION_ID } = notification_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn update_notification(
         &self,
@@ -1203,8 +1194,7 @@ impl NotificationRepository for Repository {
         fields(
             { attr::TASK_ID } = task_id.to_string(),
             { attr::NOTIFICATION_KIND } = notification_kind.map(|kind| kind.to_string())
-        ),
-        err
+        )
     )]
     async fn update_notifications_for_task(
         &self,
@@ -1341,8 +1331,7 @@ impl NotificationRepository for Repository {
             { attr::NOTIFICATION_STATUS } = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
             { attr::NOTIFICATION_LIST_SOURCES } = ?from_sources,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn update_notifications(
         &self,
@@ -1370,8 +1359,7 @@ impl NotificationRepository for Repository {
         fields(
             { attr::NOTIFICATION_IDS } = notification_ids.iter().map(|id| id.to_string()).collect::<Vec<String>>().join(","),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn update_notifications_by_ids(
         &self,
@@ -1395,8 +1383,7 @@ impl NotificationRepository for Repository {
         fields(
             { attr::LINEAR_ISSUE_ID } = %linear_issue_id,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn delete_notifications_for_linear_issue_id(
         &self,
@@ -1490,8 +1477,7 @@ impl NotificationRepository for Repository {
         fields(
             { attr::NOTIFICATION_KIND } = kind.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn set_aside_notifications(
         &self,
@@ -1508,8 +1494,7 @@ impl NotificationRepository for Repository {
         fields(
             { attr::NOTIFICATION_KIND } = kind.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn restore_set_aside_notifications(
         &self,

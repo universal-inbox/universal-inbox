@@ -14,9 +14,8 @@ use crate::universal_inbox::{
 
 #[tracing::instrument(
     name = "refresh-oauth-tokens",
-    level = "info",
-    skip(integration_connection_service),
-    err
+    level = "debug",
+    skip(integration_connection_service)
 )]
 pub async fn refresh_oauth_tokens(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -34,38 +33,27 @@ pub async fn refresh_oauth_tokens(
     let mut transaction = service.begin().await.context(format!(
         "Failed to create new transaction while refreshing OAuth tokens for {provider_kind_string}"
     ))?;
-    let result = service
+    // A failure is recorded by the `refresh_expiring_tokens` boundary span
+    let (refreshed, failed) = service
         .refresh_expiring_tokens(&mut transaction, minutes_before_expiry, provider_kind)
-        .await;
+        .await?;
 
-    match result {
-        Ok((refreshed, failed)) => {
-            info!(
-                "OAuth token refresh complete for {provider_kind_string}: {refreshed} refreshed, {failed} failed"
-            );
-            if failed > 0 {
-                error!("{failed} token refresh(es) failed for {provider_kind_string}");
-            }
-            transaction
-                .commit()
-                .await
-                .context(format!(
-                    "Failed to commit transaction while refreshing OAuth tokens for {provider_kind_string}"
-                ))?;
-            Ok(())
-        }
-        Err(err) => {
-            error!("Failed to refresh OAuth tokens for {provider_kind_string}: {err:?}");
-            Err(err)
-        }
+    info!(
+        "OAuth token refresh complete for {provider_kind_string}: {refreshed} refreshed, {failed} failed"
+    );
+    if failed > 0 {
+        error!("{failed} token refresh(es) failed for {provider_kind_string}");
     }
+    transaction.commit().await.context(format!(
+        "Failed to commit transaction while refreshing OAuth tokens for {provider_kind_string}"
+    ))?;
+    Ok(())
 }
 
 #[tracing::instrument(
     name = "retry-oauth-grant-revocations",
-    level = "info",
-    skip(integration_connection_service),
-    err
+    level = "debug",
+    skip(integration_connection_service)
 )]
 pub async fn retry_oauth_grant_revocations(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -82,9 +70,8 @@ pub async fn retry_oauth_grant_revocations(
 
 #[tracing::instrument(
     name = "pause-slack-connections",
-    level = "info",
-    skip(integration_connection_service),
-    err
+    level = "debug",
+    skip(integration_connection_service)
 )]
 pub async fn pause_slack_connections(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,

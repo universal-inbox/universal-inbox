@@ -56,7 +56,31 @@ pub struct OpenidConnectProvider {
     pub http_client: reqwest::Client,
 }
 
+/// HTTP client to pass to `openidconnect` requests: traced on the server.
+#[cfg(not(target_arch = "wasm32"))]
+pub type OpenidConnectHttpClient<'a> = traced::TracedHttpClient<'a>;
+// `reqwest::Client` is reference-counted: cloning it is cheap
+#[cfg(target_arch = "wasm32")]
+pub type OpenidConnectHttpClient<'a> = reqwest::Client;
+
+fn http_client_for(http_client: &reqwest::Client) -> OpenidConnectHttpClient<'_> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        traced::TracedHttpClient(http_client)
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        http_client.clone()
+    }
+}
+
 impl OpenidConnectProvider {
+    /// The HTTP client to use for requests to the provider (token, user info,
+    /// revocation...): on the server, each call gets a client span.
+    pub fn traced_http_client(&self) -> OpenidConnectHttpClient<'_> {
+        http_client_for(&self.http_client)
+    }
+
     pub async fn build(
         issuer_url: IssuerUrl,
         client_id: ClientId,
@@ -87,7 +111,7 @@ impl OpenidConnectProvider {
         let provider_metadata = CoreProviderMetadata::discover_async(
             IssuerUrl::new(issuer_url_string)
                 .context("Failed to build OpenID Connect issuer URL")?,
-            &http_client,
+            &http_client_for(&http_client),
         )
         .await
         .context("Failed to discover OpenID Connect provider metadata")?;
@@ -154,7 +178,7 @@ impl OpenidConnectProvider {
             token_request = token_request.set_pkce_verifier(pkce_code_verifier);
         }
         let token_response = token_request
-            .request_async(&self.http_client)
+            .request_async(&self.traced_http_client())
             .await
             .map_err(|err| {
                 anyhow!(
@@ -210,5 +234,59 @@ impl OpenidConnectProvider {
                 nonce,
             )
             .context("Failed to verify OpenID Connect auth ID token")
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+mod traced {
+    use std::{future::Future, pin::Pin};
+
+    use openidconnect::{AsyncHttpClient, HttpClientError, HttpRequest, HttpResponse, reqwest};
+    use tracing::{Instrument, field::Empty};
+
+    /// `openidconnect` uses its own `reqwest` client, which the reqwest tracing
+    /// middleware of the API does not cover: wrap each call in an INFO client
+    /// span, named `<METHOD> <path>` like the other client spans.
+    pub struct TracedHttpClient<'a>(pub &'a reqwest::Client);
+
+    impl<'c> AsyncHttpClient<'c> for TracedHttpClient<'_> {
+        type Error = HttpClientError<reqwest::Error>;
+        type Future =
+            Pin<Box<dyn Future<Output = Result<HttpResponse, Self::Error>> + Send + Sync + 'c>>;
+
+        fn call(&'c self, request: HttpRequest) -> Self::Future {
+            let method = request.method().to_string();
+            let path = request.uri().path().to_string();
+            let span = tracing::info_span!(
+                "http client",
+                otel.name = %format!("{method} {path}"),
+                otel.kind = "client",
+                otel.status_code = Empty,
+                http.request.method = %method,
+                http.response.status_code = Empty,
+                server.address = request.uri().host().unwrap_or_default(),
+                url.template = %path,
+                error.type = Empty,
+            );
+            let call = self.0.call(request);
+            Box::pin(async move {
+                let result = call.instrument(span.clone()).await;
+                match &result {
+                    Ok(response) => {
+                        let status = response.status();
+                        span.record("http.response.status_code", status.as_u16());
+                        if status.is_client_error() || status.is_server_error() {
+                            span.record("error.type", status.as_str());
+                            span.record("otel.status_code", "ERROR");
+                        }
+                    }
+                    Err(_) => {
+                        span.record("error.type", "_OTHER");
+                        span.record("otel.status_code", "ERROR");
+                    }
+                }
+                result
+            })
+        }
     }
 }

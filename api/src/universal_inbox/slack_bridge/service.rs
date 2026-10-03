@@ -51,8 +51,7 @@ impl SlackBridgeService {
         fields(
             { attr::USER_ID } = %user_id,
             { attr::SLACK_BRIDGE_ACTION_TYPE } = %action_type,
-        ),
-        err
+        )
     )]
     pub async fn create_pending_action(
         &self,
@@ -90,8 +89,7 @@ impl SlackBridgeService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = %user_id),
-        err
+        fields({ attr::USER_ID } = %user_id)
     )]
     pub async fn get_actionable_actions_for_extension(
         &self,
@@ -140,8 +138,7 @@ impl SlackBridgeService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::SLACK_BRIDGE_ACTION_ID } = %action_id),
-        err
+        fields({ attr::SLACK_BRIDGE_ACTION_ID } = %action_id)
     )]
     pub async fn complete_action(
         &self,
@@ -165,8 +162,7 @@ impl SlackBridgeService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::SLACK_BRIDGE_ACTION_ID } = %action_id),
-        err
+        fields({ attr::SLACK_BRIDGE_ACTION_ID } = %action_id)
     )]
     pub async fn fail_action(
         &self,
@@ -191,8 +187,7 @@ impl SlackBridgeService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = %user_id),
-        err
+        fields({ attr::USER_ID } = %user_id)
     )]
     pub async fn get_bridge_status(
         &self,

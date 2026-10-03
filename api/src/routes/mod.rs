@@ -174,6 +174,81 @@ mod tests {
     }
 
     #[test]
+    fn is_client_error_matches_the_http_status_class() {
+        let errors = vec![
+            UniversalInboxError::InvalidEnumData {
+                source: enum_derive::ParseEnumError,
+                output: String::new(),
+            },
+            UniversalInboxError::InvalidUrlData {
+                source: url::ParseError::EmptyHost,
+                output: String::new(),
+            },
+            UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: String::new(),
+            },
+            UniversalInboxError::InvalidParameters(validator::ValidationErrors::new()),
+            UniversalInboxError::AlreadyExists {
+                source: None,
+                id: uuid::Uuid::nil(),
+            },
+            UniversalInboxError::Conflict(String::new()),
+            UniversalInboxError::UnsupportedAction(String::new()),
+            UniversalInboxError::ItemNotFound(String::new()),
+            UniversalInboxError::DatabaseError {
+                source: sqlx::Error::PoolTimedOut,
+                message: String::new(),
+            },
+            UniversalInboxError::DatabaseUnavailable {
+                source: sqlx::Error::PoolTimedOut,
+                message: String::new(),
+            },
+            UniversalInboxError::Unauthorized(anyhow::anyhow!("")),
+            UniversalInboxError::Forbidden(String::new()),
+            UniversalInboxError::TooManyLoginAttempts {
+                retry_after_seconds: 1,
+            },
+            UniversalInboxError::TooManyRequests {
+                retry_after_seconds: 1,
+            },
+            UniversalInboxError::Recoverable(anyhow::anyhow!("")),
+            UniversalInboxError::OAuth2InvalidGrant(String::new()),
+            UniversalInboxError::PaymentRequired {
+                code: "",
+                message: String::new(),
+                details: json!({}),
+            },
+            UniversalInboxError::Unexpected(anyhow::anyhow!("")),
+        ]
+        .into_iter()
+        .chain(
+            [
+                UpstreamErrorKind::BadRequest,
+                UpstreamErrorKind::PaymentRequired,
+                UpstreamErrorKind::RateLimited,
+                UpstreamErrorKind::Internal,
+            ]
+            .into_iter()
+            .map(|kind| UniversalInboxError::UpstreamServiceError {
+                kind,
+                code: "",
+                message: String::new(),
+            }),
+        );
+
+        for err in errors {
+            assert_eq!(
+                err.is_client_error(),
+                err.status_code().is_client_error(),
+                "{} is_client_error does not match its HTTP status {}",
+                err.error_type(),
+                err.status_code()
+            );
+        }
+    }
+
+    #[test]
     fn database_unavailable_response_uses_503_and_retry_after() {
         let err = UniversalInboxError::DatabaseUnavailable {
             source: sqlx::Error::PoolTimedOut,

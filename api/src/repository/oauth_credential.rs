@@ -79,8 +79,7 @@ impl OAuthCredentialRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
-        err
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string())
     )]
     async fn store_oauth_credential(
         &self,
@@ -148,12 +147,6 @@ impl OAuthCredentialRepository for Repository {
         })
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
-        err
-    )]
     async fn get_oauth_credential(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -200,8 +193,7 @@ impl OAuthCredentialRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
-        err
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string())
     )]
     async fn lock_oauth_credential(
         &self,
@@ -250,8 +242,7 @@ impl OAuthCredentialRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
-        err
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string())
     )]
     async fn delete_oauth_credential(
         &self,
@@ -283,8 +274,7 @@ impl OAuthCredentialRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_PROVIDER_KIND } = provider_kind.map(|kind| kind.to_string())),
-        err
+        fields({ attr::INTEGRATION_PROVIDER_KIND } = provider_kind.map(|kind| kind.to_string()))
     )]
     async fn list_expiring_credentials(
         &self,

@@ -17,6 +17,7 @@ use url::Url;
 
 use universal_inbox::{integration_connection::IntegrationConnectionPausedReason, user::User};
 
+use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::universal_inbox::UniversalInboxError;
 
@@ -238,8 +239,7 @@ impl SmtpMailer {
         fields(
             { attr::USER_ID } = user.id.to_string(),
             { attr::EMAIL_SUBJECT } = template.subject(),
-        ),
-        err
+        )
     )]
     fn build_email(
         &self,
@@ -306,8 +306,7 @@ impl Mailer for SmtpMailer {
     #[tracing::instrument(
         level = "info",
         skip_all,
-        fields({ attr::USER_ID } = user.id.to_string(), { attr::EMAIL_SUBJECT } = template.subject()),
-        err
+        fields({ attr::USER_ID } = user.id.to_string(), { attr::EMAIL_SUBJECT } = template.subject(), { attr::ERROR_TYPE } = tracing::field::Empty)
     )]
     async fn send_email(
         &self,
@@ -315,24 +314,28 @@ impl Mailer for SmtpMailer {
         template: EmailTemplate,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
-        let email = self.build_email(user, template.clone())?;
+        let result: Result<(), UniversalInboxError> = async move {
+            let email = self.build_email(user, template.clone())?;
 
-        if dry_run {
-            let email_file = format!("{template}.html");
-            info!("[dry run] Writing email to send in {email_file}");
-            std::fs::write(
-                email_file.clone(),
-                String::from_utf8(email.formatted()).unwrap(),
-            )
-            .with_context(|| format!("Failed to write email to {email_file}"))?;
-        } else {
-            self.mailer
-                .send(email)
-                .await
-                .context("Failed to send email")?;
+            if dry_run {
+                let email_file = format!("{template}.html");
+                info!("[dry run] Writing email to send in {email_file}");
+                std::fs::write(
+                    email_file.clone(),
+                    String::from_utf8(email.formatted()).unwrap(),
+                )
+                .with_context(|| format!("Failed to write email to {email_file}"))?;
+            } else {
+                self.mailer
+                    .send(email)
+                    .await
+                    .context("Failed to send email")?;
+            }
+
+            Ok(())
         }
-
-        Ok(())
+        .await;
+        result.record_span_error()
     }
 }
 

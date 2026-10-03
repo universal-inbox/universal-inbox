@@ -30,8 +30,7 @@ impl TaskEventService<SlackPushEventCallback> for TaskService {
         skip_all,
         fields(
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn save_task_from_event(
         &self,

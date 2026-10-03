@@ -9,6 +9,8 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::RecordSpanError;
+use crate::observability::attr;
 use crate::{
     repository::third_party::ThirdPartyItemRepository,
     universal_inbox::{
@@ -24,7 +26,7 @@ use crate::{
     name = "todoist-migrate-legacy-ids-command",
     level = "info",
     skip(task_service, integration_connection_service),
-    err
+    fields({ attr::ERROR_TYPE } = tracing::field::Empty)
 )]
 pub async fn migrate_legacy_ids(
     task_service: Arc<RwLock<TaskService>>,
@@ -32,6 +34,7 @@ pub async fn migrate_legacy_ids(
     user_id: Option<UserId>,
     dry_run: bool,
 ) -> Result<(), UniversalInboxError> {
+    let result: Result<(), UniversalInboxError> = async move {
     let service = task_service.read().await;
 
     let mut transaction = service
@@ -92,6 +95,8 @@ pub async fn migrate_legacy_ids(
     }
 
     Ok(())
+}.await;
+    result.record_span_error()
 }
 
 async fn migrate_connection_legacy_ids(

@@ -465,8 +465,7 @@ impl ThirdPartyItemSourceService<LinearNotification> for LinearService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     async fn fetch_items(
         &self,
@@ -536,16 +535,6 @@ impl ThirdPartyItemSourceService<LinearNotification> for LinearService {
 
 #[async_trait]
 impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
-            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
-            { attr::USER_ID } = user_id.to_string(),
-        ),
-        err
-    )]
     async fn third_party_item_into_notification(
         &self,
         source: &LinearNotification,
@@ -607,8 +596,7 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
         fields(
             { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn delete_notification_from_source(
         &self,
@@ -634,8 +622,7 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string())
     )]
     async fn unsubscribe_notification_from_source(
         &self,
@@ -694,8 +681,7 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string())
     )]
     async fn snooze_notification_from_source(
         &self,
@@ -749,8 +735,7 @@ impl ThirdPartyItemSourceService<LinearIssue> for LinearService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     async fn fetch_items(
         &self,
@@ -789,12 +774,6 @@ impl ThirdPartyItemSourceService<LinearIssue> for LinearService {
 #[async_trait]
 impl ThirdPartyTaskService<LinearIssue> for LinearService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields({ attr::THIRD_PARTY_ITEM_SOURCE_ID } = source.id.to_string(), { attr::USER_ID } = user_id.to_string()),
-        err
-    )]
     async fn third_party_item_into_task(
         &self,
         _executor: &mut Transaction<'_, Postgres>,
@@ -853,8 +832,7 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
             { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn delete_task(
         &self,
@@ -900,8 +878,7 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
             { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn complete_task(
         &self,
@@ -947,8 +924,7 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
             { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn uncomplete_task(
         &self,
@@ -990,8 +966,7 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = _user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = _user_id.to_string())
     )]
     async fn update_task(
         &self,

@@ -139,7 +139,7 @@ impl UserService {
     /// policy pausing the integrations of long-gone users. Writes
     /// `last_active_at` at most once per
     /// [`USER_ACTIVITY_RECORDING_INTERVAL_HOURS`]; returns whether it wrote.
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn record_user_activity(&self, user_id: UserId) -> Result<bool, UniversalInboxError> {
         let now = Utc::now();
         let not_before = now - TimeDelta::hours(USER_ACTIVITY_RECORDING_INTERVAL_HOURS);
@@ -228,7 +228,7 @@ impl UserService {
         self.repository.fetch_all_users_and_auth(executor).await
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
     pub async fn list_user_auth_methods(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -252,7 +252,7 @@ impl UserService {
 
     // --- Auth method management (add/remove) ---
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
     pub async fn add_local_auth_method(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -289,8 +289,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn start_add_passkey_auth_method(
         &self,
@@ -334,8 +333,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn finish_add_passkey_auth_method(
         &self,
@@ -366,8 +364,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string(), { attr::USER_AUTH_KIND } = kind.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string(), { attr::USER_AUTH_KIND } = kind.to_string())
     )]
     pub async fn remove_auth_method(
         &self,
@@ -402,7 +399,7 @@ impl UserService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
     pub async fn link_oidc_auth_method(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -487,7 +484,7 @@ impl UserService {
     }
 
     /// Link an OIDC auth method to an existing user via the Authorization Code flow (Google).
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
     pub async fn link_for_auth_code_flow(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -523,7 +520,7 @@ impl UserService {
     }
 
     /// Link an OIDC auth method to an existing user via the PKCE flow.
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
     pub async fn link_for_auth_code_pkce_flow(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -553,11 +550,19 @@ impl UserService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = user_id.to_string())
+    )]
     /// Self-service account deletion: check the user's confirmation, then run
     /// the same deletion flow as the `user delete` CLI command
     /// ([`Self::delete_user`]).
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = user_id.to_string())
+    )]
     pub async fn delete_account(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -625,7 +630,7 @@ impl UserService {
         self.repository.delete_user(executor, user_id).await
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
     pub async fn patch_user(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -774,8 +779,7 @@ impl UserService {
         fields(
             { attr::AUTH_PROVIDER_USER_ID } = tracing::field::Empty,
             { attr::USER_ID } = tracing::field::Empty
-        ),
-        err
+        )
     )]
     pub async fn authenticate_for_auth_code_flow(
         &self,
@@ -814,7 +818,7 @@ impl UserService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn verify_access_token(
         &self,
         pkce_flow_settings: &OIDCAuthorizationCodePKCEFlowSettings,
@@ -831,7 +835,7 @@ impl UserService {
         let introspection_result = client
             .introspect(access_token)
             .set_token_type_hint("access_token")
-            .request_async(&oidc_provider.http_client)
+            .request_async(&oidc_provider.traced_http_client())
             .await
             .context("Introspection request error")?;
 
@@ -856,8 +860,7 @@ impl UserService {
         fields(
             { attr::AUTH_PROVIDER_USER_ID } = tracing::field::Empty,
             { attr::USER_ID } = tracing::field::Empty
-        ),
-        err
+        )
     )]
     pub async fn authenticate_for_auth_code_pkce_flow(
         &self,
@@ -897,7 +900,7 @@ impl UserService {
 
     /// In an OpenIDConnect flow, this function update the ID token associated with the given auth_user_id
     /// If there no user associated with the given auth_user_id, it creates a new user.
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn authenticate_and_create_user_if_not_exists(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -947,7 +950,7 @@ impl UserService {
                         )),
                     )
                     .context("UserInfo configuration error")?
-                    .request_async(&oidc_provider.http_client)
+                    .request_async(&oidc_provider.traced_http_client())
                     .await
                     .context("UserInfo request error")?;
 
@@ -984,7 +987,7 @@ impl UserService {
     }
 
     /// Fetch the email address from the OIDC provider's user info endpoint.
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn fetch_oidc_user_email(
         &self,
         oidc_provider: &OpenidConnectProvider,
@@ -998,7 +1001,7 @@ impl UserService {
                 Some(SubjectIdentifier::new(auth_user_id.to_string())),
             )
             .context("UserInfo configuration error")?
-            .request_async(&oidc_provider.http_client)
+            .request_async(&oidc_provider.traced_http_client())
             .await
             .context("UserInfo request error")?;
 
@@ -1011,7 +1014,7 @@ impl UserService {
         Ok(email)
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
     pub async fn close_session(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1039,7 +1042,7 @@ impl UserService {
                         let oidc_provider = self.get_openid_connect_provider(oidc_settings).await?;
                         let provider_metadata = ProviderMetadataWithLogout::discover_async(
                             oidc_settings.oidc_issuer_url.clone(),
-                            &oidc_provider.http_client,
+                            &oidc_provider.traced_http_client(),
                         )
                         .await
                         .context("metadata provider error")?;
@@ -1105,7 +1108,7 @@ impl UserService {
     }
 
     #[allow(clippy::type_complexity)]
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn fetch_access_token(
         &self,
         openid_connect_settings: &OpenIDConnectSettings,
@@ -1153,8 +1156,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user.id.to_string()),
-        err
+        fields({ attr::USER_ID } = user.id.to_string())
     )]
     pub async fn register_user(
         &self,
@@ -1191,7 +1193,7 @@ impl UserService {
     /// When the email is already registered, emails its owner instead and
     /// returns `Ok(())` like a successful registration, so the caller's
     /// response does not reveal whether the account exists.
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn register_local_user(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1260,8 +1262,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = tracing::field::Empty),
-        err
+        fields({ attr::USER_ID } = tracing::field::Empty)
     )]
     pub async fn validate_credentials(
         &self,
@@ -1359,7 +1360,7 @@ impl UserService {
 
     /// Constant-time password check against the stored hash (or a dummy hash
     /// when the email is unknown) so timing does not leak account existence.
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn check_password(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1462,8 +1463,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn send_verification_email(
         &self,
@@ -1546,8 +1546,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn verify_email(
         &self,
@@ -1628,7 +1627,7 @@ impl UserService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn send_password_reset_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1710,7 +1709,7 @@ impl UserService {
     /// too many failed login attempts. Best-effort and silent for unknown /
     /// test accounts: the login handler must return an identical generic
     /// response regardless, so this never reveals account existence.
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn send_account_lockout_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1747,7 +1746,7 @@ impl UserService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn send_registration_attempt_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1793,8 +1792,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn reset_password(
         &self,
@@ -1834,8 +1832,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn set_password(
         &self,
@@ -1876,8 +1873,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn change_password(
         &self,
@@ -1977,7 +1973,7 @@ impl UserService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user.id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user.id.to_string()))]
     async fn send_password_changed_email(
         &self,
         user: User,
@@ -2009,7 +2005,7 @@ impl UserService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn start_passkey_registration(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -2050,8 +2046,7 @@ impl UserService {
         fields(
             { attr::USER_USERNAME } = username.to_string(),
             { attr::USER_ID } = user_id.to_string(),
-        ),
-        err
+        )
     )]
     pub async fn finish_passkey_registration(
         &self,
@@ -2080,7 +2075,7 @@ impl UserService {
         Ok(new_user)
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn start_passkey_authentication(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -2126,8 +2121,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn finish_passkey_authentication(
         &self,
@@ -2179,8 +2173,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn get_user_preferences(
         &self,
@@ -2195,8 +2188,7 @@ impl UserService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn patch_user_preferences(
         &self,

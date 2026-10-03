@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 
 use anyhow::{Context, anyhow};
 
@@ -59,6 +59,7 @@ use crate::{
         notification::ThirdPartyNotificationSourceService, oauth2::AccessToken,
         task::ThirdPartyTaskService, third_party::ThirdPartyItemSourceService,
     },
+    observability::{http_client_span, instrument_client_call},
     repository::{Repository, third_party::ThirdPartyItemRepository},
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
@@ -483,8 +484,7 @@ impl SlackService {
         let client = self.build_slack_client()?;
         let session = client.open_session(slack_api_token);
 
-        Ok(session
-            .auth_test()
+        Ok(slack_api_call("auth.test", session.auth_test())
             .await
             .context("Failed to call Slack auth.test")?)
     }
@@ -496,8 +496,7 @@ impl SlackService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string()),
-        err
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string())
     )]
     pub async fn ensure_team_context(
         &self,
@@ -551,8 +550,7 @@ impl SlackService {
 
         let request = SlackApiReactionsAddRequest::new(channel, reaction, message);
 
-        session
-            .reactions_add(&request)
+        slack_api_call("reactions.add", session.reactions_add(&request))
             .await
             .map(|_| ())
             .or_else(|e| match &e {
@@ -584,8 +582,7 @@ impl SlackService {
             .with_channel(channel)
             .with_timestamp(message);
 
-        session
-            .reactions_remove(&request)
+        slack_api_call("reactions.remove", session.reactions_remove(&request))
             .await
             .map(|_| ())
             .or_else(|e| match &e {
@@ -604,7 +601,7 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn fetch_item_from_event(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -752,7 +749,7 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions, clippy::too_many_arguments)]
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn fetch_item_from_slack_reaction(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -865,7 +862,7 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions, clippy::too_many_arguments)]
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn fetch_item_from_slack_message(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1190,11 +1187,39 @@ fn slack_token_cache_scope(slack_api_token: &SlackApiToken) -> String {
     hex::encode(&digest.as_ref()[..16])
 }
 
+/// Run a Slack Web API call inside an INFO client span: slack-morphism uses its
+/// own hyper client, which the reqwest tracing middleware does not cover.
+async fn slack_api_call<T>(
+    method: &'static str,
+    call: impl Future<Output = Result<T, SlackClientError>>,
+) -> Result<T, SlackClientError> {
+    instrument_client_call(
+        http_client_span("POST", "slack.com", &format!("/api/{method}")),
+        call,
+        slack_error_type,
+    )
+    .await
+}
+
+fn slack_error_type(error: &SlackClientError) -> String {
+    match error {
+        // Slack API error codes are a closed, low-cardinality set (`channel_not_found`, ...)
+        SlackClientError::ApiError(SlackClientApiError { code, .. }) => code.clone(),
+        SlackClientError::HttpError(error) => error.status_code.as_str().to_string(),
+        SlackClientError::RateLimitError(_) => "rate_limited".to_string(),
+        SlackClientError::HttpProtocolError(_) => "http_protocol_error".to_string(),
+        SlackClientError::EndOfStream(_) => "end_of_stream".to_string(),
+        SlackClientError::SystemError(_) => "system_error".to_string(),
+        SlackClientError::ProtocolError(_) => "protocol_error".to_string(),
+        SlackClientError::SocketModeProtocolError(_) => "socket_mode_protocol_error".to_string(),
+    }
+}
+
 #[concurrent_cached(
     key = "String",
     // Use user_id to avoid leaking a message to an unauthorized user
     convert = r#"{ format!("{}__{}__{}__{}", slack_base_url, _user_id, channel, message) }"#,
-    ty = "cached::AsyncRedisCache<String, SlackHistoryMessage>",
+    ty = "crate::utils::cache::TracedRedisCache<SlackHistoryMessage>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_message`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_message", Duration::from_secs(60), false).await }"##,
     with_cached_flag = true
@@ -1209,20 +1234,22 @@ async fn cached_fetch_message(
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    let messages = session
-        .conversations_replies(
+    let messages = slack_api_call(
+        "conversations.replies",
+        session.conversations_replies(
             &SlackApiConversationsRepliesRequest::new(channel.clone(), message.clone())
                 .with_latest(message.clone())
                 .with_limit(1)
                 .with_inclusive(true),
-        )
-        .await
-        .with_context(|| {
-            UniversalInboxError::Unexpected(anyhow!(
-                "Failed to fetch Slack message {message} in channel {channel}"
-            ))
-        })?
-        .messages;
+        ),
+    )
+    .await
+    .with_context(|| {
+        UniversalInboxError::Unexpected(anyhow!(
+            "Failed to fetch Slack message {message} in channel {channel}"
+        ))
+    })?
+    .messages;
 
     Ok(Return::new(
         messages
@@ -1240,7 +1267,7 @@ async fn cached_fetch_message(
     key = "String",
     // Use user_id to avoid leaking a message to an unauthorized user
     convert = r#"{ format!("{}__{}__{}__{}__{:?}", slack_base_url, _user_id, channel, root_message, current_message) }"#,
-    ty = "cached::AsyncRedisCache<String, Vec<SlackHistoryMessage>>",
+    ty = "crate::utils::cache::TracedRedisCache<Vec<SlackHistoryMessage>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_thread`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_thread", Duration::from_secs(60), false).await }"##,
     with_cached_flag = true
@@ -1262,15 +1289,17 @@ async fn cached_fetch_thread(
         request = request.with_latest(latest.clone()).with_inclusive(true);
     }
 
-    let messages = session
-        .conversations_replies(&request)
-        .await
-        .with_context(|| {
-            UniversalInboxError::Unexpected(anyhow!(
-                "Failed to fetch Slack thread {root_message} in channel {channel}"
-            ))
-        })?
-        .messages;
+    let messages = slack_api_call(
+        "conversations.replies",
+        session.conversations_replies(&request),
+    )
+    .await
+    .with_context(|| {
+        UniversalInboxError::Unexpected(anyhow!(
+            "Failed to fetch Slack thread {root_message} in channel {channel}"
+        ))
+    })?
+    .messages;
 
     Ok(Return::new(messages))
 }
@@ -1280,7 +1309,7 @@ async fn cached_fetch_thread(
     // Scope to the token that authorized the upstream call: Slack's per-token
     // ACL is the only authorization applying to this data.
     convert = r#"{ format!("{}__{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token), channel) }"#,
-    ty = "cached::AsyncRedisCache<String, SlackChannelInfo>",
+    ty = "crate::utils::cache::TracedRedisCache<SlackChannelInfo>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_channel`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_channel", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
@@ -1293,10 +1322,12 @@ async fn cached_fetch_channel(
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    let response = session
-        .conversations_info(&SlackApiConversationsInfoRequest::new(channel.clone()))
-        .await
-        .with_context(|| format!("Failed to fetch Slack channel {channel}"))?;
+    let response = slack_api_call(
+        "conversations.info",
+        session.conversations_info(&SlackApiConversationsInfoRequest::new(channel.clone())),
+    )
+    .await
+    .with_context(|| format!("Failed to fetch Slack channel {channel}"))?;
 
     Ok(Return::new(response.channel))
 }
@@ -1306,7 +1337,7 @@ async fn cached_fetch_channel(
     // Use user_id to avoid leaking user details to an unauthorized user
     convert = r#"{ format!("{}__{}__{}", slack_base_url, _user_id, user) }"#,
     // `None` caches that Slack cannot resolve this user, so it is not re-fetched on every sync
-    ty = "cached::AsyncRedisCache<String, Option<SlackUser>>",
+    ty = "crate::utils::cache::TracedRedisCache<Option<SlackUser>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_user`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_user", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
@@ -1320,9 +1351,11 @@ async fn cached_fetch_user(
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    match session
-        .users_info(&SlackApiUsersInfoRequest::new(user.clone()))
-        .await
+    match slack_api_call(
+        "users.info",
+        session.users_info(&SlackApiUsersInfoRequest::new(user.clone())),
+    )
+    .await
     {
         Ok(response) => Ok(Return::new(Some(response.user))),
         // Slack will never resolve this user for this token (deleted account, user from
@@ -1339,7 +1372,7 @@ async fn cached_fetch_user(
 #[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token)) }"#,
-    ty = "cached::AsyncRedisCache<String, Vec<SlackUserGroup>>",
+    ty = "crate::utils::cache::TracedRedisCache<Vec<SlackUserGroup>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_usergroups`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:list_usergroups", Duration::from_secs(12 * 60 * 60), false).await }"##,
     with_cached_flag = true
@@ -1351,10 +1384,12 @@ async fn cached_list_usergroups(
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    let response = session
-        .usergroups_list(&SlackApiUserGroupsListRequest::new())
-        .await
-        .with_context(|| "Failed to fetch Slack usergroups".to_string())?;
+    let response = slack_api_call(
+        "usergroups.list",
+        session.usergroups_list(&SlackApiUserGroupsListRequest::new()),
+    )
+    .await
+    .with_context(|| "Failed to fetch Slack usergroups".to_string())?;
 
     Ok(Return::new(response.usergroups))
 }
@@ -1362,7 +1397,7 @@ async fn cached_list_usergroups(
 #[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token), usergroup_id) }"#,
-    ty = "cached::AsyncRedisCache<String, Vec<SlackUserId>>",
+    ty = "crate::utils::cache::TracedRedisCache<Vec<SlackUserId>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_users_in_usergroup`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:list_users_in_usergroup", Duration::from_secs(12 * 60 * 60), false).await }"##,
     with_cached_flag = true
@@ -1375,12 +1410,14 @@ async fn cached_list_users_in_usergroup(
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    let response = session
-        .usergroups_users_list(&SlackApiUserGroupsUsersListRequest::new(
+    let response = slack_api_call(
+        "usergroups.users.list",
+        session.usergroups_users_list(&SlackApiUserGroupsUsersListRequest::new(
             usergroup_id.clone(),
-        ))
-        .await
-        .with_context(|| "Failed to fetch Slack users in usergroup".to_string())?;
+        )),
+    )
+    .await
+    .with_context(|| "Failed to fetch Slack users in usergroup".to_string())?;
 
     Ok(Return::new(response.users))
 }
@@ -1389,7 +1426,7 @@ async fn cached_list_users_in_usergroup(
     key = "String",
     convert = r#"{ format!("{}__{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token), bot) }"#,
     // `None` caches that Slack cannot resolve this bot, so it is not re-fetched on every sync
-    ty = "cached::AsyncRedisCache<String, Option<SlackBotInfo>>",
+    ty = "crate::utils::cache::TracedRedisCache<Option<SlackBotInfo>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_bot`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_bot", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
@@ -1402,9 +1439,11 @@ async fn cached_fetch_bot(
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    match session
-        .bots_info(&SlackApiBotsInfoRequest::new().with_bot(bot.to_string()))
-        .await
+    match slack_api_call(
+        "bots.info",
+        session.bots_info(&SlackApiBotsInfoRequest::new().with_bot(bot.to_string())),
+    )
+    .await
     {
         Ok(response) => Ok(Return::new(Some(response.bot))),
         // Slack will never resolve this bot for this token (apps from another workspace, org
@@ -1421,7 +1460,7 @@ async fn cached_fetch_bot(
 #[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token), team) }"#,
-    ty = "cached::AsyncRedisCache<String, SlackTeamInfo>",
+    ty = "crate::utils::cache::TracedRedisCache<SlackTeamInfo>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_team`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:fetch_team", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
@@ -1434,10 +1473,12 @@ async fn cached_fetch_team(
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    let response = session
-        .team_info(&SlackApiTeamInfoRequest::new().with_team(team.clone()))
-        .await
-        .with_context(|| format!("Failed to fetch Slack team {team}"))?;
+    let response = slack_api_call(
+        "team.info",
+        session.team_info(&SlackApiTeamInfoRequest::new().with_team(team.clone())),
+    )
+    .await
+    .with_context(|| format!("Failed to fetch Slack team {team}"))?;
 
     Ok(Return::new(response.team))
 }
@@ -1445,7 +1486,7 @@ async fn cached_fetch_team(
 #[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}", slack_base_url, slack_api_token.team_id.as_ref().map(|t| t.0.as_str()).unwrap_or("no-team")) }"#,
-    ty = "cached::AsyncRedisCache<String, HashMap<SlackEmojiName, SlackEmojiRef>>",
+    ty = "crate::utils::cache::TracedRedisCache<HashMap<SlackEmojiName, SlackEmojiRef>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_emojis`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:list_emojis", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
@@ -1457,8 +1498,7 @@ async fn cached_list_emojis(
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    let response = session
-        .emoji_list()
+    let response = slack_api_call("emoji.list", session.emoji_list())
         .await
         .context("Failed to fetch Slack emojis")?;
 
@@ -1468,7 +1508,7 @@ async fn cached_list_emojis(
 #[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}__{}__{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token), channel, message) }"#,
-    ty = "cached::AsyncRedisCache<String, Url>",
+    ty = "crate::utils::cache::TracedRedisCache<Url>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `get_chat_permalink`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:get_chat_permalink", Duration::from_secs(7 * 24 * 60 * 60), true).await }"##,
     with_cached_flag = true
@@ -1482,15 +1522,17 @@ async fn cached_get_chat_permalink(
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    let response = session
-        .chat_get_permalink(&SlackApiChatGetPermalinkRequest::new(
+    let response = slack_api_call(
+        "chat.getPermalink",
+        session.chat_get_permalink(&SlackApiChatGetPermalinkRequest::new(
             channel.clone(),
             message.clone(),
-        ))
-        .await
-        .with_context(|| {
-            format!("Failed to get Slack chat permalink for message {message} in channel {channel}")
-        })?;
+        )),
+    )
+    .await
+    .with_context(|| {
+        format!("Failed to get Slack chat permalink for message {message} in channel {channel}")
+    })?;
 
     Ok(Return::new(response.permalink))
 }
@@ -1512,8 +1554,7 @@ impl ThirdPartyItemSourceService<SlackThread> for SlackService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     async fn fetch_items(
         &self,
@@ -1662,16 +1703,6 @@ impl NotificationSource for SlackService {
 
 #[async_trait]
 impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
-            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
-            { attr::USER_ID } = user_id.to_string()
-        ),
-        err
-    )]
     async fn third_party_item_into_notification(
         &self,
         source: &SlackReaction,
@@ -1705,8 +1736,7 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
         fields(
             { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn delete_notification_from_source(
         &self,
@@ -1737,8 +1767,7 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
         fields(
             { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn unsubscribe_notification_from_source(
         &self,
@@ -1776,16 +1805,6 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
 
 #[async_trait]
 impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
-            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
-            { attr::USER_ID } = user_id.to_string()
-        ),
-        err
-    )]
     async fn third_party_item_into_notification(
         &self,
         source: &SlackThread,
@@ -1829,8 +1848,7 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         fields(
             { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn delete_notification_from_source(
         &self,
@@ -1856,8 +1874,7 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         fields(
             { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn unsubscribe_notification_from_source(
         &self,
@@ -1891,16 +1908,6 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
 #[async_trait]
 impl ThirdPartyTaskService<SlackReaction> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source.item.id(),
-            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
-            { attr::USER_ID } = user_id.to_string()
-        ),
-        err
-    )]
     async fn third_party_item_into_task(
         &self,
         _executor: &mut Transaction<'_, Postgres>,
@@ -1965,8 +1972,7 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
             { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn delete_task(
         &self,
@@ -1991,8 +1997,7 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
             { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn complete_task(
         &self,
@@ -2039,8 +2044,7 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
             { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn uncomplete_task(
         &self,

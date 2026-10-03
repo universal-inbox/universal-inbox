@@ -406,8 +406,7 @@ impl ThirdPartyItemSourceService<GoogleDriveComment> for GoogleDriveService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     async fn fetch_items(
         &self,
@@ -554,15 +553,6 @@ impl ThirdPartyItemSourceService<GoogleDriveComment> for GoogleDriveService {
 
 #[async_trait]
 impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveService {
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
-            { attr::USER_ID } = user_id.to_string(),
-        ),
-        err
-    )]
     async fn third_party_item_into_notification(
         &self,
         source: &GoogleDriveComment,
@@ -602,8 +592,7 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
         fields(
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_item.source_id,
             { attr::USER_ID } = _user_id.to_string(),
-        ),
-        err
+        )
     )]
     async fn delete_notification_from_source(
         &self,
@@ -622,8 +611,7 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
         fields(
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_item.source_id,
             { attr::USER_ID } = _user_id.to_string(),
-        ),
-        err
+        )
     )]
     async fn unsubscribe_notification_from_source(
         &self,
@@ -642,8 +630,7 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
         fields(
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_item.source_id,
             { attr::USER_ID } = _user_id.to_string(),
-        ),
-        err
+        )
     )]
     async fn snooze_notification_from_source(
         &self,

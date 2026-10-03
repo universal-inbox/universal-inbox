@@ -32,6 +32,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::{
     integrations::{
@@ -116,8 +117,7 @@ impl TaskService {
             { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn apply_updated_task_side_effect<T, U>(
         &self,
@@ -181,17 +181,6 @@ impl TaskService {
         Ok(())
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_ID } = synced_third_party_item.id.to_string(),
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = synced_third_party_item.source_id,
-            { attr::TASK_ID } = upsert_task.value_ref().id.to_string(),
-            { attr::USER_ID } = user_id.to_string()
-        ),
-        err
-    )]
     pub async fn apply_synced_task_side_effect(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -384,8 +373,7 @@ impl TaskService {
             { attr::TASK_STATUS } = status.to_string(),
             { attr::TASK_LIST_ONLY_SYNCED } = only_synced_tasks,
             { attr::USER_ID } = user_id.to_string(),
-        ),
-        err
+        )
     )]
     pub async fn list_tasks(
         &self,
@@ -408,8 +396,7 @@ impl TaskService {
         skip_all,
         fields(
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn search_tasks(
         &self,
@@ -429,8 +416,7 @@ impl TaskService {
         fields(
             { attr::TASK_ID } = task_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn get_task(
         &self,
@@ -454,8 +440,7 @@ impl TaskService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::TASK_IDS } = task_ids.iter().map(|id| id.to_string()).collect::<Vec<String>>().join(", ")),
-        err
+        fields({ attr::TASK_IDS } = task_ids.iter().map(|id| id.to_string()).collect::<Vec<String>>().join(", "))
     )]
     pub async fn get_tasks(
         &self,
@@ -471,8 +456,7 @@ impl TaskService {
         fields(
             { attr::TASK_ID } = task.id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn create_task(
         &self,
@@ -496,8 +480,7 @@ impl TaskService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::NOTIFICATION_ID } = notification.id.to_string()),
-        err
+        fields({ attr::NOTIFICATION_ID } = notification.id.to_string())
     )]
     pub async fn create_task_from_notification(
         &self,
@@ -620,14 +603,13 @@ impl TaskService {
     /// Then create a notification from the task if needed and return
     /// the task and the notification if any
     #[tracing::instrument(
-        level = "debug",
+        level = "info",
         skip_all,
         fields(
             { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn create_task_from_third_party_item<T, U>(
         &self,
@@ -955,16 +937,6 @@ impl TaskService {
     }
 
     /// Save a third party item as a task and apply side effects
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
-            { attr::USER_ID } = user_id.to_string()
-        ),
-        err
-    )]
     pub async fn sync_third_party_item_as_task<T, U>(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1047,16 +1019,6 @@ impl TaskService {
         Ok(upsert_task)
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
-            { attr::USER_ID } = user_id.to_string()
-        ),
-        err
-    )]
     pub async fn save_third_party_item_as_task<T, U>(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1092,16 +1054,6 @@ impl TaskService {
             .await
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_ID } = task_request.source_item.id.to_string(),
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = task_request.source_item.source_id,
-            { attr::USER_ID } = task_request.user_id.to_string()
-        ),
-        err
-    )]
     pub async fn create_or_update_task(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1113,15 +1065,15 @@ impl TaskService {
     }
 
     #[tracing::instrument(
-        level = "debug",
+        level = "info",
         skip_all,
         fields(
             { attr::SYNC_SOURCE_KIND } = source.to_string(),
             { attr::USER_ID } = user_id.to_string(),
             { attr::SYNC_FORCE } = force_sync,
-            { attr::SYNC_ITEMS_COUNT } = tracing::field::Empty
-        ),
-        err
+            { attr::SYNC_ITEMS_COUNT } = tracing::field::Empty,
+            { attr::ERROR_TYPE } = tracing::field::Empty
+        )
     )]
     async fn sync_tasks_for_source(
         &self,
@@ -1129,20 +1081,24 @@ impl TaskService {
         user_id: UserId,
         force_sync: bool,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
-        match source {
-            TaskSyncSourceKind::Todoist => {
-                self.sync_third_party_tasks(self.todoist_service.clone(), user_id, force_sync)
-                    .await
-            }
-            TaskSyncSourceKind::Linear => {
-                self.sync_third_party_tasks(self.linear_service.clone(), user_id, force_sync)
-                    .await
-            }
-            TaskSyncSourceKind::TickTick => {
-                self.sync_third_party_tasks(self.ticktick_service.clone(), user_id, force_sync)
-                    .await
+        let result: Result<Vec<TaskCreationResult>, UniversalInboxError> = async move {
+            match source {
+                TaskSyncSourceKind::Todoist => {
+                    self.sync_third_party_tasks(self.todoist_service.clone(), user_id, force_sync)
+                        .await
+                }
+                TaskSyncSourceKind::Linear => {
+                    self.sync_third_party_tasks(self.linear_service.clone(), user_id, force_sync)
+                        .await
+                }
+                TaskSyncSourceKind::TickTick => {
+                    self.sync_third_party_tasks(self.ticktick_service.clone(), user_id, force_sync)
+                        .await
+                }
             }
         }
+        .await;
+        result.record_span_error()
     }
 
     pub async fn sync_tasks_with_transaction(
@@ -1251,8 +1207,7 @@ impl TaskService {
         fields(
             { attr::TASK_ID } = task_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn patch_task(
         &self,
@@ -1352,8 +1307,7 @@ impl TaskService {
             { attr::NOTIFICATION_ID } = notification.id.to_string(),
             { attr::TASK_ID } = task_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn link_notification_with_task(
         &self,
@@ -1404,8 +1358,7 @@ impl TaskService {
         skip_all,
         fields(
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn search_projects(
         &self,
@@ -1461,8 +1414,7 @@ impl TaskService {
         fields(
             { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn apply_task_third_party_item_side_effect(
         &self,

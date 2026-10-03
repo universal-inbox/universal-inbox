@@ -101,8 +101,7 @@ impl ThirdPartyItemService {
         fields(
             { attr::THIRD_PARTY_ITEM_KIND } = third_party_item_data.kind().to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn create_task_item(
         &self,
@@ -233,8 +232,7 @@ impl ThirdPartyItemService {
         fields(
             { attr::THIRD_PARTY_ITEM_KIND } = third_party_item_data.kind().to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn create_notification_item(
         &self,
@@ -299,8 +297,7 @@ impl ThirdPartyItemService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     pub async fn sync_items<T, U>(
         &self,
@@ -409,8 +406,7 @@ impl ThirdPartyItemService {
         fields(
             { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id
-        ),
-        err
+        )
     )]
     pub async fn create_or_update_third_party_item(
         &self,
@@ -445,8 +441,7 @@ impl ThirdPartyItemService {
         fields(
             { attr::TASK_ID } = task.id.to_string(),
             { attr::TASK_OVERWRITE_EXISTING_SINK_ITEM } = overwrite_existing_sink_item
-        ),
-        err
+        )
     )]
     pub async fn create_sink_item_from_task(
         &self,

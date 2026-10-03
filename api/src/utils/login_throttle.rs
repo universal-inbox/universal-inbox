@@ -145,7 +145,7 @@ impl LoginThrottle {
 
     /// Read-only check run at the start of a login attempt. Returns the number
     /// of seconds the account remains locked, or `None` if it may proceed.
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn locked_for(
         &self,
         email: &EmailAddress,
@@ -164,7 +164,7 @@ impl LoginThrottle {
     }
 
     /// Atomically record a failed attempt and report the resulting lock state.
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn record_failure(
         &self,
         email: &EmailAddress,
@@ -194,7 +194,7 @@ impl LoginThrottle {
     /// Count one request against the `scope` budget of the account. Returns the
     /// number of seconds until the budget refills when it is exhausted, or
     /// `None` if the request may proceed.
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::LOGIN_THROTTLE_SCOPE } = scope.as_str()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::LOGIN_THROTTLE_SCOPE } = scope.as_str()))]
     pub async fn consume_request(
         &self,
         scope: AccountRateLimitScope,
@@ -218,7 +218,7 @@ impl LoginThrottle {
     }
 
     /// Clear the counter after a successful login.
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn reset(&self, email: &EmailAddress) -> Result<(), UniversalInboxError> {
         let mut conn = self.conn.clone();
         let key = Self::key(email);

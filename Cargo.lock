@@ -8495,6 +8495,7 @@ dependencies = [
  "slack-blocks-render",
  "slack-morphism",
  "strum",
+ "tracing",
  "unicode-segmentation",
  "url",
  "uuid",

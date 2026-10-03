@@ -1,14 +1,18 @@
-use std::{sync::Arc, time::Duration};
+use std::{future::Future, sync::Arc, time::Duration};
 
 use anyhow::Context;
-use cached::AsyncRedisCache;
+use cached::{AsyncRedisCache, ConcurrentCacheBase, ConcurrentCachedAsync, RedisCacheError};
 use once_cell::sync::Lazy;
 use redis::{Client, Script, aio::ConnectionManager};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-use crate::{configuration::Settings, universal_inbox::UniversalInboxError};
+use crate::{
+    configuration::Settings,
+    observability::{instrument_client_call, redis_client_span, spans::OTHER_ERROR_TYPE},
+    universal_inbox::UniversalInboxError,
+};
 
 pub struct Config {
     settings: Settings,
@@ -79,7 +83,7 @@ pub async fn build_redis_cache<T>(
     prefix: &str,
     ttl_in_seconds: Duration,
     refresh: bool,
-) -> AsyncRedisCache<String, T>
+) -> TracedRedisCache<T>
 where
     T: Serialize + DeserializeOwned + Send + Sync,
 {
@@ -91,17 +95,100 @@ where
         &namespace,
         &prefix
     );
-    AsyncRedisCache::builder(prefix)
+    let inner = AsyncRedisCache::builder(prefix)
         .ttl(ttl_in_seconds)
         .refresh_on_hit(refresh)
         .namespace(&namespace)
         .connection_string(&settings.redis.connection_string())
-        // Preserve the pre-4.0 behavior: with the `redis_connection_manager`
-        // feature enabled, `cached` 0.56 always used the auto-reconnecting
-        // `redis::aio::ConnectionManager`. In 4.0 this is an explicit per-cache
-        // opt-in (the feature only makes it available), so opt in here.
         .connection_manager(true)
         .build()
         .await
-        .expect("error building Redis cache")
+        .expect("error building Redis cache");
+    TracedRedisCache {
+        inner,
+        prefix: prefix.to_string(),
+    }
+}
+
+/// An [`AsyncRedisCache`] giving each Redis command an INFO client span: the
+/// `cached` crate talks to Redis on its own connection, outside any traced client.
+pub struct TracedRedisCache<V> {
+    inner: AsyncRedisCache<String, V>,
+    prefix: String,
+}
+
+impl<V> TracedRedisCache<V> {
+    async fn traced<T>(
+        &self,
+        operation: &'static str,
+        command: impl Future<Output = Result<T, RedisCacheError>>,
+    ) -> Result<T, RedisCacheError> {
+        instrument_client_call(
+            redis_client_span(operation, &self.prefix),
+            command,
+            redis_error_type,
+        )
+        .await
+    }
+}
+
+fn redis_error_type(error: &RedisCacheError) -> String {
+    match error {
+        RedisCacheError::Redis { .. } => "redis",
+        RedisCacheError::Pool { .. } => "pool",
+        RedisCacheError::CacheDeserialization { .. } => "deserialization",
+        _ => OTHER_ERROR_TYPE,
+    }
+    .to_string()
+}
+
+impl<V> ConcurrentCacheBase for TracedRedisCache<V> {
+    type Error = RedisCacheError;
+}
+
+impl<V> ConcurrentCachedAsync<String, V> for TracedRedisCache<V>
+where
+    V: Serialize + DeserializeOwned + Send + Sync,
+{
+    async fn async_cache_get(&self, k: &String) -> Result<Option<V>, Self::Error> {
+        self.traced("GET", self.inner.async_cache_get(k)).await
+    }
+
+    async fn async_cache_set(&self, k: String, v: V) -> Result<Option<V>, Self::Error> {
+        self.traced("SET", self.inner.async_cache_set(k, v)).await
+    }
+
+    async fn async_cache_remove(&self, k: &String) -> Result<Option<V>, Self::Error> {
+        self.traced("DEL", self.inner.async_cache_remove(k)).await
+    }
+
+    async fn async_cache_remove_entry(
+        &self,
+        k: &String,
+    ) -> Result<Option<(String, V)>, Self::Error> {
+        self.traced("DEL", self.inner.async_cache_remove_entry(k))
+            .await
+    }
+
+    async fn async_cache_contains(&self, k: &String) -> Result<bool, Self::Error>
+    where
+        Self: Sync,
+    {
+        self.traced("EXISTS", self.inner.async_cache_contains(k))
+            .await
+    }
+
+    async fn async_cache_clear(&self) -> Result<(), Self::Error>
+    where
+        Self: Sync,
+    {
+        self.traced("SCAN", self.inner.async_cache_clear()).await
+    }
+
+    async fn async_cache_reset(&self) -> Result<(), Self::Error>
+    where
+        Self: Sync,
+    {
+        self.traced("SCAN", self.inner.async_cache_reset()).await
+    }
 }

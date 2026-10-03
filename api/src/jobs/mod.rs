@@ -189,8 +189,7 @@ pub async fn handle_universal_inbox_job(
     fields(
         { attr::NOTIFICATION_ID } = notification_id.to_string(),
         { attr::USER_ID } = user_id.to_string()
-    ),
-    err
+    )
 )]
 async fn handle_process_notification_side_effects(
     notification_id: NotificationId,

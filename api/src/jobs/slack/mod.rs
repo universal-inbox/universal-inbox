@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
+use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::{
     integrations::slack::SlackService,
@@ -38,7 +39,7 @@ pub fn fail_if_needed<T>(
     }
 }
 
-#[tracing::instrument(level = "debug", skip_all, err)]
+#[tracing::instrument(level = "info", skip_all, fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
 pub async fn handle_slack_push_event(
     job: SlackPushEventCallbackJob,
     notification_service: Data<Arc<RwLock<NotificationService>>>,
@@ -47,67 +48,72 @@ pub async fn handle_slack_push_event(
     third_party_item_service: Data<Arc<RwLock<ThirdPartyItemService>>>,
     slack_service: Data<Arc<SlackService>>,
 ) -> Result<(), UniversalInboxError> {
-    let current_span = tracing::Span::current();
-    current_span.set_attribute(attr::SLACK_TEAM_ID, job.0.team_id.to_string());
-    current_span.set_attribute(attr::SLACK_EVENT_ID, job.0.event_id.to_string());
-    let event_type = match &job.0.event {
-        SlackEventCallbackBody::ReactionAdded(_) => "reaction_added",
-        SlackEventCallbackBody::ReactionRemoved(_) => "reaction_removed",
-        SlackEventCallbackBody::Message(_) => "message",
-        _ => "unknown",
-    };
-    current_span.set_attribute(attr::SLACK_EVENT_TYPE, event_type);
+    let result: Result<(), UniversalInboxError> = async move {
+        let current_span = tracing::Span::current();
+        current_span.set_attribute(attr::SLACK_TEAM_ID, job.0.team_id.to_string());
+        current_span.set_attribute(attr::SLACK_EVENT_ID, job.0.event_id.to_string());
+        let event_type = match &job.0.event {
+            SlackEventCallbackBody::ReactionAdded(_) => "reaction_added",
+            SlackEventCallbackBody::ReactionRemoved(_) => "reaction_removed",
+            SlackEventCallbackBody::Message(_) => "message",
+            _ => "unknown",
+        };
+        current_span.set_attribute(attr::SLACK_EVENT_TYPE, event_type);
 
-    let service = notification_service.read().await;
-    let mut transaction = service
-        .begin()
-        .await
-        .context("Failed to create new transaction while handling a Slack event")?;
+        let service = notification_service.read().await;
+        let mut transaction = service
+            .begin()
+            .await
+            .context("Failed to create new transaction while handling a Slack event")?;
 
-    match &job.0 {
-        event @ SlackPushEventCallback {
-            event: SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent { user, .. }),
-            ..
-        }
-        | event @ SlackPushEventCallback {
-            event: SlackEventCallbackBody::ReactionRemoved(SlackReactionRemovedEvent { user, .. }),
-            ..
-        } => {
-            handle_slack_reaction_push_event(
-                &mut transaction,
-                event,
-                user.to_string(),
-                (*notification_service).clone(),
-                (*task_service).clone(),
-                (*integration_connection_service).clone(),
-            )
-            .await?
-        }
-        event @ SlackPushEventCallback {
-            event: SlackEventCallbackBody::Message(_),
-            ..
-        } => {
-            handle_slack_message_push_event(
-                &mut transaction,
-                event,
-                (*notification_service).clone(),
-                (*integration_connection_service).clone(),
-                (*third_party_item_service).clone(),
-                (*slack_service).clone(),
-            )
-            .await?
-        }
-        event => {
-            return Err(UniversalInboxError::UnsupportedAction(format!(
-                "Unsupported Slack event {event:?}"
-            )));
-        }
-    };
+        match &job.0 {
+            event @ SlackPushEventCallback {
+                event: SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent { user, .. }),
+                ..
+            }
+            | event @ SlackPushEventCallback {
+                event:
+                    SlackEventCallbackBody::ReactionRemoved(SlackReactionRemovedEvent { user, .. }),
+                ..
+            } => {
+                handle_slack_reaction_push_event(
+                    &mut transaction,
+                    event,
+                    user.to_string(),
+                    (*notification_service).clone(),
+                    (*task_service).clone(),
+                    (*integration_connection_service).clone(),
+                )
+                .await?
+            }
+            event @ SlackPushEventCallback {
+                event: SlackEventCallbackBody::Message(_),
+                ..
+            } => {
+                handle_slack_message_push_event(
+                    &mut transaction,
+                    event,
+                    (*notification_service).clone(),
+                    (*integration_connection_service).clone(),
+                    (*third_party_item_service).clone(),
+                    (*slack_service).clone(),
+                )
+                .await?
+            }
+            event => {
+                return Err(UniversalInboxError::UnsupportedAction(format!(
+                    "Unsupported Slack event {event:?}"
+                )));
+            }
+        };
 
-    transaction
-        .commit()
-        .await
-        .context("Failed to commit while handling a Slack event")?;
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit while handling a Slack event")?;
 
-    Ok(())
+        Ok(())
+    }
+    .await;
+    result.record_span_error()
 }

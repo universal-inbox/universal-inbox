@@ -34,7 +34,7 @@ impl SessionRevocation {
     }
 
     /// Revoke every session of `user_id` issued before `revoked_before`.
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn revoke_sessions(
         &self,
         user_id: UserId,
@@ -54,7 +54,7 @@ impl SessionRevocation {
 
     /// Whether a session of `user_id` issued at `issued_at` (unix seconds) has
     /// not been revoked.
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn is_session_active(
         &self,
         user_id: UserId,
