@@ -23,6 +23,7 @@ use universal_inbox::{
 };
 use url::Url;
 
+use crate::observability::attr;
 use crate::{
     billing::{
         repository::BillingRepository,
@@ -378,7 +379,7 @@ impl BillingService {
     ///
     /// No-op for a user without a `user_subscription` row (Free user who never
     /// started a checkout).
-    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
     pub async fn cancel_billing_for_account_deletion(
         &self,
         executor: &mut Transaction<'_, Postgres>,

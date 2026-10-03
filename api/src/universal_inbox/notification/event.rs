@@ -15,6 +15,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::slack::SlackService,
     universal_inbox::{
@@ -30,9 +31,9 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = existing_third_party_item.map(|tpi| tpi.id.to_string()),
-            third_party_item_source_id = existing_third_party_item.map(|tpi| tpi.source_id.clone()),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = existing_third_party_item.map(|tpi| tpi.id.to_string()),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = existing_third_party_item.map(|tpi| tpi.source_id.clone()),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]

@@ -37,6 +37,7 @@ use email_address::EmailAddress;
 use redis::{AsyncCommands, Script, aio::ConnectionManager};
 use ring::digest;
 
+use crate::observability::attr;
 use crate::{configuration::LocalAuthenticationSettings, universal_inbox::UniversalInboxError};
 
 const NAMESPACE: &str = "universal-inbox:login-throttle:";
@@ -193,7 +194,7 @@ impl LoginThrottle {
     /// Count one request against the `scope` budget of the account. Returns the
     /// number of seconds until the budget refills when it is exhausted, or
     /// `None` if the request may proceed.
-    #[tracing::instrument(level = "debug", skip_all, fields(scope = scope.as_str()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::LOGIN_THROTTLE_SCOPE } = scope.as_str()), err)]
     pub async fn consume_request(
         &self,
         scope: AccountRateLimitScope,

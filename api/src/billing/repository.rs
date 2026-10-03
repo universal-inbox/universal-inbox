@@ -19,6 +19,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{repository::Repository, universal_inbox::UniversalInboxError};
 
 #[async_trait]
@@ -102,7 +103,7 @@ impl BillingRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn get_user_subscription(
@@ -192,7 +193,7 @@ impl BillingRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = subscription.user_id.to_string()),
+        fields({ attr::USER_ID } = subscription.user_id.to_string()),
         err
     )]
     async fn upsert_user_subscription(
@@ -291,7 +292,7 @@ impl BillingRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn set_over_limit_grace_deadline(
@@ -322,7 +323,7 @@ impl BillingRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(stripe_event_id = event_id),
+        fields({ attr::STRIPE_EVENT_ID } = event_id),
         err
     )]
     async fn record_stripe_event(
@@ -352,7 +353,7 @@ impl BillingRepository for Repository {
         Ok(row.is_some())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(retention_days = days), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::STRIPE_EVENT_RETENTION_DAYS } = days), err)]
     async fn prune_stripe_events_older_than_days(
         &self,
         executor: &mut Transaction<'_, Postgres>,

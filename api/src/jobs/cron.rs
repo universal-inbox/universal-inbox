@@ -7,6 +7,7 @@ use redis::{AsyncCommands, ExistenceCheck, SetExpiry, SetOptions};
 use redis_apalis::Script;
 use tracing::{info, warn};
 
+use crate::observability::attr;
 use crate::{
     configuration::{
         PauseSlackConnectionsCronSettings, RefreshOAuthTokensCronSettings,
@@ -31,7 +32,7 @@ pub struct RefreshOAuthTokensCronTick;
     name = "refresh-oauth-tokens-cron-tick",
     level = "info",
     skip_all,
-    fields(cron.tick = %ctx.get_timestamp()),
+    fields({ attr::CRON_TICK } = %ctx.get_timestamp()),
     err
 )]
 pub async fn handle_refresh_oauth_tokens_cron_tick(
@@ -77,7 +78,7 @@ pub struct RetryOAuthGrantRevocationsCronTick;
     name = "retry-oauth-grant-revocations-cron-tick",
     level = "info",
     skip_all,
-    fields(cron.tick = %ctx.get_timestamp()),
+    fields({ attr::CRON_TICK } = %ctx.get_timestamp()),
     err
 )]
 pub async fn handle_retry_oauth_grant_revocations_cron_tick(
@@ -128,7 +129,7 @@ pub struct PauseSlackConnectionsCronTick;
     name = "pause-slack-connections-cron-tick",
     level = "info",
     skip_all,
-    fields(cron.tick = %ctx.get_timestamp()),
+    fields({ attr::CRON_TICK } = %ctx.get_timestamp()),
     err
 )]
 pub async fn handle_pause_slack_connections_cron_tick(
@@ -185,7 +186,7 @@ pub struct VacuumJobsCronTick;
     name = "vacuum-jobs-cron-tick",
     level = "info",
     skip_all,
-    fields(cron.tick = %ctx.get_timestamp()),
+    fields({ attr::CRON_TICK } = %ctx.get_timestamp()),
     err
 )]
 pub async fn handle_vacuum_jobs_cron_tick(

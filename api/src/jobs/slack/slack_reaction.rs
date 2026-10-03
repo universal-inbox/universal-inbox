@@ -12,6 +12,7 @@ use universal_inbox::integration_connection::{
     provider::{IntegrationProvider, IntegrationProviderKind},
 };
 
+use crate::observability::attr;
 use crate::universal_inbox::{
     UniversalInboxError,
     integration_connection::service::IntegrationConnectionService,
@@ -29,7 +30,7 @@ pub async fn handle_slack_reaction_push_event(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
 ) -> Result<(), UniversalInboxError> {
     let current_span = tracing::Span::current();
-    current_span.set_attribute("slack.provider_user_id", provider_user_id.clone());
+    current_span.set_attribute(attr::SLACK_USER_ID, provider_user_id.clone());
 
     let Some(integration_connection) = integration_connection_service
         .read()
@@ -41,8 +42,11 @@ pub async fn handle_slack_reaction_push_event(
         )
         .await?
     else {
-        current_span.set_attribute("slack.reaction.outcome", "discarded");
-        current_span.set_attribute("slack.reaction.discard_reason", "no_integration_connection");
+        current_span.set_attribute(attr::SLACK_REACTION_OUTCOME, "discarded");
+        current_span.set_attribute(
+            attr::SLACK_REACTION_DISCARD_REASON,
+            "no_integration_connection",
+        );
         warn!("Validated integration connection not found for Slack user id {provider_user_id}");
         return Ok(());
     };
@@ -60,9 +64,9 @@ pub async fn handle_slack_reaction_push_event(
 
     let user_id = integration_connection.user_id;
     let integration_connection_id = integration_connection.id;
-    current_span.set_attribute("user.id", user_id.to_string());
+    current_span.set_attribute(attr::USER_ID, user_id.to_string());
     current_span.set_attribute(
-        "slack.integration_connection_id",
+        attr::INTEGRATION_CONNECTION_ID,
         integration_connection_id.to_string(),
     );
 
@@ -76,8 +80,8 @@ pub async fn handle_slack_reaction_push_event(
                 },
             ..
         } => {
-            current_span.set_attribute("slack.sync_type", "as_tasks");
-            current_span.set_attribute("slack.reaction.outcome", "processed");
+            current_span.set_attribute(attr::SLACK_SYNC_TYPE, "as_tasks");
+            current_span.set_attribute(attr::SLACK_REACTION_OUTCOME, "processed");
             task_service
                 .read()
                 .await
@@ -95,8 +99,8 @@ pub async fn handle_slack_reaction_push_event(
                 },
             ..
         } => {
-            current_span.set_attribute("slack.sync_type", "as_notifications");
-            current_span.set_attribute("slack.reaction.outcome", "processed");
+            current_span.set_attribute(attr::SLACK_SYNC_TYPE, "as_notifications");
+            current_span.set_attribute(attr::SLACK_REACTION_OUTCOME, "processed");
             notification_service
                 .read()
                 .await
@@ -106,8 +110,8 @@ pub async fn handle_slack_reaction_push_event(
         }
 
         _ => {
-            current_span.set_attribute("slack.reaction.outcome", "discarded");
-            current_span.set_attribute("slack.reaction.discard_reason", "sync_disabled");
+            current_span.set_attribute(attr::SLACK_REACTION_OUTCOME, "discarded");
+            current_span.set_attribute(attr::SLACK_REACTION_DISCARD_REASON, "sync_disabled");
             warn!(
                 "Slack reaction sync was not enabled for integration connection {integration_connection_id}"
             );

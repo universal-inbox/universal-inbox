@@ -9,6 +9,7 @@ use universal_inbox::{
 };
 use uuid::Uuid;
 
+use crate::observability::attr;
 use crate::universal_inbox::UniversalInboxError;
 
 use super::Repository;
@@ -105,7 +106,7 @@ impl AuthenticationTokenRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string(), exclude_session_tokens = exclude_session_tokens),
+        fields({ attr::USER_ID } = user_id.to_string(), { attr::AUTH_TOKEN_EXCLUDE_SESSION } = exclude_session_tokens),
         err
     )]
     async fn fetch_auth_tokens_for_user(
@@ -186,7 +187,7 @@ impl AuthenticationTokenRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string(), auth_token.id = auth_token_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string(), { attr::AUTH_TOKEN_ID } = auth_token_id.to_string()),
         err
     )]
     async fn revoke_auth_token(

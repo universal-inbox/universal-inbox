@@ -22,6 +22,7 @@ At the start of each session, read these 3 files:
 - Frontend work / styling → [`frontend-dioxus.md`](.claude/docs/learnings/frontend-dioxus.md)
 - Adding an integration → [`integrations.md`](.claude/docs/learnings/integrations.md) + `database-patterns.md` + `testing-patterns.md`
 - Writing tests → [`testing-patterns.md`](.claude/docs/learnings/testing-patterns.md)
+- Tracing / span attributes → [`observability.md`](.claude/docs/learnings/observability.md)
 - Stuck / error → [`common-pitfalls.md`](.claude/docs/learnings/common-pitfalls.md) + `COMMON_MISTAKES.md`
 - Fast lookups / code patterns / style → [`QUICK_REFERENCE.md`](.claude/docs/QUICK_REFERENCE.md)
 

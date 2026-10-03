@@ -16,6 +16,7 @@ use universal_inbox::{
     third_party::item::{ThirdPartyItem, ThirdPartyItemKind},
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::slack::{SlackService, find_slack_references_in_message},
     universal_inbox::{
@@ -84,15 +85,15 @@ pub async fn handle_slack_message_push_event(
             (user_ids, thread_ts.clone())
         }
         _ => {
-            current_span.set_attribute("slack.message.outcome", "discarded");
-            current_span.set_attribute("slack.message.discard_reason", "not_a_message_event");
+            current_span.set_attribute(attr::SLACK_MESSAGE_OUTCOME, "discarded");
+            current_span.set_attribute(attr::SLACK_MESSAGE_DISCARD_REASON, "not_a_message_event");
             warn!("Slack push event is not a message event");
             return Ok(());
         }
     };
 
     current_span.set_attribute(
-        "slack.referenced_user_count",
+        attr::SLACK_REFERENCED_USERS_COUNT,
         provider_user_ids.len() as i64,
     );
 
@@ -111,7 +112,7 @@ pub async fn handle_slack_message_push_event(
         .collect::<Vec<_>>();
 
     current_span.set_attribute(
-        "slack.matched_integration_connections_count",
+        attr::SLACK_MATCHED_INTEGRATION_CONNECTIONS_COUNT,
         integration_connections.len() as i64,
     );
 
@@ -141,7 +142,7 @@ pub async fn handle_slack_message_push_event(
         .await?;
 
     current_span.set_attribute(
-        "slack.known_thread_items_count",
+        attr::SLACK_KNOWN_THREAD_ITEMS_COUNT,
         third_party_items.len() as i64,
     );
 
@@ -177,10 +178,10 @@ async fn handle_slack_message_push_event_if_enabled(
 ) -> Result<(), UniversalInboxError> {
     let current_span = tracing::Span::current();
     current_span.set_attribute(
-        "slack.integration_connection_id",
+        attr::INTEGRATION_CONNECTION_ID,
         integration_connection.id.to_string(),
     );
-    current_span.set_attribute("user.id", integration_connection.user_id.to_string());
+    current_span.set_attribute(attr::USER_ID, integration_connection.user_id.to_string());
 
     let IntegrationProvider::Slack {
         config: slack_config,
@@ -203,7 +204,7 @@ async fn handle_slack_message_push_event_if_enabled(
         ..
     } = slack_config
     {
-        current_span.set_attribute("slack.message_sync_enabled", true);
+        current_span.set_attribute(attr::SLACK_MESSAGE_SYNC_ENABLED, true);
         let user_id = integration_connection.user_id;
         notification_service
             .read()
@@ -220,7 +221,7 @@ async fn handle_slack_message_push_event_if_enabled(
             )
             .await?;
     } else {
-        current_span.set_attribute("slack.message_sync_enabled", false);
+        current_span.set_attribute(attr::SLACK_MESSAGE_SYNC_ENABLED, false);
     }
 
     Ok(())

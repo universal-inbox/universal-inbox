@@ -15,6 +15,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus};
 
 use super::{
@@ -90,7 +91,7 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(task_id = id.to_string()),
+        fields({ attr::TASK_ID } = id.to_string()),
         err
     )]
     async fn get_one_task(
@@ -153,7 +154,7 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(task_id = id.to_string()),
+        fields({ attr::TASK_ID } = id.to_string()),
         err
     )]
     async fn does_task_exist(
@@ -245,9 +246,9 @@ impl TaskRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            status = status.to_string(),
-            only_synced_tasks = only_synced_tasks,
-            user.id = user_id.to_string()
+            { attr::TASK_STATUS } = status.to_string(),
+            { attr::TASK_LIST_ONLY_SYNCED } = only_synced_tasks,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -371,7 +372,7 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn search_tasks(
@@ -437,7 +438,7 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(task_id = task.id.to_string()),
+        fields({ attr::TASK_ID } = task.id.to_string()),
         err
     )]
     async fn create_task(
@@ -523,9 +524,9 @@ impl TaskRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            kind = kind.to_string(),
-            status = status.to_string(),
-            user.id = user_id.to_string()
+            { attr::SYNC_SOURCE_KIND } = kind.to_string(),
+            { attr::TASK_STATUS } = status.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -635,10 +636,10 @@ impl TaskRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            task_id = task_request.id.to_string(),
-            task_kind = task_request.kind.to_string(),
-            task_source_item_id = task_request.source_item.id.to_string(),
-            user.id = task_request.user_id.to_string()
+            { attr::TASK_ID } = task_request.id.to_string(),
+            { attr::TASK_KIND } = task_request.kind.to_string(),
+            { attr::THIRD_PARTY_ITEM_ID } = task_request.source_item.id.to_string(),
+            { attr::USER_ID } = task_request.user_id.to_string()
         ),
         err
     )]
@@ -936,8 +937,8 @@ impl TaskRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            task_id = task_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::TASK_ID } = task_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -1133,8 +1134,8 @@ impl TaskRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            source_item_id = source_item_id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = source_item_id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]

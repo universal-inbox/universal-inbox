@@ -5,6 +5,7 @@
 use std::sync::Arc;
 
 use crate::middlewares::jwt_auth::Authenticated;
+use crate::observability::attr;
 use actix_web::{HttpRequest, HttpResponse, Scope, web};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -233,7 +234,15 @@ pub async fn create_portal_session(
     Ok(HttpResponse::Ok().json(SessionUrlResponse { url }))
 }
 
-#[tracing::instrument(level = "debug", skip_all, err)]
+#[tracing::instrument(
+    level = "debug",
+    skip_all,
+    fields(
+        { attr::STRIPE_EVENT_ID } = tracing::field::Empty,
+        { attr::STRIPE_EVENT_TYPE } = tracing::field::Empty
+    ),
+    err
+)]
 pub async fn stripe_webhook(
     req: HttpRequest,
     body: web::Bytes,
@@ -275,6 +284,9 @@ pub async fn stripe_webhook(
             })));
         }
     };
+    let current_span = tracing::Span::current();
+    current_span.record(attr::STRIPE_EVENT_ID, event.id.as_str());
+    current_span.record(attr::STRIPE_EVENT_TYPE, event.type_.as_str());
 
     use crate::billing::repository::BillingRepository;
     use crate::billing::stripe::StripeEventKind;

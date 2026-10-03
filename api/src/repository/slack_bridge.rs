@@ -11,6 +11,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{repository::Repository, universal_inbox::UniversalInboxError};
 
 const MAX_RETRIES: i32 = 5;
@@ -114,7 +115,7 @@ pub trait SlackBridgeRepository {
 
 #[async_trait]
 impl SlackBridgeRepository for Repository {
-    #[tracing::instrument(level = "debug", skip_all, fields(action_id = action.id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::SLACK_BRIDGE_ACTION_ID } = action.id.to_string()), err)]
     async fn create_pending_action(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -151,7 +152,7 @@ impl SlackBridgeRepository for Repository {
         row.try_into()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(user_id = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
     async fn get_actionable_actions(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -187,7 +188,7 @@ impl SlackBridgeRepository for Repository {
         rows.into_iter().map(|row| row.try_into()).collect()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(action_id = action_id.to_string(), user_id = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::SLACK_BRIDGE_ACTION_ID } = action_id.to_string(), { attr::USER_ID } = user_id.to_string()), err)]
     async fn mark_action_completed(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -217,7 +218,7 @@ impl SlackBridgeRepository for Repository {
         row.map(|r| r.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(action_id = action_id.to_string(), user_id = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::SLACK_BRIDGE_ACTION_ID } = action_id.to_string(), { attr::USER_ID } = user_id.to_string()), err)]
     async fn mark_action_failed(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -254,7 +255,7 @@ impl SlackBridgeRepository for Repository {
         row.map(|r| r.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(user_id = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
     async fn get_bridge_status(
         &self,
         executor: &mut Transaction<'_, Postgres>,

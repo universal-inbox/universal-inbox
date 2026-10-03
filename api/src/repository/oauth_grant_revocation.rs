@@ -8,6 +8,7 @@ use universal_inbox::integration_connection::{
     provider::{IntegrationConnectionContext, IntegrationProviderKind},
 };
 
+use crate::observability::attr;
 use crate::{repository::Repository, universal_inbox::UniversalInboxError};
 
 /// An OAuth grant to revoke at its provider. The tokens are encrypted with the
@@ -96,7 +97,7 @@ pub trait OAuthGrantRevocationRepository {
 
 #[async_trait]
 impl OAuthGrantRevocationRepository for Repository {
-    #[tracing::instrument(level = "debug", skip_all, fields(id = revocation.id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_GRANT_REVOCATION_ID } = revocation.id.to_string()), err)]
     async fn create_oauth_grant_revocation(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -230,7 +231,7 @@ impl OAuthGrantRevocationRepository for Repository {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(id = id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_GRANT_REVOCATION_ID } = id.to_string()), err)]
     async fn record_oauth_grant_revocation_failure(
         &self,
         executor: &mut Transaction<'_, Postgres>,

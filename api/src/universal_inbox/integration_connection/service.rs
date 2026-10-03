@@ -33,6 +33,7 @@ use universal_inbox::{
     user::{User, UserId},
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::oauth2::{
         AccessToken, AuthorizationCode, PkceVerifier, RefreshToken,
@@ -285,7 +286,7 @@ impl IntegrationConnectionService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = for_user_id.to_string()),
+        fields({ attr::USER_ID } = for_user_id.to_string()),
         err
     )]
     pub async fn schedule_due_syncs(
@@ -390,8 +391,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            notification_sync_source_kind = notification_sync_source_kind.map(|kind| kind.to_string()),
-            user.id = for_user_id.map(|id| id.to_string())
+            { attr::SYNC_SOURCE_KIND } = notification_sync_source_kind.map(|kind| kind.to_string()),
+            { attr::USER_ID } = for_user_id.map(|id| id.to_string())
         ),
         err
     )]
@@ -434,8 +435,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            task_sync_source_kind = task_sync_source_kind.map(|kind| kind.to_string()),
-            user.id = for_user_id.map(|id| id.to_string())
+            { attr::SYNC_SOURCE_KIND } = task_sync_source_kind.map(|kind| kind.to_string()),
+            { attr::USER_ID } = for_user_id.map(|id| id.to_string())
         ),
         err
     )]
@@ -485,8 +486,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            notification_sync_source_kind = notification_sync_source_kind.map(|kind| kind.to_string()),
-            user.id = for_user_id.map(|id| id.to_string())
+            { attr::SYNC_SOURCE_KIND } = notification_sync_source_kind.map(|kind| kind.to_string()),
+            { attr::USER_ID } = for_user_id.map(|id| id.to_string())
         ),
         err
     )]
@@ -521,8 +522,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            task_sync_source_kind = task_sync_source_kind.map(|kind| kind.to_string()),
-            user.id = for_user_id.map(|id| id.to_string())
+            { attr::SYNC_SOURCE_KIND } = task_sync_source_kind.map(|kind| kind.to_string()),
+            { attr::USER_ID } = for_user_id.map(|id| id.to_string())
         ),
         err
     )]
@@ -554,9 +555,9 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            user.id = for_user_id.to_string(),
-            integration_provider_kind = integration_provider_kind.to_string(),
-            status = status.to_string(),
+            { attr::USER_ID } = for_user_id.to_string(),
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
+            { attr::INTEGRATION_CONNECTION_STATUS } = status.to_string(),
         ),
         err
     )]
@@ -591,8 +592,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            user.id = for_user_id.to_string(),
-            integration_provider_kind = integration_provider_kind.to_string()
+            { attr::USER_ID } = for_user_id.to_string(),
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string()
         ),
         err
     )]
@@ -628,8 +629,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -723,8 +724,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection.id.to_string(),
-            user.id = integration_connection.user_id.to_string()
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string(),
+            { attr::USER_ID } = integration_connection.user_id.to_string()
         ),
         err
     )]
@@ -762,8 +763,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection.id.to_string(),
-            user.id = integration_connection.user_id.to_string()
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string(),
+            { attr::USER_ID } = integration_connection.user_id.to_string()
         ),
         err
     )]
@@ -874,8 +875,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection.id.to_string(),
-            provider_kind = integration_connection.provider.kind().to_string()
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string(),
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_connection.provider.kind().to_string()
         ),
         err
     )]
@@ -965,9 +966,9 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            team_id = %team_id,
-            provider_user_ids = ?provider_user_ids,
-            revoked_at = revoked_at.to_rfc3339()
+            { attr::SLACK_TEAM_ID } = %team_id,
+            { attr::INTEGRATION_PROVIDER_USER_IDS } = ?provider_user_ids,
+            { attr::OAUTH_REVOKED_AT } = revoked_at.to_rfc3339()
         ),
         err
     )]
@@ -1036,7 +1037,7 @@ impl IntegrationConnectionService {
 
     /// Revoke, at the providers, every OAuth grant of a user (account
     /// deletion). See [`Self::revoke_provider_grant`].
-    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
     pub async fn revoke_all_provider_grants(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1352,8 +1353,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -1430,9 +1431,9 @@ impl IntegrationConnectionService {
         level = "info",
         skip(self),
         fields(
-            provider_kind = provider_kind.to_string(),
-            inactive_before = inactive_before.to_rfc3339(),
-            pause_on = pause_on.to_rfc3339()
+            { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
+            { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339(),
+            { attr::INTEGRATION_CONNECTION_PAUSE_ON } = pause_on.to_rfc3339()
         ),
         err
     )]
@@ -1510,7 +1511,7 @@ impl IntegrationConnectionService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(integration_connection_id = integration_connection_id.to_string()),
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
         err
     )]
     async fn warn_integration_connection_of_inactivity(
@@ -1596,9 +1597,9 @@ impl IntegrationConnectionService {
         level = "info",
         skip(self),
         fields(
-            provider_kind = provider_kind.to_string(),
-            inactive_before = inactive_before.to_rfc3339(),
-            warned_before = warned_before.map(|warned_before| warned_before.to_rfc3339())
+            { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
+            { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339(),
+            { attr::INTEGRATION_CONNECTION_WARNED_BEFORE } = warned_before.map(|warned_before| warned_before.to_rfc3339())
         ),
         err
     )]
@@ -1642,8 +1643,8 @@ impl IntegrationConnectionService {
         level = "info",
         skip(self),
         fields(
-            provider_kind = provider_kind.to_string(),
-            failing_before = failing_before.to_rfc3339()
+            { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
+            { attr::INTEGRATION_CONNECTION_FAILING_BEFORE } = failing_before.to_rfc3339()
         ),
         err
     )]
@@ -1749,8 +1750,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection_id.to_string(),
-            paused_reason = paused_reason.to_string()
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
+            { attr::INTEGRATION_CONNECTION_PAUSED_REASON } = paused_reason.to_string()
         ),
         err
     )]
@@ -1825,10 +1826,10 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
-            min_sync_interval_in_minutes = min_sync_interval_in_minutes,
-            sync_type = sync_type.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
+            { attr::SYNC_MIN_INTERVAL_MINUTES } = min_sync_interval_in_minutes,
+            { attr::SYNC_TYPE } = sync_type.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -1897,8 +1898,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -1950,8 +1951,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -1984,8 +1985,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection.id = integration_connection_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -2022,7 +2023,7 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection.id = integration_connection.id.to_string(),
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string(),
         ),
         err
     )]
@@ -2082,7 +2083,7 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection_id.to_string()
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()
         ),
         err
     )]
@@ -2115,7 +2116,7 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string()
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string()
         ),
         err
     )]
@@ -2138,7 +2139,7 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
         ),
         err
     )]
@@ -2161,8 +2162,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.map(|id| id.to_string()),
-            user.id = for_user_id.map(|id| id.to_string())
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.map(|id| id.to_string()),
+            { attr::USER_ID } = for_user_id.map(|id| id.to_string())
         ),
         err
     )]
@@ -2192,8 +2193,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -2220,8 +2221,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -2247,8 +2248,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -2304,8 +2305,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -2331,8 +2332,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.map(|kind| kind.to_string()),
-            user.id = for_user_id.map(|id| id.to_string())
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.map(|kind| kind.to_string()),
+            { attr::USER_ID } = for_user_id.map(|id| id.to_string())
         ),
         err
     )]
@@ -2357,8 +2358,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -2400,8 +2401,8 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
     )]
     pub async fn error_tasks_sync_status(
@@ -2426,7 +2427,7 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            provider_kind = provider_kind.to_string()
+            { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string()
         ),
         err
     )]
@@ -2450,9 +2451,9 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection.id = %integration_connection_id,
-            user.id = %user_id,
-            status = ?status
+            { attr::INTEGRATION_CONNECTION_ID } = %integration_connection_id,
+            { attr::USER_ID } = %user_id,
+            { attr::INTEGRATION_CONNECTION_STATUS } = ?status
         ),
         err
     )]
@@ -2499,8 +2500,8 @@ impl IntegrationConnectionService {
         level = "info",
         skip_all,
         fields(
-            minutes_before_expiry = minutes_before_expiry,
-            integration.provider_kind = ?provider_kind
+            { attr::OAUTH_MINUTES_BEFORE_EXPIRY } = minutes_before_expiry,
+            { attr::INTEGRATION_PROVIDER_KIND } = ?provider_kind
         ),
         err
     )]
@@ -2539,6 +2540,8 @@ impl IntegrationConnectionService {
                 Some(p) => p,
                 None => {
                     warn!(
+                        { attr::INTEGRATION_CONNECTION_ID } = %conn_id,
+                        { attr::INTEGRATION_PROVIDER_KIND } = %pk,
                         "No OAuth2Provider configured for {pk:?}, skipping credential for connection {conn_id}"
                     );
                     failed += 1;
@@ -2554,7 +2557,11 @@ impl IntegrationConnectionService {
             ) {
                 Ok(t) => RefreshToken(t),
                 Err(err) => {
-                    error!("Failed to decrypt refresh token for connection {conn_id}: {err:?}");
+                    error!(
+                        { attr::INTEGRATION_CONNECTION_ID } = %conn_id,
+                        { attr::INTEGRATION_PROVIDER_KIND } = %pk,
+                        "Failed to decrypt refresh token for connection {conn_id}: {err:?}"
+                    );
                     failed += 1;
                     continue;
                 }
@@ -2567,6 +2574,8 @@ impl IntegrationConnectionService {
                 Ok(resp) => resp,
                 Err(UniversalInboxError::OAuth2InvalidGrant(detail)) => {
                     warn!(
+                        { attr::INTEGRATION_CONNECTION_ID } = %conn_id,
+                        { attr::INTEGRATION_PROVIDER_KIND } = %pk,
                         "Refresh token for connection {conn_id} ({pk:?}) is no longer valid \
                          (invalid_grant): {detail}. Marking connection as Failing."
                     );
@@ -2583,6 +2592,8 @@ impl IntegrationConnectionService {
                         .await
                     {
                         error!(
+                            { attr::INTEGRATION_CONNECTION_ID } = %conn_id,
+                            { attr::INTEGRATION_PROVIDER_KIND } = %pk,
                             "Failed to mark connection {conn_id} as Failing after invalid_grant: {update_err:?}"
                         );
                     }
@@ -2591,6 +2602,8 @@ impl IntegrationConnectionService {
                 }
                 Err(err) => {
                     error!(
+                        { attr::INTEGRATION_CONNECTION_ID } = %conn_id,
+                        { attr::INTEGRATION_PROVIDER_KIND } = %pk,
                         "Failed to refresh access token for connection {conn_id} ({pk:?}): {err:?}"
                     );
                     failed += 1;
@@ -2605,7 +2618,11 @@ impl IntegrationConnectionService {
             ) {
                 Ok(t) => t,
                 Err(err) => {
-                    error!("Failed to encrypt new access token for connection {conn_id}: {err:?}");
+                    error!(
+                        { attr::INTEGRATION_CONNECTION_ID } = %conn_id,
+                        { attr::INTEGRATION_PROVIDER_KIND } = %pk,
+                        "Failed to encrypt new access token for connection {conn_id}: {err:?}"
+                    );
                     failed += 1;
                     continue;
                 }
@@ -2625,7 +2642,11 @@ impl IntegrationConnectionService {
             {
                 Ok(t) => t,
                 Err(err) => {
-                    error!("Failed to encrypt new refresh token for connection {conn_id}: {err:?}");
+                    error!(
+                        { attr::INTEGRATION_CONNECTION_ID } = %conn_id,
+                        { attr::INTEGRATION_PROVIDER_KIND } = %pk,
+                        "Failed to encrypt new refresh token for connection {conn_id}: {err:?}"
+                    );
                     failed += 1;
                     continue;
                 }
@@ -2651,11 +2672,19 @@ impl IntegrationConnectionService {
                 .await
             {
                 Ok(_) => {
-                    info!("Successfully refreshed OAuth token for connection {conn_id} ({pk:?})");
+                    info!(
+                        { attr::INTEGRATION_CONNECTION_ID } = %conn_id,
+                        { attr::INTEGRATION_PROVIDER_KIND } = %pk,
+                        "Successfully refreshed OAuth token for connection {conn_id} ({pk:?})"
+                    );
                     refreshed += 1;
                 }
                 Err(err) => {
-                    error!("Failed to store refreshed token for connection {conn_id}: {err:?}");
+                    error!(
+                        { attr::INTEGRATION_CONNECTION_ID } = %conn_id,
+                        { attr::INTEGRATION_PROVIDER_KIND } = %pk,
+                        "Failed to store refreshed token for connection {conn_id}: {err:?}"
+                    );
                     failed += 1;
                 }
             }

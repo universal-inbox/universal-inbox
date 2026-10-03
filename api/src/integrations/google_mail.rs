@@ -48,6 +48,7 @@ use universal_inbox::{
     utils::base64::decode_base64,
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::{
         google_calendar::GoogleCalendarService,
@@ -635,7 +636,7 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn fetch_items(
@@ -827,9 +828,9 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
         level = "debug",
         skip_all,
         fields(
-            source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string(),
-            user.id = user_id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
+            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string(),
         ),
         err
     )]
@@ -887,7 +888,7 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
+        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn delete_notification_from_source(
@@ -921,7 +922,7 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
+        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn unsubscribe_notification_from_source(

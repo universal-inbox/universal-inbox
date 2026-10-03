@@ -8,6 +8,7 @@ use std::{
 };
 
 use crate::middlewares::jwt_auth::Authenticated;
+use crate::observability::attr;
 use actix_web::{
     HttpMessage, HttpResponse,
     body::EitherBody,
@@ -235,8 +236,8 @@ where
             let origin_str = origin_value.to_str().unwrap_or("");
             if !self.allowed_origins.iter().any(|o| o == origin_str) {
                 warn!(
-                    origin = origin_str,
-                    allowed_origins = ?self.allowed_origins,
+                    { attr::HTTP_REQUEST_HEADER_ORIGIN } = origin_str,
+                    { attr::MCP_ALLOWED_ORIGINS } = ?self.allowed_origins,
                     "MCP auth rejected: Origin not in allowed list"
                 );
                 let response = req
@@ -275,7 +276,7 @@ where
         if let Some(version) = unsupported_version {
             warn!(
                 version,
-                supported = ?SUPPORTED_PROTOCOL_VERSIONS,
+                { attr::MCP_SUPPORTED_PROTOCOL_VERSIONS } = ?SUPPORTED_PROTOCOL_VERSIONS,
                 "MCP auth rejected: unsupported protocol version"
             );
             let response = req
@@ -294,8 +295,8 @@ where
             None => {
                 warn!(
                     has_authorization_header,
-                    method = %req.method(),
-                    path = %req.path(),
+                    { attr::HTTP_REQUEST_METHOD } = %req.method(),
+                    { attr::URL_PATH } = %req.path(),
                     "MCP auth rejected: no Authenticated<Claims> in request extensions \
                      (JWT validation likely failed upstream — check for token expiry or \
                      signature errors)"
@@ -321,7 +322,7 @@ where
         // permissive CORS origin policy safe.
         if !has_authorization_header {
             warn!(
-                sub = %authenticated.claims.sub,
+                { attr::USER_ID } = %authenticated.claims.sub,
                 "MCP auth rejected: Authenticated<Claims> present but no Authorization header \
                  (session-cookie authentication is not allowed for MCP)"
             );
@@ -343,7 +344,7 @@ where
             let expected_aud = &self.resource_url;
             if aud != expected_aud {
                 warn!(
-                    sub = %authenticated.claims.sub,
+                    { attr::USER_ID } = %authenticated.claims.sub,
                     aud,
                     expected_aud,
                     "MCP auth rejected: audience mismatch"
@@ -361,7 +362,7 @@ where
             && self.rate_limiter.check_key(&uid).is_err()
         {
             warn!(
-                user_id = %uid,
+                { attr::USER_ID } = %uid,
                 "MCP auth rejected: rate limit exceeded ({MCP_RATE_LIMIT_PER_MINUTE} req/min)"
             );
             let response = req
@@ -371,13 +372,13 @@ where
         }
 
         debug!(
-            sub = %authenticated.claims.sub,
-            exp = authenticated.claims.exp,
-            iat = authenticated.claims.iat,
-            aud = ?authenticated.claims.aud,
-            client_id = ?authenticated.claims.client_id,
-            method = %req.method(),
-            path = %req.path(),
+            { attr::USER_ID } = %authenticated.claims.sub,
+            { attr::AUTH_JWT_EXPIRES_AT } = authenticated.claims.exp,
+            { attr::AUTH_JWT_ISSUED_AT } = authenticated.claims.iat,
+            { attr::AUTH_JWT_AUDIENCE } = ?authenticated.claims.aud,
+            { attr::OAUTH_CLIENT_ID } = ?authenticated.claims.client_id,
+            { attr::HTTP_REQUEST_METHOD } = %req.method(),
+            { attr::URL_PATH } = %req.path(),
             "MCP auth accepted"
         );
 
@@ -408,8 +409,8 @@ where
                     Ok(true) => {}
                     Ok(false) => {
                         warn!(
-                            user.id = ?user_id,
-                            method = %req.method(),
+                            { attr::USER_ID } = ?user_id,
+                            { attr::HTTP_REQUEST_METHOD } = %req.method(),
                             "MCP request rejected: session is not owned by the authenticated user"
                         );
                         return Ok(req
@@ -438,7 +439,7 @@ where
                     .map(str::to_string)
                 && let Err(err) = session_owners.record_owner(&new_session_id, uid).await
             {
-                error!(?err, user.id = %uid, "Failed to record MCP session owner");
+                error!(?err, { attr::USER_ID } = %uid, "Failed to record MCP session owner");
                 return Ok(response
                     .into_response(HttpResponse::InternalServerError().finish())
                     .map_into_right_body());
@@ -491,11 +492,11 @@ impl UniversalInboxMcpServer {
         let scope = required_scope(tool_name);
         if !authenticated.claims.grants_scope(scope) {
             warn!(
-                user.id = %user_id,
-                client_id = ?authenticated.claims.client_id,
-                granted_scope = ?authenticated.claims.scope,
-                required_scope = scope,
-                mcp.tool.name = tool_name,
+                { attr::USER_ID } = %user_id,
+                { attr::OAUTH_CLIENT_ID } = ?authenticated.claims.client_id,
+                { attr::OAUTH_SCOPE_GRANTED } = ?authenticated.claims.scope,
+                { attr::OAUTH_SCOPE_REQUIRED } = scope,
+                { attr::MCP_TOOL_NAME } = tool_name,
                 "MCP tool call rejected: insufficient scope"
             );
             return Err(ErrorData::invalid_request(
@@ -513,7 +514,7 @@ impl UniversalInboxMcpServer {
         Ok(user_id)
     }
 
-    #[tracing::instrument(name = "mcp.call_tool", skip(self, args, context), fields(mcp.tool.name = %tool_name))]
+    #[tracing::instrument(name = "mcp.call_tool", skip(self, args, context), fields({ attr::MCP_TOOL_NAME } = %tool_name))]
     async fn call_structured_tool<T: serde::Serialize>(
         &self,
         tool_name: &str,

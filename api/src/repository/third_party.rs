@@ -14,6 +14,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     repository::Repository,
     universal_inbox::{UniversalInboxError, UpsertStatus},
@@ -98,11 +99,11 @@ impl ThirdPartyItemRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            source_id = third_party_item.source_id.as_str(),
-            kind = third_party_item.kind().to_string(),
-            user.id = third_party_item.user_id.to_string(),
-            integration_connection_id = third_party_item.integration_connection_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id.as_str(),
+            { attr::THIRD_PARTY_ITEM_KIND } = third_party_item.kind().to_string(),
+            { attr::USER_ID } = third_party_item.user_id.to_string(),
+            { attr::INTEGRATION_CONNECTION_ID } = third_party_item.integration_connection_id.to_string()
         ),
         err
     )]
@@ -314,8 +315,8 @@ impl ThirdPartyItemRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            task_source_kind = task_source_kind.to_string(),
-            user.id = user_id.to_string()
+            { attr::SYNC_SOURCE_KIND } = task_source_kind.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -393,7 +394,7 @@ impl ThirdPartyItemRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(third_party_item.id = id.to_string(), user.id = user_id.to_string()),
+        fields({ attr::THIRD_PARTY_ITEM_ID } = id.to_string(), { attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn is_third_party_item_owned_by(
@@ -427,8 +428,8 @@ impl ThirdPartyItemRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            kind = kind.to_string(),
-            source_id = source_id,
+            { attr::THIRD_PARTY_ITEM_KIND } = kind.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_id,
         ),
         err
     )]
@@ -467,9 +468,9 @@ impl ThirdPartyItemRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            kind = kind.to_string(),
-            source_id = source_id,
-            user.id = user_id.map(|id| id.to_string()),
+            { attr::THIRD_PARTY_ITEM_KIND } = kind.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_id,
+            { attr::USER_ID } = user_id.map(|id| id.to_string()),
         ),
         err
     )]
@@ -536,8 +537,8 @@ impl ThirdPartyItemRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            kind = kind.to_string(),
-            user_id = user_id.to_string(),
+            { attr::THIRD_PARTY_ITEM_KIND } = kind.to_string(),
+            { attr::USER_ID } = user_id.to_string(),
         ),
         err
     )]
@@ -598,7 +599,7 @@ impl ThirdPartyItemRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(kind = kind.to_string(), notification_status = notification_status.to_string(), user.id = user_id.to_string()),
+        fields({ attr::THIRD_PARTY_ITEM_KIND } = kind.to_string(), { attr::NOTIFICATION_STATUS } = notification_status.to_string(), { attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn find_third_party_items_with_active_notification_for_user_id(
@@ -662,7 +663,7 @@ impl ThirdPartyItemRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.map(|id| id.to_string())),
+        fields({ attr::USER_ID } = user_id.map(|id| id.to_string())),
         err
     )]
     async fn find_legacy_todoist_items(
@@ -726,7 +727,7 @@ impl ThirdPartyItemRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(third_party_item.id = id.to_string(), third_party_item.source_id = %source_id),
+        fields({ attr::THIRD_PARTY_ITEM_ID } = id.to_string(), { attr::THIRD_PARTY_ITEM_SOURCE_ID } = %source_id),
         err
     )]
     async fn update_third_party_item_source_id(

@@ -13,6 +13,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::slack::SlackService,
     universal_inbox::{
@@ -28,7 +29,7 @@ impl TaskEventService<SlackPushEventCallback> for TaskService {
         level = "debug",
         skip_all,
         fields(
-            user.id = user_id.to_string()
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]

@@ -26,6 +26,7 @@ use universal_inbox::{
     third_party::item::ThirdPartyItemKind,
 };
 
+use crate::observability::attr;
 use crate::{
     configuration::WebhookSigningSecret,
     integrations::slack::has_slack_references_in_message,
@@ -73,8 +74,8 @@ pub async fn push_slack_event(
 
     match slack_push_event {
         SlackPushEvent::UrlVerification(SlackUrlVerificationEvent { challenge }) => {
-            current_span.set_attribute("slack.event_type", "url_verification");
-            current_span.set_attribute("slack.event.outcome", "url_verification");
+            current_span.set_attribute(attr::SLACK_EVENT_TYPE, "url_verification");
+            current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "url_verification");
             return Ok(HttpResponse::Ok()
                 .content_type("application/json")
                 .body(json!({ "challenge": challenge }).to_string()));
@@ -106,11 +107,11 @@ pub async fn push_slack_event(
                 SlackEventCallbackBody::ReactionRemoved(_) => "reaction_removed",
                 _ => unreachable!(),
             };
-            current_span.set_attribute("slack.event_type", event_type);
-            current_span.set_attribute("slack.team_id", event.team_id.to_string());
-            current_span.set_attribute("slack.event_id", event.event_id.to_string());
-            current_span.set_attribute("slack.user_id", user.to_string());
-            current_span.set_attribute("slack.reaction", reaction.to_string());
+            current_span.set_attribute(attr::SLACK_EVENT_TYPE, event_type);
+            current_span.set_attribute(attr::SLACK_TEAM_ID, event.team_id.to_string());
+            current_span.set_attribute(attr::SLACK_EVENT_ID, event.event_id.to_string());
+            current_span.set_attribute(attr::SLACK_USER_ID, user.to_string());
+            current_span.set_attribute(attr::SLACK_REACTION_NAME, reaction.to_string());
 
             let service = integration_connection_service.read().await;
             // No `.context()`: keep a pool timeout as `DatabaseUnavailable` (503).
@@ -134,7 +135,7 @@ pub async fn push_slack_event(
                         },
                     ..
                 })) if reaction_name == *reaction => {
-                    current_span.set_attribute("slack.event.outcome", "queued");
+                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "queued");
                     send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
                 }
                 Some(IntegrationConnectionConfig::Slack(SlackConfig {
@@ -145,18 +146,18 @@ pub async fn push_slack_event(
                         },
                     ..
                 })) => {
-                    current_span.set_attribute("slack.event.outcome", "discarded");
+                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
                     current_span
-                        .set_attribute("slack.event.discard_reason", "reaction_sync_disabled");
+                        .set_attribute(attr::SLACK_EVENT_DISCARD_REASON, "reaction_sync_disabled");
                 }
                 Some(IntegrationConnectionConfig::Slack(_)) => {
-                    current_span.set_attribute("slack.event.outcome", "discarded");
+                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
                     current_span
-                        .set_attribute("slack.event.discard_reason", "reaction_name_mismatch");
+                        .set_attribute(attr::SLACK_EVENT_DISCARD_REASON, "reaction_name_mismatch");
                 }
                 _ => {
-                    current_span.set_attribute("slack.event.outcome", "discarded");
-                    current_span.set_attribute("slack.event.discard_reason", "no_slack_config");
+                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
+                    current_span.set_attribute(attr::SLACK_EVENT_DISCARD_REASON, "no_slack_config");
                 }
             }
         }
@@ -178,25 +179,25 @@ pub async fn push_slack_event(
                 ..
             },
         ) => {
-            current_span.set_attribute("slack.event_type", "message");
-            current_span.set_attribute("slack.team_id", event.team_id.to_string());
-            current_span.set_attribute("slack.event_id", event.event_id.to_string());
-            current_span.set_attribute("slack.ts", ts.to_string());
+            current_span.set_attribute(attr::SLACK_EVENT_TYPE, "message");
+            current_span.set_attribute(attr::SLACK_TEAM_ID, event.team_id.to_string());
+            current_span.set_attribute(attr::SLACK_EVENT_ID, event.event_id.to_string());
+            current_span.set_attribute(attr::SLACK_MESSAGE_TS, ts.to_string());
             if let Some(thread_ts) = thread_ts {
-                current_span.set_attribute("slack.thread_ts", thread_ts.to_string());
+                current_span.set_attribute(attr::SLACK_MESSAGE_THREAD_TS, thread_ts.to_string());
             }
             if let Some(channel) = channel {
-                current_span.set_attribute("slack.channel_id", channel.to_string());
+                current_span.set_attribute(attr::SLACK_CHANNEL_ID, channel.to_string());
             }
             if let Some(user) = user {
-                current_span.set_attribute("slack.user_id", user.to_string());
+                current_span.set_attribute(attr::SLACK_USER_ID, user.to_string());
             }
 
             // Cheap, DB-free check first: this endpoint receives every message of every
             // channel the app is in, so most events must not cost a pool connection.
             if has_slack_references_in_message(content) {
-                current_span.set_attribute("slack.event.outcome", "queued");
-                current_span.set_attribute("slack.event.queue_reason", "has_references");
+                current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "queued");
+                current_span.set_attribute(attr::SLACK_EVENT_QUEUE_REASON, "has_references");
                 send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
                 return Ok(HttpResponse::Ok().finish());
             }
@@ -221,15 +222,15 @@ pub async fn push_slack_event(
             };
 
             if is_known_thread {
-                current_span.set_attribute("slack.event.outcome", "queued");
-                current_span.set_attribute("slack.event.queue_reason", "known_thread");
+                current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "queued");
+                current_span.set_attribute(attr::SLACK_EVENT_QUEUE_REASON, "known_thread");
                 send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
                 return Ok(HttpResponse::Ok().finish());
             }
 
-            current_span.set_attribute("slack.event.outcome", "discarded");
+            current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
             current_span.set_attribute(
-                "slack.event.discard_reason",
+                attr::SLACK_EVENT_DISCARD_REASON,
                 "no_references_no_known_thread",
             );
         }
@@ -238,9 +239,9 @@ pub async fn push_slack_event(
             minute_rate_limited,
             api_app_id,
         }) => {
-            current_span.set_attribute("slack.event_type", "app_rate_limited");
-            current_span.set_attribute("slack.team_id", team_id.to_string());
-            current_span.set_attribute("slack.event.outcome", "rate_limited");
+            current_span.set_attribute(attr::SLACK_EVENT_TYPE, "app_rate_limited");
+            current_span.set_attribute(attr::SLACK_TEAM_ID, team_id.to_string());
+            current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "rate_limited");
             warn!(
                 ?team_id,
                 ?api_app_id,
@@ -255,9 +256,9 @@ pub async fn push_slack_event(
             event: SlackEventCallbackBody::AppUninstalled(_),
             ..
         }) => {
-            current_span.set_attribute("slack.event_type", "app_uninstalled");
-            current_span.set_attribute("slack.team_id", team_id.to_string());
-            current_span.set_attribute("slack.event_id", event_id.to_string());
+            current_span.set_attribute(attr::SLACK_EVENT_TYPE, "app_uninstalled");
+            current_span.set_attribute(attr::SLACK_TEAM_ID, team_id.to_string());
+            current_span.set_attribute(attr::SLACK_EVENT_ID, event_id.to_string());
             revoke_slack_access(
                 integration_connection_service.as_ref(),
                 team_id,
@@ -273,9 +274,9 @@ pub async fn push_slack_event(
             event: SlackEventCallbackBody::Unknown(ref body),
             ..
         }) if body.get("type").and_then(|t| t.as_str()) == Some("tokens_revoked") => {
-            current_span.set_attribute("slack.event_type", "tokens_revoked");
-            current_span.set_attribute("slack.team_id", team_id.to_string());
-            current_span.set_attribute("slack.event_id", event_id.to_string());
+            current_span.set_attribute(attr::SLACK_EVENT_TYPE, "tokens_revoked");
+            current_span.set_attribute(attr::SLACK_TEAM_ID, team_id.to_string());
+            current_span.set_attribute(attr::SLACK_EVENT_ID, event_id.to_string());
             match serde_json::from_value::<SlackTokensRevokedEvent>(body.clone()) {
                 Ok(SlackTokensRevokedEvent {
                     tokens: SlackRevokedTokens { oauth },
@@ -289,13 +290,13 @@ pub async fn push_slack_event(
                     .await?;
                 }
                 Ok(_) => {
-                    current_span.set_attribute("slack.event.outcome", "discarded");
+                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
                     current_span
-                        .set_attribute("slack.event.discard_reason", "no_user_token_revoked");
+                        .set_attribute(attr::SLACK_EVENT_DISCARD_REASON, "no_user_token_revoked");
                 }
                 Err(err) => {
-                    current_span.set_attribute("slack.event.outcome", "discarded");
-                    current_span.set_attribute("slack.event.discard_reason", "invalid_payload");
+                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
+                    current_span.set_attribute(attr::SLACK_EVENT_DISCARD_REASON, "invalid_payload");
                     warn!(
                         ?team_id,
                         ?event_id,
@@ -310,11 +311,11 @@ pub async fn push_slack_event(
             event_id,
             ..
         }) => {
-            current_span.set_attribute("slack.event_type", "unknown");
-            current_span.set_attribute("slack.team_id", team_id.to_string());
-            current_span.set_attribute("slack.event_id", event_id.to_string());
-            current_span.set_attribute("slack.event.outcome", "discarded");
-            current_span.set_attribute("slack.event.discard_reason", "unknown_event_type");
+            current_span.set_attribute(attr::SLACK_EVENT_TYPE, "unknown");
+            current_span.set_attribute(attr::SLACK_TEAM_ID, team_id.to_string());
+            current_span.set_attribute(attr::SLACK_EVENT_ID, event_id.to_string());
+            current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
+            current_span.set_attribute(attr::SLACK_EVENT_DISCARD_REASON, "unknown_event_type");
             warn!(
                 ?team_id,
                 ?api_app_id,
@@ -363,8 +364,8 @@ async fn revoke_slack_access(
         .commit()
         .await
         .context("Failed to commit Slack access revocation")?;
-    current_span.set_attribute("slack.event.outcome", "access_revoked");
-    current_span.set_attribute("slack.revoked_connections", revoked as i64);
+    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "access_revoked");
+    current_span.set_attribute(attr::SLACK_REVOKED_CONNECTIONS_COUNT, revoked as i64);
     Ok(())
 }
 

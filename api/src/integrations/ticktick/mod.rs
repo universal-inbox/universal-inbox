@@ -47,6 +47,7 @@ use universal_inbox::{
     utils::default_value::DefaultValue,
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::{
         mock::MOCK_PROJECT_NAMES,
@@ -605,7 +606,7 @@ impl ThirdPartyItemSourceService<TickTickItem> for TickTickService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn fetch_items(
@@ -666,9 +667,9 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = source_third_party_item.id.to_string(),
-            third_party_item_source_id = source_third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -715,9 +716,9 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -749,9 +750,9 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -783,9 +784,9 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = _third_party_item.id.to_string(),
-            third_party_item_source_id = _third_party_item.source_id,
-            user.id = _user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = _third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = _third_party_item.source_id,
+            { attr::USER_ID } = _user_id.to_string()
         ),
         err
     )]
@@ -806,8 +807,8 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
         level = "debug",
         skip_all,
         fields(
-            task_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -883,7 +884,7 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn create_task(
@@ -959,7 +960,7 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn search_projects(
@@ -1001,7 +1002,7 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn get_or_create_project(
@@ -1057,9 +1058,9 @@ impl ThirdPartyNotificationSourceService<TickTickItem> for TickTickService {
         level = "debug",
         skip_all,
         fields(
-            source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
+            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1092,7 +1093,7 @@ impl ThirdPartyNotificationSourceService<TickTickItem> for TickTickService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(third_party_item_id = _source_item.id.to_string(), user.id = _user_id.to_string()),
+        fields({ attr::THIRD_PARTY_ITEM_ID } = _source_item.id.to_string(), { attr::USER_ID } = _user_id.to_string()),
         err
     )]
     async fn delete_notification_from_source(
@@ -1108,7 +1109,7 @@ impl ThirdPartyNotificationSourceService<TickTickItem> for TickTickService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(third_party_item_id = _source_item.id.to_string(), user.id = _user_id.to_string()),
+        fields({ attr::THIRD_PARTY_ITEM_ID } = _source_item.id.to_string(), { attr::USER_ID } = _user_id.to_string()),
         err
     )]
     async fn unsubscribe_notification_from_source(

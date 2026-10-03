@@ -9,6 +9,7 @@ use universal_inbox::{
     notification::NotificationSyncSourceKind, task::TaskSyncSourceKind, user::UserId,
 };
 
+use crate::observability::attr;
 use crate::universal_inbox::{
     UniversalInboxError, notification::service::NotificationService, task::service::TaskService,
 };
@@ -26,22 +27,22 @@ pub async fn handle_sync_notifications(
     let service = notification_service.read().await;
     let current_span = tracing::Span::current();
     if let Some(user_id) = event.user_id {
-        current_span.set_attribute("user.id", user_id.to_string());
+        current_span.set_attribute(attr::USER_ID, user_id.to_string());
         if let Some(source) = event.source {
-            current_span.set_attribute("synced_source", source.to_string());
+            current_span.set_attribute(attr::SYNC_SOURCE_KIND, source.to_string());
             service
                 .sync_notifications_with_transaction(source, user_id, false)
                 .await?;
         } else {
-            current_span.set_attribute("sync_all_sources", true);
+            current_span.set_attribute(attr::SYNC_ALL_SOURCES, true);
             service.sync_all_notifications(user_id, false).await?;
         };
     } else {
-        current_span.set_attribute("sync_all_users", true);
+        current_span.set_attribute(attr::SYNC_ALL_USERS, true);
         if let Some(source) = event.source {
-            current_span.set_attribute("synced_source", source.to_string());
+            current_span.set_attribute(attr::SYNC_SOURCE_KIND, source.to_string());
         } else {
-            current_span.set_attribute("sync_all_sources", true);
+            current_span.set_attribute(attr::SYNC_ALL_SOURCES, true);
         };
         service
             .sync_notifications_for_all_users(event.source, false)
@@ -64,22 +65,22 @@ pub async fn handle_sync_tasks(
     let service = task_service.read().await;
     let current_span = tracing::Span::current();
     if let Some(user_id) = event.user_id {
-        current_span.set_attribute("user.id", user_id.to_string());
+        current_span.set_attribute(attr::USER_ID, user_id.to_string());
         if let Some(source) = event.source {
-            current_span.set_attribute("synced_source", source.to_string());
+            current_span.set_attribute(attr::SYNC_SOURCE_KIND, source.to_string());
             service
                 .sync_tasks_with_transaction(source, user_id, false)
                 .await?;
         } else {
-            current_span.set_attribute("sync_all_sources", true);
+            current_span.set_attribute(attr::SYNC_ALL_SOURCES, true);
             service.sync_all_tasks(user_id, false).await?;
         };
     } else {
-        current_span.set_attribute("sync_all_users", true);
+        current_span.set_attribute(attr::SYNC_ALL_USERS, true);
         if let Some(source) = event.source {
-            current_span.set_attribute("synced_source", source.to_string());
+            current_span.set_attribute(attr::SYNC_SOURCE_KIND, source.to_string());
         } else {
-            current_span.set_attribute("sync_all_sources", true);
+            current_span.set_attribute(attr::SYNC_ALL_SOURCES, true);
         };
         service
             .sync_tasks_for_all_users(event.source, false)
