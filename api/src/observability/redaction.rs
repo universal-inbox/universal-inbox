@@ -1,4 +1,4 @@
-//! Exporter-side safety net that strips email addresses from the telemetry
+//! Exporter-side safety net that strips email addresses and JWTs from the telemetry
 //! sent over OTLP (traces and logs are exported to a third party, Honeycomb,
 //! in the US).
 //!
@@ -6,8 +6,9 @@
 //! `user.id`, never the email / username / name). These processors only
 //! catch what slips through: a span attribute, a span event (tracing events
 //! recorded inside a span), a span status or a log body containing something
-//! that looks like an email address has it replaced by [`REDACTED_EMAIL`]
-//! before the batch processor exports it. The client IP address recorded by
+//! that looks like an email address has it replaced by [`REDACTED_EMAIL`],
+//! and anything that looks like a JWT (e.g. an OIDC ID token) by
+//! [`REDACTED_JWT`], before the batch processor exports it. The client IP address recorded by
 //! the HTTP root span (`http.client_ip`) is dropped altogether.
 //!
 //! Limitation: log record *attributes* cannot be rewritten through the
@@ -30,6 +31,7 @@ use opentelemetry_sdk::{
 use regex::Regex;
 
 pub const REDACTED_EMAIL: &str = "[redacted-email]";
+pub const REDACTED_JWT: &str = "[redacted-jwt]";
 
 /// Span attributes carrying personal data that are never exported.
 const DROPPED_SPAN_ATTRIBUTES: &[&str] = &["http.client_ip", "client.address"];
@@ -37,6 +39,12 @@ const DROPPED_SPAN_ATTRIBUTES: &[&str] = &["http.client_ip", "client.address"];
 static EMAIL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}")
         .expect("valid email pattern")
+});
+
+// A JWT is three base64url segments; the header always starts with `{"`,
+// i.e. `eyJ` once encoded. The signature segment is empty for unsigned tokens.
+static JWT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]*").expect("valid JWT pattern")
 });
 
 /// Replace every email address found in `text` by [`REDACTED_EMAIL`].
@@ -48,8 +56,28 @@ pub fn redact_emails(text: &str) -> Cow<'_, str> {
     EMAIL_PATTERN.replace_all(text, REDACTED_EMAIL)
 }
 
+/// Replace every JWT found in `text` by [`REDACTED_JWT`].
+/// Borrows `text` untouched when it contains none (the common case).
+pub fn redact_jwts(text: &str) -> Cow<'_, str> {
+    if !text.contains("eyJ") {
+        return Cow::Borrowed(text);
+    }
+    JWT_PATTERN.replace_all(text, REDACTED_JWT)
+}
+
+/// Redact email addresses and JWTs from `text`.
+pub fn redact(text: &str) -> Cow<'_, str> {
+    match redact_emails(text) {
+        Cow::Borrowed(text) => redact_jwts(text),
+        Cow::Owned(redacted) => match redact_jwts(&redacted) {
+            Cow::Borrowed(_) => Cow::Owned(redacted),
+            Cow::Owned(redacted) => Cow::Owned(redacted),
+        },
+    }
+}
+
 fn redact_owned(text: Cow<'static, str>) -> Cow<'static, str> {
-    match redact_emails(&text) {
+    match redact(&text) {
         Cow::Borrowed(_) => text,
         Cow::Owned(redacted) => Cow::Owned(redacted),
     }
@@ -57,7 +85,7 @@ fn redact_owned(text: Cow<'static, str>) -> Cow<'static, str> {
 
 fn redact_value(value: &mut Value) {
     if let Value::String(string) = value
-        && let Cow::Owned(redacted) = redact_emails(string.as_str())
+        && let Cow::Owned(redacted) = redact(string.as_str())
     {
         *value = Value::String(redacted.into());
     }
@@ -69,7 +97,7 @@ fn redact_attributes(attributes: &mut [KeyValue]) {
     }
 }
 
-/// Redact email addresses from an ended span before it is exported.
+/// Redact email addresses and JWTs from an ended span before it is exported.
 pub fn redact_span(span: &mut SpanData) {
     span.attributes
         .retain(|attribute| !DROPPED_SPAN_ATTRIBUTES.contains(&attribute.key.as_str()));
@@ -120,7 +148,7 @@ impl<P: SpanProcessor> SpanProcessor for RedactingSpanProcessor<P> {
 }
 
 /// Wraps a log processor (the OTLP batch processor) and redacts email
-/// addresses from each log body before handing the record over.
+/// addresses and JWTs from each log body before handing the record over.
 #[derive(Debug)]
 pub struct RedactingLogProcessor<P> {
     inner: P,
@@ -134,7 +162,7 @@ impl<P> RedactingLogProcessor<P> {
 
 fn redacted_body(body: &AnyValue) -> Option<AnyValue> {
     match body {
-        AnyValue::String(string) => match redact_emails(string.as_str()) {
+        AnyValue::String(string) => match redact(string.as_str()) {
             Cow::Owned(redacted) => Some(AnyValue::String(redacted.into())),
             Cow::Borrowed(_) => None,
         },
@@ -201,6 +229,27 @@ mod tests {
         assert!(matches!(redact_emails("no at sign"), Cow::Borrowed(_)));
     }
 
+    const JWT: &str = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.c2lnbmF0dXJl-_x";
+
+    #[test]
+    fn redacts_jwts_and_keeps_the_rest() {
+        assert_eq!(redact(JWT), REDACTED_JWT);
+        assert_eq!(
+            redact(&format!("id_token={JWT} for john@doe.name")),
+            "id_token=[redacted-jwt] for [redacted-email]"
+        );
+        assert_eq!(
+            redact("unsigned eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1In0. end"),
+            "unsigned [redacted-jwt] end"
+        );
+    }
+
+    #[test]
+    fn leaves_text_without_jwt_borrowed() {
+        assert!(matches!(redact("eyJ but no dots"), Cow::Borrowed(_)));
+        assert!(matches!(redact("plain text"), Cow::Borrowed(_)));
+    }
+
     fn span_with_personal_data() -> SpanData {
         let mut span = SpanData {
             span_context: SpanContext::empty_context(),
@@ -214,6 +263,7 @@ mod tests {
                 KeyValue::new("user.id", "0f7f7a5e"),
                 KeyValue::new("user.email", "john@doe.name"),
                 KeyValue::new("http.client_ip", "203.0.113.7"),
+                KeyValue::new("auth_id_token", JWT),
                 KeyValue::new("count", 3),
             ],
             dropped_attributes_count: 0,
@@ -243,6 +293,7 @@ mod tests {
             vec![
                 KeyValue::new("user.id", "0f7f7a5e"),
                 KeyValue::new("user.email", REDACTED_EMAIL),
+                KeyValue::new("auth_id_token", REDACTED_JWT),
                 KeyValue::new("count", 3),
             ]
         );

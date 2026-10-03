@@ -459,7 +459,8 @@ impl SlackService {
             });
         };
 
-        let mut slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()));
+        let mut slack_api_token =
+            SlackApiToken::new(SlackApiTokenValue(access_token.as_str().to_string()));
         if let Some(ctx) = context.as_ref() {
             slack_api_token = slack_api_token.with_team_id(ctx.team_id.clone());
         }
@@ -706,8 +707,9 @@ impl SlackService {
                 anyhow!("Cannot fetch Slack notification details without an access token")
             })?;
 
-        let slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()))
-            .with_team_id(slack_push_event_callback.team_id.clone());
+        let slack_api_token =
+            SlackApiToken::new(SlackApiTokenValue(access_token.as_str().to_string()))
+                .with_team_id(slack_push_event_callback.team_id.clone());
 
         let slack_reaction = match slack_reaction_item {
             SlackReactionsItem::Message(SlackHistoryMessage {
@@ -813,8 +815,9 @@ impl SlackService {
                 anyhow!("Cannot fetch Slack notification details without an access token")
             })?;
 
-        let slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()))
-            .with_team_id(slack_push_event_callback.team_id.clone());
+        let slack_api_token =
+            SlackApiToken::new(SlackApiTokenValue(access_token.as_str().to_string()))
+                .with_team_id(slack_push_event_callback.team_id.clone());
 
         let Some(channel_id) = &origin.channel else {
             current_span.set_attribute("slack.fetch.outcome", "skipped");
@@ -1010,8 +1013,9 @@ impl SlackService {
             .ok_or_else(|| {
                 anyhow!("Cannot fetch Slack notification details without an access token")
             })?;
-        let slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()))
-            .with_team_id(slack_reaction_item.team_id());
+        let slack_api_token =
+            SlackApiToken::new(SlackApiTokenValue(access_token.as_str().to_string()))
+                .with_team_id(slack_reaction_item.team_id());
 
         if let Some(slack_reaction_ids) = slack_reaction_item.ids() {
             self.reactions_remove(
@@ -1064,8 +1068,9 @@ impl SlackService {
             .ok_or_else(|| {
                 anyhow!("Cannot fetch Slack notification details without an access token")
             })?;
-        let slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()))
-            .with_team_id(slack_reaction_item.team_id());
+        let slack_api_token =
+            SlackApiToken::new(SlackApiTokenValue(access_token.as_str().to_string()))
+                .with_team_id(slack_reaction_item.team_id());
 
         if let Some(slack_reaction_ids) = slack_reaction_item.ids() {
             self.reactions_add(
@@ -1479,8 +1484,9 @@ impl ThirdPartyItemSourceService<SlackThread> for SlackService {
             let channel_id = &slack_thread.channel.id;
             let root_ts = &slack_thread.messages.first().origin.ts;
 
-            let slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()))
-                .with_team_id(slack_thread.team.id.clone());
+            let slack_api_token =
+                SlackApiToken::new(SlackApiTokenValue(access_token.as_str().to_string()))
+                    .with_team_id(slack_thread.team.id.clone());
 
             let messages = match self
                 .fetch_thread(channel_id, root_ts, None, user_id, &slack_api_token)

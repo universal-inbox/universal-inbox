@@ -86,7 +86,8 @@ impl GoogleCalendarService {
     ) -> Result<ApiClient, UniversalInboxError> {
         let mut headers = HeaderMap::new();
 
-        let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
+        let mut auth_header_value: HeaderValue =
+            format!("Bearer {}", access_token.as_str()).parse().unwrap();
         auth_header_value.set_sensitive(true);
         headers.insert("Authorization", auth_header_value);
 

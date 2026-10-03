@@ -863,7 +863,7 @@ impl UserService {
             .update_user_auth_id_token(
                 executor,
                 &oidc_user_auth.auth_user_id,
-                &oidc_user_auth.auth_id_token.to_string().into(),
+                &oidc_user_auth.auth_id_token,
             )
             .await?
         {
@@ -1012,7 +1012,7 @@ impl UserService {
                                 "User with ID {user_id} does not have OIDCAuthorizationCodePKCE auth parameters"
                             ))?;
                         };
-                        let id_token = CoreIdToken::from_str(&user_auth.auth_id_token.to_string())
+                        let id_token = CoreIdToken::from_str(user_auth.auth_id_token.as_str())
                             .context(
                                 "Could not parse stored OIDC ID token, this should not happen",
                             )?;

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod provider;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Default)]
+#[derive(Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Default)]
 #[serde(transparent)]
 pub struct AccessToken(pub String);
 
@@ -23,13 +23,13 @@ impl Zeroize for AccessToken {
 
 impl CloneableSecret for AccessToken {}
 
-impl fmt::Display for AccessToken {
+impl fmt::Debug for AccessToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
+        f.write_str("AccessToken([redacted])")
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+#[derive(Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
 #[serde(transparent)]
 pub struct RefreshToken(pub String);
 
@@ -47,13 +47,13 @@ impl Zeroize for RefreshToken {
 
 impl CloneableSecret for RefreshToken {}
 
-impl fmt::Display for RefreshToken {
+impl fmt::Debug for RefreshToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
+        f.write_str("RefreshToken([redacted])")
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ClientSecret(pub String);
 
@@ -71,7 +71,13 @@ impl Zeroize for ClientSecret {
 
 impl CloneableSecret for ClientSecret {}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl fmt::Debug for ClientSecret {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("ClientSecret([redacted])")
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct AuthorizationCode(pub String);
 
@@ -89,7 +95,13 @@ impl Zeroize for AuthorizationCode {
 
 impl CloneableSecret for AuthorizationCode {}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl fmt::Debug for AuthorizationCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("AuthorizationCode([redacted])")
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct PkceVerifier(pub String);
 
@@ -107,3 +119,49 @@ impl Zeroize for PkceVerifier {
 
 impl CloneableSecret for PkceVerifier {}
 impl SerializableSecret for PkceVerifier {}
+
+impl fmt::Debug for PkceVerifier {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("PkceVerifier([redacted])")
+    }
+}
+
+// These types deliberately implement neither `Display` nor a raw `Debug`: a
+// `{}`/`{:?}` in a log line or a `tracing::instrument` field would otherwise
+// export the secret. Use `as_str()` where the raw value is really needed.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SECRET: &str = "s3cr3t-value-that-must-not-leak";
+
+    fn assert_redacted(debug: String, pretty_debug: String) {
+        for output in [debug, pretty_debug] {
+            assert!(!output.contains(SECRET), "secret leaked in {output}");
+            assert!(output.contains("[redacted]"), "missing marker in {output}");
+        }
+    }
+
+    #[test]
+    fn credential_types_redact_debug() {
+        let access_token = AccessToken(SECRET.to_string());
+        assert_redacted(format!("{access_token:?}"), format!("{access_token:#?}"));
+        let refresh_token = RefreshToken(SECRET.to_string());
+        assert_redacted(format!("{refresh_token:?}"), format!("{refresh_token:#?}"));
+        let client_secret = ClientSecret(SECRET.to_string());
+        assert_redacted(format!("{client_secret:?}"), format!("{client_secret:#?}"));
+        let code = AuthorizationCode(SECRET.to_string());
+        assert_redacted(format!("{code:?}"), format!("{code:#?}"));
+        let verifier = PkceVerifier(SECRET.to_string());
+        assert_redacted(format!("{verifier:?}"), format!("{verifier:#?}"));
+    }
+
+    #[test]
+    fn credential_types_redact_debug_when_nested() {
+        let tuple = (
+            AccessToken(SECRET.to_string()),
+            Some(RefreshToken(SECRET.to_string())),
+        );
+        assert_redacted(format!("{tuple:?}"), format!("{tuple:#?}"));
+    }
+}

@@ -88,7 +88,7 @@ pub async fn authenticate_session(
         )));
     };
 
-    let id_token = CoreIdToken::from_str(&params.auth_id_token.to_string())
+    let id_token = CoreIdToken::from_str(params.auth_id_token.as_str())
         .context("Could not parse OIDC ID token")?;
     let access_token = params.access_token.clone();
     let user = service
@@ -451,7 +451,7 @@ pub async fn link_oidc_pkce_session(
         )));
     };
 
-    let id_token = CoreIdToken::from_str(&params.auth_id_token.to_string())
+    let id_token = CoreIdToken::from_str(params.auth_id_token.as_str())
         .context("Could not parse OIDC ID token")?;
     let access_token = params.access_token.clone();
     let auth_method: UserAuthMethod = service
