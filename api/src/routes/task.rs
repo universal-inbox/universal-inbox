@@ -9,7 +9,7 @@ use actix_web::{
     web,
 };
 use anyhow::Context;
-use apalis_redis::RedisStorage;
+
 use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::RwLock;
@@ -26,7 +26,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    jobs::UniversalInboxJob,
+    jobs::JobStorage,
     universal_inbox::{
         UniversalInboxError, UpdateStatus,
         integration_connection::service::IntegrationConnectionService, task::service::TaskService,
@@ -63,7 +63,7 @@ pub async fn list_tasks(
     task_service: web::Data<Arc<RwLock<TaskService>>>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     authenticated: Authenticated<Claims>,
-    job_storage: web::Data<RedisStorage<UniversalInboxJob>>,
+    job_storage: web::Data<JobStorage>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let user_id = authenticated
         .claims
@@ -193,7 +193,7 @@ pub async fn sync_tasks(
     task_service: web::Data<Arc<RwLock<TaskService>>>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     authenticated: Authenticated<Claims>,
-    storage: web::Data<RedisStorage<UniversalInboxJob>>,
+    storage: web::Data<JobStorage>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let source = params.source;
     let mut storage = storage.as_ref().clone();

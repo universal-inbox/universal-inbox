@@ -16,7 +16,7 @@ use actix_web::{
     http::{Method, header},
     web,
 };
-use apalis_redis::RedisStorage;
+
 use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DefaultKeyedStateStore};
 use rmcp::{
     ErrorData, ServerHandler,
@@ -36,7 +36,7 @@ use tracing::{debug, error, warn};
 use universal_inbox::user::UserId;
 
 use crate::{
-    jobs::UniversalInboxJob,
+    jobs::JobStorage,
     mcp::tools::{
         ActOnNotificationArgs, BulkActNotificationsArgs, CreateTaskFromNotificationArgs,
         GetNotificationArgs, GetTaskArgs, ListNotificationsArgs, ListTasksArgs, McpServices,
@@ -84,7 +84,7 @@ pub fn build_http_service(
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
-    job_storage: RedisStorage<UniversalInboxJob>,
+    job_storage: JobStorage,
     session_store: Arc<dyn SessionStore>,
     allowed_hosts: Vec<String>,
 ) -> StreamableHttpService<UniversalInboxMcpServer, LocalSessionManager> {

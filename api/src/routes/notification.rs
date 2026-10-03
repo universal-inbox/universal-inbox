@@ -5,7 +5,7 @@ use crate::observability::attr;
 use actix_http::body::BoxBody;
 use actix_web::{HttpResponse, Scope, web};
 use anyhow::Context;
-use apalis_redis::RedisStorage;
+
 use serde::Deserialize;
 use serde_json::json;
 use serde_with::{StringWithSeparator, formats::CommaSeparator, serde_as};
@@ -28,7 +28,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    jobs::UniversalInboxJob,
+    jobs::JobStorage,
     universal_inbox::{
         UniversalInboxError, UpdateStatus,
         integration_connection::service::IntegrationConnectionService,
@@ -81,7 +81,7 @@ pub async fn list_notifications(
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     authenticated: Authenticated<Claims>,
-    job_storage: web::Data<RedisStorage<UniversalInboxJob>>,
+    job_storage: web::Data<JobStorage>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let user_id = authenticated
         .claims
@@ -199,7 +199,7 @@ pub async fn sync_notifications(
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     authenticated: Authenticated<Claims>,
-    storage: web::Data<RedisStorage<UniversalInboxJob>>,
+    storage: web::Data<JobStorage>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let source = params.source;
     let mut storage = storage.as_ref().clone();
@@ -257,7 +257,7 @@ pub async fn patch_notifications(
     patch_request: web::Json<PatchNotificationsRequest>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
     authenticated: Authenticated<Claims>,
-    job_storage: web::Data<RedisStorage<UniversalInboxJob>>,
+    job_storage: web::Data<JobStorage>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let user_id = authenticated
         .claims
