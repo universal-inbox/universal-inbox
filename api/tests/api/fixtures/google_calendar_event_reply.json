@@ -1,5 +1,14 @@
 {
   "method": "REPLY",
+  "reply": {
+    "attendee_email": "user2@example.com",
+    "attendee_display_name": "Jane Doe",
+    "response_status": "accepted",
+    "occurrence_start": {
+      "dateTime": "2024-05-06T13:15:00Z",
+      "timeZone": "Europe/Paris"
+    }
+  },
   "kind": "calendar#event",
   "etag": "\"3471714048456000\"",
   "id": "eventid2",

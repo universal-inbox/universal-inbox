@@ -17,7 +17,10 @@ use universal_inbox::{
         },
     },
     task::{TaskCreation, TaskId, TaskPlanning},
-    third_party::integrations::google_calendar::GoogleCalendarEventAttendeeResponseStatus,
+    third_party::{
+        integrations::google_calendar::{EventMethod, GoogleCalendarEventAttendeeResponseStatus},
+        item::ThirdPartyItemData,
+    },
 };
 
 use crate::{
@@ -745,8 +748,13 @@ async fn patch_invitation(
     ui_model: Signal<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
 ) {
+    // An attendee reply (METHOD:REPLY) is not an invitation to answer
     let has_invitation = notifications_page.read().content.iter().any(|notif| {
-        notif.id == notification_id && notif.kind == NotificationSourceKind::GoogleCalendar
+        notif.id == notification_id
+            && matches!(
+                &notif.source_item.data,
+                ThirdPartyItemData::GoogleCalendarEvent(event) if event.method != EventMethod::Reply
+            )
     });
     if !has_invitation {
         return;
@@ -756,6 +764,24 @@ async fn patch_invitation(
         .write()
         .remove_element(|notif| notif.id != notification_id);
 
+    let (loading_message, success_message) = match response_status {
+        GoogleCalendarEventAttendeeResponseStatus::Accepted => (
+            "Accepting invitation...",
+            "Invitation successfully accepted",
+        ),
+        GoogleCalendarEventAttendeeResponseStatus::Declined => (
+            "Declining invitation...",
+            "Invitation successfully declined",
+        ),
+        GoogleCalendarEventAttendeeResponseStatus::Tentative => (
+            "Tentatively accepting invitation...",
+            "Invitation successfully tentatively accepted",
+        ),
+        GoogleCalendarEventAttendeeResponseStatus::NeedsAction => {
+            ("Updating invitation...", "Invitation successfully updated")
+        }
+    };
+
     let _result: Result<Option<Notification>> = call_api_and_notify(
         Method::PATCH,
         api_base_url,
@@ -763,8 +789,8 @@ async fn patch_invitation(
         Some(InvitationPatch { response_status }),
         Some(ui_model),
         &toast_service,
-        "Accepting invitation...",
-        "Invitation successfully accepted",
+        loading_message,
+        success_message,
     )
     .await;
 }

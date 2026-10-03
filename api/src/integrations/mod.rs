@@ -23,6 +23,7 @@ pub mod google_calendar;
 pub mod google_drive;
 pub mod google_mail;
 pub mod google_oauth;
+pub mod icalendar;
 pub mod linear;
 pub mod mock;
 pub mod oauth2;
