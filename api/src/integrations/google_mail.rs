@@ -636,8 +636,7 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     async fn fetch_items(
         &self,
@@ -824,16 +823,6 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
 
 #[async_trait]
 impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService {
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
-            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
-            { attr::USER_ID } = user_id.to_string(),
-        ),
-        err
-    )]
     async fn third_party_item_into_notification(
         &self,
         source: &GoogleMailThread,
@@ -888,8 +877,7 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string())
     )]
     async fn delete_notification_from_source(
         &self,
@@ -922,8 +910,7 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string())
     )]
     async fn unsubscribe_notification_from_source(
         &self,

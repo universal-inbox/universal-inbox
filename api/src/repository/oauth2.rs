@@ -188,7 +188,7 @@ pub trait OAuth2Repository {
 
 #[async_trait]
 impl OAuth2Repository for Repository {
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn create_oauth2_client(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -232,7 +232,7 @@ impl OAuth2Repository for Repository {
         Ok(row.into())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID_URL } = ?client_id_url), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID_URL } = ?client_id_url))]
     async fn upsert_cimd_oauth2_client(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -280,7 +280,7 @@ impl OAuth2Repository for Repository {
         Ok(row.into())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id))]
     async fn get_oauth2_client_by_client_id(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -316,8 +316,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
     )]
     async fn create_authorization_code(
         &self,
@@ -366,7 +365,7 @@ impl OAuth2Repository for Repository {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn get_and_delete_authorization_code(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -408,8 +407,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
     )]
     async fn create_refresh_token(
         &self,
@@ -452,7 +450,7 @@ impl OAuth2Repository for Repository {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn get_refresh_token_by_hash(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -485,7 +483,7 @@ impl OAuth2Repository for Repository {
         Ok(row.map(|r| r.into()))
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn get_refresh_token_by_hash_including_revoked(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -519,7 +517,7 @@ impl OAuth2Repository for Repository {
         Ok(row.map(|r| r.into()))
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID } = %client_id))]
     async fn revoke_refresh_token_if_active(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -573,7 +571,7 @@ impl OAuth2Repository for Repository {
         Ok(row.map(|r| r.into()))
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn revoke_refresh_token(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -607,8 +605,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     async fn list_authorized_clients(
         &self,
@@ -672,8 +669,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
     )]
     async fn revoke_all_refresh_tokens_for_client(
         &self,
@@ -712,8 +708,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
     )]
     async fn get_user_consent(
         &self,
@@ -750,8 +745,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
     )]
     async fn upsert_user_consent(
         &self,
@@ -797,8 +791,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
     )]
     async fn delete_user_consent(
         &self,
@@ -831,7 +824,7 @@ impl OAuth2Repository for Repository {
         Ok(result.rows_affected())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID_URL } = %client_id_url), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID_URL } = %client_id_url))]
     async fn get_cimd_metadata_cache(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -862,7 +855,7 @@ impl OAuth2Repository for Repository {
         row.map(CachedClientMetadata::try_from).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID_URL } = %client_id_url), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID_URL } = %client_id_url))]
     async fn upsert_cimd_metadata_cache(
         &self,
         executor: &mut Transaction<'_, Postgres>,

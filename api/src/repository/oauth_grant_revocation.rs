@@ -97,7 +97,7 @@ pub trait OAuthGrantRevocationRepository {
 
 #[async_trait]
 impl OAuthGrantRevocationRepository for Repository {
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_GRANT_REVOCATION_ID } = revocation.id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_GRANT_REVOCATION_ID } = revocation.id.to_string()))]
     async fn create_oauth_grant_revocation(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -139,7 +139,7 @@ impl OAuthGrantRevocationRepository for Repository {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn claim_due_oauth_grant_revocation(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -197,7 +197,7 @@ impl OAuthGrantRevocationRepository for Repository {
         .transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, last_error), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, last_error))]
     async fn complete_oauth_grant_revocation(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -231,7 +231,7 @@ impl OAuthGrantRevocationRepository for Repository {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_GRANT_REVOCATION_ID } = id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_GRANT_REVOCATION_ID } = id.to_string()))]
     async fn record_oauth_grant_revocation_failure(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -278,7 +278,7 @@ impl OAuthGrantRevocationRepository for Repository {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn has_oauth_credential_for_provider_account(
         &self,
         executor: &mut Transaction<'_, Postgres>,

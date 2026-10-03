@@ -451,8 +451,7 @@ impl IntegrationConnectionRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string().to_string()),
-        err
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string().to_string())
     )]
     async fn get_integration_connection(
         &self,
@@ -510,17 +509,6 @@ impl IntegrationConnectionRepository for Repository {
         row.map(|r| r.try_into()).transpose()
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::USER_ID } = user_id.to_string(),
-            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
-            { attr::INTEGRATION_CONNECTION_SYNCED_BEFORE } = ?synced_before_filter,
-            { attr::INTEGRATION_CONNECTION_STATUS } = ?with_status
-        ),
-        err
-    )]
     async fn get_integration_connection_per_provider(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -616,8 +604,7 @@ impl IntegrationConnectionRepository for Repository {
         skip_all,
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string()
-        ),
-        err
+        )
     )]
     async fn get_integration_connection_per_provider_user_id(
         &self,
@@ -685,8 +672,7 @@ impl IntegrationConnectionRepository for Repository {
         skip_all,
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string()
-        ),
-        err
+        )
     )]
     async fn find_integration_connection_per_provider_user_ids(
         &self,
@@ -751,7 +737,7 @@ impl IntegrationConnectionRepository for Repository {
             .collect::<Result<Vec<IntegrationConnection>, UniversalInboxError>>()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn get_integration_connection_per_context(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -821,7 +807,7 @@ impl IntegrationConnectionRepository for Repository {
         row.map(|r| r.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::SLACK_TEAM_ID } = %team_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::SLACK_TEAM_ID } = %team_id))]
     async fn find_slack_integration_connections_per_team(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -888,8 +874,7 @@ impl IntegrationConnectionRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = for_user_id.map(|id| id.to_string())),
-        err
+        fields({ attr::USER_ID } = for_user_id.map(|id| id.to_string()))
     )]
     async fn find_slack_integration_connections_without_context(
         &self,
@@ -958,8 +943,7 @@ impl IntegrationConnectionRepository for Repository {
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
             { attr::INTEGRATION_CONNECTION_STATUS } = new_status.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn update_integration_connection_status(
         &self,
@@ -1096,8 +1080,7 @@ impl IntegrationConnectionRepository for Repository {
         fields(
             { attr::USER_ID } = user_id.map(|x| x.to_string()),
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.map(|x| x.to_string())
-        ),
-        err
+        )
     )]
     async fn update_integration_connection_sync_status(
         &self,
@@ -1273,8 +1256,7 @@ impl IntegrationConnectionRepository for Repository {
         skip_all,
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()
-        ),
-        err
+        )
     )]
     async fn update_integration_connection_context(
         &self,
@@ -1363,8 +1345,7 @@ impl IntegrationConnectionRepository for Repository {
             { attr::USER_ID } = for_user_id.to_string(),
             { attr::INTEGRATION_CONNECTION_STATUS } = ?status,
             { attr::INTEGRATION_CONNECTION_LOCK_ROWS } = lock_rows
-        ),
-        err
+        )
     )]
     async fn fetch_all_integration_connections(
         &self,
@@ -1449,8 +1430,7 @@ impl IntegrationConnectionRepository for Repository {
         fields(
             { attr::USER_ID } = for_user_id.to_string(),
             { attr::INTEGRATION_PROVIDER_KINDS } = ?provider_kinds,
-        ),
-        err
+        )
     )]
     async fn claim_due_notification_syncs(
         &self,
@@ -1477,8 +1457,7 @@ impl IntegrationConnectionRepository for Repository {
         fields(
             { attr::USER_ID } = for_user_id.to_string(),
             { attr::INTEGRATION_PROVIDER_KINDS } = ?provider_kinds,
-        ),
-        err
+        )
     )]
     async fn claim_due_task_syncs(
         &self,
@@ -1502,8 +1481,7 @@ impl IntegrationConnectionRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
-        err
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string())
     )]
     async fn claim_notification_sync_start(
         &self,
@@ -1525,8 +1503,7 @@ impl IntegrationConnectionRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
-        err
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string())
     )]
     async fn claim_task_sync_start(
         &self,
@@ -1548,8 +1525,7 @@ impl IntegrationConnectionRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = for_user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = for_user_id.to_string())
     )]
     async fn count_validated_integration_connections(
         &self,
@@ -1559,7 +1535,7 @@ impl IntegrationConnectionRepository for Repository {
         count_validated_connections(executor, for_user_id, PlanPauseFilter::Active).await
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = for_user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = for_user_id.to_string()))]
     async fn count_plan_paused_integration_connections(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1571,8 +1547,7 @@ impl IntegrationConnectionRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string()),
-        err
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string())
     )]
     async fn create_integration_connection(
         &self,
@@ -1690,8 +1665,7 @@ impl IntegrationConnectionRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = id.to_string()),
-        err
+        fields({ attr::INTEGRATION_CONNECTION_ID } = id.to_string())
     )]
     async fn does_integration_connection_exist(
         &self,
@@ -1724,8 +1698,7 @@ impl IntegrationConnectionRepository for Repository {
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn update_integration_connection_config(
         &self,
@@ -1809,8 +1782,7 @@ impl IntegrationConnectionRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
-        err
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string())
     )]
     async fn set_integration_connection_plan_pause(
         &self,
@@ -1943,8 +1915,7 @@ impl IntegrationConnectionRepository for Repository {
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
             { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339()
-        ),
-        err
+        )
     )]
     async fn find_validated_integration_connections_of_inactive_users(
         &self,
@@ -1997,8 +1968,7 @@ impl IntegrationConnectionRepository for Repository {
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
             { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339()
-        ),
-        err
+        )
     )]
     async fn find_integration_connections_to_warn_of_inactivity(
         &self,
@@ -2044,8 +2014,7 @@ impl IntegrationConnectionRepository for Repository {
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
             { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339()
-        ),
-        err
+        )
     )]
     async fn mark_inactivity_warning_sent(
         &self,
@@ -2090,8 +2059,7 @@ impl IntegrationConnectionRepository for Repository {
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
             { attr::INTEGRATION_CONNECTION_FAILING_BEFORE } = failing_before.to_rfc3339()
-        ),
-        err
+        )
     )]
     async fn find_long_failing_integration_connections(
         &self,
@@ -2134,8 +2102,7 @@ impl IntegrationConnectionRepository for Repository {
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
             { attr::INTEGRATION_CONNECTION_PAUSED_REASON } = paused_reason.to_string()
-        ),
-        err
+        )
     )]
     async fn pause_integration_connection(
         &self,

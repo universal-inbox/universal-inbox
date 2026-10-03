@@ -6,6 +6,8 @@ use tracing::{error, info, warn};
 
 use universal_inbox::user::UserId;
 
+use crate::observability::RecordSpanError;
+use crate::observability::attr;
 use crate::{
     integrations::slack::SlackService,
     repository::integration_connection::SlackIntegrationConnectionWithoutContext,
@@ -32,7 +34,7 @@ pub struct BackfillTeamIdReport {
     name = "slack-backfill-team-id-command",
     level = "info",
     skip(integration_connection_service, slack_service),
-    err
+    fields({ attr::ERROR_TYPE } = tracing::field::Empty)
 )]
 pub async fn backfill_team_id(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -40,6 +42,7 @@ pub async fn backfill_team_id(
     user_id: Option<UserId>,
     dry_run: bool,
 ) -> Result<BackfillTeamIdReport, UniversalInboxError> {
+    let result: Result<BackfillTeamIdReport, UniversalInboxError> = async move {
     let service = integration_connection_service.read().await;
 
     let mut transaction = service.begin().await.context(
@@ -91,6 +94,8 @@ pub async fn backfill_team_id(
     );
 
     Ok(report)
+}.await;
+    result.record_span_error()
 }
 
 /// Returns `false` when the connection has no usable access token.

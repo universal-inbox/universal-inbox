@@ -33,6 +33,12 @@ pub const MESSAGING_SYSTEM: &str = "messaging.system";
 pub const MESSAGING_DESTINATION_NAME: &str = "messaging.destination.name";
 pub const MESSAGING_OPERATION_TYPE: &str = "messaging.operation.type";
 pub const MESSAGING_MESSAGE_ID: &str = "messaging.message.id";
+pub const HTTP_RESPONSE_STATUS_CODE: &str = "http.response.status_code";
+pub const SERVER_ADDRESS: &str = "server.address";
+pub const URL_TEMPLATE: &str = "url.template";
+pub const DB_SYSTEM_NAME: &str = "db.system.name";
+pub const DB_OPERATION_NAME: &str = "db.operation.name";
+pub const DB_NAMESPACE: &str = "db.namespace";
 
 // HTTP request forwarding and rate limiting
 pub const HTTP_X_FORWARDED_FOR_MASKED: &str = "http.x_forwarded_for.masked";

@@ -32,6 +32,7 @@ use universal_inbox::{
     user::{User, UserId},
 };
 
+use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::{
     integrations::oauth2::{
@@ -285,8 +286,7 @@ impl IntegrationConnectionService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = for_user_id.to_string()),
-        err
+        fields({ attr::USER_ID } = for_user_id.to_string())
     )]
     pub async fn schedule_due_syncs(
         &self,
@@ -392,8 +392,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::SYNC_SOURCE_KIND } = notification_sync_source_kind.map(|kind| kind.to_string()),
             { attr::USER_ID } = for_user_id.map(|id| id.to_string())
-        ),
-        err
+        )
     )]
     pub async fn trigger_sync_notifications(
         &self,
@@ -437,8 +436,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::SYNC_SOURCE_KIND } = task_sync_source_kind.map(|kind| kind.to_string()),
             { attr::USER_ID } = for_user_id.map(|id| id.to_string())
-        ),
-        err
+        )
     )]
     pub async fn trigger_sync_tasks(
         &self,
@@ -489,8 +487,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::SYNC_SOURCE_KIND } = notification_sync_source_kind.map(|kind| kind.to_string()),
             { attr::USER_ID } = for_user_id.map(|id| id.to_string())
-        ),
-        err
+        )
     )]
     pub async fn push_sync_notifications_job(
         &self,
@@ -526,8 +523,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::SYNC_SOURCE_KIND } = task_sync_source_kind.map(|kind| kind.to_string()),
             { attr::USER_ID } = for_user_id.map(|id| id.to_string())
-        ),
-        err
+        )
     )]
     pub async fn push_sync_tasks_job(
         &self,
@@ -561,8 +557,7 @@ impl IntegrationConnectionService {
             { attr::USER_ID } = for_user_id.to_string(),
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
             { attr::INTEGRATION_CONNECTION_STATUS } = status.to_string(),
-        ),
-        err
+        )
     )]
     pub async fn create_integration_connection(
         &self,
@@ -597,8 +592,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::USER_ID } = for_user_id.to_string(),
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string()
-        ),
-        err
+        )
     )]
     pub async fn get_or_create_integration_connection(
         &self,
@@ -634,8 +628,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn update_integration_connection_config(
         &self,
@@ -729,8 +722,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string(),
             { attr::USER_ID } = integration_connection.user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn reconcile_set_aside_notifications(
         &self,
@@ -768,8 +760,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string(),
             { attr::USER_ID } = integration_connection.user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn restore_set_aside_notifications(
         &self,
@@ -801,13 +792,14 @@ impl IntegrationConnectionService {
     /// `.sync-led.pending` LED). Used only by the documentation screenshot
     /// generator.
     #[cfg(feature = "screenshots")]
-    #[tracing::instrument(level = "info", skip(self), err)]
+    #[tracing::instrument(level = "info", skip(self), fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
     pub async fn force_clear_sync_state(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
     ) -> Result<(), UniversalInboxError> {
-        sqlx::query(
+        let result: Result<(), UniversalInboxError> = async move {
+            sqlx::query(
             r#"
                 UPDATE integration_connection
                 SET last_notifications_sync_scheduled_at = NULL,
@@ -836,7 +828,10 @@ impl IntegrationConnectionService {
                 "Failed to clear sync state on integration connection {integration_connection_id}"
             ),
         })?;
-        Ok(())
+            Ok(())
+        }
+        .await;
+        result.record_span_error()
     }
 
     /// Force-set an integration connection's status and registered OAuth scopes.
@@ -845,7 +840,7 @@ impl IntegrationConnectionService {
     /// screenshots -- test generate-doc-screenshots`) to reproduce error/edge-state
     /// UIs against a throwaway test user. Not exposed via HTTP routes.
     #[cfg(feature = "screenshots")]
-    #[tracing::instrument(level = "info", skip(self), err)]
+    #[tracing::instrument(level = "info", skip(self), fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
     pub async fn force_set_integration_connection_state(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -855,16 +850,21 @@ impl IntegrationConnectionService {
         registered_oauth_scopes: Option<Vec<String>>,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        self.repository
-            .update_integration_connection_status(
-                executor,
-                integration_connection_id,
-                status,
-                failure_message,
-                registered_oauth_scopes,
-                for_user_id,
-            )
-            .await
+        let result: Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> =
+            async move {
+                self.repository
+                    .update_integration_connection_status(
+                        executor,
+                        integration_connection_id,
+                        status,
+                        failure_message,
+                        registered_oauth_scopes,
+                        for_user_id,
+                    )
+                    .await
+            }
+            .await;
+        result.record_span_error()
     }
 
     /// Revoke, at the provider, the OAuth grant behind an integration
@@ -880,8 +880,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string(),
             { attr::INTEGRATION_PROVIDER_KIND } = integration_connection.provider.kind().to_string()
-        ),
-        err
+        )
     )]
     pub async fn revoke_provider_grant(
         &self,
@@ -972,8 +971,7 @@ impl IntegrationConnectionService {
             { attr::SLACK_TEAM_ID } = %team_id,
             { attr::INTEGRATION_PROVIDER_USER_IDS } = ?provider_user_ids,
             { attr::OAUTH_REVOKED_AT } = revoked_at.to_rfc3339()
-        ),
-        err
+        )
     )]
     pub async fn revoke_slack_access(
         &self,
@@ -1040,7 +1038,7 @@ impl IntegrationConnectionService {
 
     /// Revoke, at the providers, every OAuth grant of a user (account
     /// deletion). See [`Self::revoke_provider_grant`].
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
     pub async fn revoke_all_provider_grants(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1062,41 +1060,45 @@ impl IntegrationConnectionService {
     /// row lock (`FOR UPDATE SKIP LOCKED`) during the provider calls, so
     /// concurrent workers never retry the same grant.
     /// Returns `(completed_count, failed_count)`.
-    #[tracing::instrument(level = "info", skip(self), err)]
+    #[tracing::instrument(level = "info", skip(self), fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
     pub async fn retry_due_grant_revocations(
         &self,
         max_revocations: usize,
         retry_policy: &GrantRevocationRetryPolicy,
     ) -> Result<(usize, usize), UniversalInboxError> {
-        let mut completed = 0usize;
-        let mut failed = 0usize;
+        let result: Result<(usize, usize), UniversalInboxError> = async move {
+            let mut completed = 0usize;
+            let mut failed = 0usize;
 
-        for _ in 0..max_revocations {
-            let mut transaction = self.begin().await?;
-            let Some(revocation) = self
-                .repository
-                .claim_due_oauth_grant_revocation(&mut transaction, Utc::now())
-                .await?
-            else {
-                break;
-            };
-            let revocation_id = revocation.id;
+            for _ in 0..max_revocations {
+                let mut transaction = self.begin().await?;
+                let Some(revocation) = self
+                    .repository
+                    .claim_due_oauth_grant_revocation(&mut transaction, Utc::now())
+                    .await?
+                else {
+                    break;
+                };
+                let revocation_id = revocation.id;
 
-            if self
-                .retry_grant_revocation(&mut transaction, revocation, retry_policy)
-                .await?
-            {
-                completed += 1;
-            } else {
-                failed += 1;
+                if self
+                    .retry_grant_revocation(&mut transaction, revocation, retry_policy)
+                    .await?
+                {
+                    completed += 1;
+                } else {
+                    failed += 1;
+                }
+
+                transaction.commit().await.context(format!(
+                    "Failed to commit the retry of the OAuth grant revocation {revocation_id}"
+                ))?;
             }
 
-            transaction.commit().await.context(format!(
-                "Failed to commit the retry of the OAuth grant revocation {revocation_id}"
-            ))?;
+            Ok((completed, failed))
         }
-
-        Ok((completed, failed))
+        .await;
+        result.record_span_error()
     }
 
     /// Retry one claimed revocation. Returns whether it left the Pending
@@ -1358,8 +1360,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn disconnect_integration_connection(
         &self,
@@ -1436,9 +1437,9 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
             { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339(),
-            { attr::INTEGRATION_CONNECTION_PAUSE_ON } = pause_on.to_rfc3339()
-        ),
-        err
+            { attr::INTEGRATION_CONNECTION_PAUSE_ON } = pause_on.to_rfc3339(),
+            { attr::ERROR_TYPE } = tracing::field::Empty
+        )
     )]
     pub async fn warn_integration_connections_of_inactive_users(
         &self,
@@ -1446,6 +1447,7 @@ impl IntegrationConnectionService {
         inactive_before: DateTime<Utc>,
         pause_on: DateTime<Utc>,
     ) -> Result<(usize, usize), UniversalInboxError> {
+        let result: Result<(usize, usize), UniversalInboxError> = async move {
         let mut transaction = self.begin().await.context(
             "Failed to create new transaction while listing integration connections to warn of inactivity",
         )?;
@@ -1503,6 +1505,8 @@ impl IntegrationConnectionService {
             "Warned {warned} {provider_kind} integration connection(s) of inactivity, {failed} failed"
         );
         Ok((warned, failed))
+    }.await;
+        result.record_span_error()
     }
 
     /// Warn one connection, see
@@ -1514,8 +1518,7 @@ impl IntegrationConnectionService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
-        err
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string())
     )]
     async fn warn_integration_connection_of_inactivity(
         &self,
@@ -1602,9 +1605,9 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
             { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339(),
-            { attr::INTEGRATION_CONNECTION_WARNED_BEFORE } = warned_before.map(|warned_before| warned_before.to_rfc3339())
-        ),
-        err
+            { attr::INTEGRATION_CONNECTION_WARNED_BEFORE } = warned_before.map(|warned_before| warned_before.to_rfc3339()),
+            { attr::ERROR_TYPE } = tracing::field::Empty
+        )
     )]
     pub async fn pause_integration_connections_of_inactive_users(
         &self,
@@ -1612,6 +1615,7 @@ impl IntegrationConnectionService {
         inactive_before: DateTime<Utc>,
         warned_before: Option<DateTime<Utc>>,
     ) -> Result<(usize, usize), UniversalInboxError> {
+        let result: Result<(usize, usize), UniversalInboxError> = async move {
         let mut transaction = self.begin().await.context(
             "Failed to create new transaction while listing integration connections of inactive users",
         )?;
@@ -1635,6 +1639,8 @@ impl IntegrationConnectionService {
             IntegrationConnectionPausedReason::Inactivity,
         )
         .await
+    }.await;
+        result.record_span_error()
     }
 
     /// Pause the `provider_kind` connections `Failing` since before
@@ -1647,37 +1653,41 @@ impl IntegrationConnectionService {
         skip(self),
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
-            { attr::INTEGRATION_CONNECTION_FAILING_BEFORE } = failing_before.to_rfc3339()
-        ),
-        err
+            { attr::INTEGRATION_CONNECTION_FAILING_BEFORE } = failing_before.to_rfc3339(),
+            { attr::ERROR_TYPE } = tracing::field::Empty
+        )
     )]
     pub async fn pause_long_failing_integration_connections(
         &self,
         provider_kind: IntegrationProviderKind,
         failing_before: DateTime<Utc>,
     ) -> Result<(usize, usize), UniversalInboxError> {
-        let mut transaction = self.begin().await.context(
+        let result: Result<(usize, usize), UniversalInboxError> = async move {
+            let mut transaction = self.begin().await.context(
             "Failed to create new transaction while listing long failing integration connections",
         )?;
-        let integration_connection_ids = self
-            .repository
-            .find_long_failing_integration_connections(
-                &mut transaction,
-                provider_kind,
-                failing_before,
-            )
-            .await?;
-        transaction
-            .commit()
-            .await
-            .context("Failed to commit while listing long failing integration connections")?;
+            let integration_connection_ids = self
+                .repository
+                .find_long_failing_integration_connections(
+                    &mut transaction,
+                    provider_kind,
+                    failing_before,
+                )
+                .await?;
+            transaction
+                .commit()
+                .await
+                .context("Failed to commit while listing long failing integration connections")?;
 
-        self.pause_integration_connections(
-            provider_kind,
-            integration_connection_ids,
-            IntegrationConnectionPausedReason::LongFailing,
-        )
-        .await
+            self.pause_integration_connections(
+                provider_kind,
+                integration_connection_ids,
+                IntegrationConnectionPausedReason::LongFailing,
+            )
+            .await
+        }
+        .await;
+        result.record_span_error()
     }
 
     /// Revoke the grant of each connection at the provider (so Slack, for
@@ -1755,8 +1765,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
             { attr::INTEGRATION_CONNECTION_PAUSED_REASON } = paused_reason.to_string()
-        ),
-        err
+        )
     )]
     async fn pause_integration_connection(
         &self,
@@ -1833,8 +1842,7 @@ impl IntegrationConnectionService {
             { attr::SYNC_MIN_INTERVAL_MINUTES } = min_sync_interval_in_minutes,
             { attr::SYNC_TYPE } = sync_type.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn get_integration_connection_to_sync(
         &self,
@@ -1897,15 +1905,6 @@ impl IntegrationConnectionService {
         Ok(connection)
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
-            { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
-    )]
     pub async fn get_validated_integration_connection_per_kind(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1925,7 +1924,6 @@ impl IntegrationConnectionService {
 
     /// This function searches for a validated Slack integration connection with up-to-date
     /// registered OAuth scopes to access Slack API endpoints not related to a specific user.
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn find_slack_access_token(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1950,15 +1948,6 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
-            { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
-    )]
     pub async fn find_access_token(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1984,15 +1973,6 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
-            { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
-    )]
     pub async fn find_access_token_for_connection(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -2022,14 +2002,6 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(
-            { attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string(),
-        ),
-        err
-    )]
     async fn fetch_access_token_locally(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -2087,8 +2059,7 @@ impl IntegrationConnectionService {
         skip_all,
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn update_integration_connection_context(
         &self,
@@ -2120,8 +2091,7 @@ impl IntegrationConnectionService {
         skip_all,
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string()
-        ),
-        err
+        )
     )]
     pub async fn get_integration_connection_per_provider_user_id(
         &self,
@@ -2143,8 +2113,7 @@ impl IntegrationConnectionService {
         skip_all,
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
-        ),
-        err
+        )
     )]
     pub async fn find_integration_connection_per_provider_user_ids(
         &self,
@@ -2167,8 +2136,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.map(|id| id.to_string()),
             { attr::USER_ID } = for_user_id.map(|id| id.to_string())
-        ),
-        err
+        )
     )]
     pub async fn schedule_notifications_sync_status(
         &self,
@@ -2198,8 +2166,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn claim_notification_sync_start(
         &self,
@@ -2226,8 +2193,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn claim_task_sync_start(
         &self,
@@ -2253,8 +2219,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn complete_notifications_sync_status(
         &self,
@@ -2310,8 +2275,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn error_notifications_sync_status(
         &self,
@@ -2337,8 +2301,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.map(|kind| kind.to_string()),
             { attr::USER_ID } = for_user_id.map(|id| id.to_string())
-        ),
-        err
+        )
     )]
     pub async fn schedule_tasks_sync_status(
         &self,
@@ -2363,8 +2326,7 @@ impl IntegrationConnectionService {
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string(),
             { attr::USER_ID } = for_user_id.to_string()
-        ),
-        err
+        )
     )]
     pub async fn complete_tasks_sync_status(
         &self,
@@ -2431,8 +2393,7 @@ impl IntegrationConnectionService {
         skip_all,
         fields(
             { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string()
-        ),
-        err
+        )
     )]
     pub async fn get_integration_connection_config_for_provider_user_id(
         &self,
@@ -2457,8 +2418,7 @@ impl IntegrationConnectionService {
             { attr::INTEGRATION_CONNECTION_ID } = %integration_connection_id,
             { attr::USER_ID } = %user_id,
             { attr::INTEGRATION_CONNECTION_STATUS } = ?status
-        ),
-        err
+        )
     )]
     pub async fn update_integration_connection_status(
         &self,
@@ -2504,9 +2464,9 @@ impl IntegrationConnectionService {
         skip_all,
         fields(
             { attr::OAUTH_MINUTES_BEFORE_EXPIRY } = minutes_before_expiry,
-            { attr::INTEGRATION_PROVIDER_KIND } = ?provider_kind
-        ),
-        err
+            { attr::INTEGRATION_PROVIDER_KIND } = ?provider_kind,
+            { attr::ERROR_TYPE } = tracing::field::Empty
+        )
     )]
     pub async fn refresh_expiring_tokens(
         &self,
@@ -2514,6 +2474,7 @@ impl IntegrationConnectionService {
         minutes_before_expiry: i64,
         provider_kind: Option<IntegrationProviderKind>,
     ) -> Result<(usize, usize), UniversalInboxError> {
+        let result: Result<(usize, usize), UniversalInboxError> = async move {
         let token_encryption_key = self.token_encryption_key.expose_secret();
         let flow_service = &self.oauth2_flow_service;
 
@@ -2695,6 +2656,8 @@ impl IntegrationConnectionService {
 
         info!("Token refresh complete: {refreshed} refreshed, {failed} failed out of {total}");
         Ok((refreshed, failed))
+    }.await;
+        result.record_span_error()
     }
 
     pub async fn start_oauth_authorization(
@@ -2997,7 +2960,7 @@ impl IntegrationConnectionService {
 #[concurrent_cached(
     key = "String",
     convert = r#"{ format!("{}{}", provider_kind, provider_user_id) }"#,
-    ty = "cached::AsyncRedisCache<String, Option<IntegrationConnectionConfig>>",
+    ty = "crate::utils::cache::TracedRedisCache<Option<IntegrationConnectionConfig>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `is_known_provider_user_id`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:is_known_provider_user_id", Duration::from_secs(6 * 60 * 60), false).await }"##
 )]

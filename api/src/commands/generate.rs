@@ -57,6 +57,7 @@ use universal_inbox::{
     user::{Password, User, UserId},
 };
 
+use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::{
     configuration::Settings,
@@ -215,7 +216,7 @@ pub fn load_seed_fixture<T: for<'de> serde::de::Deserialize<'de>>(
         .context(format!("Failed to deserialize seed fixture {path}"))?)
 }
 
-#[tracing::instrument(name = "generate-testing-user", level = "info", skip_all, err)]
+#[tracing::instrument(name = "generate-testing-user", level = "info", skip_all, fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
 pub async fn generate_testing_user(
     user_service: Arc<UserService>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -224,83 +225,90 @@ pub async fn generate_testing_user(
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     settings: Settings,
 ) -> Result<String, UniversalInboxError> {
-    let service = user_service.clone();
+    let result: Result<String, UniversalInboxError> = async move {
+        let service = user_service.clone();
 
-    let mut transaction = service
-        .begin()
-        .await
-        .context("Failed to create new transaction while generating new testing user")?;
+        let mut transaction = service
+            .begin()
+            .await
+            .context("Failed to create new transaction while generating new testing user")?;
 
-    let user = generate_user(&mut transaction, user_service).await?;
-    let email = user
-        .email
-        .as_ref()
-        .map(|email| email.to_string())
-        .unwrap_or_else(|| user.id.to_string());
+        let user = generate_user(&mut transaction, user_service).await?;
+        let email = user
+            .email
+            .as_ref()
+            .map(|email| email.to_string())
+            .unwrap_or_else(|| user.id.to_string());
 
-    generate_all_notifications(
-        &mut transaction,
-        integration_connection_service,
-        notification_service,
-        task_service,
-        third_party_item_service,
-        &settings,
-        user.id,
-        &email,
-        &[],
-    )
-    .await?;
+        generate_all_notifications(
+            &mut transaction,
+            integration_connection_service,
+            notification_service,
+            task_service,
+            third_party_item_service,
+            &settings,
+            user.id,
+            &email,
+            &[],
+        )
+        .await?;
 
-    transaction
-        .commit()
-        .await
-        .context("Failed to commit transaction while generating new testing user")?;
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction while generating new testing user")?;
 
-    info!(
-        "Test user {} successfully generated with password {DEFAULT_PASSWORD}",
-        email
-    );
+        info!(
+            "Test user {} successfully generated with password {DEFAULT_PASSWORD}",
+            email
+        );
 
-    Ok(email)
+        Ok(email)
+    }
+    .await;
+    result.record_span_error()
 }
 
-#[tracing::instrument(name = "generate-empty-user", level = "info", skip_all, err)]
+#[tracing::instrument(name = "generate-empty-user", level = "info", skip_all, fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
 pub async fn generate_empty_user(
     user_service: Arc<UserService>,
 ) -> Result<String, UniversalInboxError> {
-    let service = user_service.clone();
+    let result: Result<String, UniversalInboxError> = async move {
+        let service = user_service.clone();
 
-    let mut transaction = service
-        .begin()
-        .await
-        .context("Failed to create new transaction while generating new empty user")?;
+        let mut transaction = service
+            .begin()
+            .await
+            .context("Failed to create new transaction while generating new empty user")?;
 
-    let user = generate_user(&mut transaction, user_service).await?;
-    let email = user
-        .email
-        .as_ref()
-        .map(|email| email.to_string())
-        .unwrap_or_else(|| user.id.to_string());
+        let user = generate_user(&mut transaction, user_service).await?;
+        let email = user
+            .email
+            .as_ref()
+            .map(|email| email.to_string())
+            .unwrap_or_else(|| user.id.to_string());
 
-    transaction
-        .commit()
-        .await
-        .context("Failed to commit transaction while generating new empty user")?;
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction while generating new empty user")?;
 
-    info!(
-        "Empty user {email} (id: {}) successfully generated with password {DEFAULT_PASSWORD}",
-        user.id
-    );
+        info!(
+            "Empty user {email} (id: {}) successfully generated with password {DEFAULT_PASSWORD}",
+            user.id
+        );
 
-    Ok(email)
+        Ok(email)
+    }
+    .await;
+    result.record_span_error()
 }
 
 #[tracing::instrument(
     name = "connect-integration-for-user",
     level = "info",
     skip_all,
-    fields({ attr::USER_ID } = %user_id, { attr::INTEGRATION_PROVIDER_KIND } = %provider_kind),
-    err
+    fields({ attr::USER_ID } = %user_id, { attr::INTEGRATION_PROVIDER_KIND } = %provider_kind, { attr::ERROR_TYPE } = tracing::field::Empty)
 )]
 pub async fn connect_integration_for_user(
     user_service: Arc<UserService>,
@@ -309,6 +317,7 @@ pub async fn connect_integration_for_user(
     user_id: UserId,
     provider_kind: IntegrationProviderKind,
 ) -> Result<(), UniversalInboxError> {
+    let result: Result<(), UniversalInboxError> = async move {
     let mut transaction = user_service
         .begin()
         .await
@@ -340,10 +349,12 @@ pub async fn connect_integration_for_user(
     );
 
     Ok(())
+}.await;
+    result.record_span_error()
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(name = "generate-notifications-for-user", level = "info", skip_all, fields({ attr::USER_ID } = %user_id), err)]
+#[tracing::instrument(name = "generate-notifications-for-user", level = "info", skip_all, fields({ attr::USER_ID } = %user_id, { attr::ERROR_TYPE } = tracing::field::Empty))]
 pub async fn generate_notifications_for_user(
     user_service: Arc<UserService>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -354,48 +365,51 @@ pub async fn generate_notifications_for_user(
     user_id: UserId,
     only: Vec<NotificationSourceKind>,
 ) -> Result<(), UniversalInboxError> {
-    let mut transaction = user_service.begin().await.context(
-        "Failed to create new transaction while generating notifications for existing user",
-    )?;
+    let result: Result<(), UniversalInboxError> = async move {
+        let mut transaction = user_service.begin().await.context(
+            "Failed to create new transaction while generating notifications for existing user",
+        )?;
 
-    let user = user_service
-        .get_user(&mut transaction, user_id)
-        .await?
-        .ok_or_else(|| UniversalInboxError::Unexpected(anyhow!("User {user_id} not found")))?;
-    let email = user
-        .email
-        .as_ref()
-        .map(|email| email.to_string())
-        .unwrap_or_else(|| user.id.to_string());
-
-    generate_all_notifications(
-        &mut transaction,
-        integration_connection_service,
-        notification_service,
-        task_service,
-        third_party_item_service,
-        &settings,
-        user.id,
-        &email,
-        &only,
-    )
-    .await?;
-
-    transaction
-        .commit()
-        .await
-        .context("Failed to commit transaction while generating notifications for existing user")?;
-
-    info!(
-        "Sample notifications successfully generated for user {} ({})",
-        user.id,
-        user.email
+        let user = user_service
+            .get_user(&mut transaction, user_id)
+            .await?
+            .ok_or_else(|| UniversalInboxError::Unexpected(anyhow!("User {user_id} not found")))?;
+        let email = user
+            .email
             .as_ref()
-            .map(|e| e.to_string())
-            .unwrap_or_default()
-    );
+            .map(|email| email.to_string())
+            .unwrap_or_else(|| user.id.to_string());
 
-    Ok(())
+        generate_all_notifications(
+            &mut transaction,
+            integration_connection_service,
+            notification_service,
+            task_service,
+            third_party_item_service,
+            &settings,
+            user.id,
+            &email,
+            &only,
+        )
+        .await?;
+
+        transaction.commit().await.context(
+            "Failed to commit transaction while generating notifications for existing user",
+        )?;
+
+        info!(
+            "Sample notifications successfully generated for user {} ({})",
+            user.id,
+            user.email
+                .as_ref()
+                .map(|e| e.to_string())
+                .unwrap_or_default()
+        );
+
+        Ok(())
+    }
+    .await;
+    result.record_span_error()
 }
 
 #[allow(clippy::too_many_arguments)]

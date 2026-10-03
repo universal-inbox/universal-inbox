@@ -23,6 +23,7 @@ use universal_inbox::{
 };
 use url::Url;
 
+use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::{
     billing::{
@@ -303,6 +304,11 @@ impl BillingService {
 
     /// Create-or-reuse the Stripe Customer for `user_id` and start a
     /// Checkout session. Returns the hosted URL the UI should redirect to.
+    #[tracing::instrument(
+        level = "info",
+        skip_all,
+        fields({ attr::USER_ID } = %user_id, { attr::ERROR_TYPE } = tracing::field::Empty)
+    )]
     pub async fn create_checkout_session(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -310,57 +316,71 @@ impl BillingService {
         success_url: Url,
         cancel_url: Url,
     ) -> Result<Url, UniversalInboxError> {
-        let user = self
-            .repository
-            .get_user(executor, user_id)
-            .await?
-            .ok_or_else(|| {
-                UniversalInboxError::ItemNotFound(format!("User {user_id} not found"))
-            })?;
+        let result: Result<Url, UniversalInboxError> = async move {
+            let user = self
+                .repository
+                .get_user(executor, user_id)
+                .await?
+                .ok_or_else(|| {
+                    UniversalInboxError::ItemNotFound(format!("User {user_id} not found"))
+                })?;
 
-        let customer_id = self.ensure_stripe_customer(executor, &user).await?;
+            let customer_id = self.ensure_stripe_customer(executor, &user).await?;
 
-        let url = self
-            .stripe
-            .create_checkout_session(CheckoutSessionParams {
-                customer_id,
-                price_id: self.stripe_price_id.clone(),
-                success_url,
-                cancel_url,
-                user_id,
-            })
-            .await?;
-        Ok(url)
+            let url = self
+                .stripe
+                .create_checkout_session(CheckoutSessionParams {
+                    customer_id,
+                    price_id: self.stripe_price_id.clone(),
+                    success_url,
+                    cancel_url,
+                    user_id,
+                })
+                .await?;
+            Ok(url)
+        }
+        .await;
+        result.record_span_error()
     }
 
     /// Start a Stripe Customer Portal session for an existing customer.
     /// Returns the hosted URL.
+    #[tracing::instrument(
+        level = "info",
+        skip_all,
+        fields({ attr::USER_ID } = %user_id, { attr::ERROR_TYPE } = tracing::field::Empty)
+    )]
     pub async fn create_portal_session(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         return_url: Url,
     ) -> Result<Url, UniversalInboxError> {
-        let no_customer = || UniversalInboxError::PaymentRequired {
-            code: "no_stripe_customer",
-            message: "Start a paid subscription first to access the billing portal.".to_string(),
-            details: json!({ "current_plan": "free" }),
-        };
-        let customer_id = self
-            .repository
-            .get_user_subscription(executor, user_id)
-            .await?
-            .and_then(|sub| sub.stripe_customer_id)
-            .ok_or_else(no_customer)?;
+        let result: Result<Url, UniversalInboxError> = async move {
+            let no_customer = || UniversalInboxError::PaymentRequired {
+                code: "no_stripe_customer",
+                message: "Start a paid subscription first to access the billing portal."
+                    .to_string(),
+                details: json!({ "current_plan": "free" }),
+            };
+            let customer_id = self
+                .repository
+                .get_user_subscription(executor, user_id)
+                .await?
+                .and_then(|sub| sub.stripe_customer_id)
+                .ok_or_else(no_customer)?;
 
-        let url = self
-            .stripe
-            .create_portal_session(PortalSessionParams {
-                customer_id,
-                return_url,
-            })
-            .await?;
-        Ok(url)
+            let url = self
+                .stripe
+                .create_portal_session(PortalSessionParams {
+                    customer_id,
+                    return_url,
+                })
+                .await?;
+            Ok(url)
+        }
+        .await;
+        result.record_span_error()
     }
 
     /// Stop billing a user whose account is being deleted. Must run *before*
@@ -379,12 +399,13 @@ impl BillingService {
     ///
     /// No-op for a user without a `user_subscription` row (Free user who never
     /// started a checkout).
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
+    #[tracing::instrument(level = "info", skip_all, fields({ attr::USER_ID } = user_id.to_string(), { attr::ERROR_TYPE } = tracing::field::Empty))]
     pub async fn cancel_billing_for_account_deletion(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
+        let result: Result<(), UniversalInboxError> = async move {
         let Some(subscription) = self
             .repository
             .get_user_subscription(executor, user_id)
@@ -438,6 +459,8 @@ impl BillingService {
         }
 
         Ok(())
+    }.await;
+        result.record_span_error()
     }
 
     /// Apply an incoming, already-verified webhook event to the persisted
@@ -449,52 +472,62 @@ impl BillingService {
     /// need a live fetch — checkout-with-subscription, invoice paid/failed).
     /// Keeping the network call out of the transaction is what prevents a
     /// Stripe latency spike from pinning a DB connection per delivery.
+    #[tracing::instrument(
+        level = "info",
+        skip_all,
+        fields({ attr::ERROR_TYPE } = tracing::field::Empty)
+    )]
     pub async fn apply_subscription_event(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         event: &StripeEvent,
         prefetched: Option<RawSubscription>,
     ) -> Result<(), UniversalInboxError> {
-        match &event.kind {
-            StripeEventKind::CheckoutSessionCompleted {
-                customer_id,
-                subscription_id,
-                user_id_metadata,
-            } => {
-                self.handle_checkout_completed(
-                    executor,
-                    customer_id.as_deref(),
-                    subscription_id.as_deref(),
-                    *user_id_metadata,
-                    prefetched,
-                    event.created,
-                )
-                .await
-            }
-            StripeEventKind::SubscriptionUpserted(raw) => {
-                self.upsert_from_raw(executor, raw, None, event.created)
+        let result: Result<(), UniversalInboxError> = async move {
+            match &event.kind {
+                StripeEventKind::CheckoutSessionCompleted {
+                    customer_id,
+                    subscription_id,
+                    user_id_metadata,
+                } => {
+                    self.handle_checkout_completed(
+                        executor,
+                        customer_id.as_deref(),
+                        subscription_id.as_deref(),
+                        *user_id_metadata,
+                        prefetched,
+                        event.created,
+                    )
                     .await
-            }
-            StripeEventKind::SubscriptionDeleted(raw) => {
-                // At end-of-period the user falls back to Free. `upsert_from_raw`
-                // detects the Paid → Free transition and arms the grace deadline;
-                // the reconcile job pauses excess connections after it expires
-                // (uniform grace — no immediate pause here).
-                self.upsert_from_raw(executor, raw, None, event.created)
-                    .await
-            }
-            StripeEventKind::InvoicePaid { .. } | StripeEventKind::InvoicePaymentFailed { .. } => {
-                // The webhook handler prefetched the subscription state when an
-                // invoice carried a subscription id; nothing to do otherwise.
-                if let Some(raw) = prefetched {
-                    self.upsert_from_raw(executor, &raw, None, event.created)
-                        .await
-                } else {
-                    Ok(())
                 }
+                StripeEventKind::SubscriptionUpserted(raw) => {
+                    self.upsert_from_raw(executor, raw, None, event.created)
+                        .await
+                }
+                StripeEventKind::SubscriptionDeleted(raw) => {
+                    // At end-of-period the user falls back to Free. `upsert_from_raw`
+                    // detects the Paid → Free transition and arms the grace deadline;
+                    // the reconcile job pauses excess connections after it expires
+                    // (uniform grace — no immediate pause here).
+                    self.upsert_from_raw(executor, raw, None, event.created)
+                        .await
+                }
+                StripeEventKind::InvoicePaid { .. }
+                | StripeEventKind::InvoicePaymentFailed { .. } => {
+                    // The webhook handler prefetched the subscription state when an
+                    // invoice carried a subscription id; nothing to do otherwise.
+                    if let Some(raw) = prefetched {
+                        self.upsert_from_raw(executor, &raw, None, event.created)
+                            .await
+                    } else {
+                        Ok(())
+                    }
+                }
+                StripeEventKind::Other => Ok(()),
             }
-            StripeEventKind::Other => Ok(()),
         }
+        .await;
+        result.record_span_error()
     }
 
     /// Resolve the local subscription row for a Checkout completion. When the
@@ -769,10 +802,16 @@ impl BillingService {
     /// Each row is its own transaction, opened after Stripe has answered, so
     /// nothing is held open across a network round trip and one row's failure
     /// cannot roll back the rows already reconciled.
+    #[tracing::instrument(
+        level = "info",
+        skip_all,
+        fields({ attr::ERROR_TYPE } = tracing::field::Empty)
+    )]
     pub async fn reconcile_subscriptions(
         &self,
         dry_run: bool,
     ) -> Result<ReconcileReport, UniversalInboxError> {
+        let result: Result<ReconcileReport, UniversalInboxError> = async move {
         use crate::billing::repository::BillingRepository;
         let mut executor = self.begin().await?;
         let subs = self
@@ -919,6 +958,8 @@ impl BillingService {
             adopted,
             grace_expired,
         })
+    }.await;
+        result.record_span_error()
     }
 
     /// Bring a Free user back into compliance with the integration cap:
@@ -927,6 +968,11 @@ impl BillingService {
     /// paused first, skipping provider kinds a pause cannot restrict.
     ///
     /// No-op for Paid users. Returns the list of paused connection ids.
+    #[tracing::instrument(
+        level = "info",
+        skip_all,
+        fields({ attr::USER_ID } = %user_id, { attr::ERROR_TYPE } = tracing::field::Empty)
+    )]
     pub async fn enforce_free_plan_compliance(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -935,104 +981,112 @@ impl BillingService {
         Vec<universal_inbox::integration_connection::IntegrationConnectionId>,
         UniversalInboxError,
     > {
-        use crate::repository::integration_connection::IntegrationConnectionRepository;
-        use universal_inbox::integration_connection::{
-            IntegrationConnectionStatus, provider::IntegrationProviderKind,
-        };
+        let result: Result<
+            Vec<universal_inbox::integration_connection::IntegrationConnectionId>,
+            UniversalInboxError,
+        > = async move {
+            use crate::repository::integration_connection::IntegrationConnectionRepository;
+            use universal_inbox::integration_connection::{
+                IntegrationConnectionStatus, provider::IntegrationProviderKind,
+            };
 
-        let plan = self.get_user_plan(executor, user_id).await?;
-        if plan.is_paid() {
-            return Ok(vec![]);
-        }
-
-        let mut connections = self
-            .repository
-            .fetch_all_integration_connections(
-                executor,
-                user_id,
-                Some(IntegrationConnectionStatus::Validated),
-                false,
-            )
-            .await?;
-        // Exclude the implicit `API` connection: it is auto-created, hidden from
-        // the integrations panel, and excluded from the billing usage count, so
-        // it must neither tip the over-limit decision nor be selected for
-        // pausing. Keeps this path in lockstep with
-        // `count_validated_integration_connections`.
-        // Measure the excess the way the cap is measured, or the two disagree
-        // and this pauses connections the user does not owe. Both exclusions
-        // mirror `count_validated_integration_connections`: the implicit `API`
-        // connection, and connections already paused, which consume no slot
-        // and whose `auto_paused_config_snapshot` a second pass would
-        // overwrite with the disabled config.
-        connections.retain(|c| {
-            c.provider.kind() != IntegrationProviderKind::API && c.auto_paused_by_plan_at.is_none()
-        });
-        let limit = self.limits.max_integration_connections as usize;
-        if connections.len() <= limit {
-            return Ok(vec![]);
-        }
-
-        // Deterministic ordering: keep the oldest-created connections, so the
-        // most recently added are the ones paused when a Free user is over the
-        // cap. Iterated newest-first below, pausing until the excess is gone.
-        connections.sort_by_key(|c| c.created_at);
-        let excess = connections.len() - limit;
-
-        let now = Utc::now();
-        let mut paused = vec![];
-        let mut unenforceable = vec![];
-        for connection in connections.into_iter().rev() {
-            if paused.len() == excess {
-                break;
+            let plan = self.get_user_plan(executor, user_id).await?;
+            if plan.is_paid() {
+                return Ok(vec![]);
             }
-            // A provider kind with no sync toggle cannot be paused: the
-            // marker alone would free its slot while it kept working. Leave it
-            // counted and pause the next-newest connection instead.
-            if !connection.provider.has_sync_toggles() {
-                unenforceable.push(connection.id);
-                continue;
-            }
-            let connection_id = connection.id;
-            // Snapshot the user's real config BEFORE disabling so an upgrade
-            // can restore their exact toggles, not blanket-enable everything.
-            let snapshot = connection.provider.config();
-            let mut updated_provider = connection.provider.clone();
-            let changed = updated_provider.disable_all_syncs();
-            if changed {
-                self.repository
-                    .update_integration_connection_config(
-                        executor,
-                        connection_id,
-                        updated_provider.config(),
-                        user_id,
-                    )
-                    .await?;
-            }
-            self.repository
-                .set_integration_connection_plan_pause(
+
+            let mut connections = self
+                .repository
+                .fetch_all_integration_connections(
                     executor,
-                    connection_id,
-                    Some(now),
-                    Some(&snapshot),
+                    user_id,
+                    Some(IntegrationConnectionStatus::Validated),
+                    false,
                 )
                 .await?;
-            paused.push(connection_id);
-        }
+            // Exclude the implicit `API` connection: it is auto-created, hidden from
+            // the integrations panel, and excluded from the billing usage count, so
+            // it must neither tip the over-limit decision nor be selected for
+            // pausing. Keeps this path in lockstep with
+            // `count_validated_integration_connections`.
+            // Measure the excess the way the cap is measured, or the two disagree
+            // and this pauses connections the user does not owe. Both exclusions
+            // mirror `count_validated_integration_connections`: the implicit `API`
+            // connection, and connections already paused, which consume no slot
+            // and whose `auto_paused_config_snapshot` a second pass would
+            // overwrite with the disabled config.
+            connections.retain(|c| {
+                c.provider.kind() != IntegrationProviderKind::API
+                    && c.auto_paused_by_plan_at.is_none()
+            });
+            let limit = self.limits.max_integration_connections as usize;
+            if connections.len() <= limit {
+                return Ok(vec![]);
+            }
 
-        if paused.len() < excess {
-            // Nothing pausable is left, so the user stays over the cap and
-            // keeps the banner — better than a marker that reports a
-            // compliance it did not achieve.
-            warn!(
-                "Free-plan enforcement for user {user_id} paused {} of {excess} excess \
+            // Deterministic ordering: keep the oldest-created connections, so the
+            // most recently added are the ones paused when a Free user is over the
+            // cap. Iterated newest-first below, pausing until the excess is gone.
+            connections.sort_by_key(|c| c.created_at);
+            let excess = connections.len() - limit;
+
+            let now = Utc::now();
+            let mut paused = vec![];
+            let mut unenforceable = vec![];
+            for connection in connections.into_iter().rev() {
+                if paused.len() == excess {
+                    break;
+                }
+                // A provider kind with no sync toggle cannot be paused: the
+                // marker alone would free its slot while it kept working. Leave it
+                // counted and pause the next-newest connection instead.
+                if !connection.provider.has_sync_toggles() {
+                    unenforceable.push(connection.id);
+                    continue;
+                }
+                let connection_id = connection.id;
+                // Snapshot the user's real config BEFORE disabling so an upgrade
+                // can restore their exact toggles, not blanket-enable everything.
+                let snapshot = connection.provider.config();
+                let mut updated_provider = connection.provider.clone();
+                let changed = updated_provider.disable_all_syncs();
+                if changed {
+                    self.repository
+                        .update_integration_connection_config(
+                            executor,
+                            connection_id,
+                            updated_provider.config(),
+                            user_id,
+                        )
+                        .await?;
+                }
+                self.repository
+                    .set_integration_connection_plan_pause(
+                        executor,
+                        connection_id,
+                        Some(now),
+                        Some(&snapshot),
+                    )
+                    .await?;
+                paused.push(connection_id);
+            }
+
+            if paused.len() < excess {
+                // Nothing pausable is left, so the user stays over the cap and
+                // keeps the banner — better than a marker that reports a
+                // compliance it did not achieve.
+                warn!(
+                    "Free-plan enforcement for user {user_id} paused {} of {excess} excess \
                  connections; {} cannot be restricted by a pause ({:?})",
-                paused.len(),
-                unenforceable.len(),
-                unenforceable
-            );
+                    paused.len(),
+                    unenforceable.len(),
+                    unenforceable
+                );
+            }
+            Ok(paused)
         }
-        Ok(paused)
+        .await;
+        result.record_span_error()
     }
 
     /// Inverse of [`Self::enforce_free_plan_compliance`]: for every connection

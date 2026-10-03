@@ -47,6 +47,9 @@ uuid = { workspace = true, features = ["serde"] }
 validator = { workspace = true }
 vec1 = { workspace = true }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tracing = { workspace = true }
+
 [workspace.dependencies]
 anyhow = { version = "1.0" }
 # async-stripe 1.0 is split into a client crate (`async-stripe`) plus per-area

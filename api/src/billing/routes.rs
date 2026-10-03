@@ -76,7 +76,7 @@ fn ensure_returns_to_frontend(
     }
 }
 
-#[tracing::instrument(level = "debug", skip_all, err)]
+#[tracing::instrument(level = "debug", skip_all)]
 pub async fn get_billing_state(
     billing_service: web::Data<Arc<BillingService>>,
     settings: web::Data<Settings>,
@@ -173,7 +173,7 @@ pub async fn get_billing_state(
     Ok(HttpResponse::Ok().json(response))
 }
 
-#[tracing::instrument(level = "debug", skip_all, err)]
+#[tracing::instrument(level = "debug", skip_all)]
 pub async fn create_checkout_session(
     body: web::Json<CheckoutSessionRequest>,
     billing_service: web::Data<Arc<BillingService>>,
@@ -205,7 +205,7 @@ pub async fn create_checkout_session(
     Ok(HttpResponse::Ok().json(SessionUrlResponse { url }))
 }
 
-#[tracing::instrument(level = "debug", skip_all, err)]
+#[tracing::instrument(level = "debug", skip_all)]
 pub async fn create_portal_session(
     body: web::Json<PortalSessionRequest>,
     billing_service: web::Data<Arc<BillingService>>,
@@ -240,8 +240,7 @@ pub async fn create_portal_session(
     fields(
         { attr::STRIPE_EVENT_ID } = tracing::field::Empty,
         { attr::STRIPE_EVENT_TYPE } = tracing::field::Empty
-    ),
-    err
+    )
 )]
 pub async fn stripe_webhook(
     req: HttpRequest,
