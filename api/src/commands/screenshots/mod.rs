@@ -31,6 +31,8 @@ pub mod manifest;
 pub mod screencast;
 pub mod states;
 
+use crate::observability::RecordSpanError;
+use crate::observability::attr;
 use browser::{EXPECT_TIMEOUT, launch_browser, login, new_page};
 use manifest::{Action, Capture, MANIFEST, MANUAL, ScreenshotSpec, SeedState};
 
@@ -45,7 +47,7 @@ use manifest::{Action, Capture, MANIFEST, MANUAL, ScreenshotSpec, SeedState};
         third_party_item_service,
         settings
     ),
-    err
+    fields({ attr::ERROR_TYPE } = tracing::field::Empty)
 )]
 #[allow(clippy::too_many_arguments)]
 pub async fn generate_doc_screenshots(
@@ -60,88 +62,92 @@ pub async fn generate_doc_screenshots(
     only: Option<Vec<String>>,
     keep_user: bool,
 ) -> Result<(), UniversalInboxError> {
-    if !output_dir.is_dir() {
-        return Err(UniversalInboxError::Unexpected(anyhow::anyhow!(
-            "--output-dir does not exist or is not a directory: {}",
+    let result: Result<(), UniversalInboxError> = async move {
+        if !output_dir.is_dir() {
+            return Err(UniversalInboxError::Unexpected(anyhow::anyhow!(
+                "--output-dir does not exist or is not a directory: {}",
+                output_dir.display()
+            )));
+        }
+
+        let selected: Vec<&ScreenshotSpec> = if let Some(filter) = &only {
+            MANIFEST
+                .iter()
+                .filter(|spec| filter.iter().any(|f| f == spec.name))
+                .collect()
+        } else {
+            MANIFEST.iter().collect()
+        };
+
+        if selected.is_empty() {
+            warn!("No screenshots selected; check the --only filter against the manifest.");
+            return Ok(());
+        }
+
+        info!(
+            "Generating {} screenshot(s) from base_url={base_url}, output_dir={}",
+            selected.len(),
             output_dir.display()
-        )));
-    }
+        );
 
-    let selected: Vec<&ScreenshotSpec> = if let Some(filter) = &only {
-        MANIFEST
-            .iter()
-            .filter(|spec| filter.iter().any(|f| f == spec.name))
-            .collect()
-    } else {
-        MANIFEST.iter().collect()
-    };
-
-    if selected.is_empty() {
-        warn!("No screenshots selected; check the --only filter against the manifest.");
-        return Ok(());
-    }
-
-    info!(
-        "Generating {} screenshot(s) from base_url={base_url}, output_dir={}",
-        selected.len(),
-        output_dir.display()
-    );
-
-    info!("Generating test user with seed data…");
-    let email = generate::generate_testing_user(
-        user_service.clone(),
-        integration_connection_service.clone(),
-        notification_service,
-        task_service,
-        third_party_item_service,
-        settings,
-    )
-    .await
-    .context("Failed to generate test user")?;
-    info!("Test user generated: {email}");
-
-    let user_id = lookup_user_id(&user_service, &email)
+        info!("Generating test user with seed data…");
+        let email = generate::generate_testing_user(
+            user_service.clone(),
+            integration_connection_service.clone(),
+            notification_service,
+            task_service,
+            third_party_item_service,
+            settings,
+        )
         .await
-        .context("Failed to look up freshly-generated test user")?;
+        .context("Failed to generate test user")?;
+        info!("Test user generated: {email}");
 
-    // Seed extras the default fixture doesn't produce: API tokens + authorized
-    // OAuth clients so the /security page has content for ai_agents.md and
-    // api_usage.md. Logged-as-warn on failure rather than aborting the run.
-    if let Err(err) = states::seed_security_artifacts(user_service.clone(), user_id).await {
-        warn!("Failed to seed security-page artifacts: {err:#}");
+        let user_id = lookup_user_id(&user_service, &email)
+            .await
+            .context("Failed to look up freshly-generated test user")?;
+
+        // Seed extras the default fixture doesn't produce: API tokens + authorized
+        // OAuth clients so the /security page has content for ai_agents.md and
+        // api_usage.md. Logged-as-warn on failure rather than aborting the run.
+        if let Err(err) = states::seed_security_artifacts(user_service.clone(), user_id).await {
+            warn!("Failed to seed security-page artifacts: {err:#}");
+        }
+
+        let cleanup_outcome = run_with_browser(
+            &base_url,
+            &email,
+            user_id,
+            integration_connection_service,
+            &selected,
+            &output_dir,
+        )
+        .await;
+
+        if !keep_user {
+            info!("Deleting test user {user_id}");
+            // The throwaway screenshot user never starts a Stripe checkout, so
+            // there is no subscription to cancel.
+            if let Err(err) = user::delete_user(user_service, None, user_id).await {
+                warn!("Failed to delete test user {user_id}: {err:?}");
+            }
+        } else {
+            warn!("--keep-user set: leaving test user {email} in the database");
+        }
+
+        cleanup_outcome?;
+
+        if !MANUAL.is_empty() {
+            info!("Skipped (manual):");
+            for (_name, note) in MANUAL {
+                info!("  • {note}");
+            }
+        }
+
+        Ok(())
     }
-
-    let cleanup_outcome = run_with_browser(
-        &base_url,
-        &email,
-        user_id,
-        integration_connection_service,
-        &selected,
-        &output_dir,
-    )
     .await;
-
-    if !keep_user {
-        info!("Deleting test user {user_id}");
-        // The throwaway screenshot user never starts a Stripe checkout, so
-        // there is no subscription to cancel.
-        if let Err(err) = user::delete_user(user_service, None, user_id).await {
-            warn!("Failed to delete test user {user_id}: {err:?}");
-        }
-    } else {
-        warn!("--keep-user set: leaving test user {email} in the database");
-    }
-
-    cleanup_outcome?;
-
-    if !MANUAL.is_empty() {
-        info!("Skipped (manual):");
-        for (_name, note) in MANUAL {
-            info!("  • {note}");
-        }
-    }
-
-    Ok(())
+    result.record_span_error()
 }
 
 async fn lookup_user_id(

@@ -50,7 +50,7 @@ pub trait AuthenticationTokenRepository {
 
 #[async_trait]
 impl AuthenticationTokenRepository for Repository {
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn create_auth_token(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -106,8 +106,7 @@ impl AuthenticationTokenRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string(), { attr::AUTH_TOKEN_EXCLUDE_SESSION } = exclude_session_tokens),
-        err
+        fields({ attr::USER_ID } = user_id.to_string(), { attr::AUTH_TOKEN_EXCLUDE_SESSION } = exclude_session_tokens)
     )]
     async fn fetch_auth_tokens_for_user(
         &self,
@@ -151,7 +150,7 @@ impl AuthenticationTokenRepository for Repository {
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn get_auth_token_status_by_hash(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -187,8 +186,7 @@ impl AuthenticationTokenRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.to_string(), { attr::AUTH_TOKEN_ID } = auth_token_id.to_string()),
-        err
+        fields({ attr::USER_ID } = user_id.to_string(), { attr::AUTH_TOKEN_ID } = auth_token_id.to_string())
     )]
     async fn revoke_auth_token(
         &self,

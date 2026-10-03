@@ -47,7 +47,7 @@ pub fn scope() -> Scope {
         .service(web::resource("/slack/events").route(web::post().to(push_slack_event)))
 }
 
-#[tracing::instrument(level = "debug", skip_all, err)]
+#[tracing::instrument(level = "debug", skip_all)]
 pub async fn push_slack_event(
     req: HttpRequest,
     body: web::Bytes,

@@ -12,6 +12,7 @@ use universal_inbox::integration_connection::{
     provider::{IntegrationProvider, IntegrationProviderKind},
 };
 
+use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::universal_inbox::{
     UniversalInboxError,
@@ -20,7 +21,7 @@ use crate::universal_inbox::{
     task::{TaskEventService, service::TaskService},
 };
 
-#[tracing::instrument(level = "debug", skip_all, err)]
+#[tracing::instrument(level = "info", skip_all, fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
 pub async fn handle_slack_reaction_push_event(
     executor: &mut Transaction<'_, Postgres>,
     event: &SlackPushEventCallback,
@@ -29,6 +30,7 @@ pub async fn handle_slack_reaction_push_event(
     task_service: Arc<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
 ) -> Result<(), UniversalInboxError> {
+    let result: Result<(), UniversalInboxError> = async move {
     let current_span = tracing::Span::current();
     current_span.set_attribute(attr::SLACK_USER_ID, provider_user_id.clone());
 
@@ -118,4 +120,6 @@ pub async fn handle_slack_reaction_push_event(
             Ok(())
         }
     }
+}.await;
+    result.record_span_error()
 }

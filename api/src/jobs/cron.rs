@@ -6,6 +6,7 @@ use redis::{AsyncCommands, ExistenceCheck, SetExpiry, SetOptions};
 use redis_apalis::Script;
 use tracing::{info, warn};
 
+use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::{
     configuration::{
@@ -31,8 +32,7 @@ pub struct RefreshOAuthTokensCronTick;
     name = "refresh-oauth-tokens-cron-tick",
     level = "info",
     skip_all,
-    fields({ attr::CRON_TICK } = %ctx.get_timestamp()),
-    err
+    fields({ attr::CRON_TICK } = %ctx.get_timestamp(), { attr::ERROR_TYPE } = tracing::field::Empty)
 )]
 pub async fn handle_refresh_oauth_tokens_cron_tick(
     _tick: RefreshOAuthTokensCronTick,
@@ -41,28 +41,32 @@ pub async fn handle_refresh_oauth_tokens_cron_tick(
     cache: Data<Cache>,
     settings: Data<RefreshOAuthTokensCronSettings>,
 ) -> Result<(), UniversalInboxError> {
-    if !try_acquire_cron_tick_lock(
-        &cache,
-        &queue_scoped_cron_job_name(&storage, "refresh-oauth-tokens"),
-        ctx.get_timestamp(),
-        settings.lock_ttl_seconds,
-    )
-    .await?
-    {
-        info!("Tick already handled by another worker process, skipping");
-        return Ok(());
-    }
+    let result: Result<(), UniversalInboxError> = async move {
+        if !try_acquire_cron_tick_lock(
+            &cache,
+            &queue_scoped_cron_job_name(&storage, "refresh-oauth-tokens"),
+            ctx.get_timestamp(),
+            settings.lock_ttl_seconds,
+        )
+        .await?
+        {
+            info!("Tick already handled by another worker process, skipping");
+            return Ok(());
+        }
 
-    push_job(
-        &storage,
-        UniversalInboxJob::RefreshOAuthTokens {
-            minutes_before_expiry: settings.minutes_before_expiry,
-        },
-    )
-    .await
-    .context("Failed to enqueue RefreshOAuthTokens job")?;
-    info!("Enqueued RefreshOAuthTokens job");
-    Ok(())
+        push_job(
+            &storage,
+            UniversalInboxJob::RefreshOAuthTokens {
+                minutes_before_expiry: settings.minutes_before_expiry,
+            },
+        )
+        .await
+        .context("Failed to enqueue RefreshOAuthTokens job")?;
+        info!("Enqueued RefreshOAuthTokens job");
+        Ok(())
+    }
+    .await;
+    result.record_span_error()
 }
 
 /// Cron tick request for the `retry-oauth-grant-revocations` job. Carries no
@@ -78,8 +82,7 @@ pub struct RetryOAuthGrantRevocationsCronTick;
     name = "retry-oauth-grant-revocations-cron-tick",
     level = "info",
     skip_all,
-    fields({ attr::CRON_TICK } = %ctx.get_timestamp()),
-    err
+    fields({ attr::CRON_TICK } = %ctx.get_timestamp(), { attr::ERROR_TYPE } = tracing::field::Empty)
 )]
 pub async fn handle_retry_oauth_grant_revocations_cron_tick(
     _tick: RetryOAuthGrantRevocationsCronTick,
@@ -88,33 +91,37 @@ pub async fn handle_retry_oauth_grant_revocations_cron_tick(
     cache: Data<Cache>,
     settings: Data<RetryOAuthGrantRevocationsCronSettings>,
 ) -> Result<(), UniversalInboxError> {
-    if !try_acquire_cron_tick_lock(
-        &cache,
-        &queue_scoped_cron_job_name(&storage, "retry-oauth-grant-revocations"),
-        ctx.get_timestamp(),
-        settings.lock_ttl_seconds,
-    )
-    .await?
-    {
-        info!("Tick already handled by another worker process, skipping");
-        return Ok(());
-    }
+    let result: Result<(), UniversalInboxError> = async move {
+        if !try_acquire_cron_tick_lock(
+            &cache,
+            &queue_scoped_cron_job_name(&storage, "retry-oauth-grant-revocations"),
+            ctx.get_timestamp(),
+            settings.lock_ttl_seconds,
+        )
+        .await?
+        {
+            info!("Tick already handled by another worker process, skipping");
+            return Ok(());
+        }
 
-    push_job(
-        &storage,
-        UniversalInboxJob::RetryOAuthGrantRevocations {
-            max_revocations: settings.batch_size,
-            retry_policy: GrantRevocationRetryPolicy {
-                base_delay_in_seconds: settings.base_delay_in_seconds,
-                max_delay_in_seconds: settings.max_delay_in_seconds,
-                max_attempts: settings.max_attempts,
+        push_job(
+            &storage,
+            UniversalInboxJob::RetryOAuthGrantRevocations {
+                max_revocations: settings.batch_size,
+                retry_policy: GrantRevocationRetryPolicy {
+                    base_delay_in_seconds: settings.base_delay_in_seconds,
+                    max_delay_in_seconds: settings.max_delay_in_seconds,
+                    max_attempts: settings.max_attempts,
+                },
             },
-        },
-    )
-    .await
-    .context("Failed to enqueue RetryOAuthGrantRevocations job")?;
-    info!("Enqueued RetryOAuthGrantRevocations job");
-    Ok(())
+        )
+        .await
+        .context("Failed to enqueue RetryOAuthGrantRevocations job")?;
+        info!("Enqueued RetryOAuthGrantRevocations job");
+        Ok(())
+    }
+    .await;
+    result.record_span_error()
 }
 
 /// Cron tick request for the `pause-slack-connections` job. Carries
@@ -130,8 +137,7 @@ pub struct PauseSlackConnectionsCronTick;
     name = "pause-slack-connections-cron-tick",
     level = "info",
     skip_all,
-    fields({ attr::CRON_TICK } = %ctx.get_timestamp()),
-    err
+    fields({ attr::CRON_TICK } = %ctx.get_timestamp(), { attr::ERROR_TYPE } = tracing::field::Empty)
 )]
 pub async fn handle_pause_slack_connections_cron_tick(
     _tick: PauseSlackConnectionsCronTick,
@@ -140,30 +146,34 @@ pub async fn handle_pause_slack_connections_cron_tick(
     cache: Data<Cache>,
     settings: Data<PauseSlackConnectionsCronSettings>,
 ) -> Result<(), UniversalInboxError> {
-    if !try_acquire_cron_tick_lock(
-        &cache,
-        &queue_scoped_cron_job_name(&storage, "pause-slack-connections"),
-        ctx.get_timestamp(),
-        settings.lock_ttl_seconds,
-    )
-    .await?
-    {
-        info!("Tick already handled by another worker process, skipping");
-        return Ok(());
-    }
+    let result: Result<(), UniversalInboxError> = async move {
+        if !try_acquire_cron_tick_lock(
+            &cache,
+            &queue_scoped_cron_job_name(&storage, "pause-slack-connections"),
+            ctx.get_timestamp(),
+            settings.lock_ttl_seconds,
+        )
+        .await?
+        {
+            info!("Tick already handled by another worker process, skipping");
+            return Ok(());
+        }
 
-    push_job(
-        &storage,
-        UniversalInboxJob::PauseSlackConnections {
-            inactivity_threshold_days: settings.inactivity_threshold_days,
-            inactivity_warning_days: settings.inactivity_warning_days,
-            failing_threshold_days: settings.failing_threshold_days,
-        },
-    )
-    .await
-    .context("Failed to enqueue PauseSlackConnections job")?;
-    info!("Enqueued PauseSlackConnections job");
-    Ok(())
+        push_job(
+            &storage,
+            UniversalInboxJob::PauseSlackConnections {
+                inactivity_threshold_days: settings.inactivity_threshold_days,
+                inactivity_warning_days: settings.inactivity_warning_days,
+                failing_threshold_days: settings.failing_threshold_days,
+            },
+        )
+        .await
+        .context("Failed to enqueue PauseSlackConnections job")?;
+        info!("Enqueued PauseSlackConnections job");
+        Ok(())
+    }
+    .await;
+    result.record_span_error()
 }
 
 /// Cron tick request for the `vacuum-jobs` job. Carries no data; the scheduled
@@ -188,8 +198,7 @@ pub struct VacuumJobsCronTick;
     name = "vacuum-jobs-cron-tick",
     level = "info",
     skip_all,
-    fields({ attr::CRON_TICK } = %ctx.get_timestamp()),
-    err
+    fields({ attr::CRON_TICK } = %ctx.get_timestamp(), { attr::ERROR_TYPE } = tracing::field::Empty)
 )]
 pub async fn handle_vacuum_jobs_cron_tick(
     _tick: VacuumJobsCronTick,
@@ -198,6 +207,7 @@ pub async fn handle_vacuum_jobs_cron_tick(
     cache: Data<Cache>,
     settings: Data<VacuumJobsCronSettings>,
 ) -> Result<(), UniversalInboxError> {
+    let result: Result<(), UniversalInboxError> = async move {
     if !try_acquire_cron_tick_lock(
         &cache,
         &queue_scoped_cron_job_name(&storage, "vacuum-jobs"),
@@ -256,6 +266,8 @@ pub async fn handle_vacuum_jobs_cron_tick(
         settings.max_batches_per_tick, settings.retention_hours
     );
     Ok(())
+}.await;
+    result.record_span_error()
 }
 
 /// Scopes a cron job name to the namespace of the job queue it works on, so the

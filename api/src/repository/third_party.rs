@@ -104,8 +104,7 @@ impl ThirdPartyItemRepository for Repository {
             { attr::THIRD_PARTY_ITEM_KIND } = third_party_item.kind().to_string(),
             { attr::USER_ID } = third_party_item.user_id.to_string(),
             { attr::INTEGRATION_CONNECTION_ID } = third_party_item.integration_connection_id.to_string()
-        ),
-        err
+        )
     )]
     async fn create_or_update_third_party_item(
         &self,
@@ -317,8 +316,7 @@ impl ThirdPartyItemRepository for Repository {
         fields(
             { attr::SYNC_SOURCE_KIND } = task_source_kind.to_string(),
             { attr::USER_ID } = user_id.to_string()
-        ),
-        err
+        )
     )]
     async fn get_stale_task_source_third_party_items(
         &self,
@@ -394,8 +392,7 @@ impl ThirdPartyItemRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::THIRD_PARTY_ITEM_ID } = id.to_string(), { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::THIRD_PARTY_ITEM_ID } = id.to_string(), { attr::USER_ID } = user_id.to_string())
     )]
     async fn is_third_party_item_owned_by(
         &self,
@@ -430,8 +427,7 @@ impl ThirdPartyItemRepository for Repository {
         fields(
             { attr::THIRD_PARTY_ITEM_KIND } = kind.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_id,
-        ),
-        err
+        )
     )]
     async fn has_third_party_item_for_source_id(
         &self,
@@ -471,8 +467,7 @@ impl ThirdPartyItemRepository for Repository {
             { attr::THIRD_PARTY_ITEM_KIND } = kind.to_string(),
             { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_id,
             { attr::USER_ID } = user_id.map(|id| id.to_string()),
-        ),
-        err
+        )
     )]
     async fn find_third_party_items_for_source_id(
         &self,
@@ -539,8 +534,7 @@ impl ThirdPartyItemRepository for Repository {
         fields(
             { attr::THIRD_PARTY_ITEM_KIND } = kind.to_string(),
             { attr::USER_ID } = user_id.to_string(),
-        ),
-        err
+        )
     )]
     async fn find_third_party_items_for_user_id(
         &self,
@@ -599,8 +593,7 @@ impl ThirdPartyItemRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::THIRD_PARTY_ITEM_KIND } = kind.to_string(), { attr::NOTIFICATION_STATUS } = notification_status.to_string(), { attr::USER_ID } = user_id.to_string()),
-        err
+        fields({ attr::THIRD_PARTY_ITEM_KIND } = kind.to_string(), { attr::NOTIFICATION_STATUS } = notification_status.to_string(), { attr::USER_ID } = user_id.to_string())
     )]
     async fn find_third_party_items_with_active_notification_for_user_id(
         &self,
@@ -663,8 +656,7 @@ impl ThirdPartyItemRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::USER_ID } = user_id.map(|id| id.to_string())),
-        err
+        fields({ attr::USER_ID } = user_id.map(|id| id.to_string()))
     )]
     async fn find_legacy_todoist_items(
         &self,
@@ -727,8 +719,7 @@ impl ThirdPartyItemRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::THIRD_PARTY_ITEM_ID } = id.to_string(), { attr::THIRD_PARTY_ITEM_SOURCE_ID } = %source_id),
-        err
+        fields({ attr::THIRD_PARTY_ITEM_ID } = id.to_string(), { attr::THIRD_PARTY_ITEM_SOURCE_ID } = %source_id)
     )]
     async fn update_third_party_item_source_id(
         &self,
