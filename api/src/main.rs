@@ -16,8 +16,8 @@ use universal_inbox_api::{
     },
     mailer::SmtpMailer,
     observability::{
-        get_subscriber, get_subscriber_with_telemetry, get_subscriber_with_telemetry_and_logging,
-        init_subscriber, install_panic_hook,
+        get_subscriber, get_subscriber_with_telemetry, init_subscriber, install_panic_hook,
+        shutdown_telemetry,
     },
     utils::passkey::build_webauthn,
 };
@@ -42,31 +42,17 @@ async fn main() -> std::io::Result<()> {
     let (log_env_filter, dep_log_level_filter) = cli.log_level(&settings);
     let log_format = settings.application.observability.logging.format;
     if let Some(tracing_settings) = &settings.application.observability.tracing {
-        let service_name = cli.service_name();
-        if tracing_settings.is_stdout_logging_enabled {
-            init_subscriber(
-                get_subscriber_with_telemetry_and_logging(
-                    &settings.application.environment,
-                    &log_env_filter,
-                    tracing_settings,
-                    &service_name,
-                    settings.application.version.clone(),
-                    log_format,
-                ),
-                dep_log_level_filter,
-            );
-        } else {
-            init_subscriber(
-                get_subscriber_with_telemetry(
-                    &settings.application.environment,
-                    &log_env_filter,
-                    tracing_settings,
-                    &service_name,
-                    settings.application.version.clone(),
-                ),
-                dep_log_level_filter,
-            );
-        }
+        init_subscriber(
+            get_subscriber_with_telemetry(
+                &settings.application.environment,
+                &log_env_filter,
+                tracing_settings,
+                &cli.service_name(),
+                settings.application.version.clone(),
+                log_format,
+            ),
+            dep_log_level_filter,
+        );
     } else {
         let subscriber = get_subscriber(&log_env_filter, log_format);
         init_subscriber(subscriber, dep_log_level_filter);
@@ -156,7 +142,7 @@ async fn main() -> std::io::Result<()> {
     )
     .await;
 
-    match cli
+    let result = cli
         .execute(
             settings,
             notification_service,
@@ -170,12 +156,18 @@ async fn main() -> std::io::Result<()> {
             oauth2_service,
             billing_service,
         )
+        .await;
+    if let Err(err) = &result {
+        error!("universal-inbox failed: {err:?}");
+    }
+    // Export the last spans and logs: `execute` returns on a normal exit and
+    // after a SIGTERM/SIGINT graceful stop. Blocking, hence off the runtime.
+    tokio::task::spawn_blocking(shutdown_telemetry)
         .await
-    {
-        Err(err) => {
-            error!("universal-inbox failed: {err:?}");
-            panic!("universal-inbox failed: {err:?}")
-        }
+        .expect("Failed to shut telemetry down");
+
+    match result {
+        Err(err) => panic!("universal-inbox failed: {err:?}"),
         Ok(_) => Ok(()),
     }
 }

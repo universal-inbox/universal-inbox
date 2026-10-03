@@ -35,7 +35,9 @@ use actix_web::{
 use actix_web_lab::web::spa;
 use anyhow::{Context, anyhow};
 use apalis::{
-    layers::tracing::{DefaultOnRequest, DefaultOnResponse, OnFailure, TraceLayer},
+    layers::tracing::{
+        DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, OnFailure, TraceLayer,
+    },
     prelude::*,
 };
 use apalis_cron::{CronStream, Schedule};
@@ -401,6 +403,7 @@ pub async fn run_server(
                 async move {
                     let res = fut.await?;
                     info!(
+                        target: observability::ACCESS_LOG_TARGET,
                         "{} {} {}",
                         res.request().method(),
                         res.request().uri().path(),
@@ -568,9 +571,10 @@ pub async fn run_ping_server(
     // share the same governor state (same reasoning as the API's `/ping`).
     let ping_rate_limiter = routes::health_check::build_rate_limiter();
 
+    // Not wrapped in `TracingLogger`: health checks are not traced (see
+    // `observability::AuthenticatedRootSpanBuilder` for the API's `/ping`).
     let server = HttpServer::new(move || {
         App::new()
-            .wrap(TracingLogger::default())
             .route("/ping", web::get().to(routes::health_check::ping))
             .app_data(cache_data.clone())
             .app_data(integration_connection_service_data.clone())
@@ -581,6 +585,18 @@ pub async fn run_ping_server(
     .context("Failed to listen on worker health-check port")?;
 
     Ok(server.run())
+}
+
+/// Tracing layer shared by every apalis worker. The `task` span is raised from
+/// apalis' default DEBUG to INFO so it is exported under the default
+/// `otel_trace_directive` ("info"): it is the job's root span.
+fn job_trace_layer()
+-> TraceLayer<DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, WorkerOnFailure> {
+    TraceLayer::new()
+        .make_span_with(DefaultMakeSpan::default().level(Level::INFO))
+        .on_request(DefaultOnRequest::default().level(Level::INFO))
+        .on_response(DefaultOnResponse::default().level(Level::INFO))
+        .on_failure(WorkerOnFailure {})
 }
 
 #[derive(Clone, Debug)]
@@ -617,12 +633,7 @@ pub async fn run_worker(
     info!("Starting {count} asynchronous Workers");
     let mut monitor = Monitor::new().register(
         WorkerBuilder::new("universal-inbox-worker")
-            .layer(
-                TraceLayer::new()
-                    .on_request(DefaultOnRequest::default().level(Level::INFO))
-                    .on_response(DefaultOnResponse::default().level(Level::INFO))
-                    .on_failure(WorkerOnFailure {}),
-            )
+            .layer(job_trace_layer())
             .concurrency(count)
             .data(notification_service)
             .data(task_service)
@@ -643,12 +654,7 @@ pub async fn run_worker(
         );
         monitor = monitor.register(
             WorkerBuilder::new("universal-inbox-cron-refresh-oauth-tokens")
-                .layer(
-                    TraceLayer::new()
-                        .on_request(DefaultOnRequest::default().level(Level::INFO))
-                        .on_response(DefaultOnResponse::default().level(Level::INFO))
-                        .on_failure(WorkerOnFailure {}),
-                )
+                .layer(job_trace_layer())
                 .data(redis_storage.clone())
                 .data(cache.clone())
                 .data(refresh_oauth_tokens_settings)
@@ -667,12 +673,7 @@ pub async fn run_worker(
         );
         monitor = monitor.register(
             WorkerBuilder::new("universal-inbox-cron-retry-oauth-grant-revocations")
-                .layer(
-                    TraceLayer::new()
-                        .on_request(DefaultOnRequest::default().level(Level::INFO))
-                        .on_response(DefaultOnResponse::default().level(Level::INFO))
-                        .on_failure(WorkerOnFailure {}),
-                )
+                .layer(job_trace_layer())
                 .data(redis_storage.clone())
                 .data(cache.clone())
                 .data(retry_oauth_grant_revocations_settings)
@@ -691,12 +692,7 @@ pub async fn run_worker(
         );
         monitor = monitor.register(
             WorkerBuilder::new("universal-inbox-cron-vacuum-jobs")
-                .layer(
-                    TraceLayer::new()
-                        .on_request(DefaultOnRequest::default().level(Level::INFO))
-                        .on_response(DefaultOnResponse::default().level(Level::INFO))
-                        .on_failure(WorkerOnFailure {}),
-                )
+                .layer(job_trace_layer())
                 .data(redis_storage.clone())
                 .data(cache.clone())
                 .data(vacuum_jobs_settings)
@@ -715,12 +711,7 @@ pub async fn run_worker(
         );
         monitor = monitor.register(
             WorkerBuilder::new("universal-inbox-cron-pause-slack-connections")
-                .layer(
-                    TraceLayer::new()
-                        .on_request(DefaultOnRequest::default().level(Level::INFO))
-                        .on_response(DefaultOnResponse::default().level(Level::INFO))
-                        .on_failure(WorkerOnFailure {}),
-                )
+                .layer(job_trace_layer())
                 .data(redis_storage.clone())
                 .data(cache)
                 .data(pause_slack_connections_settings)
