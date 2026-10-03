@@ -14,8 +14,8 @@ use universal_inbox::{
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     third_party::{
         integrations::google_calendar::{
-            EventAttendee, EventReminder, GoogleCalendarEvent,
-            GoogleCalendarEventAttendeeResponseStatus,
+            EventAttendee, EventDateTime, EventMethod, EventReminder, GoogleCalendarEvent,
+            GoogleCalendarEventAttendeeResponseStatus, RecurrenceId,
         },
         item::{ThirdPartyItem, ThirdPartyItemData},
     },
@@ -39,6 +39,7 @@ use crate::{
 use super::notification::ThirdPartyNotificationSourceService;
 
 const GOOGLE_CALENDAR_BASE_URL: &str = "https://www.googleapis.com/calendar/v3";
+const MAX_EVENT_LOOKUP_PAGES: usize = 5;
 
 #[derive(Clone)]
 pub struct GoogleCalendarService {
@@ -98,33 +99,54 @@ impl GoogleCalendarService {
         )
     }
 
+    /// Find the Google Calendar event an emailed invitation is about.
+    ///
+    /// A recurring event's iCalUID matches its master event and all its modified or cancelled
+    /// occurrences, and a page may come back empty with a `nextPageToken`: all pages are
+    /// fetched (deleted events included, to see cancellations) before picking the right one.
     pub async fn get_event(
         &self,
         calendar_id: &str,
         ical_uid: &str,
+        recurrence_id: Option<&RecurrenceId>,
+        method: EventMethod,
         access_token: &AccessToken,
     ) -> Result<GoogleCalendarEvent, UniversalInboxError> {
-        // `ical_uid` comes from an emailed .ics attachment: encode it so `&`
-        // or `#` cannot add parameters or drop the filters.
-        let url = build_endpoint(
-            &self.google_calendar_base_url,
-            &["calendars", calendar_id, "events"],
-            &[("iCalUID", ical_uid), ("maxResults", "1")],
-        )?;
+        let client = self.build_google_calendar_client(access_token)?;
+        let mut items = vec![];
+        let mut page_token: Option<String> = None;
+        for _ in 0..MAX_EVENT_LOOKUP_PAGES {
+            // `ical_uid` comes from an emailed .ics attachment: encode it so `&`
+            // or `#` cannot add parameters or drop the filters.
+            let mut query = vec![("iCalUID", ical_uid), ("showDeleted", "true")];
+            if let Some(page_token) = page_token.as_deref() {
+                query.push(("pageToken", page_token));
+            }
+            let url = build_endpoint(
+                &self.google_calendar_base_url,
+                &["calendars", calendar_id, "events"],
+                &query,
+            )?;
 
-        let events_list: GoogleCalendarEventsList = self
-            .build_google_calendar_client(access_token)?
-            .get(&url)
-            .await
-            .context(format!(
-                "Cannot fetch Google Calendar event ical_uid={ical_uid} in calendar {calendar_id}"
-            ))?;
+            let events_list: RawGoogleCalendarEventsList = client.get(&url).await.context(
+                format!(
+                    "Cannot fetch Google Calendar event ical_uid={ical_uid} in calendar {calendar_id}"
+                ),
+            )?;
+            items.extend(events_list.items);
+            page_token = events_list.next_page_token;
+            if page_token.is_none() {
+                break;
+            }
+        }
 
-        Ok(events_list.items.into_iter().next().ok_or_else(|| {
-            anyhow!(
+        let mut event = select_invitation_event(items, recurrence_id, method).with_context(|| {
+            format!(
                 "Cannot find Google Calendar event ical_uid={ical_uid} in calendar {calendar_id}"
             )
-        })?)
+        })?;
+        event.method = method;
+        Ok(event)
     }
 
     async fn delete_event(
@@ -290,6 +312,9 @@ impl ThirdPartyNotificationSourceService<GoogleCalendarEvent> for GoogleCalendar
                 .then_some(attendee.response_status)
         });
         let status = match user_response_status.as_ref() {
+            // A cancellation is news even for an event you answered. Whether it should rather
+            // replace a pending invitation is decided by the notification service.
+            _ if source.is_cancelled() => NotificationStatus::Unread,
             Some(GoogleCalendarEventAttendeeResponseStatus::Accepted) => NotificationStatus::Read,
             Some(GoogleCalendarEventAttendeeResponseStatus::Declined) => NotificationStatus::Read,
             Some(GoogleCalendarEventAttendeeResponseStatus::Tentative) => {
@@ -500,6 +525,118 @@ mod tests {
 /// URL of a Google Calendar API endpoint below `base_url`, with every path
 /// segment percent-encoded and the query built by the `url` crate, so ids
 /// taken from third-party content cannot retarget the request.
+/// Events list page whose items are kept raw: a cancelled occurrence only carries its `id`,
+/// `status`, `recurringEventId` and `originalStartTime` and cannot be parsed on its own
+#[derive(Deserialize, Debug)]
+struct RawGoogleCalendarEventsList {
+    #[serde(default, rename = "nextPageToken")]
+    next_page_token: Option<String>,
+    #[serde(default)]
+    items: Vec<serde_json::Value>,
+}
+
+/// Pick the event an invitation is about among the events sharing its iCalUID:
+/// - with a `RECURRENCE-ID`, the occurrence starting at that time (completed with its master
+///   event's fields when Google only returns a partial cancelled occurrence), or the master
+///   event for a `METHOD:REPLY` about an unmodified occurrence,
+/// - otherwise a standalone or master event, preferring a cancelled one for a `METHOD:CANCEL`
+///   invitation and an active one otherwise (an iCalUID can be reused after a deletion), then
+///   the most recently updated one.
+fn select_invitation_event(
+    items: Vec<serde_json::Value>,
+    recurrence_id: Option<&RecurrenceId>,
+    method: EventMethod,
+) -> Result<GoogleCalendarEvent, UniversalInboxError> {
+    let field = |item: &serde_json::Value, name: &str| item.get(name).cloned();
+    let is_occurrence = |item: &serde_json::Value| field(item, "recurringEventId").is_some();
+
+    let occurrence = recurrence_id.and_then(|recurrence_id| {
+        items.iter().find(|item| {
+            is_occurrence(item)
+                && field(item, "originalStartTime")
+                    .and_then(|value| serde_json::from_value::<EventDateTime>(value).ok())
+                    .is_some_and(|original_start_time| recurrence_id.matches(&original_start_time))
+        })
+    });
+    // An attendee can answer a single occurrence that was never modified: its reply
+    // (carrying the occurrence start) is attached to the master event
+    let can_use_master_event = recurrence_id.is_none() || method == EventMethod::Reply;
+    let prefer_cancelled = method == EventMethod::Cancel;
+    let selected = occurrence
+        .or_else(|| {
+            items
+                .iter()
+                .filter(|item| can_use_master_event && !is_occurrence(item))
+                .max_by_key(|item| {
+                    let is_cancelled = field(item, "status")
+                        .is_some_and(|status| status == serde_json::json!("cancelled"));
+                    let updated = field(item, "updated")
+                        .and_then(|value| serde_json::from_value::<DateTime<Utc>>(value).ok());
+                    (is_cancelled == prefer_cancelled, updated)
+                })
+        })
+        .ok_or_else(|| anyhow!("No matching event among {} events", items.len()))?;
+
+    let master = field(selected, "recurringEventId").and_then(|master_id| {
+        items
+            .iter()
+            .find(|item| field(item, "id") == Some(master_id.clone()))
+    });
+    let event_value = match (master, selected) {
+        (Some(serde_json::Value::Object(master)), serde_json::Value::Object(occurrence)) => {
+            let mut merged = master.clone();
+            merged.remove("recurrence");
+            if !occurrence.contains_key("start") {
+                // A partial cancelled occurrence: it starts at its original start time and
+                // lasts as long as its master event
+                shift_master_times_to_occurrence(&mut merged, occurrence.get("originalStartTime"));
+            }
+            merged.extend(occurrence.clone());
+            serde_json::Value::Object(merged)
+        }
+        _ => selected.clone(),
+    };
+
+    Ok(serde_json::from_value(event_value).context("Failed to parse Google Calendar event")?)
+}
+
+fn shift_master_times_to_occurrence(
+    master: &mut serde_json::Map<String, serde_json::Value>,
+    original_start_time: Option<&serde_json::Value>,
+) {
+    let parse = |value: Option<&serde_json::Value>| {
+        value.and_then(|value| serde_json::from_value::<EventDateTime>(value.clone()).ok())
+    };
+    let (Some(start), Some(end), Some(original_start_time)) = (
+        parse(master.get("start")),
+        parse(master.get("end")),
+        parse(original_start_time),
+    ) else {
+        return;
+    };
+
+    let occurrence_end = match (start.datetime, end.datetime, original_start_time.datetime) {
+        (Some(start_datetime), Some(end_datetime), Some(occurrence_start)) => EventDateTime {
+            datetime: Some(occurrence_start + (end_datetime - start_datetime)),
+            ..end
+        },
+        _ => match (start.date, end.date, original_start_time.date) {
+            (Some(start_date), Some(end_date), Some(occurrence_start)) => EventDateTime {
+                date: Some(occurrence_start + (end_date - start_date)),
+                ..end
+            },
+            _ => return,
+        },
+    };
+    if let (Ok(start), Ok(end)) = (
+        serde_json::to_value(original_start_time),
+        serde_json::to_value(occurrence_end),
+    ) {
+        master.insert("start".to_string(), start);
+        master.insert("end".to_string(), end);
+    }
+}
+
 fn build_endpoint(
     base_url: &str,
     segments: &[&str],
@@ -539,6 +676,150 @@ mod endpoint_tests {
             )
             .unwrap(),
             "https://www.googleapis.com/calendar/v3/calendars/primary/events?iCalUID=x%26showDeleted%3Dtrue%23frag&maxResults=1"
+        );
+    }
+}
+
+#[cfg(test)]
+mod select_invitation_event_tests {
+    use chrono::TimeZone;
+    use pretty_assertions::assert_eq;
+    use serde_json::json;
+    use universal_inbox::third_party::integrations::google_calendar::GoogleCalendarEventStatus;
+
+    use super::*;
+
+    fn master_event() -> serde_json::Value {
+        // A weekly recurring event
+        serde_json::from_str(include_str!(
+            "../../tests/api/fixtures/google_calendar_event.json"
+        ))
+        .unwrap()
+    }
+
+    fn modified_occurrence() -> serde_json::Value {
+        let mut occurrence = master_event();
+        occurrence["id"] = json!("eventid1_20240510T131500Z");
+        occurrence["summary"] = json!("Weekly meeting (moved)");
+        occurrence["recurringEventId"] = json!("eventid1");
+        occurrence["originalStartTime"] = json!({ "dateTime": "2024-05-10T13:15:00Z" });
+        occurrence["start"] = json!({ "dateTime": "2024-05-10T14:00:00Z" });
+        occurrence["end"] = json!({ "dateTime": "2024-05-10T14:15:00Z" });
+        occurrence.as_object_mut().unwrap().remove("recurrence");
+        occurrence
+    }
+
+    // Google only returns these fields for a cancelled occurrence of a recurring event
+    fn partial_cancelled_occurrence() -> serde_json::Value {
+        json!({
+            "kind": "calendar#event",
+            "etag": "\"3\"",
+            "id": "eventid1_20240517T131500Z",
+            "status": "cancelled",
+            "recurringEventId": "eventid1",
+            "originalStartTime": { "dateTime": "2024-05-17T13:15:00Z" }
+        })
+    }
+
+    fn recurrence_id(value: &str) -> RecurrenceId {
+        RecurrenceId::DateTime(
+            chrono::NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%SZ")
+                .unwrap()
+                .and_utc(),
+        )
+    }
+
+    #[test]
+    fn test_select_the_master_event_among_its_occurrences() {
+        let event = select_invitation_event(
+            vec![
+                partial_cancelled_occurrence(),
+                modified_occurrence(),
+                master_event(),
+            ],
+            None,
+            EventMethod::Request,
+        )
+        .unwrap();
+
+        assert_eq!(event.id.to_string(), "eventid1");
+    }
+
+    #[test]
+    fn test_select_the_active_event_when_its_ical_uid_was_reused_after_a_cancellation() {
+        let mut cancelled_event = master_event();
+        cancelled_event["id"] = json!("eventid0");
+        cancelled_event["status"] = json!("cancelled");
+        cancelled_event["updated"] = json!("2030-01-01T00:00:00Z");
+        let items = vec![cancelled_event, master_event()];
+
+        let event = select_invitation_event(items.clone(), None, EventMethod::Request).unwrap();
+        assert_eq!(event.id.to_string(), "eventid1");
+
+        let event = select_invitation_event(items, None, EventMethod::Cancel).unwrap();
+        assert_eq!(event.id.to_string(), "eventid0");
+    }
+
+    #[test]
+    fn test_select_the_modified_occurrence_of_a_recurrence_id() {
+        let event = select_invitation_event(
+            vec![master_event(), modified_occurrence()],
+            Some(&recurrence_id("20240510T131500Z")),
+            EventMethod::Request,
+        )
+        .unwrap();
+
+        assert_eq!(event.id.to_string(), "eventid1_20240510T131500Z");
+        assert_eq!(event.summary, "Weekly meeting (moved)");
+    }
+
+    #[test]
+    fn test_complete_a_partial_cancelled_occurrence_with_its_master_event() {
+        let master: GoogleCalendarEvent = serde_json::from_value(master_event()).unwrap();
+
+        let event = select_invitation_event(
+            vec![master_event(), partial_cancelled_occurrence()],
+            Some(&recurrence_id("20240517T131500Z")),
+            EventMethod::Cancel,
+        )
+        .unwrap();
+
+        assert_eq!(event.id.to_string(), "eventid1_20240517T131500Z");
+        assert_eq!(event.status, GoogleCalendarEventStatus::Cancelled);
+        assert_eq!(event.summary, master.summary);
+        assert!(event.recurrence.is_none());
+        let occurrence_start = Utc.with_ymd_and_hms(2024, 5, 17, 13, 15, 0).unwrap();
+        assert_eq!(event.start.datetime, Some(occurrence_start));
+        assert_eq!(
+            event.end.datetime,
+            Some(
+                occurrence_start + (master.end.datetime.unwrap() - master.start.datetime.unwrap())
+            )
+        );
+    }
+
+    #[test]
+    fn test_select_the_master_event_for_a_reply_to_an_unmodified_occurrence() {
+        let event = select_invitation_event(
+            vec![master_event()],
+            Some(&recurrence_id("20240524T131500Z")),
+            EventMethod::Reply,
+        )
+        .unwrap();
+
+        assert_eq!(event.id.to_string(), "eventid1");
+    }
+
+    #[test]
+    fn test_fail_when_no_event_matches() {
+        assert!(select_invitation_event(vec![], None, EventMethod::Request).is_err());
+        assert!(
+            select_invitation_event(
+                vec![master_event()],
+                Some(&recurrence_id("20240524T131500Z")),
+                EventMethod::Request,
+            )
+            .is_err()
         );
     }
 }
