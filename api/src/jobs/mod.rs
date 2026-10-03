@@ -185,7 +185,7 @@ pub async fn handle_universal_inbox_job(
 
 #[tracing::instrument(
     level = "debug",
-    skip(notification_service),
+    skip_all,
     fields(
         { attr::NOTIFICATION_ID } = notification_id.to_string(),
         { attr::USER_ID } = user_id.to_string()

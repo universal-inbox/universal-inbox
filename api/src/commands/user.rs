@@ -30,8 +30,11 @@ use crate::{
 #[tracing::instrument(
     name = "send-verification-email-command",
     level = "info",
-    skip(user_service, user_email),
-    fields({ attr::ERROR_TYPE } = tracing::field::Empty)
+    skip_all,
+    fields(
+        { attr::COMMAND_DRY_RUN } = dry_run,
+        { attr::ERROR_TYPE } = tracing::field::Empty
+    )
 )]
 pub async fn send_verification_email(
     user_service: Arc<UserService>,
@@ -86,8 +89,11 @@ pub async fn send_verification_email(
 #[tracing::instrument(
     name = "send-password-reset-email-command",
     level = "info",
-    skip(user_service, user_email),
-    fields({ attr::ERROR_TYPE } = tracing::field::Empty)
+    skip_all,
+    fields(
+        { attr::COMMAND_DRY_RUN } = dry_run,
+        { attr::ERROR_TYPE } = tracing::field::Empty
+    )
 )]
 pub async fn send_password_reset_email(
     user_service: Arc<UserService>,
@@ -134,7 +140,7 @@ pub async fn send_password_reset_email(
 #[tracing::instrument(
     name = "generate-jwt-token",
     level = "info",
-    skip(user_service, auth_token_service, user_email),
+    skip_all,
     fields({ attr::ERROR_TYPE } = tracing::field::Empty)
 )]
 pub async fn generate_jwt_token(
@@ -188,7 +194,7 @@ pub async fn generate_jwt_token(
     result.record_span_error()
 }
 
-#[tracing::instrument(name = "list-users", level = "info", skip(user_service), fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
+#[tracing::instrument(name = "list-users", level = "info", skip_all, fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
 pub async fn list_users(user_service: Arc<UserService>) -> Result<(), UniversalInboxError> {
     let result: Result<(), UniversalInboxError> = async move {
         let service = user_service.clone();
@@ -266,8 +272,11 @@ fn sanitize_for_terminal(value: &str) -> String {
 #[tracing::instrument(
     name = "delete-user",
     level = "info",
-    skip(user_service, billing_service),
-    fields({ attr::ERROR_TYPE } = tracing::field::Empty)
+    skip_all,
+    fields(
+        { attr::USER_ID } = user_id.to_string(),
+        { attr::ERROR_TYPE } = tracing::field::Empty
+    )
 )]
 pub async fn delete_user(
     user_service: Arc<UserService>,
@@ -300,7 +309,7 @@ pub async fn delete_user(
 #[tracing::instrument(
     name = "reset-password-command",
     level = "info",
-    skip(user_service, user_email),
+    skip_all,
     fields({ attr::ERROR_TYPE } = tracing::field::Empty)
 )]
 pub async fn reset_password(

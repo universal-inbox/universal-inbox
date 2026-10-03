@@ -55,6 +55,8 @@ pub const USER_EMAIL_VALIDATED_AT: &str = "user.email_validated_at";
 pub const USER_EMAIL_VALIDATION_SENT_AT: &str = "user.email_validation_sent_at";
 pub const USER_PASSWORD_RESET_SENT_AT: &str = "user.password_reset_sent_at";
 pub const USER_FOR_UPDATE: &str = "user.for_update";
+/// Cut-off instant: sessions issued before it are revoked
+pub const USER_SESSIONS_REVOKED_BEFORE: &str = "user.sessions_revoked_before";
 /// Subject of the user at the authentication provider (OIDC `sub`)
 pub const AUTH_PROVIDER_USER_ID: &str = "auth.provider_user_id";
 pub const AUTH_JWT_EXPIRES_AT: &str = "auth.jwt.exp";
@@ -73,6 +75,8 @@ pub const OAUTH_SCOPE_REQUIRED: &str = "oauth.scope.required";
 pub const OAUTH_MINUTES_BEFORE_EXPIRY: &str = "oauth.minutes_before_expiry";
 pub const OAUTH_REVOKED_AT: &str = "oauth.revoked_at";
 pub const OAUTH_GRANT_REVOCATION_ID: &str = "oauth_grant_revocation.id";
+pub const OAUTH_GRANT_REVOCATION_CANCELLED: &str = "oauth_grant_revocation.cancelled";
+pub const OAUTH_GRANT_REVOCATION_MAX_COUNT: &str = "oauth_grant_revocation.max_count";
 
 // Integration connections
 pub const INTEGRATION_CONNECTION_ID: &str = "integration_connection.id";
@@ -84,6 +88,12 @@ pub const INTEGRATION_CONNECTION_SYNCED_BEFORE: &str = "integration_connection.s
 pub const INTEGRATION_CONNECTION_LOCK_ROWS: &str = "integration_connection.lock_rows";
 pub const INTEGRATION_CONNECTION_WARNED_BEFORE: &str = "integration_connection.warned_before";
 pub const INTEGRATION_CONNECTION_PAUSE_ON: &str = "integration_connection.pause_on";
+pub const INTEGRATION_CONNECTION_INACTIVITY_THRESHOLD_DAYS: &str =
+    "integration_connection.inactivity_threshold_days";
+pub const INTEGRATION_CONNECTION_INACTIVITY_WARNING_DAYS: &str =
+    "integration_connection.inactivity_warning_days";
+pub const INTEGRATION_CONNECTION_FAILING_THRESHOLD_DAYS: &str =
+    "integration_connection.failing_threshold_days";
 pub const INTEGRATION_PROVIDER_KIND: &str = "integration.provider_kind";
 pub const INTEGRATION_PROVIDER_KINDS: &str = "integration.provider_kinds";
 pub const INTEGRATION_PROVIDER_USER_IDS: &str = "integration.provider_user_ids";
@@ -124,6 +134,14 @@ pub const TASK_KIND: &str = "task.kind";
 pub const TASK_STATUS: &str = "task.status";
 pub const TASK_LIST_ONLY_SYNCED: &str = "task.list.only_synced";
 pub const TASK_OVERWRITE_EXISTING_SINK_ITEM: &str = "task.overwrite_existing_sink_item";
+
+// CLI commands
+/// Whether a CLI command runs in dry-run mode (no write)
+pub const COMMAND_DRY_RUN: &str = "command.dry_run";
+/// Whether the generated screenshots user is kept after the run
+pub const SCREENSHOTS_KEEP_USER: &str = "screenshots.keep_user";
+/// Screenshot scenarios selected with `--only`
+pub const SCREENSHOTS_ONLY: &str = "screenshots.only";
 
 // Background jobs
 pub const JOB_ID: &str = "job.id";

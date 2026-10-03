@@ -139,7 +139,7 @@ impl UserService {
     /// policy pausing the integrations of long-gone users. Writes
     /// `last_active_at` at most once per
     /// [`USER_ACTIVITY_RECORDING_INTERVAL_HOURS`]; returns whether it wrote.
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
     pub async fn record_user_activity(&self, user_id: UserId) -> Result<bool, UniversalInboxError> {
         let now = Utc::now();
         let not_before = now - TimeDelta::hours(USER_ACTIVITY_RECORDING_INTERVAL_HOURS);

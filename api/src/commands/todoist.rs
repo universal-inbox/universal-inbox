@@ -25,8 +25,12 @@ use crate::{
 #[tracing::instrument(
     name = "todoist-migrate-legacy-ids-command",
     level = "info",
-    skip(task_service, integration_connection_service),
-    fields({ attr::ERROR_TYPE } = tracing::field::Empty)
+    skip_all,
+    fields(
+        { attr::USER_ID } = ?user_id,
+        { attr::COMMAND_DRY_RUN } = dry_run,
+        { attr::ERROR_TYPE } = tracing::field::Empty
+    )
 )]
 pub async fn migrate_legacy_ids(
     task_service: Arc<RwLock<TaskService>>,

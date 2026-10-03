@@ -7,6 +7,7 @@ use tracing::{error, info};
 
 use universal_inbox::integration_connection::provider::IntegrationProviderKind;
 
+use crate::observability::attr;
 use crate::universal_inbox::{
     UniversalInboxError,
     integration_connection::service::{GrantRevocationRetryPolicy, IntegrationConnectionService},
@@ -15,7 +16,11 @@ use crate::universal_inbox::{
 #[tracing::instrument(
     name = "refresh-oauth-tokens",
     level = "debug",
-    skip(integration_connection_service)
+    skip_all,
+    fields(
+        { attr::INTEGRATION_PROVIDER_KIND } = ?provider_kind,
+        { attr::OAUTH_MINUTES_BEFORE_EXPIRY } = minutes_before_expiry
+    )
 )]
 pub async fn refresh_oauth_tokens(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -53,7 +58,8 @@ pub async fn refresh_oauth_tokens(
 #[tracing::instrument(
     name = "retry-oauth-grant-revocations",
     level = "debug",
-    skip(integration_connection_service)
+    skip_all,
+    fields({ attr::OAUTH_GRANT_REVOCATION_MAX_COUNT } = max_revocations)
 )]
 pub async fn retry_oauth_grant_revocations(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -71,7 +77,12 @@ pub async fn retry_oauth_grant_revocations(
 #[tracing::instrument(
     name = "pause-integration-connections",
     level = "debug",
-    skip(integration_connection_service)
+    skip_all,
+    fields(
+        { attr::INTEGRATION_CONNECTION_INACTIVITY_THRESHOLD_DAYS } = inactivity_threshold_days,
+        { attr::INTEGRATION_CONNECTION_INACTIVITY_WARNING_DAYS } = inactivity_warning_days,
+        { attr::INTEGRATION_CONNECTION_FAILING_THRESHOLD_DAYS } = failing_threshold_days
+    )
 )]
 pub async fn pause_integration_connections(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,

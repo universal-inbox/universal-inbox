@@ -39,15 +39,12 @@ use manifest::{Action, Capture, MANIFEST, MANUAL, ScreenshotSpec, SeedState};
 #[tracing::instrument(
     name = "generate-doc-screenshots",
     level = "info",
-    skip(
-        user_service,
-        integration_connection_service,
-        notification_service,
-        task_service,
-        third_party_item_service,
-        settings
-    ),
-    fields({ attr::ERROR_TYPE } = tracing::field::Empty)
+    skip_all,
+    fields(
+        { attr::SCREENSHOTS_ONLY } = ?only,
+        { attr::SCREENSHOTS_KEEP_USER } = keep_user,
+        { attr::ERROR_TYPE } = tracing::field::Empty
+    )
 )]
 #[allow(clippy::too_many_arguments)]
 pub async fn generate_doc_screenshots(

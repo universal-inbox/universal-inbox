@@ -178,7 +178,7 @@ impl TaskRepository for Repository {
         return Ok(false);
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::TASK_IDS } = ?ids))]
     async fn get_tasks(
         &self,
         executor: &mut Transaction<'_, Postgres>,
