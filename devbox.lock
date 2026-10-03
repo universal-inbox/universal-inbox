@@ -1381,51 +1381,41 @@
         }
       }
     },
-    "prek@0.2.30": {
-      "last_modified": "2026-02-01T05:13:08Z",
-      "resolved": "github:NixOS/nixpkgs/207d15f1a6603226e1e223dc79ac29c7846da32e#prek",
+    "prek@latest": {
+      "last_modified": "2026-08-27T07:16:00Z",
+      "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#prek",
       "source": "devbox-search",
-      "version": "0.2.30",
+      "version": "0.4.14",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/l4a2m16q0cqirnkpx7zjbprsz6pn3n1v-prek-0.2.30",
+              "path": "/nix/store/l2cyc2wcwzn8n9r8ladniyy2kxvmqn2n-prek-0.4.14",
               "default": true
             }
           ],
-          "store_path": "/nix/store/l4a2m16q0cqirnkpx7zjbprsz6pn3n1v-prek-0.2.30"
+          "store_path": "/nix/store/l2cyc2wcwzn8n9r8ladniyy2kxvmqn2n-prek-0.4.14"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/sqmy2w55wpacciwwp2wbmn3h578nvz7z-prek-0.2.30",
+              "path": "/nix/store/kxhxg4lxw2dq05w25l3l0bbz37ny0697-prek-0.4.14",
               "default": true
             }
           ],
-          "store_path": "/nix/store/sqmy2w55wpacciwwp2wbmn3h578nvz7z-prek-0.2.30"
-        },
-        "x86_64-darwin": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/y4rkkq2khr71i6k20rgdifhk5z22l02v-prek-0.2.30",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/y4rkkq2khr71i6k20rgdifhk5z22l02v-prek-0.2.30"
+          "store_path": "/nix/store/kxhxg4lxw2dq05w25l3l0bbz37ny0697-prek-0.4.14"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/xx9zcag296pwb89aam25w8vfk40krk43-prek-0.2.30",
+              "path": "/nix/store/5wnvh7cnmcm822ljjxkwmnc875f61b1s-prek-0.4.14",
               "default": true
             }
           ],
-          "store_path": "/nix/store/xx9zcag296pwb89aam25w8vfk40krk43-prek-0.2.30"
+          "store_path": "/nix/store/5wnvh7cnmcm822ljjxkwmnc875f61b1s-prek-0.4.14"
         }
       }
     },

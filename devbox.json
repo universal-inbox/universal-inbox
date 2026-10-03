@@ -38,7 +38,7 @@
         "mdbook-admonish": "latest",
         "mdbook-linkcheck": "latest",
         "jq": "latest",
-        "prek": "0.2.30",
+        "prek": "latest",
         "sccache": "latest",
         "zellij": "latest",
         "beads": "latest",

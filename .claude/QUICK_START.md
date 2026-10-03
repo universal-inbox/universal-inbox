@@ -69,8 +69,9 @@ because the test reads `web/public/` (gitignored), not your `.rs` source. Don't 
 ## Committing — pre-commit hook needs Postgres + Redis
 
 The pre-commit hook (`.pre-commit-config.yaml`) runs `just format`, `just check` and `just test`
-when `.rs` files are staged. `just test` includes integration tests, so **Postgres and Redis
-must be running or the commit fails**.
+when `.rs` files are staged, then the root `test-browser` hook (`just api test-browser`, which
+rebuilds the frontend first) when `api/` `.rs` files are staged. Both include integration tests,
+so **Postgres and Redis must be running or the commit fails**.
 
 ```bash
 direnv exec . just run-detached            # pg + redis (idempotent)

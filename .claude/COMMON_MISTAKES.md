@@ -31,7 +31,7 @@
 
 ## 6. `git commit` fails in the pre-commit hook (services not running)
 - **Symptom:** Commit aborts in the `Test Rust code` hook with DB/Redis connection errors (connection refused, pool timeout).
-- **Check:** The pre-commit hook (`.pre-commit-config.yaml`) runs `just test` — integration tests included — whenever a `.rs` file is staged. Are Postgres and Redis up? `direnv exec . just status`.
+- **Check:** The pre-commit hook (`.pre-commit-config.yaml`) runs `just test` — integration tests included — whenever a `.rs` file is staged, and the root `test-browser` hook (`just api test-browser`) when an `api/` `.rs` file is. Are Postgres and Redis up? `direnv exec . just status`.
 - **Fix:** `direnv exec . just run-detached` before committing, then commit through `direnv exec .` so the hook sees this worktree's ports. Never bypass with `--no-verify`.
 
 ## Before you finish
