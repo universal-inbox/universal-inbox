@@ -56,16 +56,18 @@ pub enum EmailTemplate {
         first_name: Option<String>,
         password_reset_url: Url,
     },
+    /// Sent once per user, listing all their connections to be paused.
     IntegrationConnectionPauseWarning {
         first_name: Option<String>,
-        provider_name: String,
+        provider_names: Vec<String>,
         inactive_for_days: i64,
         pause_date: NaiveDate,
         app_url: Url,
     },
+    /// Sent once per user and reason, listing all their paused connections.
     IntegrationConnectionPaused {
         first_name: Option<String>,
-        provider_name: String,
+        provider_names: Vec<String>,
         paused_reason: IntegrationConnectionPausedReason,
         reconnect_url: Url,
     },
@@ -85,11 +87,14 @@ impl EmailTemplate {
             EmailTemplate::PasswordChanged { .. } => {
                 "Your Universal Inbox password was changed".to_string()
             }
-            EmailTemplate::IntegrationConnectionPauseWarning { provider_name, .. } => {
-                format!("Your {provider_name} connection will soon be paused")
+            EmailTemplate::IntegrationConnectionPauseWarning { provider_names, .. } => {
+                let (connections, _) = connections_of(provider_names);
+                format!("Your {connections} will soon be paused")
             }
-            EmailTemplate::IntegrationConnectionPaused { provider_name, .. } => {
-                format!("Your {provider_name} connection was paused")
+            EmailTemplate::IntegrationConnectionPaused { provider_names, .. } => {
+                let (connections, is_plural) = connections_of(provider_names);
+                let verb = if is_plural { "were" } else { "was" };
+                format!("Your {connections} {verb} paused")
             }
         }
     }
@@ -124,28 +129,43 @@ impl EmailTemplate {
                 "The password of your Universal Inbox account was just changed, and your other sessions were signed out. If this was you, there is nothing else to do. If this wasn't you, reset your password right away.".to_string()
             }
             EmailTemplate::IntegrationConnectionPauseWarning {
-                provider_name,
+                provider_names,
                 inactive_for_days,
                 pause_date,
                 ..
-            } => format!(
-                "You haven't used Universal Inbox for more than {inactive_for_days} days. To stop collecting your {provider_name} data while you're away, your {provider_name} connection will be paused on {}. Open Universal Inbox before then to keep it connected.",
-                pause_date.format("%B %-d, %Y")
-            ),
+            } => {
+                let providers = join_provider_names(provider_names);
+                let (connections, is_plural) = connections_of(provider_names);
+                let them = if is_plural { "them" } else { "it" };
+                format!(
+                    "You haven't used Universal Inbox for more than {inactive_for_days} days. To stop collecting your {providers} data while you're away, your {connections} will be paused on {}. Open Universal Inbox before then to keep {them} connected.",
+                    pause_date.format("%B %-d, %Y")
+                )
+            }
             EmailTemplate::IntegrationConnectionPaused {
-                provider_name,
-                paused_reason: IntegrationConnectionPausedReason::Inactivity,
+                provider_names,
+                paused_reason,
                 ..
-            } => format!(
-                "Your {provider_name} connection was paused because you haven't used Universal Inbox for a while, and its access to {provider_name} was revoked. You can reconnect it at any time from the settings page."
-            ),
-            EmailTemplate::IntegrationConnectionPaused {
-                provider_name,
-                paused_reason: IntegrationConnectionPausedReason::LongFailing,
-                ..
-            } => format!(
-                "Your {provider_name} connection was paused because it has been failing to synchronize for too long, and its access to {provider_name} was revoked. You can reconnect it at any time from the settings page."
-            ),
+            } => {
+                let providers = join_provider_names(provider_names);
+                let (connections, is_plural) = connections_of(provider_names);
+                let (verb, they_have, their, them) = if is_plural {
+                    ("were", "they have", "their", "them")
+                } else {
+                    ("was", "it has", "its", "it")
+                };
+                let because = match paused_reason {
+                    IntegrationConnectionPausedReason::Inactivity => {
+                        "you haven't used Universal Inbox for a while".to_string()
+                    }
+                    IntegrationConnectionPausedReason::LongFailing => {
+                        format!("{they_have} been failing to synchronize for too long")
+                    }
+                };
+                format!(
+                    "Your {connections} {verb} paused because {because}, and {their} access to {providers} was revoked. You can reconnect {them} at any time from the settings page."
+                )
+            }
         }
     }
 
@@ -201,6 +221,30 @@ impl EmailTemplate {
 
         builder.signature("Best").build()
     }
+}
+
+/// `["Slack", "Linear", "GitHub"]` reads "Slack, Linear and GitHub".
+fn join_provider_names(provider_names: &[String]) -> String {
+    match provider_names {
+        [] => String::new(),
+        [only] => only.clone(),
+        [init @ .., last] => format!("{} and {last}", init.join(", ")),
+    }
+}
+
+/// "Slack connection", or "Slack and Linear connections", and whether it is
+/// plural.
+fn connections_of(provider_names: &[String]) -> (String, bool) {
+    let is_plural = provider_names.len() > 1;
+    let noun = if is_plural {
+        "connections"
+    } else {
+        "connection"
+    };
+    (
+        format!("{} {noun}", join_provider_names(provider_names)),
+        is_plural,
+    )
 }
 
 pub struct SmtpMailer {
@@ -360,7 +404,7 @@ mod tests {
     fn test_integration_connection_pause_warning_email() {
         let template = EmailTemplate::IntegrationConnectionPauseWarning {
             first_name: Some("John".to_string()),
-            provider_name: "Slack".to_string(),
+            provider_names: vec!["Slack".to_string()],
             inactive_for_days: 83,
             pause_date: NaiveDate::from_ymd_opt(2026, 10, 10).unwrap(),
             app_url: "https://app.universal-inbox.com/".parse().unwrap(),
@@ -379,6 +423,48 @@ mod tests {
     }
 
     #[rstest]
+    fn test_integration_connection_emails_list_every_provider() {
+        let provider_names = vec![
+            "Slack".to_string(),
+            "Linear".to_string(),
+            "GitHub".to_string(),
+        ];
+        let warning = EmailTemplate::IntegrationConnectionPauseWarning {
+            first_name: None,
+            provider_names: provider_names.clone(),
+            inactive_for_days: 83,
+            pause_date: NaiveDate::from_ymd_opt(2026, 10, 10).unwrap(),
+            app_url: "https://app.universal-inbox.com/".parse().unwrap(),
+        };
+        assert_eq!(
+            warning.subject(),
+            "Your Slack, Linear and GitHub connections will soon be paused"
+        );
+        let intro = warning.intro();
+        assert!(intro.contains("keep them connected"), "{intro}");
+
+        let paused = EmailTemplate::IntegrationConnectionPaused {
+            first_name: None,
+            provider_names,
+            paused_reason: IntegrationConnectionPausedReason::LongFailing,
+            reconnect_url: "https://app.universal-inbox.com/settings".parse().unwrap(),
+        };
+        assert_eq!(
+            paused.subject(),
+            "Your Slack, Linear and GitHub connections were paused"
+        );
+        let intro = paused.intro();
+        assert!(
+            intro.contains("they have been failing to synchronize"),
+            "{intro}"
+        );
+        assert!(
+            intro.contains("their access to Slack, Linear and GitHub was revoked"),
+            "{intro}"
+        );
+    }
+
+    #[rstest]
     #[case::inactivity(IntegrationConnectionPausedReason::Inactivity, "used Universal Inbox")]
     #[case::long_failing(
         IntegrationConnectionPausedReason::LongFailing,
@@ -390,7 +476,7 @@ mod tests {
     ) {
         let template = EmailTemplate::IntegrationConnectionPaused {
             first_name: None,
-            provider_name: "Slack".to_string(),
+            provider_names: vec!["Slack".to_string()],
             paused_reason,
             reconnect_url: "https://app.universal-inbox.com/settings".parse().unwrap(),
         };

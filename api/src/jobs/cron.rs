@@ -10,7 +10,7 @@ use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::{
     configuration::{
-        PauseSlackConnectionsCronSettings, RefreshOAuthTokensCronSettings,
+        PauseIntegrationConnectionsCronSettings, RefreshOAuthTokensCronSettings,
         RetryOAuthGrantRevocationsCronSettings, VacuumJobsCronSettings,
     },
     jobs::{JobStorage, UniversalInboxJob, push_job},
@@ -124,32 +124,32 @@ pub async fn handle_retry_oauth_grant_revocations_cron_tick(
     result.record_span_error()
 }
 
-/// Cron tick request for the `pause-slack-connections` job. Carries
+/// Cron tick request for the `pause-integration-connections` job. Carries
 /// no data; the scheduled tick timestamp is injected via [`CronContext`].
 #[derive(Debug, Clone, Default)]
-pub struct PauseSlackConnectionsCronTick;
+pub struct PauseIntegrationConnectionsCronTick;
 
 /// Handles a cron tick by electing a single winner across all worker processes
-/// (per-tick Redis lock) and enqueuing a durable `PauseSlackConnections`
+/// (per-tick Redis lock) and enqueuing a durable `PauseIntegrationConnections`
 /// job on the shared Redis-backed queue, executed once by the regular worker
 /// pool.
 #[tracing::instrument(
-    name = "pause-slack-connections-cron-tick",
+    name = "pause-integration-connections-cron-tick",
     level = "info",
     skip_all,
     fields({ attr::CRON_TICK } = %ctx.get_timestamp(), { attr::ERROR_TYPE } = tracing::field::Empty)
 )]
-pub async fn handle_pause_slack_connections_cron_tick(
-    _tick: PauseSlackConnectionsCronTick,
+pub async fn handle_pause_integration_connections_cron_tick(
+    _tick: PauseIntegrationConnectionsCronTick,
     ctx: CronContext<Utc>,
     storage: Data<JobStorage>,
     cache: Data<Cache>,
-    settings: Data<PauseSlackConnectionsCronSettings>,
+    settings: Data<PauseIntegrationConnectionsCronSettings>,
 ) -> Result<(), UniversalInboxError> {
     let result: Result<(), UniversalInboxError> = async move {
         if !try_acquire_cron_tick_lock(
             &cache,
-            &queue_scoped_cron_job_name(&storage, "pause-slack-connections"),
+            &queue_scoped_cron_job_name(&storage, "pause-integration-connections"),
             ctx.get_timestamp(),
             settings.lock_ttl_seconds,
         )
@@ -161,15 +161,15 @@ pub async fn handle_pause_slack_connections_cron_tick(
 
         push_job(
             &storage,
-            UniversalInboxJob::PauseSlackConnections {
+            UniversalInboxJob::PauseIntegrationConnections {
                 inactivity_threshold_days: settings.inactivity_threshold_days,
                 inactivity_warning_days: settings.inactivity_warning_days,
                 failing_threshold_days: settings.failing_threshold_days,
             },
         )
         .await
-        .context("Failed to enqueue PauseSlackConnections job")?;
-        info!("Enqueued PauseSlackConnections job");
+        .context("Failed to enqueue PauseIntegrationConnections job")?;
+        info!("Enqueued PauseIntegrationConnections job");
         Ok(())
     }
     .await;
