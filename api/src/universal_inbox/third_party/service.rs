@@ -443,7 +443,7 @@ impl ThirdPartyItemService {
         skip_all,
         fields(
             task_id = task.id.to_string(),
-            overwrite_existing_sink_item
+            overwrite_existing_sink_item = overwrite_existing_sink_item
         ),
         err
     )]

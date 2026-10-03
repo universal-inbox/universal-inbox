@@ -396,14 +396,7 @@ impl TodoistService {
 
         ApiClient::build(
             headers,
-            [
-                format!("{}/sync", self.todoist_base_path),
-                format!("{}/tasks", self.todoist_base_path),
-                format!(
-                    "{}/id_mappings/{{obj_name}}/{{obj_ids}}",
-                    self.todoist_base_path
-                ),
-            ],
+            otel_known_paths(&self.todoist_base_path),
             self.max_retry_duration,
         )
     }
@@ -1296,7 +1289,7 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(matches, user.id = user_id.to_string()),
+        fields(user.id = user_id.to_string()),
         err
     )]
     async fn search_projects(
@@ -1340,7 +1333,7 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(project_name, user.id = user_id.to_string()),
+        fields(user.id = user_id.to_string()),
         err
     )]
     async fn get_or_create_project(
@@ -1511,12 +1504,43 @@ impl NotificationSource for TodoistService {
     }
 }
 
+/// Route templates used to name outbound request spans. Every path the client
+/// calls must match one of them, otherwise the span is named `<METHOD> UNKNOWN`.
+fn otel_known_paths(base_path: &str) -> Vec<String> {
+    [
+        "/sync",
+        "/tasks",
+        "/tasks/{task_id}",
+        "/id_mappings/{obj_name}/{obj_ids}",
+    ]
+    .iter()
+    .map(|path| format!("{base_path}{path}"))
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::{NaiveDate, TimeZone};
     use pretty_assertions::assert_eq;
+    use reqwest_tracing::OtelPathNames;
     use rstest::*;
+
+    #[rstest]
+    #[case("/api/v1/sync", "/api/v1/sync")]
+    #[case("/api/v1/tasks", "/api/v1/tasks")]
+    #[case("/api/v1/tasks/123", "/api/v1/tasks/{task_id}")]
+    #[case(
+        "/api/v1/id_mappings/tasks/1,2",
+        "/api/v1/id_mappings/{obj_name}/{obj_ids}"
+    )]
+    fn test_otel_known_paths_match_called_endpoints(
+        #[case] path: &str,
+        #[case] expected_template: &str,
+    ) {
+        let path_names = OtelPathNames::known_paths(otel_known_paths("/api/v1")).unwrap();
+        assert_eq!(path_names.find(path), Some(expected_template));
+    }
 
     use universal_inbox::task::DueDate;
     use universal_inbox::third_party::integrations::todoist::TodoistLabel;

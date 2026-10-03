@@ -90,7 +90,7 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        field(task_id = id.to_string()),
+        fields(task_id = id.to_string()),
         err
     )]
     async fn get_one_task(
@@ -153,7 +153,7 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        field(task_id = id.to_string()),
+        fields(task_id = id.to_string()),
         err
     )]
     async fn does_task_exist(
@@ -244,9 +244,9 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        field(
+        fields(
             status = status.to_string(),
-            only_synced_tasks,
+            only_synced_tasks = only_synced_tasks,
             user.id = user_id.to_string()
         ),
         err
@@ -371,7 +371,7 @@ impl TaskRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        field(matches, user.id = user_id.to_string()),
+        fields(user.id = user_id.to_string()),
         err
     )]
     async fn search_tasks(
@@ -937,7 +937,6 @@ impl TaskRepository for Repository {
         skip_all,
         fields(
             task_id = task_id.to_string(),
-            patch,
             user.id = for_user_id.to_string()
         ),
         err

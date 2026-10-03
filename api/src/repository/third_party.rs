@@ -726,7 +726,7 @@ impl ThirdPartyItemRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(third_party_item.id = id.to_string(), source_id),
+        fields(third_party_item.id = id.to_string(), third_party_item.source_id = %source_id),
         err
     )]
     async fn update_third_party_item_source_id(

@@ -105,7 +105,7 @@ impl AuthenticationTokenRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string(), exclude_session_tokens),
+        fields(user.id = user_id.to_string(), exclude_session_tokens = exclude_session_tokens),
         err
     )]
     async fn fetch_auth_tokens_for_user(

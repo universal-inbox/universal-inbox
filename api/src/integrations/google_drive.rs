@@ -224,7 +224,11 @@ impl GoogleDriveService {
             .to_string();
         Ok(GoogleDriveService {
             google_drive_base_url,
-            google_drive_base_path,
+            google_drive_base_path: if &google_drive_base_path == "/" {
+                "".to_string()
+            } else {
+                google_drive_base_path
+            },
             page_size,
             integration_connection_service,
             notification_service,
@@ -280,11 +284,7 @@ impl GoogleDriveService {
 
         ApiClient::build(
             headers,
-            [
-                format!("{}/about", self.google_drive_base_path),
-                format!("{}/files", self.google_drive_base_path),
-                format!("{}/files/{{file_id}}/comments", self.google_drive_base_path),
-            ],
+            otel_known_paths(&self.google_drive_base_path),
             self.max_retry_duration,
         )
     }
@@ -699,12 +699,34 @@ impl IntegrationProviderSource for GoogleDriveService {
     }
 }
 
+/// Route templates used to name outbound request spans. Every path the client
+/// calls must match one of them, otherwise the span is named `<METHOD> UNKNOWN`.
+fn otel_known_paths(base_path: &str) -> Vec<String> {
+    ["/about", "/files", "/files/{file_id}/comments"]
+        .iter()
+        .map(|path| format!("{base_path}{path}"))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::TimeZone;
     use pretty_assertions::assert_eq;
+    use reqwest_tracing::OtelPathNames;
     use rstest::*;
+
+    #[rstest]
+    #[case("/drive/v3/about", "/drive/v3/about")]
+    #[case("/drive/v3/files", "/drive/v3/files")]
+    #[case("/drive/v3/files/f1/comments", "/drive/v3/files/{file_id}/comments")]
+    fn test_otel_known_paths_match_called_endpoints(
+        #[case] path: &str,
+        #[case] expected_template: &str,
+    ) {
+        let path_names = OtelPathNames::known_paths(otel_known_paths("/drive/v3")).unwrap();
+        assert_eq!(path_names.find(path), Some(expected_template));
+    }
 
     #[rstest]
     fn test_raw_comment_to_google_drive_comment() {

@@ -319,10 +319,7 @@ impl TickTickService {
 
         ApiClient::build(
             headers,
-            [
-                format!("{}/task", self.ticktick_base_path),
-                format!("{}/project", self.ticktick_base_path),
-            ],
+            otel_known_paths(&self.ticktick_base_path),
             self.max_retry_duration,
         )
     }
@@ -962,7 +959,7 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(matches, user.id = user_id.to_string()),
+        fields(user.id = user_id.to_string()),
         err
     )]
     async fn search_projects(
@@ -1004,7 +1001,7 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(project_name, user.id = user_id.to_string()),
+        fields(user.id = user_id.to_string()),
         err
     )]
     async fn get_or_create_project(
@@ -1260,6 +1257,23 @@ mod tests {
     }
 }
 
+/// Route templates used to name outbound request spans. Every path the client
+/// calls must match one of them, otherwise the span is named `<METHOD> UNKNOWN`.
+fn otel_known_paths(base_path: &str) -> Vec<String> {
+    [
+        "/task",
+        "/task/{task_id}",
+        "/tag",
+        "/project",
+        "/project/{project_id}/data",
+        "/project/{project_id}/task/{task_id}",
+        "/project/{project_id}/task/{task_id}/complete",
+    ]
+    .iter()
+    .map(|path| format!("{base_path}{path}"))
+    .collect()
+}
+
 /// See [`TickTickService::endpoint`].
 fn build_endpoint(base_url: &str, segments: &[&str]) -> Result<String, UniversalInboxError> {
     let mut url = Url::parse(base_url).context("Cannot parse TickTick base URL")?;
@@ -1273,6 +1287,31 @@ fn build_endpoint(base_url: &str, segments: &[&str]) -> Result<String, Universal
 #[cfg(test)]
 mod endpoint_tests {
     use super::*;
+    use reqwest_tracing::OtelPathNames;
+    use rstest::*;
+
+    #[rstest]
+    #[case("/open/v1/task", "/open/v1/task")]
+    #[case("/open/v1/task/t1", "/open/v1/task/{task_id}")]
+    #[case("/open/v1/tag", "/open/v1/tag")]
+    #[case("/open/v1/project", "/open/v1/project")]
+    #[case("/open/v1/project/inbox/data", "/open/v1/project/{project_id}/data")]
+    #[case("/open/v1/project/p1/data", "/open/v1/project/{project_id}/data")]
+    #[case(
+        "/open/v1/project/p1/task/t1",
+        "/open/v1/project/{project_id}/task/{task_id}"
+    )]
+    #[case(
+        "/open/v1/project/p1/task/t1/complete",
+        "/open/v1/project/{project_id}/task/{task_id}/complete"
+    )]
+    fn test_otel_known_paths_match_called_endpoints(
+        #[case] path: &str,
+        #[case] expected_template: &str,
+    ) {
+        let path_names = OtelPathNames::known_paths(otel_known_paths("/open/v1")).unwrap();
+        assert_eq!(path_names.find(path), Some(expected_template));
+    }
 
     fn endpoint(base: &str, segments: &[&str]) -> String {
         build_endpoint(base, segments).unwrap()

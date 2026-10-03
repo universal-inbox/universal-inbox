@@ -953,7 +953,11 @@ impl IntegrationConnectionService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(team_id, provider_user_ids = ?provider_user_ids, revoked_at = revoked_at.to_rfc3339()),
+        fields(
+            team_id = %team_id,
+            provider_user_ids = ?provider_user_ids,
+            revoked_at = revoked_at.to_rfc3339()
+        ),
         err
     )]
     pub async fn revoke_slack_access(
@@ -1608,7 +1612,7 @@ impl IntegrationConnectionService {
         skip_all,
         fields(
             integration_provider_kind = integration_provider_kind.to_string(),
-            min_sync_interval_in_minutes,
+            min_sync_interval_in_minutes = min_sync_interval_in_minutes,
             sync_type = sync_type.to_string(),
             user.id = for_user_id.to_string()
         ),
@@ -1864,8 +1868,7 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection_id.to_string(),
-            context
+            integration_connection_id = integration_connection_id.to_string()
         ),
         err
     )]
@@ -1888,8 +1891,7 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
-            provider_user_id,
+            integration_provider_kind = integration_provider_kind.to_string()
         ),
         err
     )]
@@ -1913,7 +1915,6 @@ impl IntegrationConnectionService {
         skip_all,
         fields(
             integration_provider_kind = integration_provider_kind.to_string(),
-            provider_user_ids,
         ),
         err
     )]
@@ -2176,7 +2177,6 @@ impl IntegrationConnectionService {
         skip_all,
         fields(
             integration_provider_kind = integration_provider_kind.to_string(),
-            failure_message,
             user.id = for_user_id.to_string()
         ),
     )]
@@ -2202,8 +2202,7 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
-            provider_kind = provider_kind.to_string(),
-            provider_user_id
+            provider_kind = provider_kind.to_string()
         ),
         err
     )]
@@ -2226,7 +2225,11 @@ impl IntegrationConnectionService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(integration_connection_id, user_id, status),
+        fields(
+            integration_connection.id = %integration_connection_id,
+            user.id = %user_id,
+            status = ?status
+        ),
         err
     )]
     pub async fn update_integration_connection_status(
@@ -2270,8 +2273,11 @@ impl IntegrationConnectionService {
     /// Returns `(refreshed_count, failed_count)`.
     #[tracing::instrument(
         level = "info",
-        skip(self, executor),
-        fields(minutes_before_expiry, provider_kind),
+        skip_all,
+        fields(
+            minutes_before_expiry = minutes_before_expiry,
+            integration.provider_kind = ?provider_kind
+        ),
         err
     )]
     pub async fn refresh_expiring_tokens(

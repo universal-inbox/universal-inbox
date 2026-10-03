@@ -92,7 +92,7 @@ impl OAuth2Service {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id = %client_id), err)]
     pub async fn get_client(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -113,7 +113,7 @@ impl OAuth2Service {
     /// TTL avoid the network round-trip entirely. The resulting `OAuth2Client`
     /// is synthesised from the document — there is no row in `oauth2_client`
     /// for CIMD clients.
-    #[tracing::instrument(level = "debug", skip_all, fields(client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id = %client_id), err)]
     pub async fn resolve_client(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -183,7 +183,7 @@ impl OAuth2Service {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(client_id, user.id = user_id.to_string()),
+        fields(client_id = %client_id, user.id = user_id.to_string()),
         err
     )]
     #[allow(clippy::too_many_arguments)]
@@ -250,7 +250,7 @@ impl OAuth2Service {
         Ok(code)
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id = %client_id), err)]
     pub async fn exchange_code(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -352,7 +352,7 @@ impl OAuth2Service {
     /// including any token freshly minted by the legitimate winning branch.
     /// The expiry check is folded into the same SQL so an expired row is
     /// never claimed.
-    #[tracing::instrument(level = "debug", skip_all, fields(client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id = %client_id), err)]
     pub async fn refresh_token(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -485,7 +485,7 @@ impl OAuth2Service {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(client_id, user.id = user_id.to_string()),
+        fields(client_id = %client_id, user.id = user_id.to_string()),
         err
     )]
     pub async fn revoke_client_authorization(
@@ -507,7 +507,7 @@ impl OAuth2Service {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(client_id, user.id = user_id.to_string()),
+        fields(client_id = %client_id, user.id = user_id.to_string()),
         err
     )]
     pub async fn get_user_consent(
@@ -524,7 +524,7 @@ impl OAuth2Service {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(client_id, user.id = user_id.to_string()),
+        fields(client_id = %client_id, user.id = user_id.to_string()),
         err
     )]
     pub async fn record_user_consent(

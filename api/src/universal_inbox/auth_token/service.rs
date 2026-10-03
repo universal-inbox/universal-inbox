@@ -65,7 +65,7 @@ impl AuthenticationTokenService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(is_session_token, user.id = user_id.to_string()),
+        fields(is_session_token = is_session_token, user.id = user_id.to_string()),
         err
     )]
     pub async fn create_auth_token(

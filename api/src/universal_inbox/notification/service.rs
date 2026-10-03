@@ -132,8 +132,7 @@ impl NotificationService {
         skip_all,
         fields(
             notification_id = notification.id.to_string(),
-            patch,
-            apply_task_side_effects,
+            apply_task_side_effects = apply_task_side_effects,
             user.id = for_user_id.to_string()
         ),
         err
@@ -313,7 +312,6 @@ impl NotificationService {
         skip_all,
         fields(
             third_party_item_id = source_item.id.to_string(),
-            patch,
             user.id = user_id.to_string()
         ),
         err
@@ -408,11 +406,10 @@ impl NotificationService {
         skip_all,
         fields(
             status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
-            include_snoozed_notifications,
+            include_snoozed_notifications = include_snoozed_notifications,
             task_id = task_id.map(|id| id.to_string()),
-            order_by,
-            from_sources,
-            page_token,
+            order_by = ?order_by,
+            from_sources = ?from_sources,
             user.id = user_id.to_string()
         ),
         err
@@ -516,7 +513,7 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            source_id,
+            third_party_item.source_id = %source_id,
             user.id = for_user_id.to_string()
         ),
         err
@@ -564,7 +561,7 @@ impl NotificationService {
         fields(
             notification_id = notification.id.to_string(),
             notification_source_kind = notification_source_kind.to_string(),
-            update_snoozed_until
+            update_snoozed_until = update_snoozed_until
         ),
         err
     )]
@@ -625,7 +622,7 @@ impl NotificationService {
         fields(
             synced_source = source.to_string(),
             user.id = user_id.to_string(),
-            force_sync
+            force_sync = force_sync
         ),
         err
     )]
@@ -838,9 +835,8 @@ impl NotificationService {
         skip_all,
         fields(
             notification_id = notification_id.to_string(),
-            patch,
-            apply_task_side_effects,
-            apply_notification_side_effects,
+            apply_task_side_effects = apply_task_side_effects,
+            apply_notification_side_effects = apply_notification_side_effects,
             user.id = for_user_id.to_string()
         ),
         err
@@ -905,8 +901,7 @@ impl NotificationService {
         skip_all,
         fields(
             task_id = task_id.to_string(),
-            notification_kind = notification_kind.map(|k| k.to_string()),
-            patch
+            notification_kind = notification_kind.map(|k| k.to_string())
         ),
         err
     )]
@@ -926,7 +921,7 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            linear_issue_id,
+            linear_issue_id = %linear_issue_id,
             user.id = user_id.to_string()
         ),
         err
@@ -947,8 +942,7 @@ impl NotificationService {
         skip_all,
         fields(
             status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
-            from_sources,
-            patch,
+            from_sources = ?from_sources,
             user.id = user_id.to_string()
         ),
         err
@@ -1063,8 +1057,7 @@ impl NotificationService {
         skip_all,
         fields(
             notification_id = notification_id.to_string(),
-            task_creation,
-            apply_notification_side_effects,
+            apply_notification_side_effects = apply_notification_side_effects,
             user.id = for_user_id.to_string()
         ),
         err
@@ -1721,9 +1714,6 @@ impl NotificationService {
         skip_all,
         fields(
             notification_id = notification_id.to_string(),
-            patch,
-            apply_task_side_effects,
-            apply_notification_side_effects,
             user.id = for_user_id.to_string()
         ),
         err

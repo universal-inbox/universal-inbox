@@ -383,12 +383,11 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            status,
-            include_snoozed_notifications,
+            status = ?status,
+            include_snoozed_notifications = include_snoozed_notifications,
             task_id = task_id.map(|id| id.to_string()),
-            order_by,
-            from_sources,
-            page_token,
+            order_by = ?order_by,
+            from_sources = ?from_sources,
             user.id = user_id.to_string()
         ),
         err
@@ -834,7 +833,7 @@ impl NotificationRepository for Repository {
         fields(
             notification_id = notification.id.to_string(),
             kind = kind.to_string(),
-            update_snoozed_until
+            update_snoozed_until = update_snoozed_until
         ),
         err
     )]
@@ -1053,7 +1052,6 @@ impl NotificationRepository for Repository {
         skip_all,
         fields(
             notification_id = notification_id.to_string(),
-            patch,
             user.id = for_user_id.to_string()
         ),
         err
@@ -1203,8 +1201,7 @@ impl NotificationRepository for Repository {
         skip_all,
         fields(
             task_id = task_id.to_string(),
-            notification_kind = notification_kind.map(|kind| kind.to_string()),
-            patch
+            notification_kind = notification_kind.map(|kind| kind.to_string())
         ),
         err
     )]
@@ -1341,7 +1338,7 @@ impl NotificationRepository for Repository {
         skip_all,
         fields(
             status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
-            from_sources,
+            from_sources = ?from_sources,
             user.id = user_id.to_string()
         ),
         err
@@ -1395,7 +1392,7 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            linear_issue_id,
+            linear_issue_id = %linear_issue_id,
             user.id = user_id.to_string()
         ),
         err
