@@ -6,6 +6,7 @@ pub mod notification;
 pub mod oauth;
 pub mod oauth2;
 pub mod slack_bridge;
+pub mod static_files;
 pub mod task;
 pub mod third_party;
 pub mod user;

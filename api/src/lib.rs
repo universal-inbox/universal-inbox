@@ -32,7 +32,6 @@ use actix_web::{
     middleware::{self, ErrorHandlerResponse, ErrorHandlers},
     web,
 };
-use actix_web_lab::web::spa;
 use anyhow::{Context, anyhow};
 use apalis::{
     layers::tracing::{
@@ -535,13 +534,7 @@ pub async fn run_server(
                 &format!(r"{path}/{{invalid_path:(.*/)?([.*]|[^/]*[:<>](/|$)).*|.*%2[fF].*}}"),
                 web::route().to(|| async { HttpResponse::NotFound().finish() }),
             );
-            app = app.service(
-                spa()
-                    .index_file(format!("{static_dir}/index.html"))
-                    .static_resources_mount(path.clone())
-                    .static_resources_location(static_dir.clone())
-                    .finish(),
-            );
+            app = app.service(routes::static_files::spa_service(path, &static_dir));
         }
         app
     })

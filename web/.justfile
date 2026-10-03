@@ -14,6 +14,15 @@ build:
 build-release:
     trunk build --release --features trunk
 
+# Precompress text assets so the API serves `.br`/`.gz` files as-is instead of
+# compressing them on every request (see `api/src/routes/static_files.rs`).
+# HTML is left out: the Docker entrypoint rewrites index.html at startup, which
+# would leave a stale precompressed copy.
+compress output-dir="public":
+    find {{ output-dir }} -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.css' -o -name '*.svg' -o -name '*.json' \) \
+        -exec brotli --best --keep --force {} + \
+        -exec gzip --best --keep --force {} +
+
 build-assets: bundle-js build-tailwind bundle-fonts
 
 build-tailwind output-dir="public":

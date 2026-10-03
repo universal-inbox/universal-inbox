@@ -28,6 +28,7 @@
 - Mark Slack connections as Failing, with a reconnect message, as soon as the user removes Universal Inbox from Slack or an admin uninstalls the app
 - Collapse the already read part of a Slack thread in its preview and open it scrolled to the latest read reply
 - Configure the OTLP trace and log export levels independently (`otel_trace_directive`, `otel_log_directive`), stop tracing `/ping`, and flush pending telemetry on shutdown
+- Serve the web application precompressed (brotli / gzip), with long-lived caching of content-hashed assets
 
 ### Security
 
