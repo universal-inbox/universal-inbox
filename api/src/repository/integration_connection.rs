@@ -83,6 +83,14 @@ pub trait IntegrationConnectionRepository {
         provider_user_ids: Option<&[String]>,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError>;
 
+    /// Slack connections whose `context` (hence `team_id`) was never stored,
+    /// e.g. connected before `SlackContext` was captured from the OAuth response.
+    async fn find_slack_integration_connections_without_context(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: Option<UserId>,
+    ) -> Result<Vec<SlackIntegrationConnectionWithoutContext>, UniversalInboxError>;
+
     async fn update_integration_connection_status(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -271,6 +279,22 @@ pub const SLACK_ACCESS_REVOKED_ERROR_MESSAGE: &str =
 
 pub const OAUTH_MISSING_REFRESH_TOKEN_ERROR_MESSAGE: &str =
     "🔌 Authorization is missing a refresh token. Please reconnect this integration.";
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlackIntegrationConnectionWithoutContext {
+    pub id: IntegrationConnectionId,
+    pub user_id: UserId,
+    pub status: IntegrationConnectionStatus,
+    pub has_credential: bool,
+}
+
+#[derive(sqlx::FromRow)]
+struct SlackIntegrationConnectionWithoutContextRow {
+    id: Uuid,
+    user_id: Uuid,
+    status: String,
+    has_credential: bool,
+}
 
 #[derive(sqlx::FromRow)]
 struct ClaimedIntegrationConnectionRow {
@@ -833,6 +857,72 @@ impl IntegrationConnectionRepository for Repository {
         rows.iter()
             .map(|r| r.try_into())
             .collect::<Result<Vec<IntegrationConnection>, UniversalInboxError>>()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = for_user_id.map(|id| id.to_string())),
+        err
+    )]
+    async fn find_slack_integration_connections_without_context(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: Option<UserId>,
+    ) -> Result<Vec<SlackIntegrationConnectionWithoutContext>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                SELECT
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.status::TEXT AS status,
+                  EXISTS (
+                    SELECT 1 FROM oauth_credential
+                    WHERE oauth_credential.integration_connection_id = integration_connection.id
+                  ) AS has_credential
+                FROM integration_connection
+                WHERE integration_connection.provider_kind::TEXT = 'Slack'
+                  AND integration_connection.context IS NULL
+            "#,
+        );
+        if let Some(for_user_id) = for_user_id {
+            query_builder
+                .push(" AND integration_connection.user_id = ")
+                .push_bind(for_user_id.0);
+        }
+        query_builder.push(" ORDER BY integration_connection.id");
+
+        let rows: Vec<SlackIntegrationConnectionWithoutContextRow> = query_builder
+            .build_query_as()
+            .fetch_all(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to fetch Slack integration connections without context from storage: {err}"
+                );
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        rows.into_iter()
+            .map(|row| {
+                let status =
+                    row.status
+                        .parse()
+                        .map_err(|e| UniversalInboxError::InvalidEnumData {
+                            source: e,
+                            output: row.status.clone(),
+                        })?;
+                Ok(SlackIntegrationConnectionWithoutContext {
+                    id: IntegrationConnectionId(row.id),
+                    user_id: UserId(row.user_id),
+                    status,
+                    has_credential: row.has_credential,
+                })
+            })
+            .collect()
     }
 
     #[tracing::instrument(
