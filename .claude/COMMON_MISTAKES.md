@@ -4,8 +4,8 @@
 
 ## 1. Tests overflow the stack (missing RUST_MIN_STACK)
 - **Symptom:** Tests crash with `thread 'main' has overflowed its stack` / SIGABRT on big nested structs.
-- **Check:** `echo $RUST_MIN_STACK` — empty or not `104857600`?
-- **Fix:** `export RUST_MIN_STACK=104857600` before tests. `just test` already sets it; don't bypass it with raw `cargo test`.
+- **Check:** `echo $RUST_MIN_STACK` — exported but smaller than `104857600`? An exported value overrides the default.
+- **Fix:** `.cargo/config.toml` `[env]` sets `RUST_MIN_STACK=104857600` for every `cargo test`/`cargo nextest` run, so no export is needed. `unset RUST_MIN_STACK` if a smaller value is exported.
 
 ## 2. SQLx compile errors offline (stale query cache)
 - **Symptom:** `error: failed to find data for query ...` or `SQLX_OFFLINE=true but ...` after editing a `query!`/`query_as!`.

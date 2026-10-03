@@ -10,3 +10,10 @@ rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 
 [target.x86_64-apple-darwin]
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# Tests deserialize large nested structs with serde, which overflows the default
+# 2 MiB thread stack. Cargo and nextest inject `[env]` into every test process, so
+# tests get the bigger stack without depending on direnv having loaded `.envrc`.
+# An explicitly exported RUST_MIN_STACK still takes precedence.
+[env]
+RUST_MIN_STACK = "104857600"
