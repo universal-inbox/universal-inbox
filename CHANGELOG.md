@@ -57,6 +57,7 @@
 - Completing a Slack-sourced task no longer fails when its Slack reaction was already removed
 - Mark a Slack connection as Failing when Slack rejects its refresh token (`invalid_refresh_token` / `invalid_grant`)
 - The toast shown after answering a Google Calendar invitation now matches the chosen answer
+- Slack webhook events now reach Slack connections created before their workspace id was recorded (backfilled by the `slack backfill-team-id` command and on the next Slack sync)
 
 ## 2026-03-17
 

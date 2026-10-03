@@ -47,6 +47,7 @@ use crate::{
             IntegrationConnectionRepository, IntegrationConnectionSyncStatusUpdate,
             IntegrationConnectionSyncedBeforeFilter, OAUTH_INVALID_GRANT_ERROR_MESSAGE,
             OAUTH_MISSING_REFRESH_TOKEN_ERROR_MESSAGE, SLACK_ACCESS_REVOKED_ERROR_MESSAGE,
+            SlackIntegrationConnectionWithoutContext,
         },
         notification::NotificationRepository,
         oauth_credential::OAuthCredentialRepository,
@@ -1884,6 +1885,16 @@ impl IntegrationConnectionService {
                 integration_connection_id,
                 Some(context),
             )
+            .await
+    }
+
+    pub async fn find_slack_integration_connections_without_context(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: Option<UserId>,
+    ) -> Result<Vec<SlackIntegrationConnectionWithoutContext>, UniversalInboxError> {
+        self.repository
+            .find_slack_integration_connections_without_context(executor, for_user_id)
             .await
     }
 
