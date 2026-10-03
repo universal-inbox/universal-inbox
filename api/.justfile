@@ -9,7 +9,8 @@ default:
 
 ## Dev recipes
 check-db:
-    cargo sqlx prepare -- --bin universal-inbox-api
+    # mbx can make sqlx prepare delete .sqlx files
+    MBX_DISABLE=1 cargo sqlx prepare -- --bin universal-inbox-api
     cargo check --tests
 
 ensure-db:
