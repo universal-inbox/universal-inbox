@@ -69,11 +69,11 @@ pub async fn retry_oauth_grant_revocations(
 }
 
 #[tracing::instrument(
-    name = "pause-slack-connections",
+    name = "pause-integration-connections",
     level = "debug",
     skip(integration_connection_service)
 )]
-pub async fn pause_slack_connections(
+pub async fn pause_integration_connections(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     inactivity_threshold_days: i64,
     inactivity_warning_days: i64,
@@ -95,12 +95,11 @@ pub async fn pause_slack_connections(
     // warning, even when its user was already inactive for longer.
     let (failed_warnings, warned_before) = if inactivity_warning_days > 0 {
         info!(
-            "Warning users inactive for more than {} days that their Slack connections will be paused",
+            "Warning users inactive for more than {} days that their integration connections will be paused",
             inactivity_threshold_days - inactivity_warning_days
         );
         let (_, failed_warnings) = service
             .warn_integration_connections_of_inactive_users(
-                IntegrationProviderKind::Slack,
                 days_ago(inactivity_threshold_days - inactivity_warning_days)?,
                 Utc::now() + TimeDelta::days(inactivity_warning_days),
             )
@@ -111,32 +110,30 @@ pub async fn pause_slack_connections(
     };
 
     info!(
-        "Pausing Slack connections of users inactive for more than {inactivity_threshold_days} days"
+        "Pausing integration connections of users inactive for more than {inactivity_threshold_days} days"
     );
     let (paused_inactive, failed_inactive) = service
-        .pause_integration_connections_of_inactive_users(
-            IntegrationProviderKind::Slack,
-            inactive_before,
-            warned_before,
-        )
+        .pause_integration_connections_of_inactive_users(inactive_before, warned_before)
         .await?;
 
-    info!("Pausing Slack connections failing for more than {failing_threshold_days} days");
+    info!("Pausing integration connections failing for more than {failing_threshold_days} days");
     let (paused_failing, failed_failing) = service
-        .pause_long_failing_integration_connections(IntegrationProviderKind::Slack, failing_before)
+        .pause_long_failing_integration_connections(failing_before)
         .await?;
 
     if failed_warnings > 0 {
         error!(
-            "{failed_warnings} user(s) could not be warned that their Slack connection will be paused"
+            "{failed_warnings} user(s) could not be warned that their integration connections will be paused"
         );
     }
-    let failed = failed_inactive + failed_failing;
-    if failed > 0 {
-        error!("{failed} Slack connection(s) could not be paused");
+    if failed_inactive > 0 {
+        error!("{failed_inactive} integration connection(s) of inactive users could not be paused");
+    }
+    if failed_failing > 0 {
+        error!("{failed_failing} long failing integration connection(s) could not be paused");
     }
     info!(
-        "Paused {paused_inactive} Slack connection(s) of inactive users and {paused_failing} long failing Slack connection(s)"
+        "Paused {paused_inactive} integration connection(s) of inactive users and {paused_failing} long failing integration connection(s)"
     );
     Ok(())
 }
