@@ -24,6 +24,7 @@
         "fzf": "latest",
         "process-compose": "latest",
         "binaryen": "latest",
+        "brotli": "latest",
         "cargo-chef": "0.1.78",
         "cargo-binstall": "latest",
         "openssl.dev": "",

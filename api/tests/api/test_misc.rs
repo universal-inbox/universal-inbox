@@ -248,3 +248,87 @@ mod invalid_static_paths {
         assert_eq!(response.status(), 200);
     }
 }
+
+mod static_files {
+    use super::*;
+
+    use pretty_assertions::assert_eq;
+
+    const HASHED_WASM_PATH: &str = "/app-0123456789abcdef_bg.wasm";
+    const IMMUTABLE: &str = "public, max-age=31536000, immutable";
+
+    async fn get(app: &TestedApp, path: &str, accept_encoding: &str) -> reqwest::Response {
+        // Keep the raw (compressed) body and headers: no transparent decompression
+        reqwest::Client::builder()
+            .no_gzip()
+            .no_brotli()
+            .no_zstd()
+            .no_deflate()
+            .build()
+            .unwrap()
+            .get(format!("{}{path}", app.app_address))
+            .header("accept-encoding", accept_encoding)
+            .send()
+            .await
+            .unwrap()
+    }
+
+    fn header<'a>(response: &'a reqwest::Response, name: &str) -> Option<&'a str> {
+        response
+            .headers()
+            .get(name)
+            .map(|value| value.to_str().unwrap())
+    }
+
+    #[rstest]
+    #[case::brotli(
+        "br, gzip",
+        Some("br"),
+        "tests/api/statics/app-0123456789abcdef_bg.wasm.br"
+    )]
+    #[case::gzip(
+        "gzip",
+        Some("gzip"),
+        "tests/api/statics/app-0123456789abcdef_bg.wasm.gz"
+    )]
+    #[case::identity("identity", None, "tests/api/statics/app-0123456789abcdef_bg.wasm")]
+    #[tokio::test]
+    async fn test_hashed_asset_is_served_precompressed_and_immutable(
+        #[future] tested_app: TestedApp,
+        #[case] accept_encoding: &str,
+        #[case] expected_content_encoding: Option<&str>,
+        #[case] expected_body_file: &str,
+    ) {
+        let app = tested_app.await;
+
+        let response = get(&app, HASHED_WASM_PATH, accept_encoding).await;
+
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            header(&response, "content-encoding"),
+            expected_content_encoding
+        );
+        assert_eq!(header(&response, "cache-control"), Some(IMMUTABLE));
+        assert_eq!(header(&response, "content-type"), Some("application/wasm"));
+        let expected_body = std::fs::read(expected_body_file).unwrap();
+        assert_eq!(response.bytes().await.unwrap().to_vec(), expected_body);
+    }
+
+    #[rstest]
+    #[case::root("/")]
+    #[case::spa_route("/notifications")]
+    #[case::spa_route_looking_hashed("/notifications/app-0123456789abcdef")]
+    #[case::unhashed_asset("/style.css")]
+    #[tokio::test]
+    async fn test_unhashed_content_is_revalidated(
+        #[future] tested_app: TestedApp,
+        #[case] path: &str,
+    ) {
+        let app = tested_app.await;
+
+        let response = get(&app, path, "identity").await;
+
+        assert_eq!(response.status(), 200);
+        assert_eq!(header(&response, "cache-control"), Some("no-cache"));
+    }
+}

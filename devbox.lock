@@ -87,6 +87,86 @@
         }
       }
     },
+    "brotli@latest": {
+      "last_modified": "2026-08-27T07:16:00Z",
+      "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#brotli",
+      "source": "devbox-search",
+      "version": "1.2.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/w9pg5nn6zpzsmqwnxqcsv9k010f22xfc-brotli-1.2.0",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/czp0399bv437zf8x5v0bvrnn53k80qyi-brotli-1.2.0-dev"
+            },
+            {
+              "name": "lib",
+              "path": "/nix/store/mna7bp7y5v81ww0x8v3w8j5aq57g32kc-brotli-1.2.0-lib"
+            }
+          ],
+          "store_path": "/nix/store/w9pg5nn6zpzsmqwnxqcsv9k010f22xfc-brotli-1.2.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/a66qqjb7mpff108pqlfgq4afkbvx3yl0-brotli-1.2.0",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/hvbrjbd5h71ry5i0brpcjqyn6lhg5k48-brotli-1.2.0-dev"
+            },
+            {
+              "name": "lib",
+              "path": "/nix/store/ix8ij52ljmbsk8p96k265flzp3lzadwa-brotli-1.2.0-lib"
+            }
+          ],
+          "store_path": "/nix/store/a66qqjb7mpff108pqlfgq4afkbvx3yl0-brotli-1.2.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/hwrsr7a2ywjkhk7nn0bnw7jp2sp8hc0s-brotli-1.2.0",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/905sjm6d83yfh18ij1nx7f55acv0wdbf-brotli-1.2.0-dev"
+            },
+            {
+              "name": "lib",
+              "path": "/nix/store/zgvn3yqqv9b9fi8pxljphvdb8afsab89-brotli-1.2.0-lib"
+            }
+          ],
+          "store_path": "/nix/store/hwrsr7a2ywjkhk7nn0bnw7jp2sp8hc0s-brotli-1.2.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/34vidkz6jm5pinhhyxi64pj82x70vida-brotli-1.2.0",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/46hh240hlj9si28zra66dyc3nj85lynw-brotli-1.2.0-dev"
+            },
+            {
+              "name": "lib",
+              "path": "/nix/store/c56x66gbj3qwv3g7dhadcfiq408q2hay-brotli-1.2.0-lib"
+            }
+          ],
+          "store_path": "/nix/store/34vidkz6jm5pinhhyxi64pj82x70vida-brotli-1.2.0"
+        }
+      }
+    },
     "caddy@latest": {
       "last_modified": "2026-08-27T07:16:00Z",
       "plugin_version": "0.0.3",
