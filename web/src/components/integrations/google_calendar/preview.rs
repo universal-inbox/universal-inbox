@@ -7,7 +7,7 @@ use url::Url;
 use universal_inbox::{
     notification::NotificationWithTask,
     third_party::integrations::google_calendar::{
-        EventMethod, GoogleCalendarEvent, GoogleCalendarEventAttendeeResponseStatus,
+        EventMethod, EventReply, GoogleCalendarEvent, GoogleCalendarEventAttendeeResponseStatus,
         GoogleCalendarEventStatus,
     },
 };
@@ -32,8 +32,11 @@ pub fn GoogleCalendarEventPreview(
     expand_details: ReadSignal<bool>,
 ) -> Element {
     let notification_service = use_coroutine_handle::<NotificationCommand>();
-    let date_label = use_memo(move || compute_date_label(google_calendar_event(), "%A %B %e, %Y"));
-    let date_block = use_memo(move || compute_date_block(&google_calendar_event()));
+    let reply = use_memo(move || google_calendar_event().reply);
+    // For an attendee reply, show the dates of the answered occurrence
+    let displayed_event = use_memo(move || with_reply_occurrence(google_calendar_event()));
+    let date_label = use_memo(move || compute_date_label(displayed_event(), "%A %B %e, %Y"));
+    let date_block = use_memo(move || compute_date_block(&displayed_event()));
     let organizer_label = use_memo(move || {
         let organizer = google_calendar_event().organizer;
         organizer.display_name.unwrap_or(organizer.email)
@@ -88,7 +91,7 @@ pub fn GoogleCalendarEventPreview(
     });
 
     // Time range "15:00 – 15:30" + tz abbreviation. None for all-day events.
-    let time_range = use_memo(move || compute_time_range_label(&google_calendar_event()));
+    let time_range = use_memo(move || compute_time_range_label(&displayed_event()));
 
     // Single-line recurrence summary ("Repeats every week on FRs"). None when not recurring.
     let recurrence_summary = use_memo(move || {
@@ -168,6 +171,10 @@ pub fn GoogleCalendarEventPreview(
             div {
                 id: "notification-preview-details",
                 class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto p-3",
+
+                if let Some(reply) = reply() {
+                    AttendeeReplyCard { reply }
+                }
 
                 // Primary card: date tile + meta column on top, guests + RSVP stacked underneath.
                 {
@@ -297,7 +304,7 @@ pub fn GoogleCalendarEventPreview(
                                 }
                             }
 
-                            if !is_cancelled() {
+                            if !is_cancelled() && reply().is_none() {
                                 div {
                                     id: "google-calendar-rsvp-buttons",
                                     class: "grid grid-flow-col auto-cols-fr mt-2.5 -mx-3 -mb-3 border-t border-ui-border-light overflow-hidden rounded-b-[calc(var(--ui-radius-lg)-1px)]",
@@ -349,6 +356,75 @@ pub fn GoogleCalendarEventPreview(
             }
         }
     }
+}
+
+#[component]
+fn AttendeeReplyCard(reply: ReadSignal<EventReply>) -> Element {
+    let reply_value = reply();
+    let user_name = reply_value
+        .attendee_display_name
+        .clone()
+        .unwrap_or_else(|| reply_value.attendee_email.clone());
+    let avatar_url = Url::parse(&Generator::default().generate(&reply_value.attendee_email)).ok();
+    let (tag_variant, answer) = match reply_value.response_status {
+        GoogleCalendarEventAttendeeResponseStatus::Accepted => (TagVariant::Success, "Accepted"),
+        GoogleCalendarEventAttendeeResponseStatus::Declined => (TagVariant::Error, "Declined"),
+        GoogleCalendarEventAttendeeResponseStatus::Tentative => (TagVariant::Warning, "Maybe"),
+        GoogleCalendarEventAttendeeResponseStatus::NeedsAction => (TagVariant::Muted, "Awaiting"),
+    };
+
+    rsx! {
+        Card {
+            variant: CardVariant::Default,
+            div {
+                id: "google-calendar-attendee-reply",
+                class: "flex flex-col gap-1.5",
+                div {
+                    class: "flex items-center gap-2 min-w-0",
+                    UserWithAvatar {
+                        user_name: Some(user_name),
+                        avatar_url: Some(avatar_url),
+                        display_name: true,
+                    }
+                    Tag { variant: tag_variant, "{answer}" }
+                }
+                if let Some(comment) = reply_value.comment.as_ref() {
+                    div {
+                        class: "flex items-center gap-1.5 text-[12.5px] text-ui-base-muted",
+                        span { class: "icon-[lucide--message-square] size-4 shrink-0" }
+                        span { "{comment}" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// When the event carries an attendee reply for a specific occurrence, move the
+/// event dates to that occurrence (keeping the event duration).
+fn with_reply_occurrence(mut event: GoogleCalendarEvent) -> GoogleCalendarEvent {
+    let Some(occurrence_start) = event
+        .reply
+        .as_ref()
+        .and_then(|reply| reply.occurrence_start.clone())
+    else {
+        return event;
+    };
+
+    if let (Some(occurrence_datetime), Some(start), Some(end)) = (
+        occurrence_start.datetime,
+        event.start.datetime,
+        event.end.datetime,
+    ) {
+        event.end.datetime = Some(occurrence_datetime + (end - start));
+        event.start.datetime = Some(occurrence_datetime);
+    } else if let (Some(occurrence_date), Some(start), Some(end)) =
+        (occurrence_start.date, event.start.date, event.end.date)
+    {
+        event.end.date = Some(occurrence_date + (end - start));
+        event.start.date = Some(occurrence_date);
+    }
+    event
 }
 
 #[component]

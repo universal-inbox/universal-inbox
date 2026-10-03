@@ -27,7 +27,7 @@ use crate::helpers::{
     notification::{
         google_calendar::{
             create_notification_from_google_calendar_event, google_calendar_event,
-            mock_google_calendar_event_delete_service,
+            google_calendar_event_reply, mock_google_calendar_event_delete_service,
         },
         google_mail::{google_mail_thread_get_123, mock_google_mail_thread_modify_service},
     },
@@ -420,5 +420,73 @@ mod update_invitation {
             updated_notification.source_item.data,
             ThirdPartyItemData::GoogleCalendarEvent(boxed_updated_google_calendar_event)
         );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_answer_google_calendar_invitation_reply_is_rejected(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        google_mail_thread_get_123: GoogleMailThread,
+        google_calendar_event_reply: GoogleCalendarEvent,
+        google_mail_oauth_credential: OAuthCredentialFixture,
+        google_calendar_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+
+        let google_mail_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
+            &settings,
+            google_mail_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        let google_calendar_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
+            &settings,
+            google_calendar_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+
+        let reply_notification = create_notification_from_google_calendar_event(
+            &app.app,
+            &google_mail_thread_get_123,
+            &google_calendar_event_reply,
+            app.user.id,
+            google_mail_integration_connection.id,
+            google_calendar_integration_connection.id,
+        )
+        .await;
+
+        let response = app
+            .client
+            .patch(format!(
+                "{}notifications/{}/invitation",
+                app.app.api_address, reply_notification.id
+            ))
+            .json(&InvitationPatch {
+                response_status: GoogleCalendarEventAttendeeResponseStatus::Accepted,
+            })
+            .send()
+            .await
+            .expect("Failed to execute request");
+
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+
+        let notification: Box<NotificationWithTask> = get_resource(
+            &app.client,
+            &app.app.api_address,
+            "notifications",
+            reply_notification.id.into(),
+        )
+        .await;
+        assert_eq!(notification.status, reply_notification.status);
     }
 }

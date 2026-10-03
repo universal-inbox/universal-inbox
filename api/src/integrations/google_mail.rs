@@ -37,6 +37,7 @@ use universal_inbox::{
     },
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     third_party::{
+        integrations::google_calendar::EventMethod,
         integrations::google_mail::{
             GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL, GoogleMailLabel, GoogleMailMessage,
             GoogleMailMessageBody, GoogleMailThread, MessageSelection,
@@ -49,8 +50,9 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
-        google_calendar::GoogleCalendarService, notification::ThirdPartyNotificationSourceService,
-        oauth2::AccessToken, third_party::ThirdPartyItemSourceService,
+        google_calendar::GoogleCalendarService, icalendar::parse_event_reply,
+        notification::ThirdPartyNotificationSourceService, oauth2::AccessToken,
+        third_party::ThirdPartyItemSourceService,
     },
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
@@ -622,6 +624,9 @@ impl GoogleMailService {
 
         // Set the method from the vcal attachment
         event.method = vcal_method;
+        if event.method == EventMethod::Reply {
+            event.reply = parse_event_reply(vcal_event);
+        }
 
         Ok(Some(event.into_third_party_item(
             user_id,

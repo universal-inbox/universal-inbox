@@ -39,6 +39,7 @@ cached = { version = "4.0", features = [
   "redis_connection_manager",
 ] }
 chrono = { workspace = true, features = ["serde"] }
+chrono-tz = { workspace = true }
 clap = { workspace = true }
 color-backtrace = "0.7"
 config = { version = "0.15.19", default-features = false, features = [
