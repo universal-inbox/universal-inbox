@@ -1,0 +1,29 @@
+query DiscussionCommentRepliesQuery($comment_id: ID!, $after: String) {
+  node(id: $comment_id) {
+    __typename
+    ... on DiscussionComment {
+      replies(first: 100, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          bodyHTML
+          url
+          createdAt
+          isMinimized
+
+          author {
+            __typename
+            avatarUrl
+            login
+            ... on User {
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+}

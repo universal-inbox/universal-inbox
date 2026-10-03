@@ -18,7 +18,9 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::integrations::github::graphql::{
-    DiscussionQuery, PullRequestQuery, discussion_query, pull_request_query,
+    DiscussionCommentRepliesQuery, DiscussionCommentsQuery, DiscussionQuery, PullRequestQuery,
+    discussion_comment_replies_query, discussion_comments_query, discussion_query,
+    pull_request_query,
 };
 
 use crate::helpers::{
@@ -121,6 +123,60 @@ pub async fn mock_github_discussion_query(
         .await;
 }
 
+pub async fn mock_github_discussion_comments_query(
+    github_mock_server: &MockServer,
+    owner: String,
+    repository: String,
+    discussion_number: i64,
+    after: Option<String>,
+    result: &Response<discussion_comments_query::ResponseData>,
+) {
+    let expected_request_body =
+        DiscussionCommentsQuery::build_query(discussion_comments_query::Variables {
+            owner,
+            repository,
+            discussion_number,
+            after,
+        });
+    mock_github_graphql_query(github_mock_server, &expected_request_body, result).await;
+}
+
+pub async fn mock_github_discussion_comment_replies_query(
+    github_mock_server: &MockServer,
+    comment_id: String,
+    after: Option<String>,
+    result: &Response<discussion_comment_replies_query::ResponseData>,
+) {
+    let expected_request_body =
+        DiscussionCommentRepliesQuery::build_query(discussion_comment_replies_query::Variables {
+            comment_id,
+            after,
+        });
+    mock_github_graphql_query(github_mock_server, &expected_request_body, result).await;
+}
+
+async fn mock_github_graphql_query<B: serde::Serialize, R: serde::Serialize>(
+    github_mock_server: &MockServer,
+    expected_request_body: &B,
+    result: &R,
+) {
+    Mock::given(method("POST"))
+        .and(path("/graphql"))
+        .and(body_json(expected_request_body))
+        .and(header(
+            "accept",
+            "application/vnd.github.merge-info-preview+json",
+        ))
+        .and(header("authorization", "Bearer github_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(github_mock_server)
+        .await;
+}
+
 #[fixture]
 pub fn sync_github_notifications() -> Vec<GithubNotification> {
     load_json_fixture_file("sync_github_notifications.json")
@@ -139,6 +195,20 @@ pub fn github_pull_request_123_no_commits_response() -> Response<pull_request_qu
 #[fixture]
 pub fn github_discussion_123_response() -> Response<discussion_query::ResponseData> {
     load_json_fixture_file("github_discussion_123_response.json")
+}
+
+pub fn github_discussion_123_comments_response(
+    page: usize,
+) -> Response<discussion_comments_query::ResponseData> {
+    load_json_fixture_file(&format!(
+        "github_discussion_123_comments_page_{page}_response.json"
+    ))
+}
+
+#[fixture]
+pub fn github_discussion_comment_1_replies_page_2_response()
+-> Response<discussion_comment_replies_query::ResponseData> {
+    load_json_fixture_file("github_discussion_comment_1_replies_page_2_response.json")
 }
 
 pub fn assert_sync_notifications(

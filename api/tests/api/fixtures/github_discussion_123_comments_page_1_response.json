@@ -1,0 +1,81 @@
+{
+  "data": {
+    "repository": {
+      "discussion": {
+        "comments": {
+          "pageInfo": {
+            "hasNextPage": true,
+            "endCursor": "comments-cursor-1"
+          },
+          "nodes": [
+            {
+              "id": "DC_1",
+              "bodyHTML": "<p>first comment</p>",
+              "url": "https://github.com/octocat/universal-inbox/discussions/1#discussioncomment-1",
+              "createdAt": "2023-07-10T08:00:00Z",
+              "isAnswer": false,
+              "isMinimized": false,
+              "author": {
+                "__typename": "Bot",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/456?v=4",
+                "login": "helper-bot"
+              },
+              "replies": {
+                "totalCount": 3,
+                "pageInfo": {
+                  "hasNextPage": true,
+                  "endCursor": "replies-cursor-1"
+                },
+                "nodes": [
+                  {
+                    "id": "DC_2",
+                    "bodyHTML": "<p>a reply</p>",
+                    "url": "https://github.com/octocat/universal-inbox/discussions/1#discussioncomment-2",
+                    "createdAt": "2023-07-11T08:00:00Z",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/123?v=4",
+                      "login": "test",
+                      "name": null
+                    }
+                  },
+                  {
+                    "id": "DC_3",
+                    "bodyHTML": "<p>spam</p>",
+                    "url": "https://github.com/octocat/universal-inbox/discussions/1#discussioncomment-3",
+                    "createdAt": "2023-07-12T08:00:00Z",
+                    "isMinimized": true,
+                    "author": null
+                  }
+                ]
+              }
+            },
+            {
+              "id": "DC_4",
+              "bodyHTML": "<p dir=\"auto\">test answer</p>",
+              "url": "https://github.com/octocat/universal-inbox/discussions/1#discussioncomment-4",
+              "createdAt": "2023-10-19T20:35:06Z",
+              "isAnswer": true,
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/123?v=4",
+                "login": "test",
+                "name": null
+              },
+              "replies": {
+                "totalCount": 0,
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
