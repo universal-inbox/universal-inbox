@@ -189,6 +189,7 @@ screenshots = ["dep:playwright-rs"]
 
 [dev-dependencies]
 lzma-rust2 = "0.21"
+opentelemetry_sdk = { version = "0.32", features = ["testing"] }
 playwright-rs = "0.18.0"
 pretty_assertions = { workspace = true }
 rrule = { workspace = true }

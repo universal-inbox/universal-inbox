@@ -27,9 +27,12 @@ use crate::{
 };
 
 pub mod cron;
+pub mod envelope;
 pub mod oauth;
 pub mod slack;
 pub mod sync;
+
+pub use envelope::{JobEnvelope, JobMakeSpan, JobStorage, push_job};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, Deserialize)]
@@ -74,31 +77,13 @@ impl UniversalInboxJob {
     }
 }
 
-#[tracing::instrument(
-    level = "debug",
-    skip(
-        job,
-        task_id,
-        attempt,
-        notification_service,
-        task_service,
-        integration_connection_service,
-        third_party_item_service,
-        slack_service
-    ),
-    fields(
-        { attr::JOB_ID } = %task_id.to_string(),
-        { attr::JOB_NAME } = %job.name(),
-        { attr::JOB_ATTEMPT } = attempt.current(),
-        { attr::ERROR_TYPE } = tracing::field::Empty,
-    ),
-    err
-)]
+/// Runs a job. Its root span is the `process` consumer span made by
+/// [`JobMakeSpan`], so the job's status and `error.type` are recorded on that
+/// span.
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_universal_inbox_job(
-    job: UniversalInboxJob,
+    JobEnvelope { job, .. }: JobEnvelope,
     task_id: TaskId,
-    attempt: Attempt,
     notification_service: Data<Arc<RwLock<NotificationService>>>,
     task_service: Data<Arc<RwLock<TaskService>>>,
     integration_connection_service: Data<Arc<RwLock<IntegrationConnectionService>>>,

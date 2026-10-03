@@ -1,6 +1,6 @@
 use apalis::prelude::{Data, Storage};
 use apalis_cron::CronContext;
-use apalis_redis::RedisStorage;
+
 use chrono::{DateTime, TimeDelta, TimeZone, Timelike, Utc};
 use redis_apalis::{AsyncCommands, aio::ConnectionManager};
 use rstest::*;
@@ -12,7 +12,7 @@ use universal_inbox_api::{
         VacuumJobsCronSettings,
     },
     jobs::{
-        UniversalInboxJob,
+        JobStorage,
         cron::{
             handle_pause_slack_connections_cron_tick, handle_refresh_oauth_tokens_cron_tick,
             handle_vacuum_jobs_cron_tick, try_acquire_cron_tick_lock,
@@ -52,7 +52,7 @@ async fn test_try_acquire_cron_tick_lock_dedupes_same_tick(settings: Settings) {
 #[tokio::test]
 async fn test_refresh_oauth_tokens_cron_tick_enqueues_job_once(
     settings: Settings,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) {
     let mut redis_storage = redis_storage.await;
     let cache = Cache::new(settings.redis.connection_string())
@@ -91,7 +91,7 @@ async fn test_refresh_oauth_tokens_cron_tick_enqueues_job_once(
 #[tokio::test]
 async fn test_pause_slack_connections_cron_tick_enqueues_job_once(
     settings: Settings,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) {
     let mut redis_storage = redis_storage.await;
     let cache = Cache::new(settings.redis.connection_string())
@@ -137,7 +137,7 @@ struct JobQueue {
 }
 
 impl JobQueue {
-    fn new(storage: &RedisStorage<UniversalInboxJob>) -> Self {
+    fn new(storage: &JobStorage) -> Self {
         let config = storage.get_config();
         let job_data_hash = config.job_data_hash();
         JobQueue {
@@ -249,7 +249,7 @@ fn vacuum_jobs_settings(batch_size: usize, max_batches_per_tick: usize) -> Vacuu
 }
 
 async fn vacuum_jobs(
-    redis_storage: &RedisStorage<UniversalInboxJob>,
+    redis_storage: &JobStorage,
     cache: &Cache,
     tick: DateTime<Utc>,
     cron_settings: &VacuumJobsCronSettings,
@@ -269,7 +269,7 @@ async fn vacuum_jobs(
 #[tokio::test]
 async fn test_vacuum_jobs_cron_tick_purges_only_jobs_completed_before_the_retention_window(
     settings: Settings,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) {
     let redis_storage = redis_storage.await;
     let cache = Cache::new(settings.redis.connection_string())
@@ -317,7 +317,7 @@ async fn test_vacuum_jobs_cron_tick_purges_only_jobs_completed_before_the_retent
 #[tokio::test]
 async fn test_vacuum_jobs_cron_tick_purges_every_batch(
     settings: Settings,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) {
     let redis_storage = redis_storage.await;
     let cache = Cache::new(settings.redis.connection_string())
@@ -351,7 +351,7 @@ async fn test_vacuum_jobs_cron_tick_purges_every_batch(
 #[tokio::test]
 async fn test_vacuum_jobs_cron_tick_stops_at_max_batches_per_tick(
     settings: Settings,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) {
     let redis_storage = redis_storage.await;
     let cache = Cache::new(settings.redis.connection_string())
@@ -384,7 +384,7 @@ async fn test_vacuum_jobs_cron_tick_stops_at_max_batches_per_tick(
 #[tokio::test]
 async fn test_vacuum_jobs_cron_tick_dedupes_same_tick(
     settings: Settings,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) {
     let redis_storage = redis_storage.await;
     let cache = Cache::new(settings.redis.connection_string())
@@ -414,10 +414,10 @@ async fn test_vacuum_jobs_cron_tick_dedupes_same_tick(
 #[tokio::test]
 async fn test_vacuum_jobs_cron_tick_lock_is_scoped_to_the_job_queue(
     settings: Settings,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
     #[future]
     #[from(redis_storage)]
-    other_redis_storage: RedisStorage<UniversalInboxJob>,
+    other_redis_storage: JobStorage,
 ) {
     let (redis_storage, other_redis_storage) = (redis_storage.await, other_redis_storage.await);
     let cache = Cache::new(settings.redis.connection_string())
@@ -445,10 +445,10 @@ async fn test_vacuum_jobs_cron_tick_lock_is_scoped_to_the_job_queue(
 #[tokio::test]
 async fn test_refresh_oauth_tokens_cron_tick_lock_is_scoped_to_the_job_queue(
     settings: Settings,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
     #[future]
     #[from(redis_storage)]
-    other_redis_storage: RedisStorage<UniversalInboxJob>,
+    other_redis_storage: JobStorage,
 ) {
     let (redis_storage, other_redis_storage) = (redis_storage.await, other_redis_storage.await);
     let cache = Cache::new(settings.redis.connection_string())

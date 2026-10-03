@@ -25,6 +25,14 @@ pub const URL_PATH: &str = "url.path";
 pub const HTTP_STATUS_CODE: &str = "http.status_code";
 /// Special field interpreted by `tracing-opentelemetry` as the span status
 pub const OTEL_STATUS_CODE: &str = "otel.status_code";
+/// Special field interpreted by `tracing-opentelemetry` as the span name
+pub const OTEL_NAME: &str = "otel.name";
+/// Special field interpreted by `tracing-opentelemetry` as the span kind
+pub const OTEL_KIND: &str = "otel.kind";
+pub const MESSAGING_SYSTEM: &str = "messaging.system";
+pub const MESSAGING_DESTINATION_NAME: &str = "messaging.destination.name";
+pub const MESSAGING_OPERATION_TYPE: &str = "messaging.operation.type";
+pub const MESSAGING_MESSAGE_ID: &str = "messaging.message.id";
 
 // HTTP request forwarding and rate limiting
 pub const HTTP_X_FORWARDED_FOR_MASKED: &str = "http.x_forwarded_for.masked";
