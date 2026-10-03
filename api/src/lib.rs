@@ -40,13 +40,13 @@ use apalis::{
     prelude::*,
 };
 use apalis_cron::{CronStream, Schedule};
-use apalis_redis::RedisStorage;
+
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use chrono::Utc;
 use configuration::{AuthenticationSettings, CronSettings};
 use csp::{CSP, Directive, Source, Sources};
 use integrations::{api::APIService, google_calendar::GoogleCalendarService, slack::SlackService};
-use jobs::UniversalInboxJob;
+use jobs::{JobMakeSpan, JobStorage};
 use jsonwebtoken::{Algorithm, Validation};
 use mailer::Mailer;
 use regex::Regex;
@@ -114,7 +114,7 @@ pub mod utils;
 #[allow(clippy::too_many_arguments)]
 pub async fn run_server(
     listener: TcpListener,
-    redis_storage: RedisStorage<UniversalInboxJob>,
+    redis_storage: JobStorage,
     settings: Settings,
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
@@ -580,10 +580,23 @@ pub async fn run_ping_server(
     Ok(server.run())
 }
 
-/// Tracing layer shared by every apalis worker. The `task` span is raised from
-/// apalis' default DEBUG to INFO so it is exported under the default
-/// `otel_trace_directive` ("info"): it is the job's root span.
-fn job_trace_layer()
+/// Tracing layer of the job worker. Each job runs in a new trace whose root is
+/// a `process` consumer span linked to the span that enqueued the job.
+fn job_trace_layer(
+    redis_storage: &JobStorage,
+) -> TraceLayer<JobMakeSpan, DefaultOnRequest, DefaultOnResponse, WorkerOnFailure> {
+    TraceLayer::new()
+        .make_span_with(JobMakeSpan::new(redis_storage))
+        .on_request(DefaultOnRequest::default().level(Level::INFO))
+        .on_response(DefaultOnResponse::default().level(Level::INFO))
+        .on_failure(WorkerOnFailure {})
+}
+
+/// Tracing layer of the cron workers. The `task` span is raised from apalis'
+/// default DEBUG to INFO so it is exported under the default
+/// `otel_trace_directive` ("info"): it is the tick's root span, and the parent
+/// of the `send` span of the job the tick enqueues.
+fn cron_trace_layer()
 -> TraceLayer<DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, WorkerOnFailure> {
     TraceLayer::new()
         .make_span_with(DefaultMakeSpan::default().level(Level::INFO))
@@ -609,7 +622,7 @@ impl<E: Display + Debug> OnFailure<E> for WorkerOnFailure {
 #[allow(clippy::too_many_arguments)]
 pub async fn run_worker(
     workers_count: Option<usize>,
-    redis_storage: RedisStorage<UniversalInboxJob>,
+    redis_storage: JobStorage,
     cron_settings: CronSettings,
     cache: Cache,
     notification_service: Arc<RwLock<NotificationService>>,
@@ -626,7 +639,7 @@ pub async fn run_worker(
     info!("Starting {count} asynchronous Workers");
     let mut monitor = Monitor::new().register(
         WorkerBuilder::new("universal-inbox-worker")
-            .layer(job_trace_layer())
+            .layer(job_trace_layer(&redis_storage))
             .concurrency(count)
             .data(notification_service)
             .data(task_service)
@@ -647,7 +660,7 @@ pub async fn run_worker(
         );
         monitor = monitor.register(
             WorkerBuilder::new("universal-inbox-cron-refresh-oauth-tokens")
-                .layer(job_trace_layer())
+                .layer(cron_trace_layer())
                 .data(redis_storage.clone())
                 .data(cache.clone())
                 .data(refresh_oauth_tokens_settings)
@@ -666,7 +679,7 @@ pub async fn run_worker(
         );
         monitor = monitor.register(
             WorkerBuilder::new("universal-inbox-cron-retry-oauth-grant-revocations")
-                .layer(job_trace_layer())
+                .layer(cron_trace_layer())
                 .data(redis_storage.clone())
                 .data(cache.clone())
                 .data(retry_oauth_grant_revocations_settings)
@@ -685,7 +698,7 @@ pub async fn run_worker(
         );
         monitor = monitor.register(
             WorkerBuilder::new("universal-inbox-cron-vacuum-jobs")
-                .layer(job_trace_layer())
+                .layer(cron_trace_layer())
                 .data(redis_storage.clone())
                 .data(cache.clone())
                 .data(vacuum_jobs_settings)
@@ -704,7 +717,7 @@ pub async fn run_worker(
         );
         monitor = monitor.register(
             WorkerBuilder::new("universal-inbox-cron-pause-slack-connections")
-                .layer(job_trace_layer())
+                .layer(cron_trace_layer())
                 .data(redis_storage.clone())
                 .data(cache)
                 .data(pause_slack_connections_settings)

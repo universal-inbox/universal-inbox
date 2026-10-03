@@ -2,8 +2,7 @@ use core::fmt;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{Context, anyhow};
-use apalis::prelude::*;
-use apalis_redis::RedisStorage;
+
 use cached::proc_macro::concurrent_cached;
 use chrono::{DateTime, TimeDelta, Utc};
 use clap::ValueEnum;
@@ -40,7 +39,7 @@ use crate::{
         provider::{OAuth2FlowService, OAuth2Provider, TokenRevocationError},
     },
     jobs::{
-        UniversalInboxJob,
+        JobStorage, UniversalInboxJob, push_job,
         sync::{SyncNotificationsJob, SyncTasksJob},
     },
     mailer::{EmailTemplate, Mailer},
@@ -292,7 +291,7 @@ impl IntegrationConnectionService {
     pub async fn schedule_due_syncs(
         &self,
         for_user_id: UserId,
-        job_storage: &mut RedisStorage<UniversalInboxJob>,
+        job_storage: &mut JobStorage,
     ) -> Result<(), UniversalInboxError> {
         let now = Utc::now();
         let notifications_synced_before = now
@@ -401,7 +400,7 @@ impl IntegrationConnectionService {
         executor: &mut Transaction<'_, Postgres>,
         notification_sync_source_kind: Option<NotificationSyncSourceKind>,
         for_user_id: Option<UserId>,
-        job_storage: &mut RedisStorage<UniversalInboxJob>,
+        job_storage: &mut JobStorage,
     ) -> Result<(), UniversalInboxError> {
         info!(
             "Triggering sync notifications job for {notification_sync_source_kind:?} integration connection for user {for_user_id:?}"
@@ -416,13 +415,14 @@ impl IntegrationConnectionService {
         Retry::start(
             ExponentialBackoff::from_millis(10).map(jitter).take(10),
             || async {
-                job_storage
-                    .clone()
-                    .push(UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
+                push_job(
+                    &*job_storage,
+                    UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
                         source: notification_sync_source_kind,
                         user_id: for_user_id,
-                    }))
-                    .await
+                    }),
+                )
+                .await
             },
         )
         .await
@@ -445,7 +445,7 @@ impl IntegrationConnectionService {
         executor: &mut Transaction<'_, Postgres>,
         task_sync_source_kind: Option<TaskSyncSourceKind>,
         for_user_id: Option<UserId>,
-        job_storage: &mut RedisStorage<UniversalInboxJob>,
+        job_storage: &mut JobStorage,
     ) -> Result<(), UniversalInboxError> {
         info!(
             "Triggering sync tasks job for {task_sync_source_kind:?} integration connection for user {for_user_id:?}"
@@ -460,13 +460,14 @@ impl IntegrationConnectionService {
         Retry::start(
             ExponentialBackoff::from_millis(10).map(jitter).take(10),
             || async {
-                job_storage
-                    .clone()
-                    .push(UniversalInboxJob::SyncTasks(SyncTasksJob {
+                push_job(
+                    &*job_storage,
+                    UniversalInboxJob::SyncTasks(SyncTasksJob {
                         source: task_sync_source_kind,
                         user_id: for_user_id,
-                    }))
-                    .await
+                    }),
+                )
+                .await
             },
         )
         .await
@@ -493,20 +494,21 @@ impl IntegrationConnectionService {
     )]
     pub async fn push_sync_notifications_job(
         &self,
-        job_storage: &mut RedisStorage<UniversalInboxJob>,
+        job_storage: &mut JobStorage,
         notification_sync_source_kind: Option<NotificationSyncSourceKind>,
         for_user_id: Option<UserId>,
     ) -> Result<(), UniversalInboxError> {
         Retry::start(
             ExponentialBackoff::from_millis(10).map(jitter).take(10),
             || async {
-                job_storage
-                    .clone()
-                    .push(UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
+                push_job(
+                    &*job_storage,
+                    UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
                         source: notification_sync_source_kind,
                         user_id: for_user_id,
-                    }))
-                    .await
+                    }),
+                )
+                .await
             },
         )
         .await
@@ -529,20 +531,21 @@ impl IntegrationConnectionService {
     )]
     pub async fn push_sync_tasks_job(
         &self,
-        job_storage: &mut RedisStorage<UniversalInboxJob>,
+        job_storage: &mut JobStorage,
         task_sync_source_kind: Option<TaskSyncSourceKind>,
         for_user_id: Option<UserId>,
     ) -> Result<(), UniversalInboxError> {
         Retry::start(
             ExponentialBackoff::from_millis(10).map(jitter).take(10),
             || async {
-                job_storage
-                    .clone()
-                    .push(UniversalInboxJob::SyncTasks(SyncTasksJob {
+                push_job(
+                    &*job_storage,
+                    UniversalInboxJob::SyncTasks(SyncTasksJob {
                         source: task_sync_source_kind,
                         user_id: for_user_id,
-                    }))
-                    .await
+                    }),
+                )
+                .await
             },
         )
         .await

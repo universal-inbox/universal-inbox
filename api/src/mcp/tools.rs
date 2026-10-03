@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use anyhow::{Context, anyhow};
-use apalis_redis::RedisStorage;
+
 use chrono::{DateTime, Utc};
 use rmcp::{handler::server::tool::schema_for_output, model::JsonObject};
 use schemars::JsonSchema;
@@ -27,7 +27,7 @@ use universal_inbox::{
 
 use crate::observability::attr;
 use crate::{
-    jobs::UniversalInboxJob,
+    jobs::JobStorage,
     universal_inbox::{
         UpdateStatus, integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
@@ -39,7 +39,7 @@ pub struct McpServices {
     pub notification_service: Arc<RwLock<NotificationService>>,
     pub task_service: Arc<RwLock<TaskService>>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
-    pub job_storage: RedisStorage<UniversalInboxJob>,
+    pub job_storage: JobStorage,
 }
 
 pub enum ToolCallError {

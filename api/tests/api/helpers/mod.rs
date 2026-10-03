@@ -1,6 +1,5 @@
 use std::{collections::HashMap, env, fs, sync::Arc};
 
-use apalis_redis::RedisStorage;
 use openidconnect::{ClientId, IntrospectionUrl, IssuerUrl};
 use rstest::*;
 use sqlx::PgPool;
@@ -15,7 +14,7 @@ use universal_inbox_api::{
         AuthenticationSettings, LocalAuthenticationSettings, OIDCFlowSettings, Settings,
     },
     integrations::slack::SlackService,
-    jobs::UniversalInboxJob,
+    jobs::JobStorage,
     repository::Repository,
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
@@ -66,7 +65,7 @@ pub struct TestedApp {
     pub ticktick_mock_server: MockServer,
     pub oidc_issuer_mock_server: Option<MockServer>,
     pub mailer_stub: Arc<RwLock<MailerStub>>,
-    pub redis_storage: RedisStorage<UniversalInboxJob>,
+    pub redis_storage: JobStorage,
     pub cache: Cache,
     /// Holds the test database slot for the lifetime of the app.
     pub _test_db: TestDb,
@@ -99,7 +98,7 @@ pub async fn tested_app(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: TestDb,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) -> TestedApp {
     info!("Setting up server");
 
@@ -199,7 +198,7 @@ pub async fn tested_app_with_local_auth(
     settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: TestDb,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) -> TestedApp {
     setup_tested_app_with_local_auth(
         settings,
@@ -215,7 +214,7 @@ pub async fn tested_app_with_account_rate_limits(
     settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: TestDb,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) -> TestedApp {
     setup_tested_app_with_local_auth(
         settings,
@@ -234,7 +233,7 @@ async fn setup_tested_app_with_local_auth(
     mut settings: Settings,
     local_auth_settings: LocalAuthenticationSettings,
     test_db: TestDb,
-    redis_storage: RedisStorage<UniversalInboxJob>,
+    redis_storage: JobStorage,
 ) -> TestedApp {
     info!("Setting up server");
 
@@ -293,7 +292,7 @@ pub async fn tested_app_with_domain_blacklist(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: TestDb,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) -> TestedApp {
     info!("Setting up server with domain blacklist");
 

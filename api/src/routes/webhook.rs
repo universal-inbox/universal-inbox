@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use actix_web::{HttpRequest, HttpResponse, Scope, web};
 use anyhow::Context;
-use apalis::prelude::Storage;
-use apalis_redis::RedisStorage;
+
 use ring::hmac;
 use secrecy::{ExposeSecret, SecretBox};
 use serde::Deserialize;
@@ -30,7 +29,7 @@ use crate::observability::attr;
 use crate::{
     configuration::WebhookSigningSecret,
     integrations::slack::has_slack_references_in_message,
-    jobs::{UniversalInboxJob, slack::SlackPushEventCallbackJob},
+    jobs::{JobStorage, UniversalInboxJob, push_job, slack::SlackPushEventCallbackJob},
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
         third_party::service::ThirdPartyItemService,
@@ -55,7 +54,7 @@ pub async fn push_slack_event(
     signing_secret: web::Data<Option<SlackSigningSecret>>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     third_party_item_service: web::Data<Arc<RwLock<ThirdPartyItemService>>>,
-    storage: web::Data<RedisStorage<UniversalInboxJob>>,
+    storage: web::Data<JobStorage>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let current_span = tracing::Span::current();
 
@@ -370,25 +369,24 @@ async fn revoke_slack_access(
 }
 
 async fn send_slack_push_event_callback_job(
-    storage: &RedisStorage<UniversalInboxJob>,
+    storage: &JobStorage,
     event: SlackPushEventCallback,
 ) -> Result<(), UniversalInboxError> {
-    let job = Retry::start(
+    let task_id = Retry::start(
         ExponentialBackoff::from_millis(10).map(jitter).take(10),
         || async {
-            storage
-                .clone()
-                .push(UniversalInboxJob::SlackPushEventCallback(
-                    SlackPushEventCallbackJob(event.clone()),
-                ))
-                .await
+            push_job(
+                storage,
+                UniversalInboxJob::SlackPushEventCallback(SlackPushEventCallbackJob(event.clone())),
+            )
+            .await
         },
     )
     .await
     .context("Failed to push Slack event to queue")?;
     debug!(
         "Pushed a Slack event {} to the queue with job ID {}",
-        event.event_id, job.task_id
+        event.event_id, task_id
     );
     Ok(())
 }

@@ -5,8 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, anyhow};
-use apalis::prelude::Storage;
-use apalis_redis::RedisStorage;
+
 use chrono::{DateTime, TimeDelta, Utc};
 use futures::FutureExt;
 use sqlx::{Postgres, Transaction};
@@ -50,7 +49,7 @@ use crate::{
         notification::ThirdPartyNotificationSourceService, slack::SlackService,
         third_party::ThirdPartyItemSourceService,
     },
-    jobs::UniversalInboxJob,
+    jobs::{JobStorage, UniversalInboxJob, push_job},
     repository::{
         Repository, notification::NotificationRepository, task::TaskRepository,
         third_party::ThirdPartyItemRepository,
@@ -974,7 +973,7 @@ impl NotificationService {
         from_sources: Vec<NotificationSourceKind>,
         patch: &NotificationPatch,
         user_id: UserId,
-        job_storage: &mut RedisStorage<UniversalInboxJob>,
+        job_storage: &mut JobStorage,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let updated_notifications = self
             .repository
@@ -1008,7 +1007,7 @@ impl NotificationService {
         executor: &mut Transaction<'_, Postgres>,
         patches: Vec<(NotificationId, NotificationPatch)>,
         user_id: UserId,
-        job_storage: &mut RedisStorage<UniversalInboxJob>,
+        job_storage: &mut JobStorage,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         // The action vocabulary bounds this at 4 groups, and `NotificationPatch`
         // derives `PartialEq` but not `Hash`, so a linear scan beats a map.
@@ -1049,20 +1048,21 @@ impl NotificationService {
         notifications: &[Notification],
         patch: &NotificationPatch,
         user_id: UserId,
-        job_storage: &mut RedisStorage<UniversalInboxJob>,
+        job_storage: &mut JobStorage,
     ) -> Result<(), UniversalInboxError> {
         for notification in notifications {
             Retry::start(
                 ExponentialBackoff::from_millis(10).map(jitter).take(10),
                 || async {
-                    job_storage
-                        .clone()
-                        .push(UniversalInboxJob::ProcessNotificationSideEffects {
+                    push_job(
+                        &*job_storage,
+                        UniversalInboxJob::ProcessNotificationSideEffects {
                             notification_id: notification.id,
                             patch: patch.clone(),
                             user_id,
-                        })
-                        .await
+                        },
+                    )
+                    .await
                 },
             )
             .await

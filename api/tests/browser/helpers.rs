@@ -1,6 +1,5 @@
 use std::{collections::HashMap, env, sync::Arc, time::Duration};
 
-use apalis_redis::RedisStorage;
 use email_address::EmailAddress;
 use rstest::*;
 use sqlx::PgPool;
@@ -19,7 +18,7 @@ use universal_inbox::notification::{Notification, NotificationId};
 use universal_inbox_api::{
     commands::generate::generate_testing_user,
     configuration::{AuthenticationSettings, LocalAuthenticationSettings, Settings},
-    jobs::UniversalInboxJob,
+    jobs::JobStorage,
     repository::{Repository, notification::NotificationRepository, user::UserRepository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
@@ -73,7 +72,7 @@ pub async fn browser_tested_app(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: TestDb,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) -> BrowserTestedApp {
     info!("Setting up browser test server");
 
@@ -155,7 +154,7 @@ pub async fn browser_tested_app_with_billing(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: TestDb,
-    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+    #[future] redis_storage: JobStorage,
 ) -> BrowserTestedApp {
     info!("Setting up browser test server (billing enabled)");
 

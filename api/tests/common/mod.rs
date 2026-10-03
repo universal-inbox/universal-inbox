@@ -28,7 +28,7 @@ use universal_inbox_api::{
     },
     configuration::{CronSettings, FreePlanSettings, Settings},
     integrations::slack::SlackService,
-    jobs::UniversalInboxJob,
+    jobs::JobStorage,
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
     universal_inbox::{
@@ -80,7 +80,7 @@ pub async fn db_connection(mut settings: Settings) -> test_db::TestDb {
 }
 
 #[fixture]
-pub async fn redis_storage(settings: Settings) -> RedisStorage<UniversalInboxJob> {
+pub async fn redis_storage(settings: Settings) -> JobStorage {
     let namespace = format!("universal-inbox:jobs:UniversalInboxJob:{}", Uuid::new_v4());
     RedisStorage::new_with_config(
         apalis_redis::connect(settings.redis.connection_string())
@@ -249,7 +249,7 @@ pub async fn build_test_services(
 
 pub async fn spawn_test_server(
     listener: TcpListener,
-    redis_storage: RedisStorage<UniversalInboxJob>,
+    redis_storage: JobStorage,
     settings: Settings,
     services: &TestServices,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
@@ -275,7 +275,7 @@ pub async fn spawn_test_server(
 }
 
 pub async fn spawn_test_worker(
-    redis_storage: RedisStorage<UniversalInboxJob>,
+    redis_storage: JobStorage,
     cron_settings: CronSettings,
     cache: Cache,
     services: &TestServices,
@@ -326,12 +326,8 @@ pub async fn build_and_spawn(
     pool: Arc<PgPool>,
     settings: Settings,
     mock_servers: &MockServers,
-    redis_storage: RedisStorage<UniversalInboxJob>,
-) -> (
-    TestServices,
-    Arc<RwLock<MailerStub>>,
-    RedisStorage<UniversalInboxJob>,
-) {
+    redis_storage: JobStorage,
+) -> (TestServices, Arc<RwLock<MailerStub>>, JobStorage) {
     let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
     let (services, auth_token_service) =
         build_test_services(pool, &settings, mock_servers, mailer_stub.clone()).await;
@@ -538,7 +534,7 @@ pub fn build_fake_billing_service(
 /// is mounted (the route gate keys on `Some(billing_service)`).
 pub async fn spawn_test_server_with_billing(
     listener: TcpListener,
-    redis_storage: RedisStorage<UniversalInboxJob>,
+    redis_storage: JobStorage,
     settings: Settings,
     services: &TestServices,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
@@ -570,13 +566,9 @@ pub async fn build_and_spawn_with_billing(
     pool: Arc<PgPool>,
     settings: Settings,
     mock_servers: &MockServers,
-    redis_storage: RedisStorage<UniversalInboxJob>,
+    redis_storage: JobStorage,
     billing_service: Option<Arc<BillingService>>,
-) -> (
-    TestServices,
-    Arc<RwLock<MailerStub>>,
-    RedisStorage<UniversalInboxJob>,
-) {
+) -> (TestServices, Arc<RwLock<MailerStub>>, JobStorage) {
     let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
     let (services, auth_token_service) =
         build_test_services(pool, &settings, mock_servers, mailer_stub.clone()).await;

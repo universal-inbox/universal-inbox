@@ -1,7 +1,6 @@
 use anyhow::Context;
 use apalis::prelude::*;
 use apalis_cron::CronContext;
-use apalis_redis::RedisStorage;
 use chrono::{DateTime, TimeDelta, Utc};
 use redis::{AsyncCommands, ExistenceCheck, SetExpiry, SetOptions};
 use redis_apalis::Script;
@@ -13,7 +12,7 @@ use crate::{
         PauseSlackConnectionsCronSettings, RefreshOAuthTokensCronSettings,
         RetryOAuthGrantRevocationsCronSettings, VacuumJobsCronSettings,
     },
-    jobs::UniversalInboxJob,
+    jobs::{JobStorage, UniversalInboxJob, push_job},
     universal_inbox::{
         UniversalInboxError, integration_connection::service::GrantRevocationRetryPolicy,
     },
@@ -38,7 +37,7 @@ pub struct RefreshOAuthTokensCronTick;
 pub async fn handle_refresh_oauth_tokens_cron_tick(
     _tick: RefreshOAuthTokensCronTick,
     ctx: CronContext<Utc>,
-    storage: Data<RedisStorage<UniversalInboxJob>>,
+    storage: Data<JobStorage>,
     cache: Data<Cache>,
     settings: Data<RefreshOAuthTokensCronSettings>,
 ) -> Result<(), UniversalInboxError> {
@@ -54,13 +53,14 @@ pub async fn handle_refresh_oauth_tokens_cron_tick(
         return Ok(());
     }
 
-    let mut storage = (*storage).clone();
-    storage
-        .push(UniversalInboxJob::RefreshOAuthTokens {
+    push_job(
+        &storage,
+        UniversalInboxJob::RefreshOAuthTokens {
             minutes_before_expiry: settings.minutes_before_expiry,
-        })
-        .await
-        .context("Failed to enqueue RefreshOAuthTokens job")?;
+        },
+    )
+    .await
+    .context("Failed to enqueue RefreshOAuthTokens job")?;
     info!("Enqueued RefreshOAuthTokens job");
     Ok(())
 }
@@ -84,7 +84,7 @@ pub struct RetryOAuthGrantRevocationsCronTick;
 pub async fn handle_retry_oauth_grant_revocations_cron_tick(
     _tick: RetryOAuthGrantRevocationsCronTick,
     ctx: CronContext<Utc>,
-    storage: Data<RedisStorage<UniversalInboxJob>>,
+    storage: Data<JobStorage>,
     cache: Data<Cache>,
     settings: Data<RetryOAuthGrantRevocationsCronSettings>,
 ) -> Result<(), UniversalInboxError> {
@@ -100,18 +100,19 @@ pub async fn handle_retry_oauth_grant_revocations_cron_tick(
         return Ok(());
     }
 
-    let mut storage = (*storage).clone();
-    storage
-        .push(UniversalInboxJob::RetryOAuthGrantRevocations {
+    push_job(
+        &storage,
+        UniversalInboxJob::RetryOAuthGrantRevocations {
             max_revocations: settings.batch_size,
             retry_policy: GrantRevocationRetryPolicy {
                 base_delay_in_seconds: settings.base_delay_in_seconds,
                 max_delay_in_seconds: settings.max_delay_in_seconds,
                 max_attempts: settings.max_attempts,
             },
-        })
-        .await
-        .context("Failed to enqueue RetryOAuthGrantRevocations job")?;
+        },
+    )
+    .await
+    .context("Failed to enqueue RetryOAuthGrantRevocations job")?;
     info!("Enqueued RetryOAuthGrantRevocations job");
     Ok(())
 }
@@ -135,7 +136,7 @@ pub struct PauseSlackConnectionsCronTick;
 pub async fn handle_pause_slack_connections_cron_tick(
     _tick: PauseSlackConnectionsCronTick,
     ctx: CronContext<Utc>,
-    storage: Data<RedisStorage<UniversalInboxJob>>,
+    storage: Data<JobStorage>,
     cache: Data<Cache>,
     settings: Data<PauseSlackConnectionsCronSettings>,
 ) -> Result<(), UniversalInboxError> {
@@ -151,15 +152,16 @@ pub async fn handle_pause_slack_connections_cron_tick(
         return Ok(());
     }
 
-    let mut storage = (*storage).clone();
-    storage
-        .push(UniversalInboxJob::PauseSlackConnections {
+    push_job(
+        &storage,
+        UniversalInboxJob::PauseSlackConnections {
             inactivity_threshold_days: settings.inactivity_threshold_days,
             inactivity_warning_days: settings.inactivity_warning_days,
             failing_threshold_days: settings.failing_threshold_days,
-        })
-        .await
-        .context("Failed to enqueue PauseSlackConnections job")?;
+        },
+    )
+    .await
+    .context("Failed to enqueue PauseSlackConnections job")?;
     info!("Enqueued PauseSlackConnections job");
     Ok(())
 }
@@ -192,7 +194,7 @@ pub struct VacuumJobsCronTick;
 pub async fn handle_vacuum_jobs_cron_tick(
     _tick: VacuumJobsCronTick,
     ctx: CronContext<Utc>,
-    storage: Data<RedisStorage<UniversalInboxJob>>,
+    storage: Data<JobStorage>,
     cache: Data<Cache>,
     settings: Data<VacuumJobsCronSettings>,
 ) -> Result<(), UniversalInboxError> {
@@ -261,7 +263,7 @@ pub async fn handle_vacuum_jobs_cron_tick(
 /// process of a deployment uses the same queue namespace, hence the same lock;
 /// another deployment (or test) sharing the Redis server with its own queue
 /// namespace gets its own lock instead of silently skipping the tick.
-fn queue_scoped_cron_job_name(storage: &RedisStorage<UniversalInboxJob>, job_name: &str) -> String {
+fn queue_scoped_cron_job_name(storage: &JobStorage, job_name: &str) -> String {
     format!("{}:{job_name}", storage.get_config().get_namespace())
 }
 
