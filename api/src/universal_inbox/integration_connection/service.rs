@@ -792,7 +792,14 @@ impl IntegrationConnectionService {
     /// `.sync-led.pending` LED). Used only by the documentation screenshot
     /// generator.
     #[cfg(feature = "screenshots")]
-    #[tracing::instrument(level = "info", skip(self), fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
+    #[tracing::instrument(
+        level = "info",
+        skip_all,
+        fields(
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
+            { attr::ERROR_TYPE } = tracing::field::Empty
+        )
+    )]
     pub async fn force_clear_sync_state(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -840,7 +847,16 @@ impl IntegrationConnectionService {
     /// screenshots -- test generate-doc-screenshots`) to reproduce error/edge-state
     /// UIs against a throwaway test user. Not exposed via HTTP routes.
     #[cfg(feature = "screenshots")]
-    #[tracing::instrument(level = "info", skip(self), fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
+    #[tracing::instrument(
+        level = "info",
+        skip_all,
+        fields(
+            { attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string(),
+            { attr::INTEGRATION_CONNECTION_STATUS } = status.to_string(),
+            { attr::USER_ID } = for_user_id.to_string(),
+            { attr::ERROR_TYPE } = tracing::field::Empty
+        )
+    )]
     pub async fn force_set_integration_connection_state(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1060,7 +1076,14 @@ impl IntegrationConnectionService {
     /// row lock (`FOR UPDATE SKIP LOCKED`) during the provider calls, so
     /// concurrent workers never retry the same grant.
     /// Returns `(completed_count, failed_count)`.
-    #[tracing::instrument(level = "info", skip(self), fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
+    #[tracing::instrument(
+        level = "info",
+        skip_all,
+        fields(
+            { attr::OAUTH_GRANT_REVOCATION_MAX_COUNT } = max_revocations,
+            { attr::ERROR_TYPE } = tracing::field::Empty
+        )
+    )]
     pub async fn retry_due_grant_revocations(
         &self,
         max_revocations: usize,
@@ -1442,7 +1465,7 @@ impl IntegrationConnectionService {
     /// Returns `(warned_users_count, failed_users_count)`.
     #[tracing::instrument(
         level = "info",
-        skip(self),
+        skip_all,
         fields(
             { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339(),
             { attr::INTEGRATION_CONNECTION_PAUSE_ON } = pause_on.to_rfc3339(),
@@ -1613,7 +1636,7 @@ impl IntegrationConnectionService {
     /// Returns `(paused_count, failed_count)`.
     #[tracing::instrument(
         level = "info",
-        skip(self),
+        skip_all,
         fields(
             { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339(),
             { attr::INTEGRATION_CONNECTION_WARNED_BEFORE } = warned_before.map(|warned_before| warned_before.to_rfc3339()),
@@ -1659,7 +1682,7 @@ impl IntegrationConnectionService {
     /// Returns `(paused_count, failed_count)`.
     #[tracing::instrument(
         level = "info",
-        skip(self),
+        skip_all,
         fields(
             { attr::INTEGRATION_CONNECTION_FAILING_BEFORE } = failing_before.to_rfc3339(),
             { attr::ERROR_TYPE } = tracing::field::Empty

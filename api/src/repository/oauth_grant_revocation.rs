@@ -197,7 +197,14 @@ impl OAuthGrantRevocationRepository for Repository {
         .transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, last_error))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            { attr::OAUTH_GRANT_REVOCATION_ID } = id.to_string(),
+            { attr::OAUTH_GRANT_REVOCATION_CANCELLED } = cancelled
+        )
+    )]
     async fn complete_oauth_grant_revocation(
         &self,
         executor: &mut Transaction<'_, Postgres>,
