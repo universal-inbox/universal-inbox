@@ -113,7 +113,7 @@ Each worktree gets **its own ports**, NOT 5432/6379. On create, worktrunk
 ## Required Env
 
 ```bash
-RUST_MIN_STACK=104857600   # tests (large nested structs); omit => stack overflow
+RUST_MIN_STACK=104857600   # tests (large nested structs); default set by .cargo/config.toml [env]
 SQLX_OFFLINE=true          # use cached query metadata
 # DATABASE_URL: 5432 default in .envrc, OVERRIDDEN per worktree by .local_envrc (PGPORT).
 # Don't hardcode 5432 — read $DATABASE_URL / $PGPORT from direnv.
