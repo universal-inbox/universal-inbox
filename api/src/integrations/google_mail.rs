@@ -50,8 +50,10 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
-        google_calendar::GoogleCalendarService, icalendar::parse_event_reply,
-        notification::ThirdPartyNotificationSourceService, oauth2::AccessToken,
+        google_calendar::GoogleCalendarService,
+        icalendar::{parse_event_reply, parse_recurrence_id},
+        notification::ThirdPartyNotificationSourceService,
+        oauth2::AccessToken,
         third_party::ThirdPartyItemSourceService,
     },
     universal_inbox::{
@@ -598,16 +600,24 @@ impl GoogleMailService {
             })
             .ok_or_else(|| anyhow!("Failed to parse VCal events"))?;
 
+        // Set when the invitation is about a single occurrence of a recurring event
+        let vcal_recurrence_id =
+            parse_recurrence_id(vcal_event).context("Failed to parse VCal event RECURRENCE-ID")?;
+
         let mut event = self
             .google_calendar_service
-            .get_event("primary", &vcal_uid, &gcal_access_token)
+            .get_event(
+                "primary",
+                &vcal_uid,
+                vcal_recurrence_id.as_ref(),
+                vcal_method,
+                &gcal_access_token,
+            )
             .await
             .with_context(|| {
                 format!("Failed to fetch Google Calendar event with iCalUID `{vcal_uid}`")
             })?;
 
-        // Set the method from the vcal attachment
-        event.method = vcal_method;
         if event.method == EventMethod::Reply {
             event.reply = parse_event_reply(vcal_event);
         }

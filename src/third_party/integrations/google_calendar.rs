@@ -434,6 +434,37 @@ impl GoogleCalendarEvent {
             .find(|attendee| attendee.self_ == Some(true))
             .cloned()
     }
+
+    /// An event is cancelled when Google says so or when the invitation email is a `METHOD:CANCEL`
+    pub fn is_cancelled(&self) -> bool {
+        self.status == GoogleCalendarEventStatus::Cancelled || self.method == EventMethod::Cancel
+    }
+}
+
+/// Identifies one occurrence of a recurring event, as carried by an iCalendar `RECURRENCE-ID`
+/// and by the `originalStartTime` of a Google Calendar event instance.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum RecurrenceId {
+    DateTime(DateTime<Utc>),
+    Date(NaiveDate),
+}
+
+impl RecurrenceId {
+    /// The occurrence identified by a parsed `RECURRENCE-ID`: its date-time, else its date
+    /// (all-day event)
+    pub fn from_event_date_time(event_date_time: &EventDateTime) -> Option<Self> {
+        event_date_time
+            .datetime
+            .map(RecurrenceId::DateTime)
+            .or_else(|| event_date_time.date.map(RecurrenceId::Date))
+    }
+
+    pub fn matches(&self, original_start_time: &EventDateTime) -> bool {
+        match self {
+            RecurrenceId::DateTime(datetime) => original_start_time.datetime == Some(*datetime),
+            RecurrenceId::Date(date) => original_start_time.date == Some(*date),
+        }
+    }
 }
 
 impl HasHtmlUrl for GoogleCalendarEvent {
@@ -591,6 +622,60 @@ impl ThirdPartyItemFromSource for GoogleCalendarEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod recurrence_id {
+        use super::*;
+        use chrono::TimeZone;
+        use pretty_assertions::assert_eq;
+
+        fn event_date_time(
+            datetime: Option<DateTime<Utc>>,
+            date: Option<NaiveDate>,
+        ) -> EventDateTime {
+            EventDateTime {
+                date,
+                datetime,
+                timezone: None,
+            }
+        }
+
+        #[test]
+        fn test_recurrence_id_from_event_date_time() {
+            let datetime = Utc.with_ymd_and_hms(2026, 6, 18, 9, 15, 0).unwrap();
+            let date = NaiveDate::from_ymd_opt(2026, 6, 18).unwrap();
+
+            assert_eq!(
+                RecurrenceId::from_event_date_time(&event_date_time(Some(datetime), None)),
+                Some(RecurrenceId::DateTime(datetime))
+            );
+            assert_eq!(
+                RecurrenceId::from_event_date_time(&event_date_time(None, Some(date))),
+                Some(RecurrenceId::Date(date))
+            );
+            assert_eq!(
+                RecurrenceId::from_event_date_time(&event_date_time(None, None)),
+                None
+            );
+        }
+
+        #[test]
+        fn test_recurrence_id_matches_original_start_time() {
+            let original_start_time = EventDateTime {
+                date: None,
+                datetime: Some(Utc.with_ymd_and_hms(2026, 6, 18, 9, 15, 0).unwrap()),
+                timezone: Some("Europe/Paris".to_string()),
+            };
+
+            assert!(
+                RecurrenceId::DateTime(Utc.with_ymd_and_hms(2026, 6, 18, 9, 15, 0).unwrap())
+                    .matches(&original_start_time)
+            );
+            assert!(
+                !RecurrenceId::DateTime(Utc.with_ymd_and_hms(2026, 6, 25, 9, 15, 0).unwrap())
+                    .matches(&original_start_time)
+            );
+        }
+    }
 
     mod event_method {
         use super::*;

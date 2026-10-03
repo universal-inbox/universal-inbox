@@ -1,6 +1,7 @@
 use rstest::*;
+use serde::Serialize;
 use serde_json::json;
-use wiremock::matchers::{body_json, header, method, path, query_param};
+use wiremock::matchers::{body_json, header, method, path, query_param, query_param_is_missing};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use universal_inbox::{
@@ -91,21 +92,40 @@ pub async fn mock_google_calendar_list_events_service(
     event_id: &str,
     result: &GoogleCalendarEventsList,
 ) {
-    Mock::given(method("GET"))
+    mock_google_calendar_list_events_page_service(
+        google_calendar_mock_server,
+        event_id,
+        None,
+        result,
+    )
+    .await;
+}
+
+pub async fn mock_google_calendar_list_events_page_service<T: Serialize>(
+    google_calendar_mock_server: &MockServer,
+    event_id: &str,
+    page_token: Option<&str>,
+    result: &T,
+) {
+    let mock = Mock::given(method("GET"))
         .and(path("/calendars/primary/events"))
         .and(header(
             "authorization",
             "Bearer google_calendar_test_access_token",
         ))
         .and(query_param("iCalUID", event_id))
-        .and(query_param("maxResults", "1"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/json")
-                .set_body_json(result),
-        )
-        .mount(google_calendar_mock_server)
-        .await;
+        .and(query_param("showDeleted", "true"));
+    let mock = match page_token {
+        Some(page_token) => mock.and(query_param("pageToken", page_token)),
+        None => mock.and(query_param_is_missing("pageToken")),
+    };
+    mock.respond_with(
+        ResponseTemplate::new(200)
+            .insert_header("content-type", "application/json")
+            .set_body_json(result),
+    )
+    .mount(google_calendar_mock_server)
+    .await;
 }
 
 pub async fn mock_google_calendar_event_delete_service(

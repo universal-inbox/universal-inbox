@@ -1,10 +1,24 @@
+use anyhow::anyhow;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use ical::{parser::ical::component::IcalEvent, property::Property};
 
 use universal_inbox::third_party::integrations::google_calendar::{
-    EventDateTime, EventReply, GoogleCalendarEventAttendeeResponseStatus,
+    EventDateTime, EventReply, GoogleCalendarEventAttendeeResponseStatus, RecurrenceId,
 };
+
+/// The occurrence of a recurring event a VEVENT is about, from its `RECURRENCE-ID`.
+/// Returns `None` when the VEVENT has none, and an error when it cannot be parsed.
+pub fn parse_recurrence_id(vcal_event: &IcalEvent) -> Result<Option<RecurrenceId>, anyhow::Error> {
+    let Some(property) = find_property(vcal_event, "RECURRENCE-ID") else {
+        return Ok(None);
+    };
+    parse_date_time_property(property)
+        .as_ref()
+        .and_then(RecurrenceId::from_event_date_time)
+        .map(Some)
+        .ok_or_else(|| anyhow!("Invalid RECURRENCE-ID `{:?}`", property.value))
+}
 
 /// Extract the attendee answer from the VEVENT of an iCalendar `METHOD:REPLY` message.
 /// Returns `None` when the event has no attendee with a usable email.
@@ -212,5 +226,74 @@ mod tests {
         let event = parse_vevent("UID:event_icaluid2\r\nDTSTART:20251030T090000Z\r\n");
 
         assert_eq!(parse_event_reply(&event), None);
+    }
+
+    mod recurrence_id {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        fn recurrence_id(property: &str) -> Result<Option<RecurrenceId>, anyhow::Error> {
+            parse_recurrence_id(&parse_vevent(&format!("UID:event_icaluid2\r\n{property}")))
+        }
+
+        fn at(hour: u32) -> Option<RecurrenceId> {
+            Some(RecurrenceId::DateTime(
+                Utc.with_ymd_and_hms(2026, 6, 18, hour, 15, 0).unwrap(),
+            ))
+        }
+
+        #[test]
+        fn test_parse_utc_recurrence_id() {
+            assert_eq!(
+                recurrence_id("RECURRENCE-ID:20260618T091500Z\r\n").unwrap(),
+                at(9)
+            );
+        }
+
+        #[test]
+        fn test_parse_recurrence_id_with_tzid() {
+            assert_eq!(
+                recurrence_id("RECURRENCE-ID;TZID=Europe/Paris:20260618T111500\r\n").unwrap(),
+                at(9)
+            );
+        }
+
+        #[test]
+        fn test_parse_floating_recurrence_id_or_unknown_tzid_as_utc() {
+            assert_eq!(
+                recurrence_id("RECURRENCE-ID:20260618T091500\r\n").unwrap(),
+                at(9)
+            );
+            assert_eq!(
+                recurrence_id("RECURRENCE-ID;TZID=Mars/Olympus:20260618T091500\r\n").unwrap(),
+                at(9)
+            );
+        }
+
+        #[test]
+        fn test_parse_all_day_recurrence_id() {
+            let expected = Some(RecurrenceId::Date(
+                NaiveDate::from_ymd_opt(2026, 6, 18).unwrap(),
+            ));
+            assert_eq!(
+                recurrence_id("RECURRENCE-ID:20260618\r\n").unwrap(),
+                expected
+            );
+            assert_eq!(
+                recurrence_id("RECURRENCE-ID;VALUE=DATE:20260618\r\n").unwrap(),
+                expected
+            );
+        }
+
+        #[test]
+        fn test_parse_missing_recurrence_id() {
+            assert_eq!(recurrence_id("").unwrap(), None);
+        }
+
+        #[test]
+        fn test_parse_invalid_recurrence_id() {
+            assert!(recurrence_id("RECURRENCE-ID:not-a-date\r\n").is_err());
+        }
     }
 }

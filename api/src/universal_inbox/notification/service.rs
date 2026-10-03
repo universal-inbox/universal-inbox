@@ -32,7 +32,9 @@ use universal_inbox::{
     task::{DueDate, Task, TaskCreation, TaskId, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::{
-            google_calendar::EventMethod,
+            google_calendar::{
+                EventMethod, GoogleCalendarEvent, GoogleCalendarEventAttendeeResponseStatus,
+            },
             slack::{SlackReaction, SlackThread},
         },
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId, ThirdPartyItemKind},
@@ -1580,6 +1582,18 @@ impl NotificationService {
             .third_party_item_into_notification(&data, third_party_item, user_id)
             .await?;
         notification.task_id = task_id;
+        if let ThirdPartyItemData::GoogleCalendarEvent(ref event) = third_party_item.data
+            && event.is_cancelled()
+        {
+            notification.status = self
+                .get_cancelled_google_calendar_event_notification_status(
+                    executor,
+                    event,
+                    notification.status,
+                    user_id,
+                )
+                .await?;
+        }
         self.repository
             .create_or_update_notification(
                 executor,
@@ -1588,6 +1602,39 @@ impl NotificationService {
                 third_party_notification_service.is_supporting_snoozed_notifications(),
             )
             .await
+    }
+
+    /// A cancelled event replaces its invitation when the invitation is still waiting for
+    /// an answer: there is nothing left to answer. Otherwise the cancellation is news and
+    /// shows up, unless it was already handled (the notification changed after the event was
+    /// cancelled), so that each sync of the Gmail thread does not bring it back.
+    async fn get_cancelled_google_calendar_event_notification_status(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        event: &GoogleCalendarEvent,
+        cancellation_status: NotificationStatus,
+        user_id: UserId,
+    ) -> Result<NotificationStatus, UniversalInboxError> {
+        let Some(existing_notification) = self
+            .repository
+            .get_notification_for_source_id(executor, &event.id.to_string(), user_id)
+            .await?
+        else {
+            return Ok(cancellation_status);
+        };
+
+        if existing_notification.updated_at >= event.updated {
+            return Ok(existing_notification.status);
+        }
+
+        let is_waiting_for_an_answer = event.get_self_attendee().is_some_and(|attendee| {
+            attendee.response_status == GoogleCalendarEventAttendeeResponseStatus::NeedsAction
+        });
+        if existing_notification.status != NotificationStatus::Deleted && is_waiting_for_an_answer {
+            return Ok(NotificationStatus::Deleted);
+        }
+
+        Ok(cancellation_status)
     }
 
     #[tracing::instrument(
