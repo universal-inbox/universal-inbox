@@ -89,6 +89,7 @@ pub async fn retry_oauth_grant_revocations(
 pub async fn pause_slack_connections(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     inactivity_threshold_days: i64,
+    inactivity_warning_days: i64,
     failing_threshold_days: i64,
 ) -> Result<(), UniversalInboxError> {
     let days_ago = |days: i64| {
@@ -102,6 +103,26 @@ pub async fn pause_slack_connections(
     let failing_before = days_ago(failing_threshold_days)?;
     let service = integration_connection_service.read().await;
 
+    // Users are warned `inactivity_warning_days` before the pause, and a
+    // connection is paused at the earliest `inactivity_warning_days` after its
+    // warning, even when its user was already inactive for longer.
+    let (failed_warnings, warned_before) = if inactivity_warning_days > 0 {
+        info!(
+            "Warning users inactive for more than {} days that their Slack connections will be paused",
+            inactivity_threshold_days - inactivity_warning_days
+        );
+        let (_, failed_warnings) = service
+            .warn_integration_connections_of_inactive_users(
+                IntegrationProviderKind::Slack,
+                days_ago(inactivity_threshold_days - inactivity_warning_days)?,
+                Utc::now() + TimeDelta::days(inactivity_warning_days),
+            )
+            .await?;
+        (failed_warnings, Some(days_ago(inactivity_warning_days)?))
+    } else {
+        (0, None)
+    };
+
     info!(
         "Pausing Slack connections of users inactive for more than {inactivity_threshold_days} days"
     );
@@ -109,6 +130,7 @@ pub async fn pause_slack_connections(
         .pause_integration_connections_of_inactive_users(
             IntegrationProviderKind::Slack,
             inactive_before,
+            warned_before,
         )
         .await?;
 
@@ -117,6 +139,11 @@ pub async fn pause_slack_connections(
         .pause_long_failing_integration_connections(IntegrationProviderKind::Slack, failing_before)
         .await?;
 
+    if failed_warnings > 0 {
+        error!(
+            "{failed_warnings} user(s) could not be warned that their Slack connection will be paused"
+        );
+    }
     let failed = failed_inactive + failed_failing;
     if failed > 0 {
         error!("{failed} Slack connection(s) could not be paused");

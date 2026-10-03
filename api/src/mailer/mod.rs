@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
+use chrono::NaiveDate;
 use enum_display::EnumDisplay;
 use lettre::{
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
@@ -14,7 +15,7 @@ use serde::Serialize;
 use tracing::info;
 use url::Url;
 
-use universal_inbox::user::User;
+use universal_inbox::{integration_connection::IntegrationConnectionPausedReason, user::User};
 
 use crate::universal_inbox::UniversalInboxError;
 
@@ -53,6 +54,19 @@ pub enum EmailTemplate {
         first_name: Option<String>,
         password_reset_url: Url,
     },
+    IntegrationConnectionPauseWarning {
+        first_name: Option<String>,
+        provider_name: String,
+        inactive_for_days: i64,
+        pause_date: NaiveDate,
+        app_url: Url,
+    },
+    IntegrationConnectionPaused {
+        first_name: Option<String>,
+        provider_name: String,
+        paused_reason: IntegrationConnectionPausedReason,
+        reconnect_url: Url,
+    },
 }
 
 impl EmailTemplate {
@@ -69,114 +83,121 @@ impl EmailTemplate {
             EmailTemplate::PasswordChanged { .. } => {
                 "Your Universal Inbox password was changed".to_string()
             }
+            EmailTemplate::IntegrationConnectionPauseWarning { provider_name, .. } => {
+                format!("Your {provider_name} connection will soon be paused")
+            }
+            EmailTemplate::IntegrationConnectionPaused { provider_name, .. } => {
+                format!("Your {provider_name} connection was paused")
+            }
         }
     }
 
-    pub fn build_email_body(&self) -> Email<'_> {
+    fn first_name(&self) -> Option<&str> {
         match self {
-            EmailTemplate::EmailVerification {
-                first_name,
-                email_verification_url,
-            } => {
-                let mut builder = EmailBuilder::new();
-                if let Some(first_name) = first_name {
-                    builder = builder.greeting(Greeting::Name(first_name));
-                }
-
-                builder
-                    .intro("Please verify your email address to start using Universal Inbox")
-                    .action(Action {
-                        text: "Verify your email",
-                        link: email_verification_url.as_str(),
-                        color: Some(("#388FEF", "white")),
-                        ..Default::default()
-                    })
-                    .outro("Welcome to Universal Inbox")
-                    .signature("Best")
-                    .build()
-            }
-            EmailTemplate::PasswordReset {
-                first_name,
-                password_reset_url,
-            } => {
-                let mut builder = EmailBuilder::new();
-                if let Some(first_name) = first_name {
-                    builder = builder.greeting(Greeting::Name(first_name));
-                }
-
-                builder
-                    .intro("Reset your Universal Inbox password")
-                    .action(Action {
-                        text: "Reset your password",
-                        link: password_reset_url.as_str(),
-                        color: Some(("#388FEF", "white")),
-                        ..Default::default()
-                    })
-                    .signature("Best")
-                    .build()
-            }
-            EmailTemplate::RegistrationAttemptOnExistingAccount {
-                first_name,
-                login_url,
-                ..
-            } => {
-                let mut builder = EmailBuilder::new();
-                if let Some(first_name) = first_name {
-                    builder = builder.greeting(Greeting::Name(first_name));
-                }
-
-                builder
-                    .intro("Someone tried to create a Universal Inbox account using your email address. If this was you, you can log in below. If you need to reset your password, use the \"Forgot password\" link on the login page. If this wasn't you, you can safely ignore this email, your account is secure.")
-                    .action(Action {
-                        text: "Log in",
-                        link: login_url.as_str(),
-                        color: Some(("#388FEF", "white")),
-                        ..Default::default()
-                    })
-                    .signature("Best")
-                    .build()
-            }
-            EmailTemplate::AccountLockout {
-                first_name,
-                login_url,
-            } => {
-                let mut builder = EmailBuilder::new();
-                if let Some(first_name) = first_name {
-                    builder = builder.greeting(Greeting::Name(first_name));
-                }
-
-                builder
-                    .intro("Your Universal Inbox account was temporarily locked after too many failed login attempts. It will unlock automatically shortly. If this was you, simply try again later. If this wasn't you, someone may be trying to access your account — we recommend resetting your password using the \"Forgot password\" link on the login page.")
-                    .action(Action {
-                        text: "Go to login",
-                        link: login_url.as_str(),
-                        color: Some(("#388FEF", "white")),
-                        ..Default::default()
-                    })
-                    .signature("Best")
-                    .build()
-            }
-            EmailTemplate::PasswordChanged {
-                first_name,
-                password_reset_url,
-            } => {
-                let mut builder = EmailBuilder::new();
-                if let Some(first_name) = first_name {
-                    builder = builder.greeting(Greeting::Name(first_name));
-                }
-
-                builder
-                    .intro("The password of your Universal Inbox account was just changed, and your other sessions were signed out. If this was you, there is nothing else to do. If this wasn't you, reset your password right away.")
-                    .action(Action {
-                        text: "Reset your password",
-                        link: password_reset_url.as_str(),
-                        color: Some(("#388FEF", "white")),
-                        ..Default::default()
-                    })
-                    .signature("Best")
-                    .build()
+            EmailTemplate::EmailVerification { first_name, .. }
+            | EmailTemplate::PasswordReset { first_name, .. }
+            | EmailTemplate::RegistrationAttemptOnExistingAccount { first_name, .. }
+            | EmailTemplate::AccountLockout { first_name, .. }
+            | EmailTemplate::PasswordChanged { first_name, .. }
+            | EmailTemplate::IntegrationConnectionPauseWarning { first_name, .. }
+            | EmailTemplate::IntegrationConnectionPaused { first_name, .. } => {
+                first_name.as_deref()
             }
         }
+    }
+
+    fn intro(&self) -> String {
+        match self {
+            EmailTemplate::EmailVerification { .. } => {
+                "Please verify your email address to start using Universal Inbox".to_string()
+            }
+            EmailTemplate::PasswordReset { .. } => "Reset your Universal Inbox password".to_string(),
+            EmailTemplate::RegistrationAttemptOnExistingAccount { .. } => {
+                "Someone tried to create a Universal Inbox account using your email address. If this was you, you can log in below. If you need to reset your password, use the \"Forgot password\" link on the login page. If this wasn't you, you can safely ignore this email, your account is secure.".to_string()
+            }
+            EmailTemplate::AccountLockout { .. } => {
+                "Your Universal Inbox account was temporarily locked after too many failed login attempts. It will unlock automatically shortly. If this was you, simply try again later. If this wasn't you, someone may be trying to access your account — we recommend resetting your password using the \"Forgot password\" link on the login page.".to_string()
+            }
+            EmailTemplate::PasswordChanged { .. } => {
+                "The password of your Universal Inbox account was just changed, and your other sessions were signed out. If this was you, there is nothing else to do. If this wasn't you, reset your password right away.".to_string()
+            }
+            EmailTemplate::IntegrationConnectionPauseWarning {
+                provider_name,
+                inactive_for_days,
+                pause_date,
+                ..
+            } => format!(
+                "You haven't used Universal Inbox for more than {inactive_for_days} days. To stop collecting your {provider_name} data while you're away, your {provider_name} connection will be paused on {}. Open Universal Inbox before then to keep it connected.",
+                pause_date.format("%B %-d, %Y")
+            ),
+            EmailTemplate::IntegrationConnectionPaused {
+                provider_name,
+                paused_reason: IntegrationConnectionPausedReason::Inactivity,
+                ..
+            } => format!(
+                "Your {provider_name} connection was paused because you haven't used Universal Inbox for a while, and its access to {provider_name} was revoked. You can reconnect it at any time from the settings page."
+            ),
+            EmailTemplate::IntegrationConnectionPaused {
+                provider_name,
+                paused_reason: IntegrationConnectionPausedReason::LongFailing,
+                ..
+            } => format!(
+                "Your {provider_name} connection was paused because it has been failing to synchronize for too long, and its access to {provider_name} was revoked. You can reconnect it at any time from the settings page."
+            ),
+        }
+    }
+
+    fn action(&self) -> (&'static str, &Url) {
+        match self {
+            EmailTemplate::EmailVerification {
+                email_verification_url,
+                ..
+            } => ("Verify your email", email_verification_url),
+            EmailTemplate::PasswordReset {
+                password_reset_url, ..
+            } => ("Reset your password", password_reset_url),
+            EmailTemplate::RegistrationAttemptOnExistingAccount { login_url, .. } => {
+                ("Log in", login_url)
+            }
+            EmailTemplate::AccountLockout { login_url, .. } => ("Go to login", login_url),
+            EmailTemplate::PasswordChanged {
+                password_reset_url, ..
+            } => ("Reset your password", password_reset_url),
+            EmailTemplate::IntegrationConnectionPauseWarning { app_url, .. } => {
+                ("Open Universal Inbox", app_url)
+            }
+            EmailTemplate::IntegrationConnectionPaused { reconnect_url, .. } => {
+                ("Reconnect", reconnect_url)
+            }
+        }
+    }
+
+    fn outro(&self) -> Option<&'static str> {
+        match self {
+            EmailTemplate::EmailVerification { .. } => Some("Welcome to Universal Inbox"),
+            _ => None,
+        }
+    }
+
+    /// `intro` is [`Self::intro`], passed in because the rendered email
+    /// borrows it.
+    pub fn build_email_body<'a>(&'a self, intro: &'a str) -> Email<'a> {
+        let mut builder = EmailBuilder::new();
+        if let Some(first_name) = self.first_name() {
+            builder = builder.greeting(Greeting::Name(first_name));
+        }
+        let (action_text, action_link) = self.action();
+        builder = builder.intro(intro).action(Action {
+            text: action_text,
+            link: action_link.as_str(),
+            color: Some(("#388FEF", "white")),
+            ..Default::default()
+        });
+        if let Some(outro) = self.outro() {
+            builder = builder.outro(outro);
+        }
+
+        builder.signature("Best").build()
     }
 }
 
@@ -237,7 +258,8 @@ impl SmtpMailer {
             ),
             ..Branding::new("Universal Inbox", "https://www.universal-inbox.com")
         };
-        let email_body = template.build_email_body();
+        let intro = template.intro();
+        let email_body = template.build_email_body(&intro);
         let mailgen = Mailgen::new(theme, branding);
 
         let email_txt_body = mailgen
@@ -310,5 +332,73 @@ impl Mailer for SmtpMailer {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+
+    fn render(template: &EmailTemplate) -> String {
+        let mailgen = Mailgen::new(
+            DefaultTheme::new().unwrap(),
+            Branding::new("Universal Inbox", "https://www.universal-inbox.com"),
+        );
+        let intro = template.intro();
+        mailgen
+            .render_text(&template.build_email_body(&intro))
+            .unwrap()
+    }
+
+    #[rstest]
+    fn test_integration_connection_pause_warning_email() {
+        let template = EmailTemplate::IntegrationConnectionPauseWarning {
+            first_name: Some("John".to_string()),
+            provider_name: "Slack".to_string(),
+            inactive_for_days: 83,
+            pause_date: NaiveDate::from_ymd_opt(2026, 10, 10).unwrap(),
+            app_url: "https://app.universal-inbox.com/".parse().unwrap(),
+        };
+
+        assert_eq!(
+            template.subject(),
+            "Your Slack connection will soon be paused"
+        );
+        let intro = template.intro();
+        assert!(intro.contains("for more than 83 days"), "{intro}");
+        assert!(intro.contains("paused on October 10, 2026"), "{intro}");
+        let text = render(&template);
+        assert!(text.contains("John"), "{text}");
+        assert!(text.contains("https://app.universal-inbox.com/"), "{text}");
+    }
+
+    #[rstest]
+    #[case::inactivity(IntegrationConnectionPausedReason::Inactivity, "used Universal Inbox")]
+    #[case::long_failing(
+        IntegrationConnectionPausedReason::LongFailing,
+        "failing to synchronize"
+    )]
+    fn test_integration_connection_paused_email(
+        #[case] paused_reason: IntegrationConnectionPausedReason,
+        #[case] expected_reason_text: &str,
+    ) {
+        let template = EmailTemplate::IntegrationConnectionPaused {
+            first_name: None,
+            provider_name: "Slack".to_string(),
+            paused_reason,
+            reconnect_url: "https://app.universal-inbox.com/settings".parse().unwrap(),
+        };
+
+        assert_eq!(template.subject(), "Your Slack connection was paused");
+        let intro = template.intro();
+        assert!(intro.contains(expected_reason_text), "{intro}");
+        let text = render(&template);
+        assert!(text.contains("Reconnect"), "{text}");
+        assert!(
+            text.contains("https://app.universal-inbox.com/settings"),
+            "{text}"
+        );
     }
 }

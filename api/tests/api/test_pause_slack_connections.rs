@@ -2,7 +2,8 @@
 //! their token is valid, so the Slack connections of users inactive for too
 //! long, and those failing for too long, are paused: their grant is revoked at
 //! Slack, their credential deleted, and they stay `Paused` until the user
-//! reconnects them.
+//! reconnects them. Inactive users are warned by email before the pause, and
+//! every user is emailed once paused.
 
 use chrono::{DateTime, TimeDelta, Utc};
 use email_address::EmailAddress;
@@ -27,6 +28,7 @@ use universal_inbox_api::{
     configuration::Settings,
     integrations::oauth2::RefreshToken,
     jobs::oauth::pause_slack_connections,
+    mailer::EmailTemplate,
     repository::oauth_credential::{OAuthCredentialRepository, StoredOAuthCredential},
 };
 
@@ -42,6 +44,8 @@ use crate::helpers::{
 };
 
 const INACTIVITY_THRESHOLD_DAYS: i64 = 90;
+const INACTIVITY_WARNING_DAYS: i64 = 7;
+const NO_INACTIVITY_WARNING: i64 = 0;
 const FAILING_THRESHOLD_DAYS: i64 = 30;
 
 async fn connect_slack(
@@ -131,9 +135,77 @@ async fn pause_inactive_users_connections(app: &AuthenticatedApp) -> (usize, usi
         .pause_integration_connections_of_inactive_users(
             IntegrationProviderKind::Slack,
             Utc::now() - TimeDelta::days(INACTIVITY_THRESHOLD_DAYS),
+            None,
         )
         .await
         .unwrap()
+}
+
+async fn run_pause_slack_connections(app: &AuthenticatedApp, inactivity_warning_days: i64) {
+    pause_slack_connections(
+        app.app.integration_connection_service.clone(),
+        INACTIVITY_THRESHOLD_DAYS,
+        inactivity_warning_days,
+        FAILING_THRESHOLD_DAYS,
+    )
+    .await
+    .unwrap();
+}
+
+/// The emails sent about pausing connections, oldest first.
+async fn pause_emails(app: &AuthenticatedApp) -> Vec<EmailTemplate> {
+    app.app
+        .mailer_stub
+        .read()
+        .await
+        .emails_sent
+        .read()
+        .await
+        .iter()
+        .filter(|(_, template)| {
+            matches!(
+                template,
+                EmailTemplate::IntegrationConnectionPauseWarning { .. }
+                    | EmailTemplate::IntegrationConnectionPaused { .. }
+            )
+        })
+        .map(|(_, template)| template.clone())
+        .collect()
+}
+
+async fn set_inactivity_warning_sent_at(
+    app: &AuthenticatedApp,
+    integration_connection: &IntegrationConnection,
+    sent_at: DateTime<Utc>,
+) {
+    sqlx::query("UPDATE integration_connection SET inactivity_warning_sent_at = $2 WHERE id = $1")
+        .bind(integration_connection.id.0)
+        .bind(sent_at.naive_utc())
+        .execute(&*app.app.repository.pool)
+        .await
+        .expect("Failed to set the inactivity warning time");
+}
+
+fn assert_paused_email(
+    app: &AuthenticatedApp,
+    template: &EmailTemplate,
+    expected_reason: IntegrationConnectionPausedReason,
+) {
+    let EmailTemplate::IntegrationConnectionPaused {
+        provider_name,
+        paused_reason,
+        reconnect_url,
+        ..
+    } = template
+    else {
+        panic!("Expected a paused email, got {template:?}");
+    };
+    assert_eq!(provider_name, "Slack");
+    assert_eq!(*paused_reason, expected_reason);
+    assert_eq!(
+        *reconnect_url,
+        app.app.front_base_url.join("settings").unwrap()
+    );
 }
 
 async fn pause_long_failing_connections(app: &AuthenticatedApp) -> (usize, usize) {
@@ -199,13 +271,7 @@ async fn test_slack_connection_is_paused_past_the_inactivity_threshold(
     set_last_active_at(&app.app, app.user.id, Utc::now() - inactive_for).await;
     let revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
 
-    pause_slack_connections(
-        app.app.integration_connection_service.clone(),
-        INACTIVITY_THRESHOLD_DAYS,
-        FAILING_THRESHOLD_DAYS,
-    )
-    .await
-    .unwrap();
+    run_pause_slack_connections(&app, NO_INACTIVITY_WARNING).await;
 
     let connection = reload(&app, &connection).await;
     if expect_paused {
@@ -218,11 +284,19 @@ async fn test_slack_connection_is_paused_past_the_inactivity_threshold(
         assert!(!connection.is_connected());
         assert_eq!(revocation.received_requests().await.len(), 1);
         assert!(fetch_oauth_credential(&app, &connection).await.is_none());
+        let emails = pause_emails(&app).await;
+        assert_eq!(emails.len(), 1);
+        assert_paused_email(
+            &app,
+            &emails[0],
+            IntegrationConnectionPausedReason::Inactivity,
+        );
     } else {
         assert_eq!(connection.status, IntegrationConnectionStatus::Validated);
         assert_eq!(connection.paused_at, None);
         assert_eq!(revocation.received_requests().await.len(), 0);
         assert!(fetch_oauth_credential(&app, &connection).await.is_some());
+        assert_eq!(pause_emails(&app).await, vec![]);
     }
 }
 
@@ -431,13 +505,7 @@ async fn test_slack_connection_is_paused_past_the_failing_threshold(
     .await;
     let revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
 
-    pause_slack_connections(
-        app.app.integration_connection_service.clone(),
-        INACTIVITY_THRESHOLD_DAYS,
-        FAILING_THRESHOLD_DAYS,
-    )
-    .await
-    .unwrap();
+    run_pause_slack_connections(&app, NO_INACTIVITY_WARNING).await;
 
     let connection = reload(&app, &connection).await;
     if expect_paused {
@@ -451,6 +519,13 @@ async fn test_slack_connection_is_paused_past_the_failing_threshold(
         assert!(fetch_oauth_credential(&app, &connection).await.is_none());
         // Nothing the user did paused it: its notifications stay visible.
         assert!(!connection.should_set_aside_notifications());
+        let emails = pause_emails(&app).await;
+        assert_eq!(emails.len(), 1);
+        assert_paused_email(
+            &app,
+            &emails[0],
+            IntegrationConnectionPausedReason::LongFailing,
+        );
     } else {
         assert_eq!(connection.status, IntegrationConnectionStatus::Failing);
         assert_eq!(revocation.received_requests().await.len(), 0);
@@ -517,4 +592,200 @@ async fn test_dead_refresh_token_counts_as_revoked(
         reload(&app, &connection).await.status,
         IntegrationConnectionStatus::Paused
     );
+}
+
+/// Users inactive for `INACTIVITY_THRESHOLD_DAYS - INACTIVITY_WARNING_DAYS`
+/// are warned once that their connection will be paused, and nothing else
+/// happens yet.
+#[rstest]
+#[case::just_past_the_warning_threshold(TimeDelta::hours(1), true)]
+#[case::just_before_the_warning_threshold(-TimeDelta::hours(1), false)]
+#[tokio::test]
+async fn test_inactive_user_is_warned_once_before_the_pause(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    #[case] past_warning_threshold_by: TimeDelta,
+    #[case] expect_warned: bool,
+) {
+    let app = authenticated_app.await;
+    let connection = connect_slack(&app, &settings, None).await;
+    set_last_active_at(
+        &app.app,
+        app.user.id,
+        Utc::now()
+            - TimeDelta::days(INACTIVITY_THRESHOLD_DAYS - INACTIVITY_WARNING_DAYS)
+            - past_warning_threshold_by,
+    )
+    .await;
+    let revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
+
+    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+
+    let emails = pause_emails(&app).await;
+    if expect_warned {
+        assert_eq!(
+            emails,
+            vec![EmailTemplate::IntegrationConnectionPauseWarning {
+                first_name: app.user.first_name.clone(),
+                provider_name: "Slack".to_string(),
+                inactive_for_days: INACTIVITY_THRESHOLD_DAYS - INACTIVITY_WARNING_DAYS,
+                pause_date: (Utc::now() + TimeDelta::days(INACTIVITY_WARNING_DAYS)).date_naive(),
+                app_url: app.app.front_base_url.clone(),
+            }]
+        );
+    } else {
+        assert_eq!(emails, vec![]);
+    }
+    assert_eq!(
+        reload(&app, &connection).await.status,
+        IntegrationConnectionStatus::Validated
+    );
+    assert_eq!(revocation.received_requests().await.len(), 0);
+}
+
+/// A user already inactive past the pause threshold when first seen (e.g. the
+/// cron was just enabled) is warned first, and paused only
+/// `INACTIVITY_WARNING_DAYS` after the warning.
+#[rstest]
+#[tokio::test]
+async fn test_inactive_user_is_paused_only_after_the_warning_period(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    let connection = connect_slack(&app, &settings, None).await;
+    set_last_active_at(
+        &app.app,
+        app.user.id,
+        Utc::now() - TimeDelta::days(INACTIVITY_THRESHOLD_DAYS + 10),
+    )
+    .await;
+    let revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
+
+    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+
+    assert_eq!(
+        reload(&app, &connection).await.status,
+        IntegrationConnectionStatus::Validated
+    );
+    let emails = pause_emails(&app).await;
+    assert_eq!(emails.len(), 1);
+    assert!(matches!(
+        emails[0],
+        EmailTemplate::IntegrationConnectionPauseWarning { .. }
+    ));
+
+    // Still within the warning period
+    set_inactivity_warning_sent_at(
+        &app,
+        &connection,
+        Utc::now() - TimeDelta::days(INACTIVITY_WARNING_DAYS) + TimeDelta::hours(1),
+    )
+    .await;
+    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    assert_eq!(
+        reload(&app, &connection).await.status,
+        IntegrationConnectionStatus::Validated
+    );
+    assert_eq!(pause_emails(&app).await.len(), 1);
+
+    // Past the warning period
+    set_inactivity_warning_sent_at(
+        &app,
+        &connection,
+        Utc::now() - TimeDelta::days(INACTIVITY_WARNING_DAYS) - TimeDelta::hours(1),
+    )
+    .await;
+    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+
+    let connection = reload(&app, &connection).await;
+    assert_eq!(connection.status, IntegrationConnectionStatus::Paused);
+    assert_eq!(revocation.received_requests().await.len(), 1);
+    let emails = pause_emails(&app).await;
+    assert_eq!(emails.len(), 2);
+    assert_paused_email(
+        &app,
+        &emails[1],
+        IntegrationConnectionPausedReason::Inactivity,
+    );
+}
+
+/// A warning only counts for the inactivity period it was sent in: a user
+/// active since is not paused on it, and is warned again once inactive again.
+#[rstest]
+#[tokio::test]
+async fn test_warning_sent_before_the_last_activity_does_not_count(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    let connection = connect_slack(&app, &settings, None).await;
+    // Warned long ago, active since, and inactive past the threshold again
+    set_inactivity_warning_sent_at(&app, &connection, Utc::now() - TimeDelta::days(200)).await;
+    set_last_active_at(
+        &app.app,
+        app.user.id,
+        Utc::now() - TimeDelta::days(INACTIVITY_THRESHOLD_DAYS + 10),
+    )
+    .await;
+    let revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
+
+    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+
+    assert_eq!(
+        reload(&app, &connection).await.status,
+        IntegrationConnectionStatus::Validated
+    );
+    assert_eq!(revocation.received_requests().await.len(), 0);
+    let emails = pause_emails(&app).await;
+    assert_eq!(emails.len(), 1);
+    assert!(matches!(
+        emails[0],
+        EmailTemplate::IntegrationConnectionPauseWarning { .. }
+    ));
+}
+
+/// Testing accounts are never emailed, but their connections are still
+/// warned (silently) and paused on schedule.
+#[rstest]
+#[tokio::test]
+async fn test_testing_account_is_paused_without_emails(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    let connection = connect_slack(&app, &settings, None).await;
+    sqlx::query(r#"UPDATE "user" SET is_testing = true WHERE id = $1"#)
+        .bind(app.user.id.0)
+        .execute(&*app.app.repository.pool)
+        .await
+        .unwrap();
+    set_last_active_at(
+        &app.app,
+        app.user.id,
+        Utc::now() - TimeDelta::days(INACTIVITY_THRESHOLD_DAYS + 10),
+    )
+    .await;
+    let _revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
+
+    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    assert_eq!(
+        reload(&app, &connection).await.status,
+        IntegrationConnectionStatus::Validated
+    );
+
+    set_inactivity_warning_sent_at(
+        &app,
+        &connection,
+        Utc::now() - TimeDelta::days(INACTIVITY_WARNING_DAYS + 1),
+    )
+    .await;
+    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+
+    assert_eq!(
+        reload(&app, &connection).await.status,
+        IntegrationConnectionStatus::Paused
+    );
+    assert_eq!(pause_emails(&app).await, vec![]);
 }

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE integration_connection\n                SET inactivity_warning_sent_at = $3\n                FROM \"user\"\n                WHERE integration_connection.id = $1\n                  AND \"user\".id = integration_connection.user_id\n                  AND integration_connection.status = 'Validated'\n                  AND \"user\".last_active_at < $2\n                  AND (\n                    integration_connection.inactivity_warning_sent_at IS NULL\n                    OR integration_connection.inactivity_warning_sent_at < \"user\".last_active_at\n                  )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamp",
+        "Timestamp"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a92c5c2f600f148580ec7bc31f802efd1b2e0f44f4f6bfe65c0acd47c8807187"
+}

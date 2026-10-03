@@ -187,6 +187,8 @@ fn default_refresh_oauth_tokens_lock_ttl_seconds() -> u64 {
 /// tokens valid forever. This cron revokes the Slack grant, and pauses the
 /// connection, of users inactive for longer than `inactivity_threshold_days`
 /// and of connections `Failing` for longer than `failing_threshold_days`.
+/// Inactive users are warned by email `inactivity_warning_days` beforehand,
+/// and every user is emailed once their connection is paused.
 /// Disabled by default: it revokes grants at Slack.
 #[derive(Deserialize, Clone, Debug)]
 pub struct PauseSlackConnectionsCronSettings {
@@ -198,6 +200,11 @@ pub struct PauseSlackConnectionsCronSettings {
     /// Pause the Slack connections of users inactive for longer than this
     #[serde(default = "default_pause_slack_connections_inactivity_threshold_days")]
     pub inactivity_threshold_days: i64,
+    /// Warn inactive users by email this many days before pausing their Slack
+    /// connections. A connection is never paused for inactivity less than this
+    /// many days after its warning. 0 disables the warning.
+    #[serde(default = "default_pause_slack_connections_inactivity_warning_days")]
+    pub inactivity_warning_days: i64,
     /// Pause the Slack connections `Failing` for longer than this
     #[serde(default = "default_pause_slack_connections_failing_threshold_days")]
     pub failing_threshold_days: i64,
@@ -212,6 +219,7 @@ impl Default for PauseSlackConnectionsCronSettings {
             is_enabled: false,
             schedule: default_pause_slack_connections_schedule(),
             inactivity_threshold_days: default_pause_slack_connections_inactivity_threshold_days(),
+            inactivity_warning_days: default_pause_slack_connections_inactivity_warning_days(),
             failing_threshold_days: default_pause_slack_connections_failing_threshold_days(),
             lock_ttl_seconds: default_pause_slack_connections_lock_ttl_seconds(),
         }
@@ -223,6 +231,9 @@ fn default_pause_slack_connections_schedule() -> String {
 }
 fn default_pause_slack_connections_inactivity_threshold_days() -> i64 {
     90
+}
+pub(crate) fn default_pause_slack_connections_inactivity_warning_days() -> i64 {
+    7
 }
 fn default_pause_slack_connections_failing_threshold_days() -> i64 {
     30

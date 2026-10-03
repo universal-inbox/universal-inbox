@@ -1002,6 +1002,8 @@ pub async fn build_services(
         settings.application.sync_backoff_max_delay_in_seconds,
         settings.application.sync_failure_window_in_hours,
         billing_service.clone(),
+        mailer.clone(),
+        settings.application.front_base_url.clone(),
     )));
 
     // Built after the integration connection service: account deletion
