@@ -162,7 +162,10 @@ mod close_session {
             format!(
                 "{oidc_issuer_mock_server_url}/end_session?{}",
                 serde_urlencoded::to_string([
-                    ("id_token_hint", user_auth.auth_id_token.to_string()),
+                    (
+                        "id_token_hint",
+                        user_auth.auth_id_token.as_str().to_string()
+                    ),
                     (
                         "post_logout_redirect_uri",
                         settings.application.front_base_url.to_string()
