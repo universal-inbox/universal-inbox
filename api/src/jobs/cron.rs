@@ -154,6 +154,7 @@ pub async fn handle_pause_slack_connections_cron_tick(
     storage
         .push(UniversalInboxJob::PauseSlackConnections {
             inactivity_threshold_days: settings.inactivity_threshold_days,
+            inactivity_warning_days: settings.inactivity_warning_days,
             failing_threshold_days: settings.failing_threshold_days,
         })
         .await

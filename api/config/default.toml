@@ -56,12 +56,15 @@ lock_ttl_seconds = 60
 # Revoke the Slack grant and pause the Slack connection of users who have not
 # used Universal Inbox for `inactivity_threshold_days`, and of connections
 # failing for `failing_threshold_days`, so Slack stops sending their events.
-# Reconnecting the integration resumes it.
+# Reconnecting the integration resumes it. Inactive users are warned by email
+# `inactivity_warning_days` before their connection is paused (0 disables the
+# warning), and every user is emailed once their connection is paused.
 [application.cron.pause_slack_connections]
 is_enabled = false
 # Cron expression with a seconds field
 schedule = "0 0 3 * * *"
 inactivity_threshold_days = 90
+inactivity_warning_days = 7
 failing_threshold_days = 30
 lock_ttl_seconds = 300
 
