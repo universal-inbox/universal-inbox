@@ -25,6 +25,7 @@ use opentelemetry_otlp::{
 use opentelemetry_sdk::{
     Resource,
     logs::{BatchLogProcessor, SdkLoggerProvider},
+    propagation::TraceContextPropagator,
     trace::{BatchSpanProcessor, RandomIdGenerator, Sampler, SdkTracerProvider},
 };
 use tokio::task::JoinHandle;
@@ -32,12 +33,7 @@ use tonic::metadata::AsciiMetadataKey;
 use tracing::{Instrument, Span, Subscriber, subscriber::set_global_default};
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder};
 use tracing_log::LogTracer;
-use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::{
-    EnvFilter, Layer, Registry,
-    layer::{Layered, SubscriberExt},
-    registry::LookupSpan,
-};
+use tracing_subscriber::{EnvFilter, Layer, Registry, layer::SubscriberExt, registry::LookupSpan};
 
 use crate::{
     configuration::{LogFormat, OtlpExporterProtocol, TracingSettings},
@@ -47,17 +43,6 @@ use crate::{
 pub mod redaction;
 
 use redaction::{RedactingLogProcessor, RedactingSpanProcessor};
-
-type SubscriberWithTelemetry = Layered<
-    OpenTelemetryTracingBridge<
-        opentelemetry_sdk::logs::SdkLoggerProvider,
-        opentelemetry_sdk::logs::SdkLogger,
-    >,
-    Layered<
-        OpenTelemetryLayer<Layered<EnvFilter, Registry>, opentelemetry_sdk::trace::Tracer>,
-        Layered<EnvFilter, Registry>,
-    >,
->;
 
 /// Targets that must stay off whatever the operator configures.
 ///
@@ -81,24 +66,63 @@ fn with_forced_off_targets(filter: EnvFilter) -> EnvFilter {
     })
 }
 
-/// Kept so the panic hook can flush buffered spans and logs before the
-/// process exits: batch processors would otherwise drop them.
+/// Target of the one-line-per-request access log written by the API server.
+pub const ACCESS_LOG_TARGET: &str = "access_log";
+
+/// Targets whose INFO lines are kept on stdout but not exported: the HTTP
+/// root span and the apalis job span already carry the same information, so
+/// exporting them as span events and OTel logs only duplicates it.
+///
+/// Prepended to the operator's OTel directives, so a directive naming one of
+/// these targets explicitly still wins.
+const OTEL_QUIET_DIRECTIVES: [&str; 3] = [
+    "access_log=warn",
+    "apalis::layers::tracing::on_request=warn",
+    "apalis::layers::tracing::on_response=warn",
+];
+
+/// Kept so the panic hook and [`shutdown_telemetry`] can flush buffered spans
+/// and logs before the process exits: batch processors would otherwise drop
+/// them.
 static TELEMETRY_PROVIDERS: OnceLock<(SdkTracerProvider, SdkLoggerProvider)> = OnceLock::new();
 
+/// Filter for the stdout layer: `RUST_LOG` when set, else the configured
+/// directive.
 fn build_env_filter(env_filter_str: &str) -> EnvFilter {
     with_forced_off_targets(
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str)),
     )
 }
 
+/// Filter for an OTel layer. It ignores `RUST_LOG`, so raising local stdout
+/// verbosity does not flood the trace backend.
+fn build_otel_filter(directive: &str) -> EnvFilter {
+    with_forced_off_targets(EnvFilter::new(format!(
+        "{},{directive}",
+        OTEL_QUIET_DIRECTIVES.join(",")
+    )))
+}
+
+/// Build a subscriber exporting traces and logs over OTLP, and writing logs to
+/// stdout when `config.is_stdout_logging_enabled`.
+///
+/// Each layer has its own filter: stdout uses `stdout_filter_str` (or
+/// `RUST_LOG`), the trace layer `config.otel_trace_directive` and the log
+/// bridge `config.otel_log_directive`. Keeping the OTel filters tighter than
+/// the stdout one avoids exporting every event twice (as a span event and as
+/// an OTel log).
 pub fn get_subscriber_with_telemetry(
     environment: &str,
-    env_filter_str: &str,
+    stdout_filter_str: &str,
     config: &TracingSettings,
     service_name: &str,
     version: Option<String>,
-) -> SubscriberWithTelemetry {
-    let env_filter = build_env_filter(env_filter_str);
+    log_format: LogFormat,
+) -> impl Subscriber + Send + Sync {
+    // `traceparent` on inbound requests is read through the global propagator
+    // (tracing-actix-web). Outbound third-party calls opt out with
+    // `DisableOtelPropagation`.
+    opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
 
     let resource = build_resource(environment, service_name, version);
     let tracer_provider = SdkTracerProvider::builder()
@@ -139,22 +163,14 @@ pub fn get_subscriber_with_telemetry(
     // Already set only if the subscriber is built twice: the first providers stay.
     let _ = TELEMETRY_PROVIDERS.set((tracer_provider, logger));
 
-    Registry::default()
-        .with(env_filter)
-        .with(telemetry)
-        .with(logging)
-}
+    let stdout_layer = config
+        .is_stdout_logging_enabled
+        .then(|| build_fmt_layer(log_format).with_filter(build_env_filter(stdout_filter_str)));
 
-pub fn get_subscriber_with_telemetry_and_logging(
-    environment: &str,
-    env_filter_str: &str,
-    config: &TracingSettings,
-    service_name: &str,
-    version: Option<String>,
-    log_format: LogFormat,
-) -> impl Subscriber + Send + Sync {
-    get_subscriber_with_telemetry(environment, env_filter_str, config, service_name, version)
-        .with(build_fmt_layer(log_format))
+    Registry::default()
+        .with(telemetry.with_filter(build_otel_filter(&config.otel_trace_directive)))
+        .with(logging.with_filter(build_otel_filter(&config.otel_log_directive)))
+        .with(stdout_layer)
 }
 
 pub fn get_subscriber(
@@ -212,6 +228,30 @@ pub fn install_panic_hook() {
 
         previous_hook(panic_info);
     }));
+}
+
+/// Flush and shut down the OTLP tracer and logger providers, so the last
+/// batch of spans and logs is exported. Call it once, right before a normal
+/// exit (including after a SIGTERM-triggered graceful stop). Blocks until the
+/// exporters are done or time out. A no-op when telemetry is not set up.
+pub fn shutdown_telemetry() {
+    let Some((tracer_provider, logger_provider)) = TELEMETRY_PROVIDERS.get() else {
+        return;
+    };
+    // Reported on stderr: the exporters being shut down are where an error
+    // event would go.
+    if let Err(error) = tracer_provider.force_flush() {
+        eprintln!("Failed to flush the tracer provider: {error}");
+    }
+    if let Err(error) = logger_provider.force_flush() {
+        eprintln!("Failed to flush the logger provider: {error}");
+    }
+    if let Err(error) = tracer_provider.shutdown() {
+        eprintln!("Failed to shut the tracer provider down: {error}");
+    }
+    if let Err(error) = logger_provider.shutdown() {
+        eprintln!("Failed to shut the logger provider down: {error}");
+    }
 }
 
 pub fn init_subscriber(
@@ -348,8 +388,21 @@ fn record_forwarded_for(span: &Span, request: &ServiceRequest) {
 
 /// This is a custom root span builder that will add the user id to the root
 /// span if the user is connected
+/// Health-check path, polled by the platform: not traced, it would only add
+/// root spans with nothing to debug in them.
+const UNTRACED_PATH: &str = "/ping";
+
+/// Whether `request` gets a root span. Matched on the path only, so every
+/// method (GET and HEAD probes alike) is skipped.
+fn is_traced(request: &ServiceRequest) -> bool {
+    request.path() != UNTRACED_PATH
+}
+
 impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
     fn on_request_start(request: &ServiceRequest) -> Span {
+        if !is_traced(request) {
+            return Span::none();
+        }
         let authenticated_value = request.extensions().get::<Authenticated<Claims>>().cloned();
         let redacted_request = RedactedRequest::new(request);
         let request = &redacted_request;
@@ -538,8 +591,120 @@ fn build_resource(environment: &str, service_name: &str, version: Option<String>
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use super::*;
     use pretty_assertions::assert_eq;
+    use tracing::Level;
+
+    /// Records the `(target, level)` of every event reaching it.
+    #[derive(Clone, Default)]
+    struct RecordedEvents(Arc<Mutex<Vec<(String, Level)>>>);
+
+    impl<S: Subscriber> Layer<S> for RecordedEvents {
+        fn on_event(
+            &self,
+            event: &tracing::Event<'_>,
+            _ctx: tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            self.0.lock().unwrap().push((
+                event.metadata().target().to_string(),
+                *event.metadata().level(),
+            ));
+        }
+    }
+
+    /// Emit a fixed set of events through `filter` and return those it let
+    /// through.
+    fn events_passing(filter: EnvFilter) -> Vec<(String, Level)> {
+        let recorded = RecordedEvents::default();
+        let subscriber = Registry::default().with(recorded.clone().with_filter(filter));
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::debug!(target: "sqlx::query", "statement");
+            tracing::warn!(target: "sqlx::query", "slow statement");
+            tracing::info!(target: "access_log", "GET /api 200");
+            tracing::warn!(target: "access_log", "access warning");
+            tracing::info!(target: "apalis::layers::tracing::on_request", "task.start");
+            tracing::info!(target: "apalis::layers::tracing::on_response", "task.done");
+            tracing::info!(target: "universal_inbox_api", "app info");
+            tracing::warn!(target: "universal_inbox_api", "app warning");
+            tracing::error!(target: "stripe_webhook", "payload");
+        });
+        recorded.0.lock().unwrap().clone()
+    }
+
+    fn event(target: &str, level: Level) -> (String, Level) {
+        (target.to_string(), level)
+    }
+
+    #[test]
+    fn default_otel_trace_filter_drops_duplicated_lines() {
+        assert_eq!(
+            events_passing(build_otel_filter("info")),
+            vec![
+                event("sqlx::query", Level::WARN),
+                event("access_log", Level::WARN),
+                event("universal_inbox_api", Level::INFO),
+                event("universal_inbox_api", Level::WARN),
+            ]
+        );
+    }
+
+    #[test]
+    fn default_otel_log_filter_keeps_warnings_only() {
+        assert_eq!(
+            events_passing(build_otel_filter("warn")),
+            vec![
+                event("sqlx::query", Level::WARN),
+                event("access_log", Level::WARN),
+                event("universal_inbox_api", Level::WARN),
+            ]
+        );
+    }
+
+    #[test]
+    fn otel_filter_lets_an_operator_directive_override_a_quiet_target() {
+        // `stripe_webhook` stays forced off even at `trace`.
+        assert_eq!(
+            events_passing(build_otel_filter(
+                "warn,access_log=info,stripe_webhook=trace"
+            )),
+            vec![
+                event("sqlx::query", Level::WARN),
+                event("access_log", Level::INFO),
+                event("access_log", Level::WARN),
+                event("universal_inbox_api", Level::WARN),
+            ]
+        );
+    }
+
+    #[rstest::rstest]
+    #[case::ping_get(actix_web::http::Method::GET, "/ping", false)]
+    #[case::ping_head(actix_web::http::Method::HEAD, "/ping", false)]
+    #[case::api(actix_web::http::Method::GET, "/api/notifications", true)]
+    #[case::ping_prefix(actix_web::http::Method::GET, "/ping-other", true)]
+    fn only_ping_is_untraced(
+        #[case] method: actix_web::http::Method,
+        #[case] path: &str,
+        #[case] traced: bool,
+    ) {
+        let request = actix_web::test::TestRequest::default()
+            .method(method)
+            .uri(path)
+            .to_srv_request();
+        assert_eq!(is_traced(&request), traced);
+    }
+
+    #[test]
+    fn ping_root_span_is_disabled() {
+        let subscriber = Registry::default().with(RecordedEvents::default());
+        tracing::subscriber::with_default(subscriber, || {
+            let request = actix_web::test::TestRequest::default()
+                .uri("/ping")
+                .to_srv_request();
+            assert!(AuthenticatedRootSpanBuilder::on_request_start(&request).is_disabled());
+        });
+    }
 
     #[test]
     fn stripe_webhook_target_stays_off_even_when_configured_on() {

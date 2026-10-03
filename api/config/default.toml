@@ -192,6 +192,15 @@ format = "Pretty"
 # otlp_exporter_protocol = "Grpc" # or Http
 # otlp_exporter_endpoint = "https://otlp.host"
 # is_stdout_logging_enabled = true
+# Each OTLP signal has its own filter, independent from `log_directive`
+# (stdout only) and from RUST_LOG. Same EnvFilter syntax.
+# Spans, and events recorded as span events:
+# otel_trace_directive = "info"
+# Events exported as OTLP logs. An event passing both filters is exported
+# twice, so keep this one tighter:
+# otel_log_directive = "warn"
+# The access log and the apalis task.start/task.done lines are kept at warn on
+# both (OTEL_QUIET_DIRECTIVES in api/src/observability.rs) unless named here.
 
 # Depending on the OTLP provider, the header may be different or may not be
 # required
