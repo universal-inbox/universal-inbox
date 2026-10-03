@@ -22,6 +22,7 @@
 - **Check:** Did you prefix with `direnv exec .`? Per-branch ports live in `.local_envrc` (PGPORT/REDIS_PORT/…, NOT 5432/6379). Bare `devbox run` skips `.local_envrc` → wrong ports.
 - **Fix:** `cd /abs/path/to/worktree && direnv exec . just <cmd>`. Shell state doesn't persist across agent calls. See QUICK_START.md "Worktree".
 - **Before `wt remove` / `wt merge`:** stop that worktree's services first: `direnv exec . just down`, then `direnv exec . just status` to confirm. Orphaned pg/redis/API processes hold the branch ports.
+- **Builds link another worktree's code** (e.g. E0063 on a field your branch has): `readlink target` matches another worktree's? `target` is an mbx symlink and must be per-worktree. Fix: `rm target` (the symlink only), then rebuild. Never `mbx clean` here: it deletes the shared dir.
 
 ## 5. Frontend styling drift (hardcoded values / stray CSS)
 - **Symptom:** `bg-[#388fef]`, inline px radii, or a new `.foo-bar` class in `universal-inbox.css`.

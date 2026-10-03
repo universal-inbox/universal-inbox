@@ -1,6 +1,12 @@
 [[pre-start]]
 copy = "wt step copy-ignored"
 
+# `target` is a symlink to the main checkout's mbx-managed build dir: copying it
+# makes every worktree build into the same directory and clobber each other.
+# Without it, mbx creates a per-worktree target on the first cargo run.
+[step.copy-ignored]
+exclude = ["/target"]
+
 [[pre-start]]
 clean_data = "rm -rf .devbox/virtenv/redis/dump.rdb .devbox/virtenv/postgresql_17/data"
 
