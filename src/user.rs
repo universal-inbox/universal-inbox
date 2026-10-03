@@ -142,6 +142,14 @@ pub struct Credentials {
     pub password: SecretBox<Password>,
 }
 
+/// Body of a password change request from an authenticated user: the
+/// current password is re-checked before `new_password` replaces it.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PasswordChange {
+    pub current_password: SecretBox<Password>,
+    pub new_password: SecretBox<Password>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(transparent)]
 pub struct Password(pub String);
