@@ -209,6 +209,11 @@ impl OAuth2Provider for SlackOAuth2Provider {
                 .get("error")
                 .and_then(|e| e.as_str())
                 .unwrap_or("unknown error");
+            // Slack answers a dead refresh token with a 200 and one of these
+            // errors instead of RFC 6749's HTTP 400 `invalid_grant`.
+            if matches!(err_msg, "invalid_refresh_token" | "invalid_grant") {
+                return Err(UniversalInboxError::OAuth2InvalidGrant(err_msg.to_string()));
+            }
             return Err(UniversalInboxError::Unexpected(anyhow::anyhow!(
                 "Slack token exchange failed: {err_msg} (body: {body})"
             )));
@@ -366,7 +371,21 @@ mod tests {
     #[test]
     fn test_parse_token_response_errors_when_not_ok() {
         let body = r#"{ "ok": false, "error": "invalid_code" }"#;
-        assert!(provider().parse_token_response(body).is_err());
+        assert!(matches!(
+            provider().parse_token_response(body),
+            Err(UniversalInboxError::Unexpected(_))
+        ));
+    }
+
+    #[rstest::rstest]
+    #[case("invalid_refresh_token")]
+    #[case("invalid_grant")]
+    fn test_parse_token_response_dead_refresh_token_is_invalid_grant(#[case] error: &str) {
+        let body = format!(r#"{{ "ok": false, "error": "{error}" }}"#);
+        assert!(matches!(
+            provider().parse_token_response(&body),
+            Err(UniversalInboxError::OAuth2InvalidGrant(_))
+        ));
     }
 
     #[test]

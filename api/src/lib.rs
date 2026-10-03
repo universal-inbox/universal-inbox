@@ -74,8 +74,8 @@ use crate::{
     },
     jobs::{
         cron::{
-            handle_refresh_oauth_tokens_cron_tick, handle_retry_oauth_grant_revocations_cron_tick,
-            handle_vacuum_jobs_cron_tick,
+            handle_pause_slack_connections_cron_tick, handle_refresh_oauth_tokens_cron_tick,
+            handle_retry_oauth_grant_revocations_cron_tick, handle_vacuum_jobs_cron_tick,
         },
         handle_universal_inbox_job,
     },
@@ -404,6 +404,11 @@ pub async fn run_server(
                     Ok(res)
                 }
             })
+            // Declared before the auth middleware so that it runs after it
+            // (`wrap` is LIFO) and sees the authenticated user.
+            .wrap(middlewares::user_activity::RecordUserActivity::new(
+                user_service.clone(),
+            ))
             .wrap(TracingLogger::<AuthenticatedRootSpanBuilder>::new())
             .wrap(auth_middleware_factory.clone())
             .wrap(
@@ -688,10 +693,34 @@ pub async fn run_worker(
                         .on_failure(WorkerOnFailure {}),
                 )
                 .data(redis_storage.clone())
-                .data(cache)
+                .data(cache.clone())
                 .data(vacuum_jobs_settings)
                 .backend(CronStream::new_with_timezone(schedule, Utc))
                 .build_fn(handle_vacuum_jobs_cron_tick),
+        );
+    }
+
+    let pause_slack_connections_settings = cron_settings.pause_slack_connections;
+    if pause_slack_connections_settings.is_enabled {
+        let schedule = Schedule::from_str(&pause_slack_connections_settings.schedule)
+            .expect("Invalid cron schedule for the pause-slack-connections job");
+        info!(
+            "Registering pause-slack-connections cron worker with schedule `{}`",
+            pause_slack_connections_settings.schedule
+        );
+        monitor = monitor.register(
+            WorkerBuilder::new("universal-inbox-cron-pause-slack-connections")
+                .layer(
+                    TraceLayer::new()
+                        .on_request(DefaultOnRequest::default().level(Level::INFO))
+                        .on_response(DefaultOnResponse::default().level(Level::INFO))
+                        .on_failure(WorkerOnFailure {}),
+                )
+                .data(redis_storage.clone())
+                .data(cache)
+                .data(pause_slack_connections_settings)
+                .backend(CronStream::new_with_timezone(schedule, Utc))
+                .build_fn(handle_pause_slack_connections_cron_tick),
         );
     }
 

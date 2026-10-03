@@ -342,3 +342,56 @@ async fn test_late_revocation_event_spares_a_reconnected_connection(
 
     assert_eq!(connection_state(&app.app, &connection).await, untouched());
 }
+
+#[rstest]
+#[tokio::test]
+async fn test_revocation_event_leaves_a_paused_connection_paused(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    slack_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+    let connection = create_slack_connection(
+        &app.app,
+        &settings,
+        app.user.id,
+        "U05XXX",
+        TEAM_ID,
+        slack_oauth_credential,
+    )
+    .await;
+    // Pausing revokes the token at Slack, which then sends `tokens_revoked`
+    let mut transaction = app.app.repository.begin().await.unwrap();
+    app.app
+        .repository
+        .delete_oauth_credential(&mut transaction, connection.id)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    sqlx::query(
+        r#"
+            UPDATE integration_connection
+            SET status = 'Paused',
+                paused_at = (now() at time zone 'utc'),
+                paused_reason = 'Inactivity'
+            WHERE id = $1
+        "#,
+    )
+    .bind(connection.id.0)
+    .execute(&*app.app.repository.pool)
+    .await
+    .unwrap();
+
+    for event in [
+        tokens_revoked_event(TEAM_ID, &["U05XXX"], Utc::now()),
+        app_uninstalled_event(TEAM_ID, Utc::now()),
+    ] {
+        let response = post_signed_slack_event(&app.client, &app.app.api_address, &event).await;
+        assert_eq!(response.status(), 200);
+    }
+
+    assert_eq!(
+        connection_state(&app.app, &connection).await,
+        (IntegrationConnectionStatus::Paused, None, false)
+    );
+}

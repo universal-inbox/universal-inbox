@@ -250,6 +250,55 @@ async fn test_disconnect_sets_aside_and_reconnect_restores(
     assert_triage_state_preserved(&app, &triaged_notification).await;
 }
 
+/// Pausing a connection after a long inactivity is a disconnect Universal Inbox
+/// makes on the user's behalf: its notifications are set aside the same way,
+/// and reconnecting brings them back.
+#[rstest]
+#[tokio::test]
+async fn test_inactivity_pause_sets_aside_and_reconnect_restores(
+    #[future] authenticated_app: AuthenticatedApp,
+    provider_fixtures: ProviderFixtures,
+) {
+    let app = authenticated_app.await;
+
+    let case = seed_provider(&app, IntegrationProviderKind::Slack, &provider_fixtures).await;
+    let triaged_notification =
+        triage_notification(&app, &case.notification, &provider_fixtures.todoist_item).await;
+
+    sqlx::query(r#"UPDATE "user" SET last_active_at = $2 WHERE id = $1"#)
+        .bind(app.user.id.0)
+        .bind((Utc::now() - chrono::TimeDelta::days(100)).naive_utc())
+        .execute(&*app.app.repository.pool)
+        .await
+        .unwrap();
+    let _revocation = wiremock::Mock::given(wiremock::matchers::path("/auth.revoke"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({ "ok": true, "revoked": true })),
+        )
+        .mount_as_scoped(&app.app.slack_mock_server)
+        .await;
+    let (paused, failed) = app
+        .app
+        .integration_connection_service
+        .read()
+        .await
+        .pause_integration_connections_of_inactive_users(
+            IntegrationProviderKind::Slack,
+            Utc::now() - chrono::TimeDelta::days(90),
+        )
+        .await
+        .unwrap();
+    assert_eq!((paused, failed), (1, 0));
+
+    assert_notification_set_aside(&app, &triaged_notification).await;
+
+    reconnect_connection(&app, case.connection.id).await;
+    complete_restoring_sync(&app, IntegrationProviderKind::Slack).await;
+
+    assert_triage_state_preserved(&app, &triaged_notification).await;
+}
+
 /// `API` notifications are pushed in by an external client rather than collected
 /// by a synchronization, so no sync completion could ever bring them back.
 /// Disconnecting an `API` connection therefore leaves them in the inbox, rather

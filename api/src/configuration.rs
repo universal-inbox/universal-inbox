@@ -80,6 +80,8 @@ pub struct CronSettings {
     pub vacuum_jobs: VacuumJobsCronSettings,
     #[serde(default)]
     pub retry_oauth_grant_revocations: RetryOAuthGrantRevocationsCronSettings,
+    #[serde(default)]
+    pub pause_slack_connections: PauseSlackConnectionsCronSettings,
 }
 
 /// Configuration for the `retry-oauth-grant-revocations` cron, retrying the
@@ -176,6 +178,57 @@ fn default_refresh_oauth_tokens_minutes_before_expiry() -> i64 {
 }
 fn default_refresh_oauth_tokens_lock_ttl_seconds() -> u64 {
     60
+}
+
+/// Configuration for the `pause-slack-connections` cron.
+///
+/// Slack keeps sending events for every user who authorized the app as long
+/// as their token is valid, and the refresh-oauth-tokens cron keeps rotated
+/// tokens valid forever. This cron revokes the Slack grant, and pauses the
+/// connection, of users inactive for longer than `inactivity_threshold_days`
+/// and of connections `Failing` for longer than `failing_threshold_days`.
+/// Disabled by default: it revokes grants at Slack.
+#[derive(Deserialize, Clone, Debug)]
+pub struct PauseSlackConnectionsCronSettings {
+    #[serde(default)]
+    pub is_enabled: bool,
+    /// Cron expression with a seconds field, e.g. `0 0 3 * * *`
+    #[serde(default = "default_pause_slack_connections_schedule")]
+    pub schedule: String,
+    /// Pause the Slack connections of users inactive for longer than this
+    #[serde(default = "default_pause_slack_connections_inactivity_threshold_days")]
+    pub inactivity_threshold_days: i64,
+    /// Pause the Slack connections `Failing` for longer than this
+    #[serde(default = "default_pause_slack_connections_failing_threshold_days")]
+    pub failing_threshold_days: i64,
+    /// TTL of the per-tick deduplication lock key in Redis
+    #[serde(default = "default_pause_slack_connections_lock_ttl_seconds")]
+    pub lock_ttl_seconds: u64,
+}
+
+impl Default for PauseSlackConnectionsCronSettings {
+    fn default() -> Self {
+        Self {
+            is_enabled: false,
+            schedule: default_pause_slack_connections_schedule(),
+            inactivity_threshold_days: default_pause_slack_connections_inactivity_threshold_days(),
+            failing_threshold_days: default_pause_slack_connections_failing_threshold_days(),
+            lock_ttl_seconds: default_pause_slack_connections_lock_ttl_seconds(),
+        }
+    }
+}
+
+fn default_pause_slack_connections_schedule() -> String {
+    "0 0 3 * * *".to_string()
+}
+fn default_pause_slack_connections_inactivity_threshold_days() -> i64 {
+    90
+}
+fn default_pause_slack_connections_failing_threshold_days() -> i64 {
+    30
+}
+fn default_pause_slack_connections_lock_ttl_seconds() -> u64 {
+    300
 }
 
 /// Configuration for the `vacuum-jobs` cron, purging completed jobs from the

@@ -48,6 +48,10 @@ pub enum UniversalInboxJob {
         max_revocations: usize,
         retry_policy: GrantRevocationRetryPolicy,
     },
+    PauseSlackConnections {
+        inactivity_threshold_days: i64,
+        failing_threshold_days: i64,
+    },
 }
 
 impl UniversalInboxJob {
@@ -59,6 +63,7 @@ impl UniversalInboxJob {
             Self::ProcessNotificationSideEffects { .. } => "ProcessNotificationSideEffects",
             Self::RefreshOAuthTokens { .. } => "RefreshOAuthTokens",
             Self::RetryOAuthGrantRevocations { .. } => "RetryOAuthGrantRevocations",
+            Self::PauseSlackConnections { .. } => "PauseSlackConnections",
         }
     }
 }
@@ -143,6 +148,17 @@ pub async fn handle_universal_inbox_job(
                 (*integration_connection_service).clone(),
                 max_revocations,
                 retry_policy,
+            )
+            .await
+        }
+        UniversalInboxJob::PauseSlackConnections {
+            inactivity_threshold_days,
+            failing_threshold_days,
+        } => {
+            oauth::pause_slack_connections(
+                (*integration_connection_service).clone(),
+                inactivity_threshold_days,
+                failing_threshold_days,
             )
             .await
         }
