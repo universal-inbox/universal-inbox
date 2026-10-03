@@ -54,6 +54,15 @@ pub struct IntegrationConnection {
     /// `auto_paused_by_plan_at` is non-`None` (set and cleared together).
     #[serde(default)]
     pub auto_paused_config_snapshot: Option<IntegrationConnectionConfig>,
+    /// Timestamp set when Universal Inbox moved this connection to `Paused`
+    /// (its grant revoked at the provider and its credential deleted).
+    /// Non-`None` exactly when `status` is `Paused`.
+    #[serde(default)]
+    pub paused_at: Option<DateTime<Utc>>,
+    /// Why Universal Inbox paused this connection. Set and cleared together
+    /// with `paused_at`.
+    #[serde(default)]
+    pub paused_reason: Option<IntegrationConnectionPausedReason>,
 }
 
 impl IntegrationConnection {
@@ -89,6 +98,8 @@ impl IntegrationConnection {
             registered_oauth_scopes: Vec::new(),
             auto_paused_by_plan_at: None,
             auto_paused_config_snapshot: None,
+            paused_at: None,
+            paused_reason: None,
         }
     }
 
@@ -100,6 +111,10 @@ impl IntegrationConnection {
         self.status == IntegrationConnectionStatus::Failing
     }
 
+    pub fn is_paused(&self) -> bool {
+        self.status == IntegrationConnectionStatus::Paused
+    }
+
     /// Whether this integration has stopped feeding the inbox because of
     /// something the user did, in which case its notifications are set aside
     /// until it feeds again.
@@ -109,13 +124,19 @@ impl IntegrationConnection {
     /// so treating `Failing` as set aside would empty a provider's inbox
     /// overnight with no user action. `Created` is only reachable by the user
     /// disconnecting, or by a connection that was never authorized and has no
-    /// notifications to begin with.
+    /// notifications to begin with. A connection `Paused` for inactivity is a
+    /// disconnect Universal Inbox made on behalf of a user who is gone: it is
+    /// handled the same way, and reconnecting brings the notifications back.
+    /// One paused because it kept failing is not: like `Failing`, nothing the
+    /// user did put it there.
     ///
     /// A provider no synchronization could ever restore is left alone: hiding
     /// its notifications would hide them for good.
     pub fn should_set_aside_notifications(&self) -> bool {
         self.provider.can_restore_set_aside_notifications()
             && (self.status == IntegrationConnectionStatus::Created
+                || (self.status == IntegrationConnectionStatus::Paused
+                    && self.paused_reason == Some(IntegrationConnectionPausedReason::Inactivity))
                 || self.provider.are_notifications_muted())
     }
 
@@ -259,6 +280,19 @@ macro_attr! {
         Created,
         Validated,
         Failing,
+        Paused,
+    }
+}
+
+macro_attr! {
+    #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!, Hash)]
+    pub enum IntegrationConnectionPausedReason {
+        /// The user has not used Universal Inbox for longer than the
+        /// configured inactivity threshold.
+        Inactivity,
+        /// The connection has been `Failing` for longer than the configured
+        /// threshold, while its grant was still valid at the provider.
+        LongFailing,
     }
 }
 
@@ -464,6 +498,39 @@ mod tests {
             first_failed,
             48
         ));
+    }
+
+    #[rstest]
+    #[case::created(IntegrationConnectionStatus::Created, None, true)]
+    #[case::paused_for_inactivity(
+        IntegrationConnectionStatus::Paused,
+        Some(IntegrationConnectionPausedReason::Inactivity),
+        true
+    )]
+    #[case::paused_for_long_failing(
+        IntegrationConnectionStatus::Paused,
+        Some(IntegrationConnectionPausedReason::LongFailing),
+        false
+    )]
+    #[case::validated(IntegrationConnectionStatus::Validated, None, false)]
+    #[case::failing(IntegrationConnectionStatus::Failing, None, false)]
+    fn test_should_set_aside_notifications_per_status(
+        mut connection: IntegrationConnection,
+        #[case] status: IntegrationConnectionStatus,
+        #[case] paused_reason: Option<IntegrationConnectionPausedReason>,
+        #[case] expected: bool,
+    ) {
+        connection.status = status;
+        connection.paused_reason = paused_reason;
+        assert_eq!(connection.should_set_aside_notifications(), expected);
+    }
+
+    #[rstest]
+    fn test_paused_connection_is_not_connected(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Paused;
+        assert!(connection.is_paused());
+        assert!(!connection.is_connected());
+        assert!(!connection.is_syncing());
     }
 
     #[rstest]

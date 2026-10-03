@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE \"user\"\n                SET last_active_at = $2\n                WHERE id = $1\n                  AND last_active_at < $3\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamp",
+        "Timestamp"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "06191c0dc1f8a3b57665d6ead685422ce852a6ea1d9b2a4dc141e9783ea1314f"
+}

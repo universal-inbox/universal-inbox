@@ -9,8 +9,8 @@ use tracing::{info, warn};
 
 use crate::{
     configuration::{
-        RefreshOAuthTokensCronSettings, RetryOAuthGrantRevocationsCronSettings,
-        VacuumJobsCronSettings,
+        PauseSlackConnectionsCronSettings, RefreshOAuthTokensCronSettings,
+        RetryOAuthGrantRevocationsCronSettings, VacuumJobsCronSettings,
     },
     jobs::UniversalInboxJob,
     universal_inbox::{
@@ -112,6 +112,53 @@ pub async fn handle_retry_oauth_grant_revocations_cron_tick(
         .await
         .context("Failed to enqueue RetryOAuthGrantRevocations job")?;
     info!("Enqueued RetryOAuthGrantRevocations job");
+    Ok(())
+}
+
+/// Cron tick request for the `pause-slack-connections` job. Carries
+/// no data; the scheduled tick timestamp is injected via [`CronContext`].
+#[derive(Debug, Clone, Default)]
+pub struct PauseSlackConnectionsCronTick;
+
+/// Handles a cron tick by electing a single winner across all worker processes
+/// (per-tick Redis lock) and enqueuing a durable `PauseSlackConnections`
+/// job on the shared Redis-backed queue, executed once by the regular worker
+/// pool.
+#[tracing::instrument(
+    name = "pause-slack-connections-cron-tick",
+    level = "info",
+    skip_all,
+    fields(cron.tick = %ctx.get_timestamp()),
+    err
+)]
+pub async fn handle_pause_slack_connections_cron_tick(
+    _tick: PauseSlackConnectionsCronTick,
+    ctx: CronContext<Utc>,
+    storage: Data<RedisStorage<UniversalInboxJob>>,
+    cache: Data<Cache>,
+    settings: Data<PauseSlackConnectionsCronSettings>,
+) -> Result<(), UniversalInboxError> {
+    if !try_acquire_cron_tick_lock(
+        &cache,
+        &queue_scoped_cron_job_name(&storage, "pause-slack-connections"),
+        ctx.get_timestamp(),
+        settings.lock_ttl_seconds,
+    )
+    .await?
+    {
+        info!("Tick already handled by another worker process, skipping");
+        return Ok(());
+    }
+
+    let mut storage = (*storage).clone();
+    storage
+        .push(UniversalInboxJob::PauseSlackConnections {
+            inactivity_threshold_days: settings.inactivity_threshold_days,
+            failing_threshold_days: settings.failing_threshold_days,
+        })
+        .await
+        .context("Failed to enqueue PauseSlackConnections job")?;
+    info!("Enqueued PauseSlackConnections job");
     Ok(())
 }
 

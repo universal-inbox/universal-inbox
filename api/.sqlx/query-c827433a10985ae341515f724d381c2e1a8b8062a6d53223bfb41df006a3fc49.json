@@ -18,47 +18,101 @@
               ]
             }
           }
+        },
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "kind"
+          }
         }
       },
       {
         "ordinal": 1,
         "name": "password_hash",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "password_hash"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "password_reset_at",
-        "type_info": "Timestamp"
+        "type_info": "Timestamp",
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "password_reset_at"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "password_reset_sent_at",
-        "type_info": "Timestamp"
+        "type_info": "Timestamp",
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "password_reset_sent_at"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "auth_user_id",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "auth_user_id"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "auth_id_token",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "auth_id_token"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "username",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "username"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "passkey: Json<Passkey>",
-        "type_info": "Json"
+        "type_info": "Json",
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "passkey"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "user_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "user_id"
+          }
+        }
       }
     ],
     "parameters": {

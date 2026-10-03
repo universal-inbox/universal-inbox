@@ -7,7 +7,8 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionPausedReason,
+        IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
     },
@@ -228,6 +229,36 @@ pub trait IntegrationConnectionRepository {
         integration_connection_id: IntegrationConnectionId,
         provider_user_id: Option<String>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
+
+    /// List the `Validated` connections of `provider_kind` whose owner has not
+    /// been active since `inactive_before`.
+    async fn find_validated_integration_connections_of_inactive_users(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        provider_kind: IntegrationProviderKind,
+        inactive_before: DateTime<Utc>,
+    ) -> Result<Vec<IntegrationConnectionId>, UniversalInboxError>;
+
+    /// List the `Failing` connections of `provider_kind` failing since before
+    /// `failing_before`. A connection marked `Failing` by its syncs is failing
+    /// since its first failed sync; one marked `Failing` by a token refresh
+    /// has no such timestamp and falls back to its last update.
+    async fn find_long_failing_integration_connections(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        provider_kind: IntegrationProviderKind,
+        failing_before: DateTime<Utc>,
+    ) -> Result<Vec<IntegrationConnectionId>, UniversalInboxError>;
+
+    /// Move a connection to `Paused`, setting `paused_at` and `paused_reason`
+    /// together and clearing any failure message.
+    async fn pause_integration_connection(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        paused_at: DateTime<Utc>,
+        paused_reason: IntegrationConnectionPausedReason,
+    ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 }
 
 pub const TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE: &str = "♻️ Synchronization has been failing for too long. Please try to reconnect the integration. If the issue keeps happening, please contact our support.";
@@ -407,7 +438,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.context as "context: Json<IntegrationConnectionContext>",
                   integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
                   integration_connection.auto_paused_by_plan_at,
-                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>"
+                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>",
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -474,7 +507,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.context,
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
-                  integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot
+                  integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -570,7 +605,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.context as "context: Json<IntegrationConnectionContext>",
                   integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
                   integration_connection.auto_paused_by_plan_at,
-                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>"
+                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>",
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -638,7 +675,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.context as "context: Json<IntegrationConnectionContext>",
                   integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
                   integration_connection.auto_paused_by_plan_at,
-                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>"
+                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>",
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -706,7 +745,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.context as "context: Json<IntegrationConnectionContext>",
                   integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
                   integration_connection.auto_paused_by_plan_at,
-                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>"
+                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>",
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -768,7 +809,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.context as "context: Json<IntegrationConnectionContext>",
                   integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
                   integration_connection.auto_paused_by_plan_at,
-                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>"
+                  integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>",
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -824,6 +867,12 @@ impl IntegrationConnectionRepository for Repository {
         separated
             .push(" failure_message = ")
             .push_bind_unseparated(failure_message.clone());
+        // Leaving `Paused` (disconnect, reconnect) clears the pause marker;
+        // only `pause_integration_connection` sets it.
+        if new_status != IntegrationConnectionStatus::Paused {
+            separated.push(" paused_at = NULL");
+            separated.push(" paused_reason = NULL");
+        }
 
         if let Some(registered_oauth_scopes) = &registered_oauth_scopes {
             separated
@@ -870,6 +919,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason,
                   (SELECT
              "#,
         );
@@ -1073,6 +1124,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason,
                   true as "is_updated"
              "#,
         );
@@ -1158,6 +1211,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason,
                   true as "is_updated"
                "#,
         );
@@ -1236,7 +1291,9 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.context,
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
-                  integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot
+                  integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -1610,6 +1667,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason,
                   true as "is_updated"
                "#,
         );
@@ -1735,6 +1794,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
+                  integration_connection.paused_at,
+                  integration_connection.paused_reason,
                   true as "is_updated"
                "#,
         );
@@ -1767,6 +1828,136 @@ impl IntegrationConnectionRepository for Repository {
             })
         }
     }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            provider_kind = provider_kind.to_string(),
+            inactive_before = inactive_before.to_rfc3339()
+        ),
+        err
+    )]
+    async fn find_validated_integration_connections_of_inactive_users(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        provider_kind: IntegrationProviderKind,
+        inactive_before: DateTime<Utc>,
+    ) -> Result<Vec<IntegrationConnectionId>, UniversalInboxError> {
+        let ids = sqlx::query_scalar!(
+            r#"
+                SELECT integration_connection.id
+                FROM integration_connection
+                INNER JOIN "user" ON "user".id = integration_connection.user_id
+                WHERE integration_connection.provider_kind::TEXT = $1
+                  AND integration_connection.status = 'Validated'
+                  AND "user".last_active_at < $2
+                ORDER BY "user".last_active_at
+            "#,
+            provider_kind.to_string(),
+            inactive_before.naive_utc(),
+        )
+        .fetch_all(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to list {provider_kind} integration connections of inactive users: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        Ok(ids.into_iter().map(IntegrationConnectionId).collect())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            provider_kind = provider_kind.to_string(),
+            failing_before = failing_before.to_rfc3339()
+        ),
+        err
+    )]
+    async fn find_long_failing_integration_connections(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        provider_kind: IntegrationProviderKind,
+        failing_before: DateTime<Utc>,
+    ) -> Result<Vec<IntegrationConnectionId>, UniversalInboxError> {
+        let ids = sqlx::query_scalar!(
+            r#"
+                SELECT id
+                FROM integration_connection
+                WHERE provider_kind::TEXT = $1
+                  AND status = 'Failing'
+                  AND COALESCE(
+                    LEAST(first_notifications_sync_failed_at, first_tasks_sync_failed_at),
+                    updated_at
+                  ) < $2
+            "#,
+            provider_kind.to_string(),
+            failing_before.naive_utc(),
+        )
+        .fetch_all(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to list long failing {provider_kind} integration connections: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        Ok(ids.into_iter().map(IntegrationConnectionId).collect())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection_id = integration_connection_id.to_string(),
+            paused_reason = paused_reason.to_string()
+        ),
+        err
+    )]
+    async fn pause_integration_connection(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        paused_at: DateTime<Utc>,
+        paused_reason: IntegrationConnectionPausedReason,
+    ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
+        sqlx::query!(
+            r#"
+                UPDATE integration_connection
+                SET status = 'Paused',
+                    failure_message = NULL,
+                    paused_at = $2,
+                    paused_reason = $3,
+                    updated_at = (now() at time zone 'utc')
+                WHERE id = $1
+            "#,
+            integration_connection_id.0,
+            paused_at.naive_utc(),
+            paused_reason.to_string(),
+        )
+        .execute(&mut **executor)
+        .await
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            message: format!(
+                "Failed to pause integration connection {integration_connection_id}: {err}"
+            ),
+            source: err,
+        })?;
+
+        self.get_integration_connection(executor, integration_connection_id)
+            .await
+    }
 }
 
 #[derive(sqlx::Type, Debug)]
@@ -1775,6 +1966,7 @@ enum PgIntegrationConnectionStatus {
     Created,
     Validated,
     Failing,
+    Paused,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -1805,6 +1997,8 @@ pub struct IntegrationConnectionRow {
     registered_oauth_scopes: Json<Vec<String>>,
     auto_paused_by_plan_at: Option<NaiveDateTime>,
     auto_paused_config_snapshot: Option<Json<IntegrationConnectionConfig>>,
+    paused_at: Option<NaiveDateTime>,
+    paused_reason: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -1897,6 +2091,21 @@ impl TryFrom<&IntegrationConnectionRow> for IntegrationConnection {
                 .auto_paused_config_snapshot
                 .as_ref()
                 .map(|snapshot| snapshot.0.clone()),
+            paused_at: row
+                .paused_at
+                .map(|t| DateTime::from_naive_utc_and_offset(t, Utc)),
+            paused_reason: row
+                .paused_reason
+                .as_ref()
+                .map(|reason| {
+                    reason
+                        .parse()
+                        .map_err(|e| UniversalInboxError::InvalidEnumData {
+                            source: e,
+                            output: reason.clone(),
+                        })
+                })
+                .transpose()?,
         })
     }
 }
