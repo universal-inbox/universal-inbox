@@ -24,9 +24,12 @@ use wiremock::{
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnectionId,
-        integrations::slack::SlackEmojiSuggestion,
-        provider::{IntegrationProvider, IntegrationProviderKind, IntegrationProviderSource},
+        IntegrationConnection, IntegrationConnectionId,
+        integrations::slack::{SlackContext, SlackEmojiSuggestion},
+        provider::{
+            IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind,
+            IntegrationProviderSource,
+        },
     },
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
@@ -52,8 +55,8 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
-        notification::ThirdPartyNotificationSourceService, task::ThirdPartyTaskService,
-        third_party::ThirdPartyItemSourceService,
+        notification::ThirdPartyNotificationSourceService, oauth2::AccessToken,
+        task::ThirdPartyTaskService, third_party::ThirdPartyItemSourceService,
     },
     repository::{Repository, third_party::ThirdPartyItemRepository},
     universal_inbox::{
@@ -470,6 +473,69 @@ impl SlackService {
         }
 
         self.list_emojis(&slack_api_token).await
+    }
+
+    pub async fn auth_test(
+        &self,
+        slack_api_token: &SlackApiToken,
+    ) -> Result<SlackApiAuthTestResponse, UniversalInboxError> {
+        let client = self.build_slack_client()?;
+        let session = client.open_session(slack_api_token);
+
+        Ok(session
+            .auth_test()
+            .await
+            .context("Failed to call Slack auth.test")?)
+    }
+
+    /// Store the Slack workspace (`team_id`) of an integration connection that
+    /// has no context yet (connected before `SlackContext` was captured from the
+    /// OAuth response), so it can be found by `team_id` lookups.
+    /// Returns the stored `team_id`, or `None` if the connection already had a context.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(integration_connection.id = integration_connection.id.to_string()),
+        err
+    )]
+    pub async fn ensure_team_context(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        access_token: &AccessToken,
+        integration_connection: &IntegrationConnection,
+    ) -> Result<Option<SlackTeamId>, UniversalInboxError> {
+        let IntegrationProvider::Slack { context, .. } = &integration_connection.provider else {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: format!(
+                    "Integration connection {} is not a Slack connection",
+                    integration_connection.id
+                ),
+            });
+        };
+        if context.is_some() {
+            return Ok(None);
+        }
+
+        let slack_api_token =
+            SlackApiToken::new(SlackApiTokenValue(access_token.as_str().to_string()));
+        let team_id = self.auth_test(&slack_api_token).await?.team_id;
+
+        self.integration_connection_service
+            .read()
+            .await
+            .update_integration_connection_context(
+                executor,
+                integration_connection.id,
+                IntegrationConnectionContext::Slack(SlackContext {
+                    team_id: team_id.clone(),
+                    extension_credentials: vec![],
+                    last_extension_heartbeat_at: None,
+                }),
+            )
+            .await?;
+
+        Ok(Some(team_id))
     }
 
     pub async fn reactions_add(
@@ -1463,6 +1529,17 @@ impl ThirdPartyItemSourceService<SlackThread> for SlackService {
             .ok_or_else(|| {
                 anyhow!("Cannot sync Slack thread notifications without an access token")
             })?;
+
+        // Self-heal connections created before their Slack context was stored
+        if let Err(err) = self
+            .ensure_team_context(executor, &access_token, &integration_connection)
+            .await
+        {
+            warn!(
+                "Failed to store missing Slack team context of integration connection {}: {err:?}",
+                integration_connection.id
+            );
+        }
 
         let existing_items = self
             .repository

@@ -14,12 +14,15 @@ use universal_inbox_api::configuration::Settings;
 use crate::helpers::integration_connection::OAuthCredentialFixture;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
-    integration_connection::{create_and_mock_integration_connection, slack_oauth_credential},
+    integration_connection::{
+        create_and_mock_integration_connection, get_integration_connection, slack_context,
+        slack_oauth_credential,
+    },
     notification::{
         slack::{
-            create_notification_from_slack_thread, mock_slack_fetch_channel,
+            create_notification_from_slack_thread, mock_slack_auth_test, mock_slack_fetch_channel,
             mock_slack_fetch_full_thread, mock_slack_fetch_team, mock_slack_fetch_user,
-            mock_slack_get_chat_permalink, slack_thread,
+            mock_slack_get_chat_permalink, slack_auth_test_response, slack_thread,
         },
         sync_notifications,
     },
@@ -299,5 +302,50 @@ mod sync_slack_thread_notifications {
 
         assert_eq!(synced_notifications.len(), 1);
         assert_eq!(synced_notifications[0].status, NotificationStatus::Unread);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_sync_slack_threads_stores_missing_team_context(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        slack_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        let slack_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+            &settings,
+            slack_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        mock_slack_auth_test(
+            &app.app.slack_mock_server,
+            "slack_test_user_access_token",
+            slack_auth_test_response("T053BSKET"),
+            1,
+        )
+        .await;
+
+        let synced_notifications = sync_notifications(
+            &app.client,
+            &app.app.api_address,
+            Some(NotificationSourceKind::Slack),
+            false,
+        )
+        .await;
+
+        assert_eq!(synced_notifications.len(), 0);
+        let integration_connection =
+            get_integration_connection(&app, slack_integration_connection.id)
+                .await
+                .unwrap();
+        assert_eq!(
+            integration_connection.provider.context(),
+            Some(slack_context("T053BSKET"))
+        );
     }
 }

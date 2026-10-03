@@ -34,6 +34,7 @@ pub mod generate;
 pub mod oauth;
 #[cfg(feature = "screenshots")]
 pub mod screenshots;
+pub mod slack;
 pub mod sync;
 pub mod todoist;
 pub mod user;
@@ -136,6 +137,12 @@ pub enum Commands {
         command: TodoistCommands,
     },
 
+    /// Slack maintenance tasks
+    Slack {
+        #[clap(subcommand)]
+        command: SlackCommands,
+    },
+
     /// Manage Stripe-backed billing state (reconciliation, etc.).
     /// No-op when `[billing]` is absent from configuration.
     Billing {
@@ -220,6 +227,19 @@ pub enum TodoistCommands {
     /// API v1 IDs (one-off backfill)
     MigrateLegacyIds {
         /// Only migrate tasks of given user
+        #[arg(short, long)]
+        user_id: Option<UserId>,
+        #[arg(short, long)]
+        dry_run: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SlackCommands {
+    /// Store the missing Slack workspace (`team_id`) context of Slack
+    /// integration connections, using Slack `auth.test` (one-off backfill)
+    BackfillTeamId {
+        /// Only backfill integration connections of given user
         #[arg(short, long)]
         user_id: Option<UserId>,
         #[arg(short, long)]
@@ -599,6 +619,17 @@ impl Cli {
                     )
                     .await
                 }
+            },
+
+            Commands::Slack { command } => match command {
+                SlackCommands::BackfillTeamId { user_id, dry_run } => slack::backfill_team_id(
+                    integration_connection_service,
+                    slack_service,
+                    *user_id,
+                    *dry_run,
+                )
+                .await
+                .map(|_| ()),
             },
 
             Commands::Billing { action } => {

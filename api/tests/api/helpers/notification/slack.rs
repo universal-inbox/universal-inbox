@@ -428,3 +428,32 @@ pub fn slack_reacted_message() -> Box<SlackReactionItem> {
         }),
     }))
 }
+
+pub async fn mock_slack_auth_test(
+    slack_mock_server: &MockServer,
+    access_token: &str,
+    response: Value,
+    expected_calls: u64,
+) {
+    Mock::given(method("GET"))
+        .and(path("/auth.test"))
+        .and(header(
+            "authorization",
+            format!("Bearer {access_token}").as_str(),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response))
+        .expect(expected_calls)
+        .mount(slack_mock_server)
+        .await;
+}
+
+pub fn slack_auth_test_response(team_id: &str) -> Value {
+    json!({
+        "ok": true,
+        "url": "https://test-workspace.slack.com/",
+        "team": "Test Workspace",
+        "user": "test.user",
+        "team_id": team_id,
+        "user_id": "U05XXX"
+    })
+}
