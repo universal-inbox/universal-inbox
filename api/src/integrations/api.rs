@@ -13,6 +13,7 @@ use universal_inbox::{
 };
 use uuid::Uuid;
 
+use crate::observability::attr;
 use crate::{
     integrations::{
         notification::ThirdPartyNotificationSourceService, third_party::ThirdPartyItemSourceService,
@@ -61,9 +62,9 @@ impl ThirdPartyNotificationSourceService<WebPage> for APIService {
         level = "debug",
         skip_all,
         fields(
-            source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string(),
-            user.id = user_id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
+            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string(),
         ),
         err
     )]

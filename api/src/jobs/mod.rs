@@ -12,6 +12,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::slack::SlackService,
     universal_inbox::{
@@ -78,6 +79,7 @@ impl UniversalInboxJob {
     skip(
         job,
         task_id,
+        attempt,
         notification_service,
         task_service,
         integration_connection_service,
@@ -85,14 +87,18 @@ impl UniversalInboxJob {
         slack_service
     ),
     fields(
-        job.id = %task_id.to_string(),
-        job.name = %job.name(),
+        { attr::JOB_ID } = %task_id.to_string(),
+        { attr::JOB_NAME } = %job.name(),
+        { attr::JOB_ATTEMPT } = attempt.current(),
+        { attr::ERROR_TYPE } = tracing::field::Empty,
     ),
     err
 )]
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_universal_inbox_job(
     job: UniversalInboxJob,
     task_id: TaskId,
+    attempt: Attempt,
     notification_service: Data<Arc<RwLock<NotificationService>>>,
     task_service: Data<Arc<RwLock<TaskService>>>,
     integration_connection_service: Data<Arc<RwLock<IntegrationConnectionService>>>,
@@ -102,7 +108,7 @@ pub async fn handle_universal_inbox_job(
     let current_span = tracing::Span::current();
 
     info!(
-        job_id = task_id.to_string(),
+        { attr::JOB_ID } = task_id.to_string(),
         "Processing {} job",
         job.name()
     );
@@ -174,13 +180,17 @@ pub async fn handle_universal_inbox_job(
     match result {
         Ok(_) => {
             current_span.set_status(Status::Ok);
-            info!(job_id = task_id.to_string(), "Successfully executed job");
+            info!(
+                { attr::JOB_ID } = task_id.to_string(),
+                "Successfully executed job"
+            );
             Ok(())
         }
         Err(err) => {
             current_span.set_status(Status::error(err.to_string()));
+            current_span.record(attr::ERROR_TYPE, err.error_type());
             error!(
-                job_id = task_id.to_string(),
+                { attr::JOB_ID } = task_id.to_string(),
                 "Failed to execute job: {err:?}"
             );
             Err(err)
@@ -192,8 +202,8 @@ pub async fn handle_universal_inbox_job(
     level = "debug",
     skip(notification_service),
     fields(
-        notification_id = notification_id.to_string(),
-        user.id = user_id.to_string()
+        { attr::NOTIFICATION_ID } = notification_id.to_string(),
+        { attr::USER_ID } = user_id.to_string()
     ),
     err
 )]

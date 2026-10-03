@@ -20,6 +20,7 @@ use universal_inbox::{
 
 use universal_inbox::integration_connection::IntegrationConnectionStatus;
 
+use crate::observability::attr;
 use crate::{
     repository::{
         Repository, integration_connection::IntegrationConnectionRepository,
@@ -48,8 +49,8 @@ impl SlackBridgeService {
         level = "debug",
         skip_all,
         fields(
-            user_id = %user_id,
-            action_type = %action_type,
+            { attr::USER_ID } = %user_id,
+            { attr::SLACK_BRIDGE_ACTION_TYPE } = %action_type,
         ),
         err
     )]
@@ -89,7 +90,7 @@ impl SlackBridgeService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user_id = %user_id),
+        fields({ attr::USER_ID } = %user_id),
         err
     )]
     pub async fn get_actionable_actions_for_extension(
@@ -139,7 +140,7 @@ impl SlackBridgeService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(action_id = %action_id),
+        fields({ attr::SLACK_BRIDGE_ACTION_ID } = %action_id),
         err
     )]
     pub async fn complete_action(
@@ -164,7 +165,7 @@ impl SlackBridgeService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(action_id = %action_id),
+        fields({ attr::SLACK_BRIDGE_ACTION_ID } = %action_id),
         err
     )]
     pub async fn fail_action(
@@ -190,7 +191,7 @@ impl SlackBridgeService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user_id = %user_id),
+        fields({ attr::USER_ID } = %user_id),
         err
     )]
     pub async fn get_bridge_status(

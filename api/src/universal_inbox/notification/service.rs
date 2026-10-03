@@ -42,6 +42,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::{
         github::GithubService, google_calendar::GoogleCalendarService,
@@ -133,9 +134,9 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
-            apply_task_side_effects = apply_task_side_effects,
-            user.id = for_user_id.to_string()
+            { attr::NOTIFICATION_ID } = notification.id.to_string(),
+            { attr::NOTIFICATION_APPLY_TASK_SIDE_EFFECTS } = apply_task_side_effects,
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -313,8 +314,8 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = source_item.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -407,12 +408,12 @@ impl NotificationService {
         level = "debug", 
         skip_all,
         fields(
-            status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
-            include_snoozed_notifications = include_snoozed_notifications,
-            task_id = task_id.map(|id| id.to_string()),
-            order_by = ?order_by,
-            from_sources = ?from_sources,
-            user.id = user_id.to_string()
+            { attr::NOTIFICATION_STATUS } = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
+            { attr::NOTIFICATION_LIST_INCLUDE_SNOOZED } = include_snoozed_notifications,
+            { attr::TASK_ID } = task_id.map(|id| id.to_string()),
+            { attr::NOTIFICATION_LIST_ORDER_BY } = ?order_by,
+            { attr::NOTIFICATION_LIST_SOURCES } = ?from_sources,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -453,8 +454,8 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::NOTIFICATION_ID } = notification_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -484,8 +485,8 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::NOTIFICATION_ID } = notification_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -515,8 +516,8 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item.source_id = %source_id,
-            user.id = for_user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = %source_id,
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -535,8 +536,8 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::NOTIFICATION_ID } = notification.id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -561,9 +562,9 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
-            notification_source_kind = notification_source_kind.to_string(),
-            update_snoozed_until = update_snoozed_until
+            { attr::NOTIFICATION_ID } = notification.id.to_string(),
+            { attr::SYNC_SOURCE_KIND } = notification_source_kind.to_string(),
+            { attr::NOTIFICATION_UPDATE_SNOOZED_UNTIL } = update_snoozed_until
         ),
         err
     )]
@@ -588,8 +589,9 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            notification_source_kind = notification_source_kind.to_string(),
-            user.id = user_id.to_string()
+            { attr::SYNC_SOURCE_KIND } = notification_source_kind.to_string(),
+            { attr::USER_ID } = user_id.to_string(),
+            { attr::SYNC_DELETED_ITEMS_COUNT } = tracing::field::Empty
         ),
         err
     )]
@@ -610,9 +612,11 @@ impl NotificationService {
                 user_id,
             )
             .await?;
+        tracing::Span::current()
+            .record(attr::SYNC_DELETED_ITEMS_COUNT, deleted_notifications.len());
         info!(
-            "{} {notification_source_kind} notifications marked as deleted for user {user_id}.",
-            deleted_notifications.len()
+            { attr::SYNC_DELETED_ITEMS_COUNT } = deleted_notifications.len(),
+            "Stale notifications marked as deleted"
         );
 
         Ok(deleted_notifications)
@@ -622,9 +626,10 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            synced_source = source.to_string(),
-            user.id = user_id.to_string(),
-            force_sync = force_sync
+            { attr::SYNC_SOURCE_KIND } = source.to_string(),
+            { attr::USER_ID } = user_id.to_string(),
+            { attr::SYNC_FORCE } = force_sync,
+            { attr::SYNC_ITEMS_COUNT } = tracing::field::Empty
         ),
         err
     )]
@@ -807,6 +812,16 @@ impl NotificationService {
         Ok(())
     }
 
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            { attr::SYNC_SOURCE_KIND } = source.map(|source| source.to_string()),
+            { attr::USER_ID } = user_id.to_string(),
+            { attr::SYNC_FORCE } = force_sync,
+            { attr::SYNC_ITEMS_COUNT } = tracing::field::Empty
+        )
+    )]
     pub async fn sync_notifications_for_user(
         &self,
         source: Option<NotificationSyncSourceKind>,
@@ -822,10 +837,13 @@ impl NotificationService {
             self.sync_all_notifications(user_id, force_sync).await
         };
         match sync_result {
-            Ok(notifications) => info!(
-                "{} notifications successfully synced for user {user_id}",
-                notifications.len()
-            ),
+            Ok(notifications) => {
+                tracing::Span::current().record(attr::SYNC_ITEMS_COUNT, notifications.len());
+                info!(
+                    { attr::SYNC_ITEMS_COUNT } = notifications.len(),
+                    "Notifications successfully synced"
+                )
+            }
             Err(err) => error!("Failed to sync notifications for user {user_id}: {err:?}"),
         };
 
@@ -836,10 +854,10 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification_id.to_string(),
-            apply_task_side_effects = apply_task_side_effects,
-            apply_notification_side_effects = apply_notification_side_effects,
-            user.id = for_user_id.to_string()
+            { attr::NOTIFICATION_ID } = notification_id.to_string(),
+            { attr::NOTIFICATION_APPLY_TASK_SIDE_EFFECTS } = apply_task_side_effects,
+            { attr::NOTIFICATION_APPLY_SIDE_EFFECTS } = apply_notification_side_effects,
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -902,8 +920,8 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            task_id = task_id.to_string(),
-            notification_kind = notification_kind.map(|k| k.to_string())
+            { attr::TASK_ID } = task_id.to_string(),
+            { attr::NOTIFICATION_KIND } = notification_kind.map(|k| k.to_string())
         ),
         err
     )]
@@ -923,8 +941,8 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            linear_issue_id = %linear_issue_id,
-            user.id = user_id.to_string()
+            { attr::LINEAR_ISSUE_ID } = %linear_issue_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -943,9 +961,9 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
-            from_sources = ?from_sources,
-            user.id = user_id.to_string()
+            { attr::NOTIFICATION_STATUS } = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
+            { attr::NOTIFICATION_LIST_SOURCES } = ?from_sources,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -980,8 +998,8 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            notification_count = patches.len(),
-            user.id = user_id.to_string()
+            { attr::NOTIFICATION_COUNT } = patches.len(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1058,9 +1076,9 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification_id.to_string(),
-            apply_notification_side_effects = apply_notification_side_effects,
-            user.id = for_user_id.to_string()
+            { attr::NOTIFICATION_ID } = notification_id.to_string(),
+            { attr::NOTIFICATION_APPLY_SIDE_EFFECTS } = apply_notification_side_effects,
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -1224,9 +1242,9 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1538,9 +1556,12 @@ impl NotificationService {
             }
         };
 
+        // Recorded on the `sync_notifications_for_source` span
+        tracing::Span::current()
+            .record(attr::SYNC_ITEMS_COUNT, notification_creation_results.len());
         info!(
-            "Successfully synced {} {integration_provider_kind} notifications for user {user_id}",
-            notification_creation_results.len()
+            { attr::SYNC_ITEMS_COUNT } = notification_creation_results.len(),
+            "Successfully synced {integration_provider_kind} notifications"
         );
 
         Ok(notification_creation_results)
@@ -1550,10 +1571,10 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            task_id = task_id.map(|id| id.to_string()),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::TASK_ID } = task_id.map(|id| id.to_string()),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1641,12 +1662,12 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            task_id = task.id.to_string(),
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            integration_connection_provider = integration_connection_provider.kind().to_string(),
-            is_incremental_update = _is_incremental_update,
-            user.id = user_id.to_string()
+            { attr::TASK_ID } = task.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::INTEGRATION_PROVIDER_KIND } = integration_connection_provider.kind().to_string(),
+            { attr::SYNC_INCREMENTAL } = _is_incremental_update,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1760,8 +1781,8 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::NOTIFICATION_ID } = notification_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]

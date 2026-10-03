@@ -50,6 +50,7 @@ use universal_inbox::{
     utils::default_value::DefaultValue,
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::{
         mock::MOCK_PROJECT_NAMES,
@@ -569,7 +570,7 @@ impl TodoistService {
             Ok(mut mappings) => mappings.remove(&item.project_id),
             Err(err) => {
                 tracing::warn!(
-                    error = %err,
+                    { attr::ERROR_MESSAGE } = %err,
                     "Failed to resolve new ID of Todoist legacy project ID {}",
                     item.project_id
                 );
@@ -881,7 +882,7 @@ impl ThirdPartyItemSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn fetch_items(
@@ -934,7 +935,7 @@ impl ThirdPartyItemSourceService<TodoistItem> for TodoistService {
             Ok(labels) => build_label_color_index(&labels),
             Err(err) => {
                 tracing::warn!(
-                    error = %err,
+                    { attr::ERROR_MESSAGE } = %err,
                     "Failed to fetch Todoist label definitions, falling back to default label color"
                 );
                 HashMap::new()
@@ -973,9 +974,9 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = source_third_party_item.id.to_string(),
-            third_party_item_source_id = source_third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1017,9 +1018,9 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1053,9 +1054,9 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1089,9 +1090,9 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1125,8 +1126,8 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         level = "debug",
         skip_all,
         fields(
-            task_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1205,7 +1206,7 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn create_task(
@@ -1289,7 +1290,7 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn search_projects(
@@ -1333,7 +1334,7 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn get_or_create_project(
@@ -1407,9 +1408,9 @@ impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
         level = "debug",
         skip_all,
         fields(
-            source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
+            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1442,7 +1443,7 @@ impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(third_party_item_id = _source_item.id.to_string(), user.id = _user_id.to_string()),,
+        fields({ attr::THIRD_PARTY_ITEM_ID } = _source_item.id.to_string(), { attr::USER_ID } = _user_id.to_string()),,
         err
     )]
     async fn delete_notification_from_source(
@@ -1458,7 +1459,7 @@ impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(third_party_item_id = _source_item.id.to_string(), user.id = _user_id.to_string()),
+        fields({ attr::THIRD_PARTY_ITEM_ID } = _source_item.id.to_string(), { attr::USER_ID } = _user_id.to_string()),
         err
     )]
     async fn unsubscribe_notification_from_source(

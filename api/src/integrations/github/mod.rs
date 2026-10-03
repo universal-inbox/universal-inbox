@@ -27,6 +27,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::{
         github::graphql::{
@@ -332,8 +333,8 @@ impl GithubService {
         level = "debug",
         skip_all,
         fields(
-            raw_github_notification_id = raw_github_notification.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = raw_github_notification.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -391,7 +392,7 @@ impl ThirdPartyItemSourceService<GithubNotification> for GithubService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn fetch_items(
@@ -468,9 +469,9 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
         level = "debug",
         skip_all,
         fields(
-            source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
+            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -503,7 +504,7 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
+        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn delete_notification_from_source(
@@ -528,7 +529,7 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
+        fields({ attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(), { attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn unsubscribe_notification_from_source(

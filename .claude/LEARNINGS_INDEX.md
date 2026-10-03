@@ -13,6 +13,7 @@ For full navigation, see [docs/INDEX.md](docs/INDEX.md).
 | [frontend-dioxus](docs/learnings/frontend-dioxus.md) | Dioxus 0.6 WASM, components/ui, Tailwind v4 + FlyonUI, theme tokens | ~800 |
 | [integrations](docs/learnings/integrations.md) | Adding a source, `ThirdParty*SourceService`, OAuth2, third_party items | ~700 |
 | [common-pitfalls](docs/learnings/common-pitfalls.md) | Sharp edges: SQLX_OFFLINE, worktree ports, headless process-compose | ~500 |
+| [observability](docs/learnings/observability.md) | Span attribute naming convention, `attr::` constants, `error.type` | ~800 |
 
 ## Load this when…
 
@@ -24,5 +25,6 @@ For full navigation, see [docs/INDEX.md](docs/INDEX.md).
 | UI components, styling, pages | frontend-dioxus |
 | Adding/editing a GitHub/Linear/Slack/Google/Todoist source | integrations + database-patterns + api-design |
 | Debugging a build/test/runtime surprise | common-pitfalls |
+| `#[tracing::instrument]` fields, span attributes | observability |
 
 _Last updated: 2026-05-30_

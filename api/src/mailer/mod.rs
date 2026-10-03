@@ -17,6 +17,7 @@ use url::Url;
 
 use universal_inbox::{integration_connection::IntegrationConnectionPausedReason, user::User};
 
+use crate::observability::attr;
 use crate::universal_inbox::UniversalInboxError;
 
 #[async_trait]
@@ -235,8 +236,8 @@ impl SmtpMailer {
         level = "debug",
         skip_all,
         fields(
-            user.id = user.id.to_string(),
-            email_subject = template.subject(),
+            { attr::USER_ID } = user.id.to_string(),
+            { attr::EMAIL_SUBJECT } = template.subject(),
         ),
         err
     )]
@@ -305,7 +306,7 @@ impl Mailer for SmtpMailer {
     #[tracing::instrument(
         level = "info",
         skip_all,
-        fields(user.id = user.id.to_string(), template = template.subject()),
+        fields({ attr::USER_ID } = user.id.to_string(), { attr::EMAIL_SUBJECT } = template.subject()),
         err
     )]
     async fn send_email(

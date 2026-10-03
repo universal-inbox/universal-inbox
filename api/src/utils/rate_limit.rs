@@ -23,6 +23,7 @@ use governor::{RateLimiter, clock::DefaultClock, state::keyed::DefaultKeyedState
 use tracing::warn;
 
 use crate::configuration::{DEFAULT_TRUSTED_PROXY_HOPS, Settings};
+use crate::observability::attr;
 
 /// Above this many tracked addresses, stale buckets are evicted: the keyed
 /// store never shrinks on its own, and every distinct address adds an entry.
@@ -92,9 +93,9 @@ pub fn resolve_client_ip(req: &HttpRequest) -> Option<IpAddr> {
             // Most likely a misconfiguration rather than an attack: hint at
             // the fix without logging the (personal) addresses themselves.
             warn!(
-                x_forwarded_for.entries = entries,
+                { attr::HTTP_X_FORWARDED_FOR_ENTRIES } = entries,
                 trusted_proxy_hops,
-                x_forwarded_for.masked = %mask_forwarded_for(chain),
+                { attr::HTTP_X_FORWARDED_FOR_MASKED } = %mask_forwarded_for(chain),
                 "X-Forwarded-For has fewer entries than application.security.trusted_proxy_hops: \
                  request refused; lower trusted_proxy_hops to the number of proxies in front of the API"
             );

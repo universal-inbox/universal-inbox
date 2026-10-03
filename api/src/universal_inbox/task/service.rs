@@ -32,6 +32,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::{
         linear::LinearService,
@@ -112,9 +113,9 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -184,10 +185,10 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = synced_third_party_item.id.to_string(),
-            third_party_item_source_id = synced_third_party_item.source_id,
-            task_id = upsert_task.value_ref().id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = synced_third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = synced_third_party_item.source_id,
+            { attr::TASK_ID } = upsert_task.value_ref().id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -380,9 +381,9 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            status = status.to_string(),
-            only_synced_tasks = only_synced_tasks,
-            user.id = user_id.to_string(),
+            { attr::TASK_STATUS } = status.to_string(),
+            { attr::TASK_LIST_ONLY_SYNCED } = only_synced_tasks,
+            { attr::USER_ID } = user_id.to_string(),
         ),
         err
     )]
@@ -406,7 +407,7 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            user.id = user_id.to_string()
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -426,8 +427,8 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            task_id = task_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::TASK_ID } = task_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -453,7 +454,7 @@ impl TaskService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(task_ids = task_ids.iter().map(|id| id.to_string()).collect::<Vec<String>>().join(", ")),
+        fields({ attr::TASK_IDS } = task_ids.iter().map(|id| id.to_string()).collect::<Vec<String>>().join(", ")),
         err
     )]
     pub async fn get_tasks(
@@ -468,8 +469,8 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            task_id = task.id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::TASK_ID } = task.id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -495,7 +496,7 @@ impl TaskService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = notification.id.to_string()),
+        fields({ attr::NOTIFICATION_ID } = notification.id.to_string()),
         err
     )]
     pub async fn create_task_from_notification(
@@ -622,9 +623,9 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -943,9 +944,11 @@ impl TaskService {
             }
         };
 
+        // Recorded on the `sync_tasks_for_source` span
+        tracing::Span::current().record(attr::SYNC_ITEMS_COUNT, task_creation_results.len());
         info!(
-            "Successfully synced {} {integration_provider_kind} tasks for user {user_id}",
-            task_creation_results.len()
+            { attr::SYNC_ITEMS_COUNT } = task_creation_results.len(),
+            "Successfully synced {integration_provider_kind} tasks"
         );
 
         Ok(task_creation_results)
@@ -956,9 +959,9 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1048,9 +1051,9 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1093,9 +1096,9 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            source_item_id = task_request.source_item.id.to_string(),
-            source_item_source_id = task_request.source_item.source_id,
-            user.id = task_request.user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = task_request.source_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = task_request.source_item.source_id,
+            { attr::USER_ID } = task_request.user_id.to_string()
         ),
         err
     )]
@@ -1113,9 +1116,10 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            source = source.to_string(),
-            user.id = user_id.to_string(),
-            force_sync = force_sync
+            { attr::SYNC_SOURCE_KIND } = source.to_string(),
+            { attr::USER_ID } = user_id.to_string(),
+            { attr::SYNC_FORCE } = force_sync,
+            { attr::SYNC_ITEMS_COUNT } = tracing::field::Empty
         ),
         err
     )]
@@ -1203,6 +1207,16 @@ impl TaskService {
         Ok(())
     }
 
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            { attr::SYNC_SOURCE_KIND } = source.map(|source| source.to_string()),
+            { attr::USER_ID } = user_id.to_string(),
+            { attr::SYNC_FORCE } = force_sync,
+            { attr::SYNC_ITEMS_COUNT } = tracing::field::Empty
+        )
+    )]
     pub async fn sync_tasks_for_user(
         &self,
         source: Option<TaskSyncSourceKind>,
@@ -1218,10 +1232,13 @@ impl TaskService {
             self.sync_all_tasks(user_id, force_sync).await
         };
         match sync_result {
-            Ok(tasks) => info!(
-                "{} tasks successfully synced for user {user_id}",
-                tasks.len()
-            ),
+            Ok(tasks) => {
+                tracing::Span::current().record(attr::SYNC_ITEMS_COUNT, tasks.len());
+                info!(
+                    { attr::SYNC_ITEMS_COUNT } = tasks.len(),
+                    "Tasks successfully synced"
+                )
+            }
             Err(err) => error!("Failed to sync tasks for user {user_id}: {err:?}"),
         };
 
@@ -1232,8 +1249,8 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            task_id = task_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::TASK_ID } = task_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -1332,9 +1349,9 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
-            task_id = task_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::NOTIFICATION_ID } = notification.id.to_string(),
+            { attr::TASK_ID } = task_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -1386,7 +1403,7 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            user.id = user_id.to_string()
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1442,8 +1459,8 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]

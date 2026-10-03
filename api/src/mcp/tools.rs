@@ -25,6 +25,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     jobs::UniversalInboxJob,
     universal_inbox::{
@@ -272,7 +273,7 @@ pub async fn execute_tool(
                     .schedule_due_syncs(user_id, &mut job_storage)
                     .await
                 {
-                    warn!(?error, user.id = %user_id, "Failed to schedule integration syncs from MCP list_notifications; serving notifications anyway");
+                    warn!(?error, { attr::USER_ID } = %user_id, "Failed to schedule integration syncs from MCP list_notifications; serving notifications anyway");
                 }
             }
             let summary_page = page.map(NotificationWithTaskSummary::from);
@@ -432,7 +433,7 @@ pub async fn execute_tool(
                     .schedule_due_syncs(user_id, &mut job_storage)
                     .await
                 {
-                    warn!(?error, user.id = %user_id, "Failed to schedule integration syncs from MCP list_tasks; serving tasks anyway");
+                    warn!(?error, { attr::USER_ID } = %user_id, "Failed to schedule integration syncs from MCP list_tasks; serving tasks anyway");
                 }
             }
             let summary_page = page.map(TaskSummaryWithStatus::from);
