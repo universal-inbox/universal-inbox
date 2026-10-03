@@ -5,7 +5,7 @@ use anyhow::Context;
 use chrono::{DateTime, TimeDelta, Utc};
 use http::HeaderMap;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
-use reqwest_tracing::{DisableOtelPropagation, SpanBackendWithUrl, TracingMiddleware};
+use reqwest_tracing::{DisableOtelPropagation, OtelName, SpanBackendWithUrl, TracingMiddleware};
 use secrecy::{ExposeSecret, SecretBox};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -280,6 +280,7 @@ impl OAuth2FlowService {
         let response = self
             .client
             .post(provider.token_url().as_str())
+            .with_extension(OtelName("POST oauth2.token".into()))
             .headers(provider.token_request_headers())
             .form(&params)
             .send()
@@ -320,6 +321,7 @@ impl OAuth2FlowService {
         let response = self
             .client
             .get(provider_user_id_url.as_str())
+            .with_extension(OtelName("GET oauth2.provider_user_id".into()))
             .bearer_auth(access_token.as_str())
             .send()
             .await
@@ -365,6 +367,7 @@ impl OAuth2FlowService {
 
         let response = provider
             .build_revocation_request(&self.client, revocation_url, access_token, refresh_token)
+            .with_extension(OtelName("oauth2.revoke".into()))
             .send()
             .await
             .context("Failed to send the token revocation request")
@@ -401,6 +404,7 @@ impl OAuth2FlowService {
         let response = self
             .client
             .post(provider.token_url().as_str())
+            .with_extension(OtelName("POST oauth2.token".into()))
             .headers(provider.token_request_headers())
             .form(&params)
             .send()

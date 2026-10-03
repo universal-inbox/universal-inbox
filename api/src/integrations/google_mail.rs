@@ -312,23 +312,7 @@ impl GoogleMailService {
 
         ApiClient::build(
             headers,
-            [
-                format!("{}/users/me/profile", self.google_mail_base_path),
-                format!(
-                    "{}/users/me/threads/{{thread_id}}/modify",
-                    self.google_mail_base_path
-                ),
-                format!(
-                    "{}/users/me/threads/{{thread_id}}",
-                    self.google_mail_base_path
-                ),
-                format!("{}/users/me/threads*", self.google_mail_base_path),
-                format!("{}/users/me/labels", self.google_mail_base_path),
-                format!(
-                    "{}/users/me/messages/{{message_id}}/attachments/{{attachment_id}}",
-                    self.google_mail_base_path
-                ),
-            ],
+            otel_known_paths(&self.google_mail_base_path),
             self.max_retry_duration,
         )
     }
@@ -986,10 +970,51 @@ impl NotificationSource for GoogleMailService {
     }
 }
 
+/// Route templates used to name outbound request spans. Every path the client
+/// calls must match one of them, otherwise the span is named `<METHOD> UNKNOWN`.
+fn otel_known_paths(base_path: &str) -> Vec<String> {
+    [
+        "/users/me/profile",
+        "/users/me/labels",
+        "/users/me/threads",
+        "/users/me/threads/{thread_id}",
+        "/users/me/threads/{thread_id}/modify",
+        "/users/me/messages/{message_id}/attachments/{attachment_id}",
+    ]
+    .iter()
+    .map(|path| format!("{base_path}{path}"))
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use reqwest_tracing::OtelPathNames;
     use rstest::*;
+
+    #[rstest]
+    #[case("/gmail/v1/users/me/profile", "/gmail/v1/users/me/profile")]
+    #[case("/gmail/v1/users/me/labels", "/gmail/v1/users/me/labels")]
+    #[case("/gmail/v1/users/me/threads", "/gmail/v1/users/me/threads")]
+    #[case(
+        "/gmail/v1/users/me/threads/th1",
+        "/gmail/v1/users/me/threads/{thread_id}"
+    )]
+    #[case(
+        "/gmail/v1/users/me/threads/th1/modify",
+        "/gmail/v1/users/me/threads/{thread_id}/modify"
+    )]
+    #[case(
+        "/gmail/v1/users/me/messages/m1/attachments/a1",
+        "/gmail/v1/users/me/messages/{message_id}/attachments/{attachment_id}"
+    )]
+    fn test_otel_known_paths_match_called_endpoints(
+        #[case] path: &str,
+        #[case] expected_template: &str,
+    ) {
+        let path_names = OtelPathNames::known_paths(otel_known_paths("/gmail/v1")).unwrap();
+        assert_eq!(path_names.find(path), Some(expected_template));
+    }
 
     mod notification_conversion {
         use std::str::FromStr;

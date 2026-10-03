@@ -385,7 +385,11 @@ impl SlackService {
         Ok(result.into_inner())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(user.id = %user_id, integration_connection.id = %integration_connection_id, query))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = %user_id, integration_connection.id = %integration_connection_id)
+    )]
     pub async fn search_emojis(
         &self,
         executor: &mut Transaction<'_, Postgres>,

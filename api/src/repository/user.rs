@@ -1427,7 +1427,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string(), for_update),
+        fields(user.id = user_id.to_string(), for_update = for_update),
         err
     )]
     async fn get_all_user_auths(

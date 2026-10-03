@@ -231,7 +231,7 @@ impl OAuth2Repository for Repository {
         Ok(row.into())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(client_id_url), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id_url = ?client_id_url), err)]
     async fn upsert_cimd_oauth2_client(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -279,7 +279,7 @@ impl OAuth2Repository for Repository {
         Ok(row.into())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id = %client_id), err)]
     async fn get_oauth2_client_by_client_id(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -315,7 +315,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(client_id, user.id = user_id.to_string()),
+        fields(client_id = %client_id, user.id = user_id.to_string()),
         err
     )]
     async fn create_authorization_code(
@@ -407,7 +407,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(client_id, user.id = user_id.to_string()),
+        fields(client_id = %client_id, user.id = user_id.to_string()),
         err
     )]
     async fn create_refresh_token(
@@ -518,7 +518,7 @@ impl OAuth2Repository for Repository {
         Ok(row.map(|r| r.into()))
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(client_id), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id = %client_id), err)]
     async fn revoke_refresh_token_if_active(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -671,7 +671,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(client_id, user.id = user_id.to_string()),
+        fields(client_id = %client_id, user.id = user_id.to_string()),
         err
     )]
     async fn revoke_all_refresh_tokens_for_client(
@@ -711,7 +711,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(client_id, user.id = user_id.to_string()),
+        fields(client_id = %client_id, user.id = user_id.to_string()),
         err
     )]
     async fn get_user_consent(
@@ -749,7 +749,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(client_id, user.id = user_id.to_string()),
+        fields(client_id = %client_id, user.id = user_id.to_string()),
         err
     )]
     async fn upsert_user_consent(
@@ -796,7 +796,7 @@ impl OAuth2Repository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(client_id, user.id = user_id.to_string()),
+        fields(client_id = %client_id, user.id = user_id.to_string()),
         err
     )]
     async fn delete_user_consent(
@@ -830,7 +830,7 @@ impl OAuth2Repository for Repository {
         Ok(result.rows_affected())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(client_id_url), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id_url = %client_id_url), err)]
     async fn get_cimd_metadata_cache(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -861,7 +861,7 @@ impl OAuth2Repository for Repository {
         row.map(CachedClientMetadata::try_from).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(client_id_url), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields(client_id_url = %client_id_url), err)]
     async fn upsert_cimd_metadata_cache(
         &self,
         executor: &mut Transaction<'_, Postgres>,
