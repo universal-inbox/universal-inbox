@@ -15,11 +15,12 @@ use playwright_rs::{Browser, BrowserContext, LaunchOptions, Locator, Page, Playw
 /// especially on resource-constrained CI runners.
 pub const EXPECT_TIMEOUT: Duration = Duration::from_secs(60);
 
+use universal_inbox::notification::{Notification, NotificationId};
 use universal_inbox_api::{
     commands::generate::generate_testing_user,
     configuration::{AuthenticationSettings, LocalAuthenticationSettings, Settings},
     jobs::UniversalInboxJob,
-    repository::{Repository, user::UserRepository},
+    repository::{Repository, notification::NotificationRepository, user::UserRepository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
@@ -228,14 +229,18 @@ pub async fn browser_tested_app_with_billing(
     }
 }
 
-/// Shared across all tests to avoid re-launching Playwright + Chromium per test (~5-10s each).
-/// Test isolation is preserved: each test gets a fresh `BrowserContext` + `Page`.
+/// Shares one Playwright + Chromium across the tests of a process. nextest runs each test
+/// in its own process, so in practice every test launches its own browser, which is what
+/// lets browser tests run in parallel without sharing state.
 static SHARED_BROWSER: OnceCell<(Playwright, Browser)> = OnceCell::const_new();
 
 /// Launch a headless Chromium browser and return a new page.
 ///
 /// External requests (e.g., CDN scripts, analytics) are blocked so they don't
-/// stall page initialization in the isolated test environment.
+/// stall page initialization in the isolated test environment. They are blocked
+/// at DNS level rather than with `page.route()`, because Playwright disables the
+/// HTTP cache when routing is enabled: every full page load would then download
+/// the WASM bundle again (~7 s per load with the debug build).
 pub async fn launch_browser() -> (BrowserContext, Page) {
     let (_playwright, browser) = SHARED_BROWSER
         .get_or_init(|| async {
@@ -243,7 +248,9 @@ pub async fn launch_browser() -> (BrowserContext, Page) {
                 .await
                 .expect("Failed to launch Playwright");
             // Disable Chromium sandbox on CI (Linux containers lack required kernel features)
-            let launch_options = LaunchOptions::default().chromium_sandbox(false);
+            let launch_options = LaunchOptions::default().chromium_sandbox(false).args(vec![
+                "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost".to_string(),
+            ]);
             let browser = playwright
                 .chromium()
                 .launch_with_options(launch_options)
@@ -257,17 +264,16 @@ pub async fn launch_browser() -> (BrowserContext, Page) {
         .new_context()
         .await
         .expect("Failed to create browser context");
-    let page = context.new_page().await.expect("Failed to create page");
-
-    // Block external network requests that may hang in isolated test environments
-    page.route("**/*headwayapp.co*", |route| async move {
-        route.abort(None).await
-    })
-    .await
-    .expect("Failed to set up route interception for headwayapp.co");
-    page.route("**/*cdn.*", |route| async move { route.abort(None).await })
+    // The test server compresses responses on the fly, which takes several seconds for
+    // the debug WASM bundle on every page load. Compression is useless on localhost.
+    context
+        .set_extra_http_headers(HashMap::from([(
+            "Accept-Encoding".to_string(),
+            "identity".to_string(),
+        )]))
         .await
-        .expect("Failed to set up route interception for cdn");
+        .expect("Failed to disable response compression");
+    let page = context.new_page().await.expect("Failed to create page");
 
     (context, page)
 }
@@ -481,6 +487,51 @@ pub async fn wait_for_notification_rows(page: &Page) {
         .to_be_visible()
         .await
         .expect("Expected at least one notification row to be visible");
+}
+
+/// Extract the notification id from a `/notifications/{id}` URL.
+pub fn notification_id_from_url(url: &str) -> NotificationId {
+    let id = url
+        .rsplit("/notifications/")
+        .next()
+        .and_then(|rest| rest.split(['?', '#', '/']).next())
+        .unwrap_or_else(|| panic!("No notification id in URL {url}"));
+    id.parse()
+        .unwrap_or_else(|_| panic!("Invalid notification id {id:?} in URL {url}"))
+}
+
+/// Wait until the server has persisted a change to a notification.
+///
+/// The UI removes rows optimistically, before the API call completes. Tests that
+/// depend on the server state (e.g. reloading the page) must wait for it here rather
+/// than sleeping for a fixed time.
+pub async fn wait_for_notification(
+    app: &BrowserTestedApp,
+    notification_id: NotificationId,
+    predicate: impl Fn(&Notification) -> bool,
+    what: &str,
+) {
+    let deadline = tokio::time::Instant::now() + EXPECT_TIMEOUT;
+    loop {
+        let mut transaction = app
+            .repository
+            .begin()
+            .await
+            .expect("Failed to begin transaction");
+        let notification = app
+            .repository
+            .get_one_notification(&mut transaction, notification_id)
+            .await
+            .expect("Failed to read notification");
+        if notification.as_ref().is_some_and(&predicate) {
+            return;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "Timed out waiting for notification {notification_id} to be {what}"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 /// Navigate within the SPA by clicking an `<a>` link and assert an element is visible.

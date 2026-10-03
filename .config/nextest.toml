@@ -1,9 +1,12 @@
+# Browser tests are isolated per test (own DB slot, port, mock servers, user and
+# Chromium process), so they run in parallel and without retries: a flaky browser
+# test must be fixed, not retried. The Playwright driver and Chromium need a moment to
+# exit after the test, hence the longer leak-timeout.
 [profile.default]
 [[profile.default.overrides]]
 filter = 'binary(browser)'
-threads-required = 'num-cpus'
-retries = 2
 slow-timeout = { period = "120s" }
+leak-timeout = "2s"
 
 [profile.ci]
 junit.path = "junit.xml"
@@ -14,6 +17,5 @@ fail-fast = false
 junit.path = "junit.xml"
 failure-output = "immediate-final"
 fail-fast = false
-test-threads = 1
-retries = 2
 slow-timeout = { period = "120s" }
+leak-timeout = "2s"

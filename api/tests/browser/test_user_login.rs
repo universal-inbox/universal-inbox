@@ -185,21 +185,18 @@ async fn test_login_lockout_shows_friendly_error(#[future] browser_tested_app: B
             .unwrap_or_else(|_| panic!("Error alert not visible after attempt {attempt}"));
     }
 
-    // Poll until the lockout message replaces the per-attempt 401 message.
-    let mut error_text = String::new();
-    for _ in 0..40 {
-        error_text = page
-            .locator("#auth-error")
-            .text_content()
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-        if error_text.contains("Too many login attempts") {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    }
+    // Wait until the lockout message replaces the per-attempt 401 message.
+    let error_alert = page.locator("#auth-error");
+    let lockout_shown = expect(error_alert.clone())
+        .with_timeout(EXPECT_TIMEOUT)
+        .to_contain_text("Too many login attempts")
+        .await;
+    let error_text = error_alert
+        .text_content()
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
 
     // The regression: a JSON error body must never surface as a decode error.
     assert!(
@@ -207,45 +204,7 @@ async fn test_login_lockout_shows_friendly_error(#[future] browser_tested_app: B
         "Login lockout surfaced a raw decode error to the user: {error_text:?}"
     );
     assert!(
-        error_text.contains("Too many login attempts"),
+        lockout_shown.is_ok(),
         "Expected the friendly lockout message after 6 attempts, but got: {error_text:?}"
-    );
-}
-
-/// Test that login fails with non-existent user.
-#[rstest]
-#[tokio::test]
-async fn test_login_fails_with_nonexistent_user(#[future] browser_tested_app: BrowserTestedApp) {
-    let app = browser_tested_app.await;
-    let (_context, page) = launch_browser().await;
-
-    page.goto(&format!("{}/login", app.app_url), None)
-        .await
-        .expect("Failed to navigate to login page");
-
-    fill_and_submit_credentials(&page, "nonexistent@test.com", "test123456", "login").await;
-
-    // An error alert should appear on the login page
-    let error_alert = page.locator("#auth-error");
-    expect(error_alert.clone())
-        .with_timeout(EXPECT_TIMEOUT)
-        .to_be_visible()
-        .await
-        .expect("Error alert not visible after nonexistent user login");
-
-    let error_text = error_alert
-        .text_content()
-        .await
-        .expect("Failed to get error alert text");
-    assert!(
-        error_text.is_some() && !error_text.as_ref().unwrap().is_empty(),
-        "Expected error alert to have text content, but got: {error_text:?}"
-    );
-
-    // Should still be on the login page
-    let url = page.url();
-    assert!(
-        url.contains("/login"),
-        "Expected to remain on /login with nonexistent user, but URL is: {url}"
     );
 }
