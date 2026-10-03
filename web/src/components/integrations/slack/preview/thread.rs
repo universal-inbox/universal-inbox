@@ -3,7 +3,6 @@
 use std::collections::{HashMap, HashSet};
 
 use dioxus::prelude::*;
-use gloo_timers::future::TimeoutFuture;
 use slack_blocks_render::SlackReferences;
 use slack_morphism::prelude::*;
 
@@ -17,20 +16,17 @@ use crate::components::{
     },
     markdown::SlackHtml,
     preview_card_header::PreviewCardHeader,
-    thread::ThreadDivider,
+    thread::{
+        EarlierMessagesDivider, LATEST_READ_ANCHOR_ID, NewMessagesDivider, ShowThreadStartDivider,
+        use_thread_collapse,
+    },
     ui::{
         participant_stack::{ParticipantDescriptor, ParticipantStack as UiParticipantStack},
         thread_message::{ThreadedMessage, ThreadedMessageFollowup},
     },
 };
-use crate::utils::scroll_child_to_top;
 
 const GROUP_GAP_SECS: i64 = 5 * 60;
-const LATEST_READ_ANCHOR_ID: &str = "slack-thread-latest-read";
-const SCROLL_ANCHOR_OFFSET_PX: f64 = 12.0;
-// Icon + text inside a `ThreadDivider` pill. `align-top` keeps the inline-flex
-// box off the label's text baseline so the content stays vertically centered.
-const DIVIDER_CONTENT_CLASS: &str = "inline-flex items-center gap-1 align-top";
 
 #[component]
 pub fn SlackThreadPreview(
@@ -42,44 +38,17 @@ pub fn SlackThreadPreview(
     // doesn't render it (read-only triage view). Kept in props for stable contract.
     let _ = title;
 
-    let mut show_all = use_signal(|| false);
-    let mut show_root = use_signal(|| false);
-    let _resource = use_resource(move || async move {
-        let expanded = expand_details();
-        *show_all.write() = expanded;
-        *show_root.write() = expanded;
-    });
-
-    // When another thread is displayed: collapse it again and scroll the
-    // preview down to the latest read reply, so the read context and the
-    // unread replies are in view.
-    let mut shown_thread_key = use_signal(|| None::<String>);
-    use_effect(move || {
+    let collapse = use_thread_collapse("notification-preview-details", expand_details, move || {
         let thread = slack_thread();
         let key = format!(
             "{}-{}",
             thread.channel.id,
             thread.messages.first().origin.ts
         );
-        if shown_thread_key.peek().as_ref() == Some(&key) {
-            return;
-        }
-        shown_thread_key.set(Some(key));
-        let expanded = *expand_details.peek();
-        show_all.set(expanded);
-        show_root.set(expanded);
-        if read_reply_count(&thread) > 0 {
-            spawn(async move {
-                // Run after the parent resets the preview scroll position.
-                TimeoutFuture::new(0).await;
-                let _ = scroll_child_to_top(
-                    "notification-preview-details",
-                    LATEST_READ_ANCHOR_ID,
-                    SCROLL_ANCHOR_OFFSET_PX,
-                );
-            });
-        }
+        (key, read_reply_count(&thread) > 0)
     });
+    let mut show_all = collapse.show_all;
+    let mut show_root = collapse.show_root;
 
     let thread = slack_thread();
     let root = thread.messages.first().clone();
@@ -137,14 +106,8 @@ pub fn SlackThreadPreview(
                     class: "bg-ui-surface border border-ui-border rounded-ui-lg p-3 mb-2.5",
 
                     if root_hidden {
-                        ThreadDivider {
-                            button {
-                                r#type: "button",
-                                class: DIVIDER_CONTENT_CLASS,
-                                onclick: move |_| { *show_root.write() = true; },
-                                span { class: "icon-[lucide--arrow-up-to-line] size-3" }
-                                "Show thread start"
-                            }
+                        ShowThreadStartDivider {
+                            onclick: move |_| { *show_root.write() = true; },
                         }
                     } else {
                         SlackMessageGroup {
@@ -156,18 +119,11 @@ pub fn SlackThreadPreview(
                     }
 
                     if collapse_active {
-                        ThreadDivider {
-                            button {
-                                r#type: "button",
-                                class: DIVIDER_CONTENT_CLASS,
-                                onclick: move |_| { *show_all.write() = true; },
-                                span { class: "icon-[lucide--arrow-up] size-3" }
-                                if hidden_count == 1 {
-                                    "1 earlier reply…"
-                                } else {
-                                    "{hidden_count} earlier replies…"
-                                }
-                            }
+                        EarlierMessagesDivider {
+                            hidden_count,
+                            singular: "reply",
+                            plural: "replies",
+                            onclick: move |_| { *show_all.write() = true; },
                         }
                     } else {
                         for group in read_groups.iter().cloned() {
@@ -193,13 +149,10 @@ pub fn SlackThreadPreview(
                     }
 
                     if unread_count > 0 {
-                        ThreadDivider {
-                            unread: true,
-                            span {
-                                class: DIVIDER_CONTENT_CLASS,
-                                span { class: "icon-[lucide--arrow-down] size-3" }
-                                if unread_count == 1 { "1 NEW REPLY" } else { "{unread_count} NEW REPLIES" }
-                            }
+                        NewMessagesDivider {
+                            unread_count,
+                            singular: "reply",
+                            plural: "replies",
                         }
                         for group in unread_groups.iter().cloned() {
                             SlackMessageGroup {

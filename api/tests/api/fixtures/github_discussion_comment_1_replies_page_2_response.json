@@ -1,0 +1,28 @@
+{
+  "data": {
+    "node": {
+      "__typename": "DiscussionComment",
+      "replies": {
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": "replies-cursor-2"
+        },
+        "nodes": [
+          {
+            "id": "DC_7",
+            "bodyHTML": "<p>a late reply</p>",
+            "url": "https://github.com/octocat/universal-inbox/discussions/1#discussioncomment-7",
+            "createdAt": "2023-10-22T08:00:00Z",
+            "isMinimized": false,
+            "author": {
+              "__typename": "User",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/123?v=4",
+              "login": "test",
+              "name": null
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -19,6 +19,7 @@
 - Pause the Slack connections of users inactive for 90 days and the connections failing for 30 days (`pause-slack-connections` cron, disabled by default): their provider grant is revoked and they show as Paused with a reconnect action; inactive users are warned by email 7 days before, and every user is emailed with a reconnect link once paused
 - Change the password from Profile > Authentication methods
 - Show attendee replies (answer and comment) to Google Calendar invitations received in Gmail
+- Show every comment and reply of a GitHub discussion in its preview, collapsing the already read ones
 
 ### Changed
 

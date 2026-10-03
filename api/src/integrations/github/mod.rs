@@ -21,7 +21,9 @@ use universal_inbox::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     third_party::{
-        integrations::github::{GithubNotification, GithubNotificationItem, GithubUrl},
+        integrations::github::{
+            GithubDiscussion, GithubNotification, GithubNotificationItem, GithubUrl,
+        },
         item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
     },
     user::UserId,
@@ -31,7 +33,11 @@ use crate::observability::attr;
 use crate::{
     integrations::{
         github::graphql::{
-            DiscussionQuery, PullRequestQuery, discussion_query, pull_request_query,
+            DiscussionCommentRepliesQuery, DiscussionCommentsQuery, DiscussionQuery,
+            PullRequestQuery,
+            discussion::{DiscussionCommentsPage, DiscussionRepliesPage},
+            discussion_comment_replies_query, discussion_comments_query, discussion_query,
+            pull_request_query,
         },
         notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
@@ -329,6 +335,113 @@ impl GithubService {
             .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
     }
 
+    /// Fetch a discussion with all its comments and replies, following
+    /// pagination.
+    pub async fn fetch_discussion(
+        &self,
+        owner: String,
+        repository: String,
+        discussion_number: i64,
+        access_token: &AccessToken,
+    ) -> Result<GithubDiscussion, UniversalInboxError> {
+        let mut discussion: GithubDiscussion = self
+            .query_discussion(
+                owner.clone(),
+                repository.clone(),
+                discussion_number,
+                access_token,
+            )
+            .await?
+            .try_into()?;
+
+        let mut after = None;
+        loop {
+            let page: DiscussionCommentsPage = self
+                .query_discussion_comments(
+                    owner.clone(),
+                    repository.clone(),
+                    discussion_number,
+                    after,
+                    access_token,
+                )
+                .await?
+                .try_into()?;
+            for (mut comment, mut replies_cursor) in page.comments {
+                while let Some(cursor) = replies_cursor {
+                    let replies_page: DiscussionRepliesPage = self
+                        .query_discussion_comment_replies(
+                            comment.id.clone(),
+                            Some(cursor),
+                            access_token,
+                        )
+                        .await?
+                        .try_into()?;
+                    comment.replies.extend(replies_page.replies);
+                    replies_cursor = replies_page.next_cursor;
+                }
+                discussion.comments.push(comment);
+            }
+            match page.next_cursor {
+                Some(cursor) => after = Some(cursor),
+                None => break,
+            }
+        }
+
+        Ok(discussion)
+    }
+
+    async fn query_discussion_comments(
+        &self,
+        owner: String,
+        repository: String,
+        discussion_number: i64,
+        after: Option<String>,
+        access_token: &AccessToken,
+    ) -> Result<discussion_comments_query::ResponseData, UniversalInboxError> {
+        let request_body =
+            DiscussionCommentsQuery::build_query(discussion_comments_query::Variables {
+                owner,
+                repository,
+                discussion_number,
+                after,
+            });
+
+        let response: graphql_client::Response<discussion_comments_query::ResponseData> = self
+            .build_github_graphql_client(access_token)?
+            .post(&self.github_graphql_url, Some(&request_body))
+            .await
+            .context("Cannot fetch discussion comments from Github graphql API")?;
+
+        assert_no_error_in_graphql_response(&response, GITHUB_GRAPHQL_API_NAME)?;
+
+        Ok(response
+            .data
+            .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
+    }
+
+    async fn query_discussion_comment_replies(
+        &self,
+        comment_id: String,
+        after: Option<String>,
+        access_token: &AccessToken,
+    ) -> Result<discussion_comment_replies_query::ResponseData, UniversalInboxError> {
+        let request_body = DiscussionCommentRepliesQuery::build_query(
+            discussion_comment_replies_query::Variables { comment_id, after },
+        );
+
+        let response: graphql_client::Response<discussion_comment_replies_query::ResponseData> =
+            self.build_github_graphql_client(access_token)?
+                .post(&self.github_graphql_url, Some(&request_body))
+                .await
+                .context("Cannot fetch discussion comment replies from Github graphql API")?;
+
+        assert_no_error_in_graphql_response(&response, GITHUB_GRAPHQL_API_NAME)?;
+
+        Ok(response
+            .data
+            .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
+    }
+
     #[tracing::instrument(
         level = "debug",
         skip_all,
@@ -371,9 +484,8 @@ impl GithubService {
                         repository,
                         number,
                     }) => Some(GithubNotificationItem::GithubDiscussion(
-                        self.query_discussion(owner, repository, number, &access_token)
-                            .await?
-                            .try_into()?,
+                        self.fetch_discussion(owner, repository, number, &access_token)
+                            .await?,
                     )),
                     // Not yet implemented resource type
                     Err(_) => None,

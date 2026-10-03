@@ -1,0 +1,58 @@
+query DiscussionCommentsQuery(
+  $owner: String!
+  $repository: String!
+  $discussion_number: Int!
+  $after: String
+) {
+  repository(owner: $owner, name: $repository) {
+    discussion(number: $discussion_number) {
+      comments(first: 100, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          bodyHTML
+          url
+          createdAt
+          isAnswer
+          isMinimized
+
+          author {
+            __typename
+            avatarUrl
+            login
+            ... on User {
+              name
+            }
+          }
+
+          replies(first: 100) {
+            totalCount
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              bodyHTML
+              url
+              createdAt
+              isMinimized
+
+              author {
+                __typename
+                avatarUrl
+                login
+                ... on User {
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
