@@ -59,6 +59,7 @@
 - Mark a Slack connection as Failing when Slack rejects its refresh token (`invalid_refresh_token` / `invalid_grant`)
 - The toast shown after answering a Google Calendar invitation now matches the chosen answer
 - Slack webhook events now reach Slack connections created before their workspace id was recorded (backfilled by the `slack backfill-team-id` command and on the next Slack sync)
+- Convert every Google Calendar email into its invitation, including occurrences of recurring events and cancelled events
 
 ## 2026-03-17
 

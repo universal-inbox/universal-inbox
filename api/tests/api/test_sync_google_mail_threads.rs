@@ -2,11 +2,12 @@
 
 use std::str::FromStr;
 
-use chrono::{TimeZone, Utc};
+use chrono::{TimeDelta, TimeZone, Utc};
 use email_address::EmailAddress;
 use pretty_assertions::assert_eq;
 use rrule::Frequency;
 use rstest::*;
+use serde_json::json;
 use wiremock::{
     Mock, ResponseTemplate,
     matchers::{method, path},
@@ -29,7 +30,10 @@ use universal_inbox::{
     },
     third_party::{
         integrations::{
-            google_calendar::GoogleCalendarEvent,
+            google_calendar::{
+                EventAttendee, EventMethod, GoogleCalendarEvent,
+                GoogleCalendarEventAttendeeResponseStatus, GoogleCalendarEventStatus,
+            },
             google_mail::{
                 GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL, GoogleMailMessageBody,
                 GoogleMailMessageHeader, GoogleMailThread,
@@ -60,11 +64,13 @@ use crate::helpers::{
         create_and_mock_integration_connection, get_integration_connection,
         google_calendar_oauth_credential, google_mail_oauth_credential, todoist_oauth_credential,
     },
+    load_json_fixture_file,
     notification::{
         google_calendar::{
             create_notification_from_google_calendar_event, google_calendar_event,
             google_calendar_event_reply, google_calendar_events_list,
-            google_calendar_events_list_reply, mock_google_calendar_list_events_service,
+            google_calendar_events_list_reply, mock_google_calendar_list_events_page_service,
+            mock_google_calendar_list_events_service,
         },
         google_mail::{
             assert_sync_notifications, create_notification_from_google_mail_thread,
@@ -1256,4 +1262,368 @@ async fn test_sync_notifications_should_refresh_user_email_address_of_pinned_acc
         panic!("Google Mail integration connection must have a context");
     };
     assert_eq!(user_email_address, expected_email_address);
+}
+
+/// Mock a Google Mail sync returning `google_mail_thread_with_invitation` with the given
+/// calendar attachment
+async fn mock_google_mail_invitation_sync(
+    app: &AuthenticatedApp,
+    settings: &Settings,
+    google_mail_config: &GoogleMailConfig,
+    google_mail_thread_with_invitation: &GoogleMailThread,
+    google_mail_user_profile: &GoogleMailUserProfile,
+    google_mail_labels_list: &GoogleMailLabelList,
+    invitation_attachment: &GoogleMailMessageBody,
+) {
+    let page_size = settings
+        .integrations
+        .get("google_mail")
+        .unwrap()
+        .page_size
+        .unwrap();
+    mock_google_mail_get_user_profile_service(
+        &app.app.google_mail_mock_server,
+        google_mail_user_profile,
+    )
+    .await;
+    mock_google_mail_labels_list_service(&app.app.google_mail_mock_server, google_mail_labels_list)
+        .await;
+    mock_google_mail_threads_list_service(
+        &app.app.google_mail_mock_server,
+        None,
+        page_size,
+        Some(vec![google_mail_config.synced_label.id.clone()]),
+        &GoogleMailThreadList {
+            threads: Some(vec![GoogleMailThreadMinimal {
+                id: google_mail_thread_with_invitation.id.clone(),
+                snippet: google_mail_thread_with_invitation.messages[0]
+                    .snippet
+                    .clone(),
+                history_id: google_mail_thread_with_invitation.history_id.clone(),
+            }]),
+            result_size_estimate: 1,
+            next_page_token: Some("next_token".to_string()),
+        },
+    )
+    .await;
+    mock_google_mail_threads_list_service(
+        &app.app.google_mail_mock_server,
+        Some("next_token"),
+        page_size,
+        Some(vec![google_mail_config.synced_label.id.clone()]),
+        &GoogleMailThreadList {
+            threads: None,
+            result_size_estimate: 1,
+            next_page_token: None,
+        },
+    )
+    .await;
+    mock_google_mail_thread_get_service(
+        &app.app.google_mail_mock_server,
+        "789",
+        &google_mail_thread_with_invitation.clone().into(),
+    )
+    .await;
+    mock_google_mail_get_attachment_service(
+        &app.app.google_mail_mock_server,
+        "789",
+        "attachmentid1", // Found in google_mail_thread_with_invitation
+        invitation_attachment,
+    )
+    .await;
+}
+
+async fn get_synced_google_calendar_notification(app: &AuthenticatedApp) -> NotificationWithTask {
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::GoogleMail),
+        false,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(
+        notifications[0].kind,
+        NotificationSourceKind::GoogleCalendar
+    );
+
+    let notification: Box<NotificationWithTask> = get_resource(
+        &app.client,
+        &app.app.api_address,
+        "notifications",
+        notifications[0].id.into(),
+    )
+    .await;
+    *notification
+}
+
+fn google_calendar_event_from_notification(
+    notification: &NotificationWithTask,
+) -> &GoogleCalendarEvent {
+    let ThirdPartyItemData::GoogleCalendarEvent(ref event) = notification.source_item.data else {
+        panic!("Expected GoogleCalendarEvent");
+    };
+    event
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_notifications_should_find_the_google_calendar_event_of_an_invitation_on_a_later_page(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    google_mail_thread_with_invitation: GoogleMailThread,
+    google_mail_user_profile: GoogleMailUserProfile,
+    google_mail_labels_list: GoogleMailLabelList,
+    google_mail_invitation_attachment: GoogleMailMessageBody,
+    google_calendar_events_list: GoogleCalendarEventsList,
+    google_mail_oauth_credential: OAuthCredentialFixture,
+    google_calendar_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
+        &settings,
+        google_calendar_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    let google_mail_config = GoogleMailConfig::enabled();
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
+        &settings,
+        google_mail_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    mock_google_mail_invitation_sync(
+        &app,
+        &settings,
+        &google_mail_config,
+        &google_mail_thread_with_invitation,
+        &google_mail_user_profile,
+        &google_mail_labels_list,
+        &google_mail_invitation_attachment,
+    )
+    .await;
+    // Google Calendar may return an empty page with a next page token
+    mock_google_calendar_list_events_page_service(
+        &app.app.google_calendar_mock_server,
+        "event_icaluid1",
+        None,
+        &json!({ "items": [], "nextPageToken": "page2" }),
+    )
+    .await;
+    mock_google_calendar_list_events_page_service(
+        &app.app.google_calendar_mock_server,
+        "event_icaluid1",
+        Some("page2"),
+        &google_calendar_events_list,
+    )
+    .await;
+
+    let notification = get_synced_google_calendar_notification(&app).await;
+
+    assert_eq!(notification.status, NotificationStatus::Unread);
+    assert_eq!(notification.source_item.source_id, "eventid1");
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_notifications_should_create_a_google_calendar_notification_for_the_updated_occurrence_of_a_recurring_event(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    google_mail_thread_with_invitation: GoogleMailThread,
+    google_mail_user_profile: GoogleMailUserProfile,
+    google_mail_labels_list: GoogleMailLabelList,
+    google_calendar_event: GoogleCalendarEvent,
+    google_mail_oauth_credential: OAuthCredentialFixture,
+    google_calendar_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
+        &settings,
+        google_calendar_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    let google_mail_config = GoogleMailConfig::enabled();
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
+        &settings,
+        google_mail_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    mock_google_mail_invitation_sync(
+        &app,
+        &settings,
+        &google_mail_config,
+        &google_mail_thread_with_invitation,
+        &google_mail_user_profile,
+        &google_mail_labels_list,
+        // RECURRENCE-ID;TZID=Europe/Paris:20240510T151500, moved to 16:00
+        &load_json_fixture_file("google_mail_invitation_occurrence_update_attachment.json"),
+    )
+    .await;
+    // The iCalUID of a recurring event matches its master event and its modified occurrences
+    let mut occurrence = serde_json::to_value(&google_calendar_event).unwrap();
+    occurrence["id"] = json!("eventid1_20240510T131500Z");
+    occurrence["summary"] = json!("Weekly meeting (moved)");
+    occurrence["recurringEventId"] = json!("eventid1");
+    occurrence["originalStartTime"] =
+        json!({ "dateTime": "2024-05-10T13:15:00Z", "timeZone": "Europe/Paris" });
+    occurrence["start"] = json!({ "dateTime": "2024-05-10T14:00:00Z", "timeZone": "Europe/Paris" });
+    occurrence["end"] = json!({ "dateTime": "2024-05-10T14:15:00Z", "timeZone": "Europe/Paris" });
+    occurrence.as_object_mut().unwrap().remove("recurrence");
+    mock_google_calendar_list_events_page_service(
+        &app.app.google_calendar_mock_server,
+        "event_icaluid1",
+        None,
+        &json!({ "items": [google_calendar_event, occurrence] }),
+    )
+    .await;
+
+    let notification = get_synced_google_calendar_notification(&app).await;
+
+    assert_eq!(notification.status, NotificationStatus::Unread);
+    assert_eq!(
+        notification.source_item.source_id,
+        "eventid1_20240510T131500Z"
+    );
+    let event = google_calendar_event_from_notification(&notification);
+    assert_eq!(event.summary, "Weekly meeting (moved)");
+    assert!(event.recurrence.is_none());
+}
+
+#[rstest]
+#[case::cancel_a_pending_invitation(
+    Some(GoogleCalendarEventAttendeeResponseStatus::NeedsAction),
+    NotificationStatus::Deleted
+)]
+#[case::cancel_an_accepted_invitation(
+    Some(GoogleCalendarEventAttendeeResponseStatus::Accepted),
+    NotificationStatus::Unread
+)]
+#[case::cancel_an_unknown_invitation(None, NotificationStatus::Unread)]
+#[tokio::test]
+async fn test_sync_notifications_should_handle_a_cancelled_google_calendar_event_from_a_google_mail_invitation(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    google_mail_thread_with_invitation: GoogleMailThread,
+    google_mail_user_profile: GoogleMailUserProfile,
+    google_mail_labels_list: GoogleMailLabelList,
+    google_calendar_event: GoogleCalendarEvent,
+    google_mail_oauth_credential: OAuthCredentialFixture,
+    google_calendar_oauth_credential: OAuthCredentialFixture,
+    #[case] existing_invitation_response: Option<GoogleCalendarEventAttendeeResponseStatus>,
+    #[case] expected_status: NotificationStatus,
+) {
+    let app = authenticated_app.await;
+    let google_calendar_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
+        &settings,
+        google_calendar_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    let google_mail_config = GoogleMailConfig::enabled();
+    let google_mail_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
+        &settings,
+        google_mail_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    let self_response_status = existing_invitation_response
+        .unwrap_or(GoogleCalendarEventAttendeeResponseStatus::NeedsAction);
+    let with_self_response = |event: &GoogleCalendarEvent| GoogleCalendarEvent {
+        attendees: event
+            .attendees
+            .iter()
+            .map(|attendee| EventAttendee {
+                response_status: if attendee.self_ == Some(true) {
+                    self_response_status
+                } else {
+                    attendee.response_status
+                },
+                ..attendee.clone()
+            })
+            .collect(),
+        ..event.clone()
+    };
+    let existing_notification = if existing_invitation_response.is_some() {
+        Some(
+            create_notification_from_google_calendar_event(
+                &app.app,
+                &GoogleMailThread {
+                    id: "invitation_thread".to_string(),
+                    ..google_mail_thread_with_invitation.clone()
+                },
+                &with_self_response(&google_calendar_event),
+                app.user.id,
+                google_mail_integration_connection.id,
+                google_calendar_integration_connection.id,
+            )
+            .await,
+        )
+    } else {
+        None
+    };
+
+    mock_google_mail_invitation_sync(
+        &app,
+        &settings,
+        &google_mail_config,
+        &google_mail_thread_with_invitation,
+        &google_mail_user_profile,
+        &google_mail_labels_list,
+        // METHOD:CANCEL
+        &load_json_fixture_file("google_mail_invitation_cancel_attachment.json"),
+    )
+    .await;
+    let cancelled_event = GoogleCalendarEvent {
+        status: GoogleCalendarEventStatus::Cancelled,
+        // Cancelled after the existing invitation was synced
+        updated: Utc::now() + TimeDelta::hours(1),
+        ..with_self_response(&google_calendar_event)
+    };
+    mock_google_calendar_list_events_page_service(
+        &app.app.google_calendar_mock_server,
+        "event_icaluid1",
+        None,
+        &json!({ "items": [cancelled_event] }),
+    )
+    .await;
+
+    let notification = get_synced_google_calendar_notification(&app).await;
+
+    if let Some(existing_notification) = existing_notification {
+        assert_eq!(notification.id, existing_notification.id);
+    }
+    assert_eq!(notification.status, expected_status);
+    assert_eq!(notification.source_item.source_id, "eventid1");
+    let event = google_calendar_event_from_notification(&notification);
+    assert_eq!(event.method, EventMethod::Cancel);
+    assert!(event.is_cancelled());
 }
