@@ -188,6 +188,17 @@ pub fn reset_scroll_top(id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Scroll the `container_id` element so that `child_id` sits `offset` pixels
+/// below its top edge. Only the container scrolls (unlike `scrollIntoView`,
+/// which also scrolls every scrollable ancestor).
+pub fn scroll_child_to_top(container_id: &str, child_id: &str, offset: f64) -> Result<()> {
+    let container = get_element_by_id(container_id)?;
+    let child = get_element_by_id(child_id)?;
+    let delta = child.get_bounding_client_rect().top() - container.get_bounding_client_rect().top();
+    container.set_scroll_top((container.scroll_top() as f64 + delta - offset).max(0.0) as i32);
+    Ok(())
+}
+
 pub fn scroll_element_by_page(id: &str) -> Result<()> {
     let elt = get_element_by_id(id)?;
     scroll_element(id, elt.client_height().into())
