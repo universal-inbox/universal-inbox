@@ -6,7 +6,9 @@ use secrecy::SecretBox;
 
 use universal_inbox::{
     FrontAuthenticationConfig,
-    user::{Password, UserAuthKind, UserAuthMethod, UserAuthMethodDisplayInfo, Username},
+    user::{
+        Password, PasswordChange, UserAuthKind, UserAuthMethod, UserAuthMethodDisplayInfo, Username,
+    },
 };
 
 use crate::{
@@ -94,7 +96,9 @@ pub fn AuthMethodsCard() -> Element {
                 div {
                     class: "flex flex-wrap gap-2 px-4 pt-2 pb-4",
 
-                    if !has_local {
+                    if has_local {
+                        ChangePasswordForm {}
+                    } else {
                         if show_add_password() {
                             form {
                                 class: "flex flex-col gap-4",
@@ -271,6 +275,130 @@ pub fn AuthMethodsCard() -> Element {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// Change the password of a user with password authentication. The current
+/// password is re-checked by the API, and the new one must be typed twice.
+#[component]
+fn ChangePasswordForm() -> Element {
+    let user_service = use_coroutine_handle::<UserCommand>();
+    let mut show_form = use_signal(|| false);
+    let mut current_password = use_signal(|| "".to_string());
+    let mut new_password = use_signal(|| "".to_string());
+    let mut new_password_confirmation = use_signal(|| "".to_string());
+    let mut force_validation = use_signal(|| false);
+    let mut mismatch = use_signal(|| false);
+
+    let mut reset = move || {
+        show_form.set(false);
+        force_validation.set(false);
+        mismatch.set(false);
+        current_password.set("".to_string());
+        new_password.set("".to_string());
+        new_password_confirmation.set("".to_string());
+    };
+
+    if !show_form() {
+        return rsx! {
+            button {
+                class: "group flex flex-1 min-w-[120px] flex-col items-center gap-2 \
+                        px-3 py-3 bg-ui-surface border border-ui-border rounded-ui-md \
+                        hover:border-ui-primary hover:bg-ui-surface-hover \
+                        focus-visible:outline-2 focus-visible:outline-ui-primary focus-visible:outline-offset-2 \
+                        transition-colors cursor-pointer",
+                r#type: "button",
+                onclick: move |_| show_form.set(true),
+                div {
+                    class: "flex items-center justify-center size-7 rounded-ui-sm bg-ui-surface-alt",
+                    span {
+                        class: "icon-[lucide--key-round] size-4 \
+                                text-ui-base-muted group-hover:text-ui-primary transition-colors",
+                    }
+                }
+                span {
+                    class: "text-[12.5px] font-medium text-ui-base-content",
+                    "Change password"
+                }
+            }
+        };
+    }
+
+    rsx! {
+        form {
+            class: "flex flex-col gap-4 w-full",
+            aria_label: "Change password",
+            onsubmit: move |evt| {
+                evt.prevent_default();
+                mismatch.set(new_password() != new_password_confirmation());
+                let result: Result<PasswordChange, _> = FormValues(evt.values()).try_into();
+                match result {
+                    Ok(password_change) => {
+                        user_service.send(UserCommand::ChangePassword(password_change));
+                        reset();
+                    }
+                    Err(err) => {
+                        force_validation.set(true);
+                        error!("Failed to parse form values as PasswordChange: {err}");
+                    }
+                }
+            },
+
+            FloatingLabelInputText::<String> {
+                name: "current_password".to_string(),
+                label: Some("Current password".to_string()),
+                required: true,
+                value: current_password,
+                autofocus: true,
+                force_validation: force_validation(),
+                r#type: "password".to_string(),
+            }
+
+            FloatingLabelInputText::<Password> {
+                name: "new_password".to_string(),
+                label: Some("New password".to_string()),
+                required: true,
+                value: new_password,
+                force_validation: force_validation(),
+                r#type: "password".to_string(),
+            }
+
+            FloatingLabelInputText::<String> {
+                name: "new_password_confirmation".to_string(),
+                label: Some("Confirm new password".to_string()),
+                required: true,
+                value: new_password_confirmation,
+                force_validation: force_validation(),
+                r#type: "password".to_string(),
+            }
+
+            if mismatch() {
+                p {
+                    class: "text-sm text-ui-error-hover",
+                    role: "alert",
+                    "The new passwords do not match"
+                }
+            }
+
+            p {
+                class: "text-xs text-ui-base-muted",
+                "Your other sessions will be signed out."
+            }
+
+            div {
+                class: "flex gap-2 mt-1",
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    onclick: move |_| reset(),
+                    "Cancel"
+                }
+                Button {
+                    variant: ButtonVariant::Primary,
+                    button_type: "submit".to_string(),
+                    "Change password"
                 }
             }
         }

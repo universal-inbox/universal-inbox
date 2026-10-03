@@ -24,9 +24,9 @@ use universal_inbox::{
     SuccessResponse,
     auth::auth_token::{AuthenticationToken, AuthenticationTokenId, TruncatedAuthenticationToken},
     user::{
-        Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordResetToken,
-        RegisterUserParameters, UserAuthKind, UserAuthMethod, UserId, UserPatch, UserPreferences,
-        UserPreferencesPatch, Username,
+        Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordChange,
+        PasswordResetToken, RegisterUserParameters, UserAuthKind, UserAuthMethod, UserId,
+        UserPatch, UserPreferences, UserPreferencesPatch, Username,
     },
 };
 
@@ -186,7 +186,9 @@ pub fn scope(auth_rate_limiter: Arc<AuthRateLimiter>) -> Scope {
                     web::scope("/auth-methods")
                         .service(web::resource("").route(web::get().to(list_auth_methods)))
                         .service(
-                            web::resource("/local").route(web::post().to(add_local_auth_method)),
+                            web::resource("/local")
+                                .route(web::post().to(add_local_auth_method))
+                                .route(web::patch().to(change_password)),
                         )
                         .service(
                             web::scope("/passkey/registration")
@@ -458,6 +460,61 @@ pub async fn add_local_auth_method(
     Ok(HttpResponse::Ok()
         .content_type("application/json")
         .body(serde_json::to_string(&auth_method).context("Cannot serialize auth method")?))
+}
+
+/// Change the password of the authenticated user. Their other sessions are
+/// revoked by the service, so the current session is re-issued to keep the
+/// caller logged in.
+#[allow(clippy::too_many_arguments)]
+pub async fn change_password(
+    req: HttpRequest,
+    user_service: web::Data<Arc<UserService>>,
+    auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    settings: web::Data<Settings>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
+    authenticated: Authenticated<Claims>,
+    session: Session,
+    password_change: web::Json<PasswordChange>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(*response);
+    }
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(*response);
+    }
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while changing password")?;
+
+    service
+        .change_password(&mut transaction, user_id, password_change.into_inner())
+        .await?;
+
+    let auth_token = auth_token_service
+        .read()
+        .await
+        .create_auth_token(&mut transaction, true, user_id, None, false)
+        .await?;
+    session
+        .insert(
+            JWT_SESSION_KEY,
+            auth_token.jwt_token.expose_secret().0.clone(),
+        )
+        .context("Failed to insert JWT token into the session")?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while changing password")?;
+
+    Ok(HttpResponse::NoContent().finish())
 }
 
 #[allow(clippy::too_many_arguments, dependency_on_unit_never_type_fallback)]

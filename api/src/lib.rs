@@ -55,7 +55,7 @@ use tokio::sync::RwLock;
 use tracing::{Level, Span, error, event, info, warn};
 use tracing_actix_web::TracingLogger;
 use utils::cache::Cache;
-use utils::login_throttle::LoginThrottle;
+use utils::{login_throttle::LoginThrottle, session_revocation::SessionRevocation};
 use webauthn_rs::prelude::*;
 
 use crate::{
@@ -208,6 +208,11 @@ pub async fn run_server(
                 crate::universal_inbox::auth_token::service::StoredBearerTokenChecker(
                     auth_token_service.clone(),
                 ),
+            )),
+            // Session cookies issued before a password change or reset stop
+            // authenticating.
+            session_token_checker: Some(Arc::new(
+                crate::universal_inbox::user::service::UserSessionChecker(user_service.clone()),
             )),
             jwt_validator: {
                 let mut validation = Validation::new(Algorithm::EdDSA);
@@ -800,20 +805,41 @@ pub async fn build_services(
     // UserService. `None` when local password auth is unconfigured (nothing to
     // throttle) or Redis is unreachable at startup — the per-IP limiter still
     // applies in that case. See utils::login_throttle.
-    let login_throttle = match Cache::new(settings.redis.connection_string()).await {
-        Ok(cache) => settings
-            .application
-            .security
-            .authentication
-            .iter()
-            .find_map(|auth| match auth {
-                AuthenticationSettings::Local(local) => Some(local.clone()),
-                _ => None,
-            })
-            .map(|local| LoginThrottle::new(cache.connection_manager, local)),
+    //
+    // Session revocation (password change / reset) shares the same Redis
+    // connection. `None` when Redis is unreachable at startup: sessions then
+    // stay valid until they expire. See utils::session_revocation.
+    let (login_throttle, session_revocation) = match Cache::new(settings.redis.connection_string())
+        .await
+    {
+        Ok(cache) => {
+            let session_revocation = SessionRevocation::new(
+                cache.connection_manager.clone(),
+                (settings
+                    .application
+                    .http_session
+                    .jwt_token_expiration_in_days
+                    .max(0) as u64)
+                    * 24
+                    * 3600,
+            );
+            let login_throttle = settings
+                .application
+                .security
+                .authentication
+                .iter()
+                .find_map(|auth| match auth {
+                    AuthenticationSettings::Local(local) => Some(local.clone()),
+                    _ => None,
+                })
+                .map(|local| LoginThrottle::new(cache.connection_manager, local));
+            (login_throttle, Some(session_revocation))
+        }
         Err(err) => {
-            warn!("Failed to connect to Redis for login throttle; throttling disabled: {err:?}");
-            None
+            warn!(
+                "Failed to connect to Redis for login throttle; throttling and session revocation disabled: {err:?}"
+            );
+            (None, None)
         }
     };
 
@@ -1002,6 +1028,7 @@ pub async fn build_services(
         mailer.clone(),
         webauthn.clone(),
         login_throttle,
+        session_revocation,
         integration_connection_service.clone(),
     ));
 

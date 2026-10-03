@@ -6,6 +6,7 @@ mod test_api_notification;
 mod test_auth;
 mod test_auth_methods;
 mod test_billing;
+mod test_change_password;
 mod test_cron;
 mod test_github_notifications;
 mod test_google_calendar_notifications;
