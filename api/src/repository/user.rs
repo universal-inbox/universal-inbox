@@ -663,7 +663,7 @@ impl UserRepository for Repository {
             user_id.0,
             user_auth.to_string() as _,
             auth_user_id.map(|id| id.to_string()),
-            auth_id_token.map(|token| token.to_string()),
+            auth_id_token.map(|token| token.0),
             password_hash.map(|hash| hash.expose_secret().0.to_string()),
             username.map(|username| username.to_string()),
             passkey.map(|passkey| Json(passkey.clone())) as Option<Json<Passkey>>,
@@ -745,7 +745,6 @@ impl UserRepository for Repository {
         skip_all,
         fields(
             auth_user_id = auth_user_id.to_string(),
-            auth_id_token = auth_id_token.to_string()
         ),
         err
     )]
@@ -758,7 +757,7 @@ impl UserRepository for Repository {
         let mut query_builder = QueryBuilder::new("UPDATE user_auth SET");
         query_builder
             .push(" auth_id_token = ")
-            .push_bind(auth_id_token.to_string())
+            .push_bind(auth_id_token.as_str().to_string())
             .push(r#" FROM "user" "#)
             .push(" WHERE ");
         let mut separated = query_builder.separated(" AND ");
@@ -783,7 +782,7 @@ impl UserRepository for Repository {
                   (SELECT"#,
             )
             .push(" auth_id_token != ")
-            .push_bind(auth_id_token.to_string())
+            .push_bind(auth_id_token.as_str().to_string())
             .push(" FROM user_auth WHERE auth_user_id = ")
             .push_bind(auth_user_id.to_string())
             .push(r#") as "is_updated""#);
