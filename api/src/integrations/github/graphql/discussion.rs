@@ -3,12 +3,15 @@ use url::Url;
 
 use universal_inbox::third_party::integrations::github::{
     GithubActor, GithubBotSummary, GithubDiscussion, GithubDiscussionCategory,
-    GithubDiscussionComment, GithubDiscussionStateReason, GithubLabel, GithubRepositorySummary,
-    GithubUserSummary,
+    GithubDiscussionComment, GithubDiscussionStateReason, GithubDiscussionThreadComment,
+    GithubLabel, GithubRepositorySummary, GithubUserSummary,
 };
 
 use crate::{
-    integrations::github::graphql::discussion_query, universal_inbox::UniversalInboxError,
+    integrations::github::graphql::{
+        discussion_comment_replies_query, discussion_comments_query, discussion_query,
+    },
+    universal_inbox::UniversalInboxError,
 };
 
 impl From<discussion_query::DiscussionQueryRepositoryDiscussionLabels> for Vec<GithubLabel> {
@@ -31,101 +34,66 @@ impl From<discussion_query::DiscussionQueryRepositoryDiscussionLabels> for Vec<G
     }
 }
 
-impl TryFrom<discussion_query::DiscussionQueryRepositoryDiscussionAuthor> for GithubActor {
-    type Error = UniversalInboxError;
+/// Each actor selection in the query gets its own generated type; they all share
+/// the same shape (`login`, `avatar_url` and a `User`-only `name`).
+macro_rules! impl_github_actor_try_from {
+    ($module:ident, $actor:ident, $actor_on:ident) => {
+        impl TryFrom<$module::$actor> for GithubActor {
+            type Error = UniversalInboxError;
 
-    fn try_from(
-        value: discussion_query::DiscussionQueryRepositoryDiscussionAuthor,
-    ) -> Result<Self, Self::Error> {
-        Ok(match value.on {
-            discussion_query::DiscussionQueryRepositoryDiscussionAuthorOn::User(user) => {
-                GithubActor::User(GithubUserSummary {
-                    login: value.login,
-                    name: user.name,
-                    avatar_url: value.avatar_url.parse::<Url>().with_context(|| {
-                        format!(
-                            "Github actor should have a valid avatar URL: {:?}",
-                            value.avatar_url
-                        )
-                    })?,
-                })
-            }
-            _ => GithubActor::Bot(GithubBotSummary {
-                login: value.login,
-                avatar_url: value.avatar_url.parse::<Url>().with_context(|| {
+            fn try_from(value: $module::$actor) -> Result<Self, Self::Error> {
+                let avatar_url = value.avatar_url.parse::<Url>().with_context(|| {
                     format!(
                         "Github actor should have a valid avatar URL: {:?}",
                         value.avatar_url
                     )
-                })?,
-            }),
-        })
-    }
-}
-
-impl TryFrom<discussion_query::DiscussionQueryRepositoryDiscussionAnswerAuthor> for GithubActor {
-    type Error = UniversalInboxError;
-
-    fn try_from(
-        value: discussion_query::DiscussionQueryRepositoryDiscussionAnswerAuthor,
-    ) -> Result<Self, Self::Error> {
-        Ok(match value.on {
-            discussion_query::DiscussionQueryRepositoryDiscussionAnswerAuthorOn::User(user) => {
-                GithubActor::User(GithubUserSummary {
-                    login: value.login,
-                    name: user.name,
-                    avatar_url: value.avatar_url.parse::<Url>().with_context(|| {
-                        format!(
-                            "Github actor should have a valid avatar URL: {:?}",
-                            value.avatar_url
-                        )
-                    })?,
+                })?;
+                Ok(match value.on {
+                    $module::$actor_on::User(user) => GithubActor::User(GithubUserSummary {
+                        login: value.login,
+                        name: user.name,
+                        avatar_url,
+                    }),
+                    _ => GithubActor::Bot(GithubBotSummary {
+                        login: value.login,
+                        avatar_url,
+                    }),
                 })
             }
-            _ => GithubActor::Bot(GithubBotSummary {
-                login: value.login,
-                avatar_url: value.avatar_url.parse::<Url>().with_context(|| {
-                    format!(
-                        "Github actor should have a valid avatar URL: {:?}",
-                        value.avatar_url
-                    )
-                })?,
-            }),
-        })
-    }
+        }
+    };
 }
 
-impl TryFrom<discussion_query::DiscussionQueryRepositoryDiscussionAnswerChosenBy> for GithubActor {
-    type Error = UniversalInboxError;
-
-    fn try_from(
-        value: discussion_query::DiscussionQueryRepositoryDiscussionAnswerChosenBy,
-    ) -> Result<Self, Self::Error> {
-        Ok(match value.on {
-            discussion_query::DiscussionQueryRepositoryDiscussionAnswerChosenByOn::User(user) => {
-                GithubActor::User(GithubUserSummary {
-                    login: value.login,
-                    name: user.name,
-                    avatar_url: value.avatar_url.parse::<Url>().with_context(|| {
-                        format!(
-                            "Github actor should have a valid avatar URL: {:?}",
-                            value.avatar_url
-                        )
-                    })?,
-                })
-            }
-            _ => GithubActor::Bot(GithubBotSummary {
-                login: value.login,
-                avatar_url: value.avatar_url.parse::<Url>().with_context(|| {
-                    format!(
-                        "Github actor should have a valid avatar URL: {:?}",
-                        value.avatar_url
-                    )
-                })?,
-            }),
-        })
-    }
-}
+impl_github_actor_try_from!(
+    discussion_query,
+    DiscussionQueryRepositoryDiscussionAuthor,
+    DiscussionQueryRepositoryDiscussionAuthorOn
+);
+impl_github_actor_try_from!(
+    discussion_query,
+    DiscussionQueryRepositoryDiscussionAnswerAuthor,
+    DiscussionQueryRepositoryDiscussionAnswerAuthorOn
+);
+impl_github_actor_try_from!(
+    discussion_query,
+    DiscussionQueryRepositoryDiscussionAnswerChosenBy,
+    DiscussionQueryRepositoryDiscussionAnswerChosenByOn
+);
+impl_github_actor_try_from!(
+    discussion_comments_query,
+    DiscussionCommentsQueryRepositoryDiscussionCommentsNodesAuthor,
+    DiscussionCommentsQueryRepositoryDiscussionCommentsNodesAuthorOn
+);
+impl_github_actor_try_from!(
+    discussion_comments_query,
+    DiscussionCommentsQueryRepositoryDiscussionCommentsNodesRepliesNodesAuthor,
+    DiscussionCommentsQueryRepositoryDiscussionCommentsNodesRepliesNodesAuthorOn
+);
+impl_github_actor_try_from!(
+    discussion_comment_replies_query,
+    DiscussionCommentRepliesQueryNodeOnDiscussionCommentRepliesNodesAuthor,
+    DiscussionCommentRepliesQueryNodeOnDiscussionCommentRepliesNodesAuthorOn
+);
 
 impl From<discussion_query::DiscussionQueryRepositoryDiscussionCategory>
     for GithubDiscussionCategory
@@ -185,6 +153,152 @@ impl TryFrom<discussion_query::DiscussionQueryRepositoryDiscussionAnswer>
             body: value.body_html,
             created_at: value.created_at,
             author: value.author.map(|author| author.try_into()).transpose()?,
+        })
+    }
+}
+
+fn parse_comment_url(url: &str) -> Result<Url, UniversalInboxError> {
+    Ok(url
+        .parse()
+        .with_context(|| format!("Unable to parse Github discussion comment URL: {url:?}"))?)
+}
+
+/// One page of top-level discussion comments.
+pub struct DiscussionCommentsPage {
+    /// Each comment with the cursor of its next replies page, if it has more
+    /// replies than the first page.
+    pub comments: Vec<(GithubDiscussionThreadComment, Option<String>)>,
+    pub next_cursor: Option<String>,
+}
+
+/// One page of replies to a discussion comment.
+pub struct DiscussionRepliesPage {
+    pub replies: Vec<GithubDiscussionComment>,
+    pub next_cursor: Option<String>,
+}
+
+fn next_cursor(has_next_page: bool, end_cursor: Option<String>) -> Option<String> {
+    if has_next_page { end_cursor } else { None }
+}
+
+impl TryFrom<discussion_comments_query::DiscussionCommentsQueryRepositoryDiscussionCommentsNodesRepliesNodes>
+    for GithubDiscussionComment
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: discussion_comments_query::DiscussionCommentsQueryRepositoryDiscussionCommentsNodesRepliesNodes,
+    ) -> Result<Self, Self::Error> {
+        Ok(GithubDiscussionComment {
+            url: parse_comment_url(&value.url)?,
+            body: value.body_html,
+            created_at: value.created_at,
+            author: value.author.map(|author| author.try_into()).transpose()?,
+        })
+    }
+}
+
+impl TryFrom<discussion_comment_replies_query::DiscussionCommentRepliesQueryNodeOnDiscussionCommentRepliesNodes>
+    for GithubDiscussionComment
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: discussion_comment_replies_query::DiscussionCommentRepliesQueryNodeOnDiscussionCommentRepliesNodes,
+    ) -> Result<Self, Self::Error> {
+        Ok(GithubDiscussionComment {
+            url: parse_comment_url(&value.url)?,
+            body: value.body_html,
+            created_at: value.created_at,
+            author: value.author.map(|author| author.try_into()).transpose()?,
+        })
+    }
+}
+
+impl TryFrom<discussion_comments_query::ResponseData> for DiscussionCommentsPage {
+    type Error = UniversalInboxError;
+
+    fn try_from(value: discussion_comments_query::ResponseData) -> Result<Self, Self::Error> {
+        let comments = value
+            .repository
+            .context("Github repository not found")?
+            .discussion
+            .context("Github discussion not found")?
+            .comments;
+
+        Ok(DiscussionCommentsPage {
+            comments: comments
+                .nodes
+                .unwrap_or_default()
+                .into_iter()
+                .flatten()
+                .filter(|comment| !comment.is_minimized)
+                .map(|comment| {
+                    let replies = comment.replies;
+                    Ok((
+                        GithubDiscussionThreadComment {
+                            id: comment.id,
+                            comment: GithubDiscussionComment {
+                                url: parse_comment_url(&comment.url)?,
+                                body: comment.body_html,
+                                created_at: comment.created_at,
+                                author: comment
+                                    .author
+                                    .map(|author| author.try_into())
+                                    .transpose()?,
+                            },
+                            is_answer: comment.is_answer,
+                            replies: replies
+                                .nodes
+                                .unwrap_or_default()
+                                .into_iter()
+                                .flatten()
+                                .filter(|reply| !reply.is_minimized)
+                                .map(|reply| reply.try_into())
+                                .collect::<Result<Vec<_>, UniversalInboxError>>()?,
+                            replies_count: replies.total_count,
+                        },
+                        next_cursor(
+                            replies.page_info.has_next_page,
+                            replies.page_info.end_cursor,
+                        ),
+                    ))
+                })
+                .collect::<Result<Vec<_>, UniversalInboxError>>()?,
+            next_cursor: next_cursor(
+                comments.page_info.has_next_page,
+                comments.page_info.end_cursor,
+            ),
+        })
+    }
+}
+
+impl TryFrom<discussion_comment_replies_query::ResponseData> for DiscussionRepliesPage {
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: discussion_comment_replies_query::ResponseData,
+    ) -> Result<Self, Self::Error> {
+        let replies = match value.node.context("Github discussion comment not found")? {
+            discussion_comment_replies_query::DiscussionCommentRepliesQueryNode::DiscussionComment(
+                comment,
+            ) => comment.replies,
+            _ => return Err(anyhow::anyhow!("Github node is not a discussion comment").into()),
+        };
+
+        Ok(DiscussionRepliesPage {
+            replies: replies
+                .nodes
+                .unwrap_or_default()
+                .into_iter()
+                .flatten()
+                .filter(|reply| !reply.is_minimized)
+                .map(|reply| reply.try_into())
+                .collect::<Result<Vec<_>, _>>()?,
+            next_cursor: next_cursor(
+                replies.page_info.has_next_page,
+                replies.page_info.end_cursor,
+            ),
         })
     }
 }
@@ -257,6 +371,8 @@ impl TryFrom<discussion_query::ResponseData> for GithubDiscussion {
                 .map(|author| author.try_into())
                 .transpose()?,
             category: Some(discussion.category.into()),
+            // Fetched separately, page by page (see `DiscussionCommentsPage`)
+            comments: vec![],
         })
     }
 }

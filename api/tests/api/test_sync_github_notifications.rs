@@ -47,8 +47,10 @@ use crate::helpers::{
     notification::{
         github::{
             assert_sync_notifications, create_notification_from_github_notification,
-            github_discussion_123_response, github_notification,
+            github_discussion_123_comments_response, github_discussion_123_response,
+            github_discussion_comment_1_replies_page_2_response, github_notification,
             github_pull_request_123_no_commits_response, github_pull_request_123_response,
+            mock_github_discussion_comment_replies_query, mock_github_discussion_comments_query,
             mock_github_discussion_query, mock_github_notifications_service,
             mock_github_pull_request_query, sync_github_notifications,
         },
@@ -930,6 +932,24 @@ async fn test_sync_discussion_notification_with_details(
         &github_discussion_123_response,
     )
     .await;
+    for (page, after) in [(1, None), (2, Some("comments-cursor-1".to_string()))] {
+        mock_github_discussion_comments_query(
+            &app.app.github_mock_server,
+            "octokit".to_string(),
+            "octokit.rb".to_string(),
+            123,
+            after,
+            &github_discussion_123_comments_response(page),
+        )
+        .await;
+    }
+    mock_github_discussion_comment_replies_query(
+        &app.app.github_mock_server,
+        "DC_1".to_string(),
+        Some("replies-cursor-1".to_string()),
+        &github_discussion_comment_1_replies_page_2_response(),
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -973,6 +993,20 @@ async fn test_sync_discussion_notification_with_details(
                     assert_eq!(category.emoji.as_deref(), Some(":pray:"));
                     assert_eq!(category.slug, "q-a");
                     assert!(category.is_answerable);
+
+                    // All comment and reply pages are fetched, minimized ones dropped
+                    let ids: Vec<&str> =
+                        discussion.comments.iter().map(|c| c.id.as_str()).collect();
+                    assert_eq!(ids, vec!["DC_1", "DC_4", "DC_6"]);
+                    let first = &discussion.comments[0];
+                    assert_eq!(first.comment.body, "<p>first comment</p>");
+                    assert!(!first.is_answer);
+                    assert_eq!(first.replies_count, 3);
+                    let replies: Vec<&str> =
+                        first.replies.iter().map(|r| r.body.as_str()).collect();
+                    assert_eq!(replies, vec!["<p>a reply</p>", "<p>a late reply</p>"]);
+                    assert!(discussion.comments[1].is_answer);
+                    assert!(discussion.comments[1].replies.is_empty());
                 }
                 _ => unreachable!("Expected a GithubDiscussion notification"),
             }

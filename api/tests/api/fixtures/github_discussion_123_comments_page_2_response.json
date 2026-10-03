@@ -1,0 +1,60 @@
+{
+  "data": {
+    "repository": {
+      "discussion": {
+        "comments": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": [
+            {
+              "id": "DC_5",
+              "bodyHTML": "<p>hidden</p>",
+              "url": "https://github.com/octocat/universal-inbox/discussions/1#discussioncomment-5",
+              "createdAt": "2023-10-20T08:00:00Z",
+              "isAnswer": false,
+              "isMinimized": true,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/123?v=4",
+                "login": "test",
+                "name": null
+              },
+              "replies": {
+                "totalCount": 0,
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              }
+            },
+            {
+              "id": "DC_6",
+              "bodyHTML": "<p>last comment</p>",
+              "url": "https://github.com/octocat/universal-inbox/discussions/1#discussioncomment-6",
+              "createdAt": "2023-10-21T08:00:00Z",
+              "isAnswer": false,
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/123?v=4",
+                "login": "test",
+                "name": null
+              },
+              "replies": {
+                "totalCount": 0,
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

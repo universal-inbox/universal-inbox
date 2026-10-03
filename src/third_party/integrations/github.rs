@@ -833,6 +833,11 @@ pub struct GithubDiscussion {
     /// deserialize cleanly.
     #[serde(default)]
     pub category: Option<GithubDiscussionCategory>,
+    /// The latest top-level comments (oldest first), each with its latest
+    /// replies. Defaults to empty for items persisted before comments were
+    /// fetched.
+    #[serde(default)]
+    pub comments: Vec<GithubDiscussionThreadComment>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -859,6 +864,17 @@ pub struct GithubDiscussionComment {
     pub body: String,
     pub created_at: DateTime<Utc>,
     pub author: Option<GithubActor>,
+}
+
+/// A top-level discussion comment and its replies.
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubDiscussionThreadComment {
+    pub id: String,
+    pub comment: GithubDiscussionComment,
+    pub is_answer: bool,
+    /// Latest replies, oldest first. May be fewer than `replies_count`.
+    pub replies: Vec<GithubDiscussionComment>,
+    pub replies_count: i64,
 }
 
 #[serde_as]

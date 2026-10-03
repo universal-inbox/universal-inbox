@@ -1,0 +1,208 @@
+{
+  "data": {
+    "repository": {
+      "discussion": {
+        "comments": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": [
+            {
+              "id": "DC_seed_1",
+              "bodyHTML": "<p>Big +1 on <code>j</code>/<code>k</code>. I'd also love <code>g i</code> to jump back to the inbox from anywhere.</p>",
+              "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-1",
+              "createdAt": "{{ago_70h}}",
+              "isAnswer": false,
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/583231?v=4",
+                "login": "lenafischer",
+                "name": "Lena Fischer"
+              },
+              "replies": {
+                "totalCount": 3,
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": [
+                  {
+                    "id": "DC_seed_2",
+                    "bodyHTML": "<p>Chords are tempting but they make the overlay harder to read. Let's keep single keys for v0.5.</p>",
+                    "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-2",
+                    "createdAt": "{{ago_68h}}",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/77231?v=4",
+                      "login": "ravipatel",
+                      "name": "Ravi Patel"
+                    }
+                  },
+                  {
+                    "id": "DC_seed_10",
+                    "bodyHTML": "<p>+1 to single keys. We can revisit chords once people have the basics in their fingers.</p>",
+                    "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-10",
+                    "createdAt": "{{ago_60h}}",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/1024025?v=4",
+                      "login": "samokafor",
+                      "name": "Sam Okafor"
+                    }
+                  },
+                  {
+                    "id": "DC_seed_3",
+                    "bodyHTML": "<p>Coming back to this: with the new command palette, <code>g i</code> would be trivial to add later. Fine to defer.</p>",
+                    "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-3",
+                    "createdAt": "{{ago_5h}}",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/583231?v=4",
+                      "login": "lenafischer",
+                      "name": "Lena Fischer"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "DC_seed_4",
+              "bodyHTML": "<p>For snooze, relative durations cover 90% of my usage. A date picker behind <code>s s</code> would be enough for the rest.</p>",
+              "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-4",
+              "createdAt": "{{ago_50h}}",
+              "isAnswer": false,
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/1024025?v=4",
+                "login": "samokafor",
+                "name": "Sam Okafor"
+              },
+              "replies": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": [
+                  {
+                    "id": "DC_seed_5",
+                    "bodyHTML": "<p>Agreed, and the picker should remember the last custom date.</p>",
+                    "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-5",
+                    "createdAt": "{{ago_48h}}",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/9919?v=4",
+                      "login": "mayachen",
+                      "name": "Maya Chen"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "DC_seed_6",
+              "bodyHTML": "<p>Please don't make <code>e</code> delete. Archive is recoverable, delete is not, and muscle memory from Gmail is strong.</p>",
+              "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-6",
+              "createdAt": "{{ago_26h}}",
+              "isAnswer": false,
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/9919?v=4",
+                "login": "mayachen",
+                "name": "Maya Chen"
+              },
+              "replies": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": [
+                  {
+                    "id": "DC_seed_11",
+                    "bodyHTML": "<p>Fully agree. Archive by default, and delete stays behind <code>#</code> with a confirmation.</p>",
+                    "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-11",
+                    "createdAt": "{{ago_30m}}",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/1024025?v=4",
+                      "login": "samokafor",
+                      "name": "Sam Okafor"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "DC_seed_7",
+              "bodyHTML": "<p>After reading the thread I think we should:</p><ol><li>Match Gmail's <code>e</code> for archive (people switching from Gmail will thank us).</li><li>Offer both relative durations <em>and</em> a date picker, defaulting to the relative menu.</li><li>Keep <code>?</code> as the global shortcut help overlay.</li></ol><p>Happy to draft the spec PR if there are no objections by Friday.</p>",
+              "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-7",
+              "createdAt": "{{ago_4h}}",
+              "isAnswer": true,
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/77231?v=4",
+                "login": "ravipatel",
+                "name": "Ravi Patel"
+              },
+              "replies": {
+                "totalCount": 1,
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": [
+                  {
+                    "id": "DC_seed_8",
+                    "bodyHTML": "<p>Sounds good. I can take the snooze picker part of the spec.</p>",
+                    "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-8",
+                    "createdAt": "{{ago_3h}}",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/1024025?v=4",
+                      "login": "samokafor",
+                      "name": "Sam Okafor"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "DC_seed_9",
+              "bodyHTML": "<p>Spec PR is up: universal-inbox/universal-inbox#512. Reviews welcome 🙏</p>",
+              "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-9",
+              "createdAt": "{{ago_1h}}",
+              "isAnswer": false,
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/583231?v=4",
+                "login": "lenafischer",
+                "name": "Lena Fischer"
+              },
+              "replies": {
+                "totalCount": 0,
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

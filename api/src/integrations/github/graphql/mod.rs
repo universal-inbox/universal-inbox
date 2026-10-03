@@ -31,3 +31,21 @@ pub struct PullRequestQuery;
     variables_derives = "Deserialize"
 )]
 pub struct DiscussionQuery;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "src/integrations/github/graphql/schema.graphql",
+    query_path = "src/integrations/github/graphql/discussion_comments_query.graphql",
+    response_derives = "Debug,Clone,Serialize",
+    variables_derives = "Deserialize"
+)]
+pub struct DiscussionCommentsQuery;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "src/integrations/github/graphql/schema.graphql",
+    query_path = "src/integrations/github/graphql/discussion_comment_replies_query.graphql",
+    response_derives = "Debug,Clone,Serialize",
+    variables_derives = "Deserialize"
+)]
+pub struct DiscussionCommentRepliesQuery;

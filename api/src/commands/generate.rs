@@ -62,7 +62,10 @@ use crate::{
     configuration::Settings,
     integrations::{
         api::APIService,
-        github::graphql::{discussion_query, pull_request_query},
+        github::graphql::{
+            discussion::DiscussionCommentsPage, discussion_comments_query, discussion_query,
+            pull_request_query,
+        },
         google_mail::{GoogleMailUserProfile, RawGoogleMailThread},
         linear::{
             LinearService,
@@ -647,32 +650,63 @@ async fn generate_github_notifications(
 
     let discussion_response: Response<discussion_query::ResponseData> =
         load_seed_fixture("github_discussion_123_response.json", user_email)?;
-    let github_discussion: GithubDiscussion = discussion_response
+    let mut github_discussion: GithubDiscussion = discussion_response
         .data
         .ok_or_else(|| anyhow!("Missing data in Github discussion fixture"))?
         .try_into()?;
-    let github_discussion_notification = GithubNotification {
-        id: "3".to_string(),
-        subject: GithubNotificationSubject {
-            title: github_discussion.title.clone(),
-            url: Some(github_discussion.url.clone()),
-            latest_comment_url: None,
-            r#type: "Discussion".to_string(),
-        },
-        item: Some(GithubNotificationItem::GithubDiscussion(github_discussion)),
-        ..github_notification.clone()
-    };
-    create_notification_from_source_item(
-        executor,
-        github_discussion_notification.id.to_string(),
-        ThirdPartyItemData::GithubNotification(Box::new(github_discussion_notification)),
-        user_id,
-        integration_connection.id,
-        github_service,
-        notification_service,
-        third_party_item_service,
-    )
-    .await?;
+    let comments_response: Response<discussion_comments_query::ResponseData> =
+        load_seed_fixture("github_discussion_42_comments_response.json", user_email)?;
+    let comments_page: DiscussionCommentsPage = comments_response
+        .data
+        .ok_or_else(|| anyhow!("Missing data in Github discussion comments fixture"))?
+        .try_into()?;
+    github_discussion.comments = comments_page
+        .comments
+        .into_iter()
+        .map(|(comment, _)| comment)
+        .collect();
+
+    // The same discussion in three read states: never read, read a day ago
+    // (body read, some old and some new comments) and read 2 hours ago
+    // (only the latest comment is new).
+    let now = Utc::now();
+    let discussion_read_states = [
+        ("3", 42, None),
+        ("5", 43, Some(now - Duration::days(1))),
+        ("6", 44, Some(now - Duration::hours(2))),
+    ];
+    for (notification_id, number, last_read_at) in discussion_read_states {
+        let mut discussion = github_discussion.clone();
+        discussion.id = format!("{}_{number}", github_discussion.id);
+        discussion.number = number;
+        discussion.url =
+            format!("https://github.com/universal-inbox/universal-inbox/discussions/{number}")
+                .parse()
+                .context("Invalid seed Github discussion URL")?;
+        let github_discussion_notification = GithubNotification {
+            id: notification_id.to_string(),
+            subject: GithubNotificationSubject {
+                title: discussion.title.clone(),
+                url: Some(discussion.url.clone()),
+                latest_comment_url: None,
+                r#type: "Discussion".to_string(),
+            },
+            last_read_at,
+            item: Some(GithubNotificationItem::GithubDiscussion(discussion)),
+            ..github_notification.clone()
+        };
+        create_notification_from_source_item(
+            executor,
+            github_discussion_notification.id.to_string(),
+            ThirdPartyItemData::GithubNotification(Box::new(github_discussion_notification)),
+            user_id,
+            integration_connection.id,
+            github_service.clone(),
+            notification_service.clone(),
+            third_party_item_service.clone(),
+        )
+        .await?;
+    }
 
     Ok(integration_connection)
 }
@@ -1773,6 +1807,11 @@ mod tests {
         .unwrap();
         load_seed_fixture::<Response<discussion_query::ResponseData>>(
             "github_discussion_123_response.json",
+            TEST_USER_EMAIL,
+        )
+        .unwrap();
+        load_seed_fixture::<Response<discussion_comments_query::ResponseData>>(
+            "github_discussion_42_comments_response.json",
             TEST_USER_EMAIL,
         )
         .unwrap();
