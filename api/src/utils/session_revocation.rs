@@ -15,7 +15,7 @@ use chrono::{DateTime, Utc};
 use redis::{AsyncCommands, aio::ConnectionManager};
 use universal_inbox::user::UserId;
 
-use crate::universal_inbox::UniversalInboxError;
+use crate::{observability::attr, universal_inbox::UniversalInboxError};
 
 const NAMESPACE: &str = "universal-inbox:sessions-revoked-before:";
 
@@ -34,7 +34,14 @@ impl SessionRevocation {
     }
 
     /// Revoke every session of `user_id` issued before `revoked_before`.
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            { attr::USER_ID } = user_id.to_string(),
+            { attr::USER_SESSIONS_REVOKED_BEFORE } = revoked_before.to_rfc3339()
+        )
+    )]
     pub async fn revoke_sessions(
         &self,
         user_id: UserId,
@@ -54,7 +61,14 @@ impl SessionRevocation {
 
     /// Whether a session of `user_id` issued at `issued_at` (unix seconds) has
     /// not been revoked.
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            { attr::USER_ID } = user_id.to_string(),
+            { attr::AUTH_JWT_ISSUED_AT } = issued_at
+        )
+    )]
     pub async fn is_session_active(
         &self,
         user_id: UserId,

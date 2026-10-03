@@ -16,8 +16,12 @@ use crate::universal_inbox::{
 #[tracing::instrument(
     name = "sync-notifications-command",
     level = "info",
-    skip(notification_service),
-    fields({ attr::ERROR_TYPE } = tracing::field::Empty)
+    skip_all,
+    fields(
+        { attr::SYNC_SOURCE_KIND } = ?source,
+        { attr::USER_ID } = ?user_id,
+        { attr::ERROR_TYPE } = tracing::field::Empty
+    )
 )]
 pub async fn sync_notifications_for_all_users(
     notification_service: Arc<RwLock<NotificationService>>,
@@ -52,7 +56,16 @@ pub async fn sync_notifications_for_all_users(
     result.record_span_error()
 }
 
-#[tracing::instrument(name = "sync-tasks-command", level = "info", skip(task_service), fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
+#[tracing::instrument(
+    name = "sync-tasks-command",
+    level = "info",
+    skip_all,
+    fields(
+        { attr::SYNC_SOURCE_KIND } = ?source,
+        { attr::USER_ID } = ?user_id,
+        { attr::ERROR_TYPE } = tracing::field::Empty
+    )
+)]
 pub async fn sync_tasks_for_all_users(
     task_service: Arc<RwLock<TaskService>>,
     source: Option<TaskSyncSourceKind>,

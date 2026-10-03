@@ -33,8 +33,12 @@ pub struct BackfillTeamIdReport {
 #[tracing::instrument(
     name = "slack-backfill-team-id-command",
     level = "info",
-    skip(integration_connection_service, slack_service),
-    fields({ attr::ERROR_TYPE } = tracing::field::Empty)
+    skip_all,
+    fields(
+        { attr::USER_ID } = ?user_id,
+        { attr::COMMAND_DRY_RUN } = dry_run,
+        { attr::ERROR_TYPE } = tracing::field::Empty
+    )
 )]
 pub async fn backfill_team_id(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,

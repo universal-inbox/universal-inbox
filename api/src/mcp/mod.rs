@@ -514,7 +514,7 @@ impl UniversalInboxMcpServer {
         Ok(user_id)
     }
 
-    #[tracing::instrument(name = "mcp.call_tool", skip(self, args, context), fields({ attr::MCP_TOOL_NAME } = %tool_name))]
+    #[tracing::instrument(name = "mcp.call_tool", skip_all, fields({ attr::MCP_TOOL_NAME } = %tool_name))]
     async fn call_structured_tool<T: serde::Serialize>(
         &self,
         tool_name: &str,
