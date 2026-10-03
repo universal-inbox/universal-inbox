@@ -406,6 +406,22 @@ pub struct TracingSettings {
     pub otlp_exporter_headers: HashMap<String, String>,
     #[serde(default = "yes")]
     pub is_stdout_logging_enabled: bool,
+    /// `EnvFilter` directive for spans and span events exported over OTLP.
+    /// Independent from `logging.log_directive`, which only drives stdout.
+    #[serde(default = "default_otel_trace_directive")]
+    pub otel_trace_directive: String,
+    /// `EnvFilter` directive for events exported as OTLP logs. Kept above the
+    /// trace directive: an event that passes both is exported twice.
+    #[serde(default = "default_otel_log_directive")]
+    pub otel_log_directive: String,
+}
+
+fn default_otel_trace_directive() -> String {
+    "info".to_string()
+}
+
+fn default_otel_log_directive() -> String {
+    "warn".to_string()
 }
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Copy)]
