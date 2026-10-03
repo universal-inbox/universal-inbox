@@ -466,8 +466,8 @@ impl IntegrationConnectionRepository for Repository {
         fields(
             user.id = user_id.to_string(),
             integration_provider_kind = integration_provider_kind.to_string(),
-            synced_before_filter,
-            with_status
+            synced_before_filter = ?synced_before_filter,
+            with_status = ?with_status
         ),
         err
     )]
@@ -565,8 +565,7 @@ impl IntegrationConnectionRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
-            provider_user_id
+            integration_provider_kind = integration_provider_kind.to_string()
         ),
         err
     )]
@@ -635,8 +634,7 @@ impl IntegrationConnectionRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            integration_provider_kind = integration_provider_kind.to_string(),
-            provider_user_ids
+            integration_provider_kind = integration_provider_kind.to_string()
         ),
         err
     )]
@@ -703,7 +701,7 @@ impl IntegrationConnectionRepository for Repository {
             .collect::<Result<Vec<IntegrationConnection>, UniversalInboxError>>()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(context, required_oauth_scopes), err)]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     async fn get_integration_connection_per_context(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -773,7 +771,7 @@ impl IntegrationConnectionRepository for Repository {
         row.map(|r| r.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(team_id, provider_user_ids), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields(team_id = %team_id), err)]
     async fn find_slack_integration_connections_per_team(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -843,8 +841,6 @@ impl IntegrationConnectionRepository for Repository {
         fields(
             integration_connection_id = integration_connection_id.to_string(),
             new_status = new_status.to_string(),
-            failure_message,
-            registered_oauth_scopes,
             user.id = for_user_id.to_string()
         ),
         err
@@ -983,8 +979,7 @@ impl IntegrationConnectionRepository for Repository {
         skip_all,
         fields(
             user.id = user_id.map(|x| x.to_string()),
-            integration_provider_kind = integration_provider_kind.map(|x| x.to_string()),
-            sync_update
+            integration_provider_kind = integration_provider_kind.map(|x| x.to_string())
         ),
         err
     )]
@@ -1161,8 +1156,7 @@ impl IntegrationConnectionRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection_id.to_string(),
-            context
+            integration_connection_id = integration_connection_id.to_string()
         ),
         err
     )]
@@ -1251,8 +1245,8 @@ impl IntegrationConnectionRepository for Repository {
         skip_all,
         fields(
             user.id = for_user_id.to_string(),
-            status,
-            lock_rows
+            status = ?status,
+            lock_rows = lock_rows
         ),
         err
     )]
@@ -1613,7 +1607,6 @@ impl IntegrationConnectionRepository for Repository {
         skip_all,
         fields(
             integration_connection_id = integration_connection_id.to_string(),
-            config,
             user.id = for_user_id.to_string()
         ),
         err
@@ -1744,8 +1737,7 @@ impl IntegrationConnectionRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            integration_connection_id = integration_connection_id.to_string(),
-            provider_user_id
+            integration_connection_id = integration_connection_id.to_string()
         )
     )]
     async fn update_integration_connection_provider_user_id(

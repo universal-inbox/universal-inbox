@@ -114,7 +114,6 @@ impl TaskService {
         fields(
             third_party_item_id = third_party_item.id.to_string(),
             third_party_item_source_id = third_party_item.source_id,
-            patch,
             user.id = user_id.to_string()
         ),
         err
@@ -382,7 +381,7 @@ impl TaskService {
         skip_all,
         fields(
             status = status.to_string(),
-            only_synced_tasks,
+            only_synced_tasks = only_synced_tasks,
             user.id = user_id.to_string(),
         ),
         err
@@ -407,7 +406,6 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            matches,
             user.id = user_id.to_string()
         ),
         err
@@ -1117,7 +1115,7 @@ impl TaskService {
         fields(
             source = source.to_string(),
             user.id = user_id.to_string(),
-            force_sync
+            force_sync = force_sync
         ),
         err
     )]
@@ -1235,7 +1233,6 @@ impl TaskService {
         skip_all,
         fields(
             task_id = task_id.to_string(),
-            patch,
             user.id = for_user_id.to_string()
         ),
         err
@@ -1389,7 +1386,6 @@ impl TaskService {
         level = "debug",
         skip_all,
         fields(
-            matches,
             user.id = user_id.to_string()
         ),
         err
@@ -1447,7 +1443,6 @@ impl TaskService {
         skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            patch,
             user.id = for_user_id.to_string()
         ),
         err

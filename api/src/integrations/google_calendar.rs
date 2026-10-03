@@ -93,10 +93,7 @@ impl GoogleCalendarService {
 
         ApiClient::build(
             headers,
-            [format!(
-                "{}/calendars/{{calendar_id}}/events/{{event_id}}",
-                self.google_calendar_base_path
-            )],
+            otel_known_paths(&self.google_calendar_base_path),
             self.max_retry_duration,
         )
     }
@@ -391,10 +388,40 @@ impl NotificationSource for GoogleCalendarService {
     }
 }
 
+/// Route templates used to name outbound request spans. Every path the client
+/// calls must match one of them, otherwise the span is named `<METHOD> UNKNOWN`.
+fn otel_known_paths(base_path: &str) -> Vec<String> {
+    [
+        "/calendars/{calendar_id}/events",
+        "/calendars/{calendar_id}/events/{event_id}",
+    ]
+    .iter()
+    .map(|path| format!("{base_path}{path}"))
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use reqwest_tracing::OtelPathNames;
     use rstest::*;
+
+    #[rstest]
+    #[case(
+        "/calendar/v3/calendars/primary/events",
+        "/calendar/v3/calendars/{calendar_id}/events"
+    )]
+    #[case(
+        "/calendar/v3/calendars/primary/events/e1",
+        "/calendar/v3/calendars/{calendar_id}/events/{event_id}"
+    )]
+    fn test_otel_known_paths_match_called_endpoints(
+        #[case] path: &str,
+        #[case] expected_template: &str,
+    ) {
+        let path_names = OtelPathNames::known_paths(otel_known_paths("/calendar/v3")).unwrap();
+        assert_eq!(path_names.find(path), Some(expected_template));
+    }
 
     mod notification_conversion {
         use std::{env, fs};
