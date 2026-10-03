@@ -1017,6 +1017,128 @@ async fn test_sync_discussion_notification_with_details(
 
 #[rstest]
 #[tokio::test]
+async fn test_sync_discussion_notification_stops_on_non_advancing_cursor(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    mut github_notification: Box<GithubNotification>,
+    github_discussion_123_response: Response<discussion_query::ResponseData>,
+    github_oauth_credential: OAuthCredentialFixture,
+) {
+    github_notification.subject = GithubNotificationSubject {
+        title: "test discussion".to_string(),
+        url: Some(
+            "https://api.github.com/repos/octokit/octokit.rb/discussions/123"
+                .parse()
+                .unwrap(),
+        ),
+        latest_comment_url: None,
+        r#type: "Discussion".to_string(),
+    };
+
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings,
+        github_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    let github_notifications_response = vec![*github_notification];
+    let _github_notifications_mock = mock_github_notifications_service(
+        &app.app.github_mock_server,
+        "1",
+        &github_notifications_response,
+    )
+    .await;
+
+    let _github_discussion_query_mock = mock_github_discussion_query(
+        &app.app.github_mock_server,
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
+        &github_discussion_123_response,
+    )
+    .await;
+    // The page after `comments-cursor-1` points back to `comments-cursor-1`
+    for after in [None, Some("comments-cursor-1".to_string())] {
+        mock_github_discussion_comments_query(
+            &app.app.github_mock_server,
+            "octokit".to_string(),
+            "octokit.rb".to_string(),
+            123,
+            after,
+            &github_discussion_123_comments_response(1),
+        )
+        .await;
+    }
+    mock_github_discussion_comment_replies_query(
+        &app.app.github_mock_server,
+        "DC_1".to_string(),
+        Some("replies-cursor-1".to_string()),
+        &github_discussion_comment_1_replies_page_2_response(),
+    )
+    .await;
+
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::Github),
+        false,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+
+    let notifications = list_notifications(
+        &app.client,
+        &app.app.api_address,
+        vec![NotificationStatus::Unread],
+        false,
+        None,
+        None,
+        false,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].kind, NotificationSourceKind::Github);
+    match &notifications[0].source_item.data {
+        ThirdPartyItemData::GithubNotification(github_notification) => {
+            match &github_notification.item {
+                Some(GithubNotificationItem::GithubDiscussion(discussion)) => {
+                    assert_eq!(discussion.title, "test discussion");
+                    assert_eq!(
+                        discussion.url,
+                        "https://github.com/octocat/universal-inbox/discussions/1"
+                            .parse()
+                            .unwrap()
+                    );
+                    let category = discussion
+                        .category
+                        .as_ref()
+                        .expect("Discussion should have a category");
+                    assert_eq!(category.name, "Q&A");
+                    assert_eq!(category.emoji.as_deref(), Some(":pray:"));
+                    assert_eq!(category.slug, "q-a");
+                    assert!(category.is_answerable);
+
+                    let ids: Vec<&str> =
+                        discussion.comments.iter().map(|c| c.id.as_str()).collect();
+                    assert_eq!(ids, vec!["DC_1", "DC_4", "DC_1", "DC_4"]);
+                }
+                _ => unreachable!("Expected a GithubDiscussion notification"),
+            }
+        }
+        _ => unreachable!("Expected a GithubDiscussion notification"),
+    }
+}
+
+#[rstest]
+#[tokio::test]
 async fn test_sync_discussion_notification_with_error(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,

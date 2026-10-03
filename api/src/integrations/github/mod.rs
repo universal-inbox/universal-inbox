@@ -68,6 +68,9 @@ pub struct GithubService {
 
 static GITHUB_BASE_URL: &str = "https://api.github.com";
 static GITHUB_GRAPHQL_API_NAME: &str = "Github";
+/// Upper bound on GraphQL requests to fetch one discussion's comments and
+/// replies (100 items per page), so a misbehaving API cannot loop forever.
+const MAX_DISCUSSION_COMMENT_PAGES: usize = 100;
 
 impl GithubService {
     pub fn new(
@@ -355,38 +358,54 @@ impl GithubService {
             .try_into()?;
 
         let mut after = None;
-        loop {
+        let mut pages_left = MAX_DISCUSSION_COMMENT_PAGES;
+        'pages: loop {
+            pages_left -= 1;
             let page: DiscussionCommentsPage = self
                 .query_discussion_comments(
                     owner.clone(),
                     repository.clone(),
                     discussion_number,
-                    after,
+                    after.clone(),
                     access_token,
                 )
                 .await?
                 .try_into()?;
             for (mut comment, mut replies_cursor) in page.comments {
                 while let Some(cursor) = replies_cursor {
+                    if pages_left == 0 {
+                        discussion.comments.push(comment);
+                        break 'pages;
+                    }
+                    pages_left -= 1;
                     let replies_page: DiscussionRepliesPage = self
                         .query_discussion_comment_replies(
                             comment.id.clone(),
-                            Some(cursor),
+                            Some(cursor.clone()),
                             access_token,
                         )
                         .await?
                         .try_into()?;
                     comment.replies.extend(replies_page.replies);
-                    replies_cursor = replies_page.next_cursor;
+                    // A cursor that does not advance would loop forever
+                    replies_cursor = replies_page
+                        .next_cursor
+                        .filter(|next_cursor| *next_cursor != cursor);
                 }
                 discussion.comments.push(comment);
             }
             match page.next_cursor {
-                Some(cursor) => after = Some(cursor),
-                None => break,
+                Some(cursor) if pages_left > 0 && after.as_ref() != Some(&cursor) => {
+                    after = Some(cursor)
+                }
+                Some(_) => break,
+                None => return Ok(discussion),
             }
         }
 
+        tracing::warn!(
+            "Stopped fetching comments of Github discussion {owner}/{repository}#{discussion_number} after {MAX_DISCUSSION_COMMENT_PAGES} pages"
+        );
         Ok(discussion)
     }
 
