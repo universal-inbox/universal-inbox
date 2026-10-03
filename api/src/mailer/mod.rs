@@ -49,6 +49,10 @@ pub enum EmailTemplate {
         first_name: Option<String>,
         login_url: Url,
     },
+    PasswordChanged {
+        first_name: Option<String>,
+        password_reset_url: Url,
+    },
 }
 
 impl EmailTemplate {
@@ -61,6 +65,9 @@ impl EmailTemplate {
             }
             EmailTemplate::AccountLockout { .. } => {
                 "Your Universal Inbox account was temporarily locked".to_string()
+            }
+            EmailTemplate::PasswordChanged { .. } => {
+                "Your Universal Inbox password was changed".to_string()
             }
         }
     }
@@ -143,6 +150,26 @@ impl EmailTemplate {
                     .action(Action {
                         text: "Go to login",
                         link: login_url.as_str(),
+                        color: Some(("#388FEF", "white")),
+                        ..Default::default()
+                    })
+                    .signature("Best")
+                    .build()
+            }
+            EmailTemplate::PasswordChanged {
+                first_name,
+                password_reset_url,
+            } => {
+                let mut builder = EmailBuilder::new();
+                if let Some(first_name) = first_name {
+                    builder = builder.greeting(Greeting::Name(first_name));
+                }
+
+                builder
+                    .intro("The password of your Universal Inbox account was just changed, and your other sessions were signed out. If this was you, there is nothing else to do. If this wasn't you, reset your password right away.")
+                    .action(Action {
+                        text: "Reset your password",
+                        link: password_reset_url.as_str(),
                         color: Some(("#388FEF", "white")),
                         ..Default::default()
                     })

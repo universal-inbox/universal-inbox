@@ -14,8 +14,9 @@ use universal_inbox::{
     SuccessResponse,
     auth::{AuthorizeSessionResponse, CloseSessionResponse},
     user::{
-        Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordResetToken,
-        RegisterUserParameters, User, UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
+        Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordChange,
+        PasswordResetToken, RegisterUserParameters, User, UserAuthKind, UserAuthMethod, UserId,
+        UserPatch, Username,
     },
 };
 
@@ -39,6 +40,7 @@ pub enum UserCommand {
     UpdateUser(UserPatch),
     ListAuthMethods,
     AddLocalAuth(SecretBox<Password>),
+    ChangePassword(PasswordChange),
     AddPasskeyAuthMethod(Username),
     LinkOIDCAuth,
     RemoveAuthMethod(UserAuthKind),
@@ -291,6 +293,28 @@ pub async fn user_service(
                         ui_model.write().confirmation_message =
                             Some("Password authentication added successfully".to_string());
                         refresh_auth_methods(&api_base_url, auth_methods, ui_model).await;
+                    }
+                    Err(err) => {
+                        ui_model.write().error_message = Some(err.to_string());
+                    }
+                };
+            }
+            Some(UserCommand::ChangePassword(password_change)) => {
+                let result: Result<()> = call_api(
+                    Method::PATCH,
+                    &api_base_url,
+                    "users/me/auth-methods/local",
+                    Some(password_change),
+                    Some(ui_model),
+                )
+                .await;
+
+                match result {
+                    Ok(_) => {
+                        ui_model.write().confirmation_message = Some(
+                            "Password changed successfully, your other sessions were signed out"
+                                .to_string(),
+                        );
                     }
                     Err(err) => {
                         ui_model.write().error_message = Some(err.to_string());

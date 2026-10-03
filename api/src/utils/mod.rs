@@ -8,3 +8,4 @@ pub mod origin;
 pub mod panic;
 pub mod passkey;
 pub mod rate_limit;
+pub mod session_revocation;

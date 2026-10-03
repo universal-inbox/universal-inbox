@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 use log::error;
 
-use universal_inbox::user::{Password, PasswordResetToken, UserId};
+use universal_inbox::user::{PASSWORD_MIN_LENGTH, Password, PasswordResetToken, UserId};
 
 use crate::{
     components::{
@@ -53,7 +53,7 @@ pub fn PasswordUpdatePage(user_id: UserId, password_reset_token: PasswordResetTo
                 force_validation: force_validation(),
                 r#type: "password".to_string(),
                 field_icon_class: "icon-[lucide--lock]".to_string(),
-                placeholder: "At least 10 characters".to_string(),
+                placeholder: format!("At least {PASSWORD_MIN_LENGTH} characters"),
                 help: "Use 10+ characters with a mix of letters, numbers and symbols.".to_string(),
             }
 

@@ -3,7 +3,9 @@ use dioxus::prelude::FormValue;
 use email_address::EmailAddress;
 use secrecy::SecretBox;
 
-use universal_inbox::user::{Credentials, Password, RegisterUserParameters, UserPatch, Username};
+use universal_inbox::user::{
+    Credentials, Password, PasswordChange, RegisterUserParameters, UserPatch, Username,
+};
 
 pub struct FormValues(pub Vec<(String, FormValue)>);
 
@@ -74,6 +76,37 @@ impl TryFrom<FormValues> for SecretBox<Password> {
             .parse()?;
 
         Ok(SecretBox::new(Box::new(password)))
+    }
+}
+
+impl TryFrom<FormValues> for PasswordChange {
+    type Error = anyhow::Error;
+
+    fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
+        // The current password was set under whatever policy applied at the
+        // time: only the new one is checked against the current policy.
+        let current_password = Password(
+            form_values
+                .get_text("current_password")
+                .filter(|password| !password.is_empty())
+                .ok_or_else(|| anyhow!("current password is required"))?
+                .to_string(),
+        );
+        let new_password: Password = form_values
+            .get_text("new_password")
+            .ok_or_else(|| anyhow!("new password is required"))?
+            .parse()?;
+        let new_password_confirmation = form_values
+            .get_text("new_password_confirmation")
+            .ok_or_else(|| anyhow!("new password confirmation is required"))?;
+        if new_password.0 != new_password_confirmation {
+            return Err(anyhow!("the new passwords do not match"));
+        }
+
+        Ok(Self {
+            current_password: SecretBox::new(Box::new(current_password)),
+            new_password: SecretBox::new(Box::new(new_password)),
+        })
     }
 }
 

@@ -17,6 +17,7 @@
 - Sync per-task time, duration, and timezone to TickTick (duration modeled as a start/due time range)
 - Self-service account deletion: `DELETE /api/users/me` (confirmed by re-typing the email address) and a "Delete my account" card on the Profile page; the `user delete` CLI command runs the same service flow
 - Pause the Slack connections of users inactive for 90 days and the connections failing for 30 days (`pause-slack-connections` cron, disabled by default): their provider grant is revoked and they show as Paused with a reconnect action
+- Change the password from Profile > Authentication methods
 
 ### Changed
 
@@ -40,6 +41,7 @@
 - Replace `typed_id` + `paste` crates with inline implementation to resolve RUSTSEC-2024-0436 (unmaintained `paste` crate)
 - Downgrade `zip` from yanked 7.4.0 to 7.2.0 (resolves GH#133)
 - Keep OAuth credentials and OIDC ID tokens out of traces: secret types no longer print their value, and the exporter redacts any JWT left in spans / log bodies
+- Changing or resetting a password signs the user out of their other sessions and sends them a confirmation email
 
 ### Fixed
 

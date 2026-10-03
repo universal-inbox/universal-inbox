@@ -8,6 +8,7 @@ use anyhow::{Context, anyhow};
 use argon2::{Argon2, Params, PasswordHasher, PasswordVerifier};
 use chrono::{DateTime, TimeDelta, Utc};
 use email_address::EmailAddress;
+use futures::{FutureExt, future::LocalBoxFuture};
 use openidconnect::{
     AccessToken, AuthorizationCode, CsrfToken, EmptyAdditionalClaims, EndSessionUrl, IdToken,
     LogoutRequest, Nonce, PostLogoutRedirectUrl, ProviderMetadataWithLogout, RedirectUrl,
@@ -28,9 +29,9 @@ use webauthn_rs::prelude::*;
 use universal_inbox::{
     auth::openidconnect::OpenidConnectProvider,
     user::{
-        Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordHash,
-        PasswordResetToken, User, UserAuthKind, UserAuthMethod, UserId, UserPatch, UserPreferences,
-        UserPreferencesPatch, Username,
+        Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordChange,
+        PasswordHash, PasswordResetToken, User, UserAuthKind, UserAuthMethod, UserId, UserPatch,
+        UserPreferences, UserPreferencesPatch, Username,
     },
 };
 
@@ -41,6 +42,7 @@ use crate::{
         OIDCFlowSettings, OpenIDConnectSettings,
     },
     mailer::{EmailTemplate, Mailer},
+    middlewares::jwt_auth::SessionTokenChecker,
     observability::spawn_blocking_with_tracing,
     repository::Repository,
     repository::user::UserRepository,
@@ -52,7 +54,10 @@ use crate::{
             AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
         },
     },
-    utils::login_throttle::{AccountRateLimitScope, LoginThrottle},
+    utils::{
+        login_throttle::{AccountRateLimitScope, LoginThrottle},
+        session_revocation::SessionRevocation,
+    },
 };
 
 /// How long a password reset link stays valid after its email was sent. An
@@ -67,6 +72,28 @@ const EMAIL_CHANGE_VALIDITY_HOURS: i64 = 24;
 /// writes.
 const USER_ACTIVITY_RECORDING_INTERVAL_HOURS: i64 = 24;
 
+/// Rejects session cookies issued before the user's sessions were revoked (see
+/// [`UserService::is_session_active`]).
+pub struct UserSessionChecker(pub Arc<UserService>);
+
+impl SessionTokenChecker for UserSessionChecker {
+    fn is_active(
+        &self,
+        subject: String,
+        issued_at: i64,
+    ) -> LocalBoxFuture<'static, Result<bool, UniversalInboxError>> {
+        let service = self.0.clone();
+        async move {
+            let user_id = subject
+                .parse::<UserId>()
+                .context("Wrong user ID format")
+                .map_err(UniversalInboxError::Unexpected)?;
+            Ok(service.is_session_active(user_id, issued_at).await)
+        }
+        .boxed_local()
+    }
+}
+
 pub struct UserService {
     repository: Arc<Repository>,
     application_settings: ApplicationSettings,
@@ -75,6 +102,9 @@ pub struct UserService {
     /// Per-account login throttle. `None` when local password auth is not
     /// configured (nothing to throttle) or when Redis is unavailable at startup.
     login_throttle: Option<LoginThrottle>,
+    /// Revokes a user's sessions on password change or reset. `None` when
+    /// Redis is unavailable at startup.
+    session_revocation: Option<SessionRevocation>,
     /// Used on account deletion to revoke the user's provider OAuth grants.
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     /// When this process last recorded each user's activity, so that most
@@ -89,6 +119,7 @@ impl UserService {
         mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
         webauthn: Arc<Webauthn>,
         login_throttle: Option<LoginThrottle>,
+        session_revocation: Option<SessionRevocation>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     ) -> UserService {
         UserService {
@@ -97,6 +128,7 @@ impl UserService {
             mailer,
             webauthn,
             login_throttle,
+            session_revocation,
             integration_connection_service,
             recorded_user_activities: Mutex::new(HashMap::new()),
         }
@@ -1755,7 +1787,10 @@ impl UserService {
         match updated_user {
             UpdateStatus {
                 result: Some(_), ..
-            } => Ok(()),
+            } => {
+                self.revoke_sessions(user_id).await;
+                Ok(())
+            }
             UpdateStatus { result: None, .. } => Err(UniversalInboxError::InvalidInputData {
                 source: None,
                 user_error: format!("Invalid password reset token for user {user_id}"),
@@ -1784,7 +1819,10 @@ impl UserService {
         match updated_user {
             UpdateStatus {
                 result: Some(_), ..
-            } => Ok(()),
+            } => {
+                self.revoke_sessions(user_id).await;
+                Ok(())
+            }
             UpdateStatus { result: None, .. } => Err(UniversalInboxError::InvalidInputData {
                 source: None,
                 user_error: format!(
@@ -1792,6 +1830,150 @@ impl UserService {
                 ),
             }),
         }
+    }
+
+    /// Change the password of an authenticated user after re-checking their
+    /// current one, then sign out their other sessions and notify them by
+    /// email. The current password check shares the login throttle, so it
+    /// cannot be used to brute-force the password either.
+    ///
+    /// A wrong current password is reported as invalid input, not
+    /// `Unauthorized`: a 401 would clear the session cookie and log the user
+    /// out.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    pub async fn change_password(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        password_change: PasswordChange,
+    ) -> Result<(), UniversalInboxError> {
+        let user = self
+            .repository
+            .get_user(executor, user_id)
+            .await?
+            .ok_or_else(|| UniversalInboxError::ItemNotFound(format!("Unknown user {user_id}")))?;
+        let (Some(email), Some(UserAuth::Local(_))) = (
+            user.email.clone(),
+            self.repository
+                .get_user_auth(executor, user_id, UserAuthKind::Local)
+                .await?,
+        ) else {
+            return Err(UniversalInboxError::UnsupportedAction(
+                "Cannot change the password of an account without password authentication"
+                    .to_string(),
+            ));
+        };
+
+        let PasswordChange {
+            current_password,
+            new_password,
+        } = password_change;
+        if current_password.expose_secret().0 == new_password.expose_secret().0 {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: "The new password must be different from the current one".to_string(),
+            });
+        }
+
+        match self
+            .validate_credentials(
+                executor,
+                Credentials {
+                    email,
+                    password: current_password,
+                },
+            )
+            .await
+        {
+            Ok(_) => {}
+            Err(UniversalInboxError::Unauthorized(_)) => {
+                return Err(UniversalInboxError::InvalidInputData {
+                    source: None,
+                    user_error: "The current password is incorrect".to_string(),
+                });
+            }
+            Err(err) => return Err(err),
+        }
+
+        self.set_password(executor, user_id, new_password).await?;
+
+        let dry_run = self.application_settings.dry_run;
+        if let Err(err) = self.send_password_changed_email(user, dry_run).await {
+            warn!("Failed to send password changed email: {err:?}");
+        }
+
+        Ok(())
+    }
+
+    /// Sign out every session of `user_id` issued before now. Best-effort, like
+    /// the login throttle: a Redis failure is logged and must not prevent the
+    /// password update that triggered it.
+    async fn revoke_sessions(&self, user_id: UserId) {
+        let Some(session_revocation) = &self.session_revocation else {
+            return;
+        };
+        if let Err(err) = session_revocation
+            .revoke_sessions(user_id, Utc::now())
+            .await
+        {
+            warn!("Failed to revoke the sessions of user {user_id}: {err:?}");
+        }
+    }
+
+    /// Whether a session JWT of `user_id` issued at `issued_at` (unix seconds)
+    /// is still valid. Fails open on Redis errors so that a Redis outage does
+    /// not log everyone out.
+    pub async fn is_session_active(&self, user_id: UserId, issued_at: i64) -> bool {
+        let Some(session_revocation) = &self.session_revocation else {
+            return true;
+        };
+        match session_revocation
+            .is_session_active(user_id, issued_at)
+            .await
+        {
+            Ok(is_active) => is_active,
+            Err(err) => {
+                warn!("Session revocation check failed, allowing session: {err:?}");
+                true
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user.id.to_string()), err)]
+    async fn send_password_changed_email(
+        &self,
+        user: User,
+        dry_run: bool,
+    ) -> Result<(), UniversalInboxError> {
+        if user.is_testing {
+            debug!(
+                "Skipping password changed email for test account {}",
+                user.id
+            );
+            return Ok(());
+        }
+
+        let template = EmailTemplate::PasswordChanged {
+            first_name: user.first_name.clone(),
+            password_reset_url: format!(
+                "{}password-reset",
+                self.application_settings.front_base_url
+            )
+            .parse()
+            .context("Failed to build password reset URL")?,
+        };
+        self.mailer
+            .read()
+            .await
+            .send_email(user, template, dry_run)
+            .await?;
+
+        Ok(())
     }
 
     #[tracing::instrument(level = "debug", skip_all, err)]

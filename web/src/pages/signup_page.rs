@@ -5,7 +5,10 @@ use dioxus::prelude::*;
 use email_address::EmailAddress;
 use log::error;
 
-use universal_inbox::{FrontAuthenticationConfig, user::Password};
+use universal_inbox::{
+    FrontAuthenticationConfig,
+    user::{PASSWORD_MIN_LENGTH, Password},
+};
 
 use crate::{
     auth::authenticate_authorization_code_flow,
@@ -104,7 +107,7 @@ pub fn SignupPage() -> Element {
                     force_validation: force_validation(),
                     r#type: "password".to_string(),
                     field_icon_class: "icon-[lucide--lock]".to_string(),
-                    placeholder: "At least 10 characters".to_string(),
+                    placeholder: format!("At least {PASSWORD_MIN_LENGTH} characters"),
                     help: "Use 10+ characters with a mix of letters, numbers and symbols.".to_string(),
                 }
 

@@ -12,6 +12,9 @@
 //! [`BearerTokenChecker`], which rejects stored API tokens that were revoked or have
 //! expired. Session JWTs are not stored: logout clears the session cookie
 //! (`session.purge()`), and OAuth2 access is revoked by deleting refresh tokens.
+//! Tokens read from the session cookie are passed to an optional
+//! [`SessionTokenChecker`], which rejects sessions issued before the user's sessions
+//! were revoked (password change or reset).
 
 use std::{
     future::{Ready, ready},
@@ -42,6 +45,33 @@ pub struct JWT(pub String);
 /// consulting its stored row (revocation, expiry).
 pub trait BearerTokenChecker {
     fn is_active(&self, jwt: JWT) -> LocalBoxFuture<'static, Result<bool, UniversalInboxError>>;
+}
+
+/// Decides whether a validly signed session JWT (read from the session cookie) is
+/// still accepted, given its subject and issue time.
+pub trait SessionTokenChecker {
+    fn is_active(
+        &self,
+        subject: String,
+        issued_at: i64,
+    ) -> LocalBoxFuture<'static, Result<bool, UniversalInboxError>>;
+}
+
+/// The claims a [`SessionTokenChecker`] needs from a decoded JWT.
+pub trait SessionClaims {
+    fn subject(&self) -> &str;
+    /// Issue time, in seconds since the Unix epoch.
+    fn issued_at(&self) -> i64;
+}
+
+impl SessionClaims for Claims {
+    fn subject(&self) -> &str {
+        &self.sub
+    }
+
+    fn issued_at(&self) -> i64 {
+        self.iat as i64
+    }
 }
 
 /// The key under which the JWT is stored in the [`actix_session::Session`] cookie.
@@ -160,6 +190,10 @@ pub struct AuthenticateMiddlewareSettings {
     /// Optional check applied to tokens read from the `Authorization` header after
     /// their signature is validated. When `None`, bearer tokens are not checked further.
     pub bearer_token_checker: Option<Arc<dyn BearerTokenChecker + Send + Sync>>,
+
+    /// Optional check applied to tokens read from the session cookie after their
+    /// signature is validated. When `None`, session tokens are not checked further.
+    pub session_token_checker: Option<Arc<dyn SessionTokenChecker + Send + Sync>>,
 }
 
 /// Factory for [`AuthenticateMiddleware`]. Instantiate once at bootstrap and clone into the
@@ -172,6 +206,7 @@ pub struct AuthenticateMiddlewareFactory<ClaimsType> {
     /// Header prefixes are pre-suffixed with a space (e.g. `"Bearer "`) for prefix stripping.
     jwt_authorization_header_prefixes: Option<Arc<Vec<String>>>,
     bearer_token_checker: Option<Arc<dyn BearerTokenChecker + Send + Sync>>,
+    session_token_checker: Option<Arc<dyn SessionTokenChecker + Send + Sync>>,
     _claims_type_marker: PhantomData<ClaimsType>,
 }
 
@@ -187,6 +222,7 @@ impl<ClaimsType> AuthenticateMiddlewareFactory<ClaimsType> {
                 |prefixes| Arc::new(prefixes.iter().map(|prefix| format!("{prefix} ")).collect()),
             ),
             bearer_token_checker: settings.bearer_token_checker,
+            session_token_checker: settings.session_token_checker,
             _claims_type_marker: PhantomData,
         }
     }
@@ -195,7 +231,7 @@ impl<ClaimsType> AuthenticateMiddlewareFactory<ClaimsType> {
 impl<S, B, ClaimsType> Transform<S, ServiceRequest> for AuthenticateMiddlewareFactory<ClaimsType>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
-    ClaimsType: DeserializeOwned + 'static,
+    ClaimsType: DeserializeOwned + SessionClaims + 'static,
     B: MessageBody + 'static,
 {
     type Response = ServiceResponse<EitherBody<B>>;
@@ -212,6 +248,7 @@ where
             jwt_session_key: self.jwt_session_key.clone(),
             jwt_authorization_header_prefixes: self.jwt_authorization_header_prefixes.clone(),
             bearer_token_checker: self.bearer_token_checker.clone(),
+            session_token_checker: self.session_token_checker.clone(),
             _claims_type_marker: PhantomData,
         }))
     }
@@ -226,12 +263,13 @@ pub struct AuthenticateMiddleware<S, ClaimsType> {
     jwt_session_key: Option<Arc<JWTSessionKey>>,
     jwt_authorization_header_prefixes: Option<Arc<Vec<String>>>,
     bearer_token_checker: Option<Arc<dyn BearerTokenChecker + Send + Sync>>,
+    session_token_checker: Option<Arc<dyn SessionTokenChecker + Send + Sync>>,
     _claims_type_marker: PhantomData<ClaimsType>,
 }
 
 impl<S, B, ClaimsType> Service<ServiceRequest> for AuthenticateMiddleware<S, ClaimsType>
 where
-    ClaimsType: DeserializeOwned + 'static,
+    ClaimsType: DeserializeOwned + SessionClaims + 'static,
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
     B: MessageBody + 'static,
 {
@@ -248,6 +286,7 @@ where
         let jwt_session_key = self.jwt_session_key.clone();
         let jwt_authorization_header_prefixes = self.jwt_authorization_header_prefixes.clone();
         let bearer_token_checker = self.bearer_token_checker.clone();
+        let session_token_checker = self.session_token_checker.clone();
         async move {
             authenticate::<S, B, ClaimsType>(
                 svc,
@@ -256,6 +295,7 @@ where
                 jwt_session_key,
                 jwt_authorization_header_prefixes,
                 bearer_token_checker,
+                session_token_checker,
                 &jwt_validator,
             )
             .await
@@ -264,6 +304,7 @@ where
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn authenticate<S, B, ClaimsType>(
     svc: Rc<S>,
     req: ServiceRequest,
@@ -271,10 +312,11 @@ async fn authenticate<S, B, ClaimsType>(
     jwt_session_key: Option<Arc<JWTSessionKey>>,
     jwt_authorization_header_prefixes: Option<Arc<Vec<String>>>,
     bearer_token_checker: Option<Arc<dyn BearerTokenChecker + Send + Sync>>,
+    session_token_checker: Option<Arc<dyn SessionTokenChecker + Send + Sync>>,
     validation: &Validation,
 ) -> Result<ServiceResponse<EitherBody<B>>, actix_web::Error>
 where
-    ClaimsType: DeserializeOwned + 'static,
+    ClaimsType: DeserializeOwned + SessionClaims + 'static,
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
 {
     let maybe_bearer_jwt =
@@ -286,21 +328,37 @@ where
     if let Some(jwt) = maybe_extracted_jwt {
         match decode::<ClaimsType>(jwt.0.as_str(), jwt_decoding_key, validation) {
             Ok(decoded) => {
-                if is_bearer && let Some(checker) = bearer_token_checker {
-                    match checker.is_active(jwt.clone()).await {
-                        Ok(true) => {}
-                        Ok(false) => {
-                            let response = req
-                                .error_response(UniversalInboxError::Unauthorized(anyhow!(
-                                    "Invalid session: token has been revoked or has expired"
-                                )))
-                                .map_into_right_body();
-                            return Ok(response);
+                let is_active = if is_bearer {
+                    match bearer_token_checker {
+                        Some(checker) => checker.is_active(jwt.clone()).await,
+                        None => Ok(true),
+                    }
+                } else {
+                    match session_token_checker {
+                        Some(checker) => {
+                            checker
+                                .is_active(
+                                    decoded.claims.subject().to_string(),
+                                    decoded.claims.issued_at(),
+                                )
+                                .await
                         }
-                        Err(error) => {
-                            let response = req.error_response(error).map_into_right_body();
-                            return Ok(response);
-                        }
+                        None => Ok(true),
+                    }
+                };
+                match is_active {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        let response = req
+                            .error_response(UniversalInboxError::Unauthorized(anyhow!(
+                                "Invalid session: token has been revoked or has expired"
+                            )))
+                            .map_into_right_body();
+                        return Ok(response);
+                    }
+                    Err(error) => {
+                        let response = req.error_response(error).map_into_right_body();
+                        return Ok(response);
                     }
                 }
                 req.extensions_mut().insert(Authenticated {
@@ -370,6 +428,16 @@ mod tests {
         sub: String,
     }
 
+    impl SessionClaims for TestClaims {
+        fn subject(&self) -> &str {
+            &self.sub
+        }
+
+        fn issued_at(&self) -> i64 {
+            self.iat as i64
+        }
+    }
+
     fn generate_keys() -> (EncodingKey, DecodingKey) {
         let doc = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
         let keypair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
@@ -400,6 +468,7 @@ mod tests {
             jwt_session_key: Some(JWTSessionKey(SESSION_KEY.to_string())),
             jwt_authorization_header_prefixes: Some(vec!["Bearer".to_string()]),
             bearer_token_checker: None,
+            session_token_checker: None,
         }
     }
 
@@ -432,7 +501,15 @@ mod tests {
         session_login_token: Option<String>,
     ) -> impl Service<Request, Response = ServiceResponse<EitherBody<BoxBody>>, Error = actix_web::Error>
     {
-        let factory = AuthenticateMiddlewareFactory::<TestClaims>::new(settings(decoding_key));
+        init_app_with_settings(settings(decoding_key), session_login_token).await
+    }
+
+    async fn init_app_with_settings(
+        settings: AuthenticateMiddlewareSettings,
+        session_login_token: Option<String>,
+    ) -> impl Service<Request, Response = ServiceResponse<EitherBody<BoxBody>>, Error = actix_web::Error>
+    {
+        let factory = AuthenticateMiddlewareFactory::<TestClaims>::new(settings);
         test::init_service(
             App::new()
                 .app_data(web::Data::new(session_login_token))
@@ -599,5 +676,65 @@ mod tests {
         assert_eq!(actix_http::StatusCode::OK, resp.status());
         let claims: TestClaims = test::read_body_json(resp).await;
         assert_eq!("cookie-user", claims.sub);
+    }
+
+    /// Rejects every session of `revoked_subject`, whatever its issue time.
+    struct RevokedSubjectChecker {
+        revoked_subject: &'static str,
+    }
+
+    impl SessionTokenChecker for RevokedSubjectChecker {
+        fn is_active(
+            &self,
+            subject: String,
+            _issued_at: i64,
+        ) -> LocalBoxFuture<'static, Result<bool, UniversalInboxError>> {
+            let is_active = subject != self.revoked_subject;
+            async move { Ok(is_active) }.boxed_local()
+        }
+    }
+
+    fn settings_with_revoked_session(
+        decoding_key: DecodingKey,
+        revoked_subject: &'static str,
+    ) -> AuthenticateMiddlewareSettings {
+        AuthenticateMiddlewareSettings {
+            session_token_checker: Some(Arc::new(RevokedSubjectChecker { revoked_subject })),
+            ..settings(decoding_key)
+        }
+    }
+
+    #[actix_web::test]
+    async fn revoked_session_cookie_is_rejected() {
+        let (enc, dec) = generate_keys();
+        let token = make_token(&enc, "cookie-user", 3600);
+        let app = init_app_with_settings(
+            settings_with_revoked_session(dec, "cookie-user"),
+            Some(token),
+        )
+        .await;
+
+        let login_resp =
+            test::call_service(&app, test::TestRequest::get().uri("/login").to_request()).await;
+        let mut req = test::TestRequest::get().uri("/protected");
+        for cookie in login_resp.response().cookies() {
+            req = req.cookie(cookie);
+        }
+        let resp = app.call(req.to_request()).await.unwrap();
+        assert_eq!(actix_http::StatusCode::UNAUTHORIZED, resp.status());
+    }
+
+    #[actix_web::test]
+    async fn session_checker_does_not_apply_to_bearer_tokens() {
+        let (enc, dec) = generate_keys();
+        let token = make_token(&enc, "cookie-user", 3600);
+        let app =
+            init_app_with_settings(settings_with_revoked_session(dec, "cookie-user"), None).await;
+        let req = test::TestRequest::get()
+            .uri("/protected")
+            .insert_header(("Authorization", format!("Bearer {token}")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(actix_http::StatusCode::OK, resp.status());
     }
 }
