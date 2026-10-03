@@ -23,6 +23,7 @@
 - Switch Slack preview rendering to direct HTML via `slack-blocks-render` v0.5.0, replacing the Markdown→comrak→regex pipeline
 - Load the Crisp support chat only when the user clicks "Support": no Crisp request, websocket or cookie before that, and none on the login/signup pages
 - Mark Slack connections as Failing, with a reconnect message, as soon as the user removes Universal Inbox from Slack or an admin uninstalls the app
+- Collapse the already read part of a Slack thread in its preview and open it scrolled to the latest read reply
 
 ### Security
 
