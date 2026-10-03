@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use dioxus::prelude::*;
+use gloo_timers::future::TimeoutFuture;
 use slack_blocks_render::SlackReferences;
 use slack_morphism::prelude::*;
 
@@ -22,9 +23,14 @@ use crate::components::{
         thread_message::{ThreadedMessage, ThreadedMessageFollowup},
     },
 };
+use crate::utils::scroll_child_to_top;
 
 const GROUP_GAP_SECS: i64 = 5 * 60;
-const COLLAPSE_THRESHOLD: usize = 3;
+const LATEST_READ_ANCHOR_ID: &str = "slack-thread-latest-read";
+const SCROLL_ANCHOR_OFFSET_PX: f64 = 12.0;
+// Icon + text inside a `ThreadDivider` pill. `align-top` keeps the inline-flex
+// box off the label's text baseline so the content stays vertically centered.
+const DIVIDER_CONTENT_CLASS: &str = "inline-flex items-center gap-1 align-top";
 
 #[component]
 pub fn SlackThreadPreview(
@@ -37,22 +43,49 @@ pub fn SlackThreadPreview(
     let _ = title;
 
     let mut show_all = use_signal(|| false);
+    let mut show_root = use_signal(|| false);
     let _resource = use_resource(move || async move {
-        *show_all.write() = expand_details();
+        let expanded = expand_details();
+        *show_all.write() = expanded;
+        *show_root.write() = expanded;
+    });
+
+    // When another thread is displayed: collapse it again and scroll the
+    // preview down to the latest read reply, so the read context and the
+    // unread replies are in view.
+    let mut shown_thread_key = use_signal(|| None::<String>);
+    use_effect(move || {
+        let thread = slack_thread();
+        let key = format!(
+            "{}-{}",
+            thread.channel.id,
+            thread.messages.first().origin.ts
+        );
+        if shown_thread_key.peek().as_ref() == Some(&key) {
+            return;
+        }
+        shown_thread_key.set(Some(key));
+        let expanded = *expand_details.peek();
+        show_all.set(expanded);
+        show_root.set(expanded);
+        if read_reply_count(&thread) > 0 {
+            spawn(async move {
+                // Run after the parent resets the preview scroll position.
+                TimeoutFuture::new(0).await;
+                let _ = scroll_child_to_top(
+                    "notification-preview-details",
+                    LATEST_READ_ANCHOR_ID,
+                    SCROLL_ANCHOR_OFFSET_PX,
+                );
+            });
+        }
     });
 
     let thread = slack_thread();
     let root = thread.messages.first().clone();
     let replies: Vec<SlackHistoryMessage> = thread.messages.iter().skip(1).cloned().collect();
 
-    let split_index = match thread.last_read.as_ref() {
-        Some(ts) => replies
-            .iter()
-            .position(|m| &m.origin.ts == ts)
-            .map(|i| i + 1)
-            .unwrap_or(0),
-        None => 0,
-    };
+    let split_index = read_reply_count(&thread);
     let read_replies: Vec<SlackHistoryMessage> = replies[..split_index].to_vec();
     let unread_replies: Vec<SlackHistoryMessage> = replies[split_index..].to_vec();
     let unread_count = unread_replies.len();
@@ -60,21 +93,24 @@ pub fn SlackThreadPreview(
 
     let participants = compute_participants(&thread);
 
-    let collapse_active = !show_all() && read_replies.len() >= COLLAPSE_THRESHOLD;
-    let read_groups: Vec<Vec<SlackHistoryMessage>> = if collapse_active {
-        Vec::new()
+    // With read replies, the root is hidden behind its own control: the latest
+    // read reply is the context that matters for triage.
+    let has_read_replies = !read_replies.is_empty();
+    let root_hidden = has_read_replies && !show_root();
+
+    let collapse_active = !show_all() && read_replies.len() >= 2;
+    let mut read_groups: Vec<Vec<SlackHistoryMessage>> = if collapse_active {
+        read_replies
+            .last()
+            .map(|last| vec![vec![last.clone()]])
+            .unwrap_or_default()
     } else {
         group_messages(&read_replies)
     };
+    let latest_read_group = read_groups.pop();
     let unread_groups: Vec<Vec<SlackHistoryMessage>> = group_messages(&unread_replies);
 
-    let collapsed_first = read_replies.first().cloned();
-    let collapsed_last = if read_replies.len() > 1 {
-        read_replies.last().cloned()
-    } else {
-        None
-    };
-    let hidden_count = read_replies.len().saturating_sub(2);
+    let hidden_count = read_replies.len().saturating_sub(1);
 
     let sender_profiles = thread.sender_profiles.clone();
     let references = thread.references.clone();
@@ -100,41 +136,37 @@ pub fn SlackThreadPreview(
                 div {
                     class: "bg-ui-surface border border-ui-border rounded-ui-lg p-3 mb-2.5",
 
-                    SlackMessageGroup {
-                        messages: vec![root.clone()],
-                        sender_profiles: sender_profiles.clone(),
-                        references: references.clone(),
-                        user_slack_id: user_slack_id.clone(),
+                    if root_hidden {
+                        ThreadDivider {
+                            button {
+                                r#type: "button",
+                                class: DIVIDER_CONTENT_CLASS,
+                                onclick: move |_| { *show_root.write() = true; },
+                                span { class: "icon-[lucide--arrow-up-to-line] size-3" }
+                                "Show thread start"
+                            }
+                        }
+                    } else {
+                        SlackMessageGroup {
+                            messages: vec![root.clone()],
+                            sender_profiles: sender_profiles.clone(),
+                            references: references.clone(),
+                            user_slack_id: user_slack_id.clone(),
+                        }
                     }
 
                     if collapse_active {
-                        if let Some(first) = collapsed_first.clone() {
-                            SlackMessageGroup {
-                                messages: vec![first],
-                                sender_profiles: sender_profiles.clone(),
-                                references: references.clone(),
-                                user_slack_id: user_slack_id.clone(),
-                            }
-                        }
-                        if hidden_count > 0 {
-                            ThreadDivider {
-                                button {
-                                    r#type: "button",
-                                    onclick: move |_| { *show_all.write() = true; },
-                                    if hidden_count == 1 {
-                                        "1 hidden reply…"
-                                    } else {
-                                        "{hidden_count} hidden replies…"
-                                    }
+                        ThreadDivider {
+                            button {
+                                r#type: "button",
+                                class: DIVIDER_CONTENT_CLASS,
+                                onclick: move |_| { *show_all.write() = true; },
+                                span { class: "icon-[lucide--arrow-up] size-3" }
+                                if hidden_count == 1 {
+                                    "1 earlier reply…"
+                                } else {
+                                    "{hidden_count} earlier replies…"
                                 }
-                            }
-                        }
-                        if let Some(last) = collapsed_last.clone() {
-                            SlackMessageGroup {
-                                messages: vec![last],
-                                sender_profiles: sender_profiles.clone(),
-                                references: references.clone(),
-                                user_slack_id: user_slack_id.clone(),
                             }
                         }
                     } else {
@@ -148,10 +180,26 @@ pub fn SlackThreadPreview(
                         }
                     }
 
+                    if let Some(group) = latest_read_group.clone() {
+                        div {
+                            id: LATEST_READ_ANCHOR_ID,
+                            SlackMessageGroup {
+                                messages: group,
+                                sender_profiles: sender_profiles.clone(),
+                                references: references.clone(),
+                                user_slack_id: user_slack_id.clone(),
+                            }
+                        }
+                    }
+
                     if unread_count > 0 {
                         ThreadDivider {
                             unread: true,
-                            if unread_count == 1 { "1 NEW REPLY" } else { "{unread_count} NEW REPLIES" }
+                            span {
+                                class: DIVIDER_CONTENT_CLASS,
+                                span { class: "icon-[lucide--arrow-down] size-3" }
+                                if unread_count == 1 { "1 NEW REPLY" } else { "{unread_count} NEW REPLIES" }
+                            }
                         }
                         for group in unread_groups.iter().cloned() {
                             SlackMessageGroup {
@@ -351,6 +399,23 @@ fn compute_participants(thread: &SlackThread) -> Vec<(String, String)> {
         }
     }
     out
+}
+
+/// Number of replies (root excluded) up to and including `last_read`.
+/// 0 when nothing is read, or only the root is.
+fn read_reply_count(thread: &SlackThread) -> usize {
+    thread
+        .last_read
+        .as_ref()
+        .and_then(|ts| {
+            thread
+                .messages
+                .iter()
+                .skip(1)
+                .position(|m| &m.origin.ts == ts)
+        })
+        .map(|i| i + 1)
+        .unwrap_or(0)
 }
 
 fn group_messages(messages: &[SlackHistoryMessage]) -> Vec<Vec<SlackHistoryMessage>> {
