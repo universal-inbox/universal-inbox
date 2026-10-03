@@ -8,13 +8,13 @@ use uuid::Uuid;
 
 use universal_inbox_api::{
     configuration::{
-        PauseSlackConnectionsCronSettings, RefreshOAuthTokensCronSettings, Settings,
+        PauseIntegrationConnectionsCronSettings, RefreshOAuthTokensCronSettings, Settings,
         VacuumJobsCronSettings,
     },
     jobs::{
         JobStorage,
         cron::{
-            handle_pause_slack_connections_cron_tick, handle_refresh_oauth_tokens_cron_tick,
+            handle_pause_integration_connections_cron_tick, handle_refresh_oauth_tokens_cron_tick,
             handle_vacuum_jobs_cron_tick, try_acquire_cron_tick_lock,
         },
     },
@@ -89,7 +89,7 @@ async fn test_refresh_oauth_tokens_cron_tick_enqueues_job_once(
 
 #[rstest]
 #[tokio::test]
-async fn test_pause_slack_connections_cron_tick_enqueues_job_once(
+async fn test_pause_integration_connections_cron_tick_enqueues_job_once(
     settings: Settings,
     #[future] redis_storage: JobStorage,
 ) {
@@ -97,7 +97,7 @@ async fn test_pause_slack_connections_cron_tick_enqueues_job_once(
     let cache = Cache::new(settings.redis.connection_string())
         .await
         .expect("Failed to create cache");
-    let cron_settings = PauseSlackConnectionsCronSettings {
+    let cron_settings = PauseIntegrationConnectionsCronSettings {
         inactivity_threshold_days: 42,
         ..Default::default()
     };
@@ -105,7 +105,7 @@ async fn test_pause_slack_connections_cron_tick_enqueues_job_once(
 
     // Simulate 2 worker processes handling the same cron tick
     for _ in 0..2 {
-        handle_pause_slack_connections_cron_tick(
+        handle_pause_integration_connections_cron_tick(
             Default::default(),
             CronContext::new(tick),
             Data::new(redis_storage.clone()),
@@ -505,8 +505,8 @@ fn test_refresh_oauth_tokens_cron_settings(settings: Settings) {
 }
 
 #[rstest]
-fn test_pause_slack_connections_cron_settings(settings: Settings) {
-    let cron_settings = settings.application.cron.pause_slack_connections;
+fn test_pause_integration_connections_cron_settings(settings: Settings) {
+    let cron_settings = settings.application.cron.pause_integration_connections;
     // Disabled by default: it revokes grants at Slack
     assert!(!cron_settings.is_enabled);
     assert_eq!(cron_settings.schedule, "0 0 3 * * *");

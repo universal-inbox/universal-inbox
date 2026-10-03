@@ -75,7 +75,7 @@ use crate::{
     },
     jobs::{
         cron::{
-            handle_pause_slack_connections_cron_tick, handle_refresh_oauth_tokens_cron_tick,
+            handle_pause_integration_connections_cron_tick, handle_refresh_oauth_tokens_cron_tick,
             handle_retry_oauth_grant_revocations_cron_tick, handle_vacuum_jobs_cron_tick,
         },
         handle_universal_inbox_job,
@@ -707,22 +707,22 @@ pub async fn run_worker(
         );
     }
 
-    let pause_slack_connections_settings = cron_settings.pause_slack_connections;
-    if pause_slack_connections_settings.is_enabled {
-        let schedule = Schedule::from_str(&pause_slack_connections_settings.schedule)
-            .expect("Invalid cron schedule for the pause-slack-connections job");
+    let pause_integration_connections_settings = cron_settings.pause_integration_connections;
+    if pause_integration_connections_settings.is_enabled {
+        let schedule = Schedule::from_str(&pause_integration_connections_settings.schedule)
+            .expect("Invalid cron schedule for the pause-integration-connections job");
         info!(
-            "Registering pause-slack-connections cron worker with schedule `{}`",
-            pause_slack_connections_settings.schedule
+            "Registering pause-integration-connections cron worker with schedule `{}`",
+            pause_integration_connections_settings.schedule
         );
         monitor = monitor.register(
-            WorkerBuilder::new("universal-inbox-cron-pause-slack-connections")
+            WorkerBuilder::new("universal-inbox-cron-pause-integration-connections")
                 .layer(cron_trace_layer())
                 .data(redis_storage.clone())
                 .data(cache)
-                .data(pause_slack_connections_settings)
+                .data(pause_integration_connections_settings)
                 .backend(CronStream::new_with_timezone(schedule, Utc))
-                .build_fn(handle_pause_slack_connections_cron_tick),
+                .build_fn(handle_pause_integration_connections_cron_tick),
         );
     }
 

@@ -1,9 +1,9 @@
-//! Slack keeps sending events for every user who authorized the app as long as
-//! their token is valid, so the Slack connections of users inactive for too
+//! Providers keep a grant valid as long as its token is (and Slack keeps
+//! sending events for it), so the OAuth connections of users inactive for too
 //! long, and those failing for too long, are paused: their grant is revoked at
-//! Slack, their credential deleted, and they stay `Paused` until the user
-//! reconnects them. Inactive users are warned by email before the pause, and
-//! every user is emailed once paused.
+//! the provider, their credential deleted, and they stay `Paused` until the
+//! user reconnects them. Inactive users are warned by email before the pause,
+//! and every user is emailed once paused.
 
 use chrono::{DateTime, TimeDelta, Utc};
 use email_address::EmailAddress;
@@ -18,8 +18,8 @@ use wiremock::{
 use universal_inbox::{
     integration_connection::{
         IntegrationConnection, IntegrationConnectionPausedReason, IntegrationConnectionStatus,
-        config::IntegrationConnectionConfig, integrations::slack::SlackConfig,
-        provider::IntegrationProviderKind,
+        config::IntegrationConnectionConfig,
+        integrations::{linear::LinearConfig, slack::SlackConfig},
     },
     user::UserId,
 };
@@ -27,16 +27,20 @@ use universal_inbox::{
 use universal_inbox_api::{
     configuration::Settings,
     integrations::oauth2::RefreshToken,
-    jobs::oauth::pause_slack_connections,
+    jobs::oauth::pause_integration_connections,
     mailer::EmailTemplate,
-    repository::oauth_credential::{OAuthCredentialRepository, StoredOAuthCredential},
+    repository::{
+        integration_connection::IntegrationConnectionRepository,
+        oauth_credential::{OAuthCredentialRepository, StoredOAuthCredential},
+    },
 };
 
 use crate::helpers::{
     TestedApp,
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, get_integration_connection, slack_oauth_credential,
+        create_and_mock_integration_connection, get_integration_connection,
+        linear_oauth_credential, slack_oauth_credential,
     },
     rest::delete_resource,
     settings, tested_app_with_local_auth,
@@ -65,6 +69,28 @@ async fn connect_slack(
         None,
     )
     .await
+}
+
+async fn connect_linear(app: &AuthenticatedApp, settings: &Settings) -> Box<IntegrationConnection> {
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
+        settings,
+        linear_oauth_credential(),
+        None,
+        None,
+    )
+    .await
+}
+
+async fn mock_linear_revocation(app: &AuthenticatedApp) -> MockGuard {
+    Mock::given(method("POST"))
+        .and(path("/oauth/revoke"))
+        .and(body_string_contains("token=linear_test_refresh_token"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount_as_scoped(&app.app.linear_mock_server)
+        .await
 }
 
 async fn set_last_active_at(app: &TestedApp, user_id: UserId, last_active_at: DateTime<Utc>) {
@@ -133,7 +159,6 @@ async fn pause_inactive_users_connections(app: &AuthenticatedApp) -> (usize, usi
         .read()
         .await
         .pause_integration_connections_of_inactive_users(
-            IntegrationProviderKind::Slack,
             Utc::now() - TimeDelta::days(INACTIVITY_THRESHOLD_DAYS),
             None,
         )
@@ -141,8 +166,8 @@ async fn pause_inactive_users_connections(app: &AuthenticatedApp) -> (usize, usi
         .unwrap()
 }
 
-async fn run_pause_slack_connections(app: &AuthenticatedApp, inactivity_warning_days: i64) {
-    pause_slack_connections(
+async fn run_pause_integration_connections(app: &AuthenticatedApp, inactivity_warning_days: i64) {
+    pause_integration_connections(
         app.app.integration_connection_service.clone(),
         INACTIVITY_THRESHOLD_DAYS,
         inactivity_warning_days,
@@ -191,8 +216,17 @@ fn assert_paused_email(
     template: &EmailTemplate,
     expected_reason: IntegrationConnectionPausedReason,
 ) {
+    assert_provider_paused_email(app, template, &["Slack"], expected_reason);
+}
+
+fn assert_provider_paused_email(
+    app: &AuthenticatedApp,
+    template: &EmailTemplate,
+    expected_provider_names: &[&str],
+    expected_reason: IntegrationConnectionPausedReason,
+) {
     let EmailTemplate::IntegrationConnectionPaused {
-        provider_name,
+        provider_names,
         paused_reason,
         reconnect_url,
         ..
@@ -200,7 +234,7 @@ fn assert_paused_email(
     else {
         panic!("Expected a paused email, got {template:?}");
     };
-    assert_eq!(provider_name, "Slack");
+    assert_eq!(provider_names, expected_provider_names);
     assert_eq!(*paused_reason, expected_reason);
     assert_eq!(
         *reconnect_url,
@@ -214,7 +248,6 @@ async fn pause_long_failing_connections(app: &AuthenticatedApp) -> (usize, usize
         .read()
         .await
         .pause_long_failing_integration_connections(
-            IntegrationProviderKind::Slack,
             Utc::now() - TimeDelta::days(FAILING_THRESHOLD_DAYS),
         )
         .await
@@ -271,7 +304,7 @@ async fn test_slack_connection_is_paused_past_the_inactivity_threshold(
     set_last_active_at(&app.app, app.user.id, Utc::now() - inactive_for).await;
     let revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
 
-    run_pause_slack_connections(&app, NO_INACTIVITY_WARNING).await;
+    run_pause_integration_connections(&app, NO_INACTIVITY_WARNING).await;
 
     let connection = reload(&app, &connection).await;
     if expect_paused {
@@ -505,7 +538,7 @@ async fn test_slack_connection_is_paused_past_the_failing_threshold(
     .await;
     let revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
 
-    run_pause_slack_connections(&app, NO_INACTIVITY_WARNING).await;
+    run_pause_integration_connections(&app, NO_INACTIVITY_WARNING).await;
 
     let connection = reload(&app, &connection).await;
     if expect_paused {
@@ -531,6 +564,202 @@ async fn test_slack_connection_is_paused_past_the_failing_threshold(
         assert_eq!(revocation.received_requests().await.len(), 0);
         assert!(fetch_oauth_credential(&app, &connection).await.is_some());
     }
+}
+
+/// A connection that just turned `Failing` without a sync failure (token
+/// refresh, Slack revocation event) is not paused because it was last updated
+/// long ago: the status change dates it.
+#[rstest]
+#[tokio::test]
+async fn test_old_connection_that_just_failed_is_not_paused(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    let connection = connect_slack(&app, &settings, None).await;
+    sqlx::query("UPDATE integration_connection SET updated_at = $2 WHERE id = $1")
+        .bind(connection.id.0)
+        .bind((Utc::now() - TimeDelta::days(FAILING_THRESHOLD_DAYS * 2)).naive_utc())
+        .execute(&*app.app.repository.pool)
+        .await
+        .unwrap();
+    let mut transaction = app.app.repository.begin().await.unwrap();
+    app.app
+        .repository
+        .update_integration_connection_status(
+            &mut transaction,
+            connection.id,
+            IntegrationConnectionStatus::Failing,
+            Some("Refresh token rejected".to_string()),
+            None,
+            app.user.id,
+        )
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    let revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
+
+    run_pause_integration_connections(&app, NO_INACTIVITY_WARNING).await;
+
+    let connection = reload(&app, &connection).await;
+    assert_eq!(connection.status, IntegrationConnectionStatus::Failing);
+    assert_eq!(revocation.received_requests().await.len(), 0);
+}
+
+/// Long failing connections of every OAuth provider are paused, not only
+/// Slack ones.
+#[rstest]
+#[case::past_the_threshold(TimeDelta::hours(1), true)]
+#[case::before_the_threshold(-TimeDelta::hours(1), false)]
+#[tokio::test]
+async fn test_linear_connection_is_paused_past_the_failing_threshold(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    #[case] past_threshold_by: TimeDelta,
+    #[case] expect_paused: bool,
+) {
+    let app = authenticated_app.await;
+    let connection = connect_linear(&app, &settings).await;
+    set_failing_since(
+        &app,
+        &connection,
+        Utc::now() - TimeDelta::days(FAILING_THRESHOLD_DAYS) - past_threshold_by,
+        true,
+    )
+    .await;
+    let revocation = mock_linear_revocation(&app).await;
+
+    run_pause_integration_connections(&app, NO_INACTIVITY_WARNING).await;
+
+    let connection = reload(&app, &connection).await;
+    if expect_paused {
+        assert_eq!(connection.status, IntegrationConnectionStatus::Paused);
+        assert_eq!(
+            connection.paused_reason,
+            Some(IntegrationConnectionPausedReason::LongFailing)
+        );
+        assert_eq!(revocation.received_requests().await.len(), 1);
+        assert!(fetch_oauth_credential(&app, &connection).await.is_none());
+        let emails = pause_emails(&app).await;
+        assert_eq!(emails.len(), 1);
+        assert_provider_paused_email(
+            &app,
+            &emails[0],
+            &["Linear"],
+            IntegrationConnectionPausedReason::LongFailing,
+        );
+    } else {
+        assert_eq!(connection.status, IntegrationConnectionStatus::Failing);
+        assert_eq!(revocation.received_requests().await.len(), 0);
+        assert!(fetch_oauth_credential(&app, &connection).await.is_some());
+    }
+}
+
+/// An inactive user is warned once about all their connections, of every
+/// OAuth provider, then emailed once when they are all paused.
+#[rstest]
+#[tokio::test]
+async fn test_inactive_user_gets_one_email_for_all_their_connections(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    let slack_connection = connect_slack(&app, &settings, None).await;
+    let linear_connection = connect_linear(&app, &settings).await;
+    let slack_revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
+    let linear_revocation = mock_linear_revocation(&app).await;
+
+    // Inactive past the warning threshold only: warned, not paused.
+    set_last_active_at(
+        &app.app,
+        app.user.id,
+        Utc::now()
+            - TimeDelta::days(INACTIVITY_THRESHOLD_DAYS - INACTIVITY_WARNING_DAYS)
+            - TimeDelta::hours(1),
+    )
+    .await;
+    run_pause_integration_connections(&app, INACTIVITY_WARNING_DAYS).await;
+
+    assert_eq!(
+        pause_emails(&app).await,
+        vec![EmailTemplate::IntegrationConnectionPauseWarning {
+            first_name: app.user.first_name.clone(),
+            provider_names: vec!["Linear".to_string(), "Slack".to_string()],
+            inactive_for_days: INACTIVITY_THRESHOLD_DAYS - INACTIVITY_WARNING_DAYS,
+            pause_date: (Utc::now() + TimeDelta::days(INACTIVITY_WARNING_DAYS)).date_naive(),
+            app_url: app.app.front_base_url.clone(),
+        }]
+    );
+    for connection in [&slack_connection, &linear_connection] {
+        assert_eq!(
+            reload(&app, connection).await.status,
+            IntegrationConnectionStatus::Validated
+        );
+    }
+
+    // Inactive past the pause threshold: both paused, one more email.
+    set_last_active_at(
+        &app.app,
+        app.user.id,
+        Utc::now() - TimeDelta::days(INACTIVITY_THRESHOLD_DAYS) - TimeDelta::hours(1),
+    )
+    .await;
+    run_pause_integration_connections(&app, NO_INACTIVITY_WARNING).await;
+
+    for connection in [&slack_connection, &linear_connection] {
+        let connection = reload(&app, connection).await;
+        assert_eq!(connection.status, IntegrationConnectionStatus::Paused);
+        assert_eq!(
+            connection.paused_reason,
+            Some(IntegrationConnectionPausedReason::Inactivity)
+        );
+        assert!(fetch_oauth_credential(&app, &connection).await.is_none());
+    }
+    assert_eq!(slack_revocation.received_requests().await.len(), 1);
+    assert_eq!(linear_revocation.received_requests().await.len(), 1);
+    let emails = pause_emails(&app).await;
+    assert_eq!(emails.len(), 2);
+    assert_provider_paused_email(
+        &app,
+        &emails[1],
+        &["Linear", "Slack"],
+        IntegrationConnectionPausedReason::Inactivity,
+    );
+}
+
+/// A user whose connections of several providers keep failing is emailed
+/// once when they are all paused.
+#[rstest]
+#[tokio::test]
+async fn test_long_failing_connections_of_a_user_get_one_email(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    let slack_connection = connect_slack(&app, &settings, None).await;
+    let linear_connection = connect_linear(&app, &settings).await;
+    for connection in [&slack_connection, &linear_connection] {
+        set_failing_since(
+            &app,
+            connection,
+            Utc::now() - TimeDelta::days(FAILING_THRESHOLD_DAYS + 1),
+            true,
+        )
+        .await;
+    }
+    let _slack_revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
+    let _linear_revocation = mock_linear_revocation(&app).await;
+
+    assert_eq!(pause_long_failing_connections(&app).await, (2, 0));
+
+    let emails = pause_emails(&app).await;
+    assert_eq!(emails.len(), 1);
+    assert_provider_paused_email(
+        &app,
+        &emails[0],
+        &["Linear", "Slack"],
+        IntegrationConnectionPausedReason::LongFailing,
+    );
 }
 
 /// A connection of an active user that syncs fine is never paused.
@@ -619,8 +848,8 @@ async fn test_inactive_user_is_warned_once_before_the_pause(
     .await;
     let revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
 
-    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
-    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    run_pause_integration_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    run_pause_integration_connections(&app, INACTIVITY_WARNING_DAYS).await;
 
     let emails = pause_emails(&app).await;
     if expect_warned {
@@ -628,7 +857,7 @@ async fn test_inactive_user_is_warned_once_before_the_pause(
             emails,
             vec![EmailTemplate::IntegrationConnectionPauseWarning {
                 first_name: app.user.first_name.clone(),
-                provider_name: "Slack".to_string(),
+                provider_names: vec!["Slack".to_string()],
                 inactive_for_days: INACTIVITY_THRESHOLD_DAYS - INACTIVITY_WARNING_DAYS,
                 pause_date: (Utc::now() + TimeDelta::days(INACTIVITY_WARNING_DAYS)).date_naive(),
                 app_url: app.app.front_base_url.clone(),
@@ -663,7 +892,7 @@ async fn test_inactive_user_is_paused_only_after_the_warning_period(
     .await;
     let revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
 
-    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    run_pause_integration_connections(&app, INACTIVITY_WARNING_DAYS).await;
 
     assert_eq!(
         reload(&app, &connection).await.status,
@@ -683,7 +912,7 @@ async fn test_inactive_user_is_paused_only_after_the_warning_period(
         Utc::now() - TimeDelta::days(INACTIVITY_WARNING_DAYS) + TimeDelta::hours(1),
     )
     .await;
-    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    run_pause_integration_connections(&app, INACTIVITY_WARNING_DAYS).await;
     assert_eq!(
         reload(&app, &connection).await.status,
         IntegrationConnectionStatus::Validated
@@ -697,7 +926,7 @@ async fn test_inactive_user_is_paused_only_after_the_warning_period(
         Utc::now() - TimeDelta::days(INACTIVITY_WARNING_DAYS) - TimeDelta::hours(1),
     )
     .await;
-    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    run_pause_integration_connections(&app, INACTIVITY_WARNING_DAYS).await;
 
     let connection = reload(&app, &connection).await;
     assert_eq!(connection.status, IntegrationConnectionStatus::Paused);
@@ -731,7 +960,7 @@ async fn test_warning_sent_before_the_last_activity_does_not_count(
     .await;
     let revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
 
-    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    run_pause_integration_connections(&app, INACTIVITY_WARNING_DAYS).await;
 
     assert_eq!(
         reload(&app, &connection).await.status,
@@ -769,7 +998,7 @@ async fn test_testing_account_is_paused_without_emails(
     .await;
     let _revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
 
-    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    run_pause_integration_connections(&app, INACTIVITY_WARNING_DAYS).await;
     assert_eq!(
         reload(&app, &connection).await.status,
         IntegrationConnectionStatus::Validated
@@ -781,7 +1010,7 @@ async fn test_testing_account_is_paused_without_emails(
         Utc::now() - TimeDelta::days(INACTIVITY_WARNING_DAYS + 1),
     )
     .await;
-    run_pause_slack_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    run_pause_integration_connections(&app, INACTIVITY_WARNING_DAYS).await;
 
     assert_eq!(
         reload(&app, &connection).await.status,

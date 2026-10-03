@@ -16,7 +16,7 @@
 - Add per-task scheduled time, duration, and timezone configuration in integration settings and the planning modal
 - Sync per-task time, duration, and timezone to TickTick (duration modeled as a start/due time range)
 - Self-service account deletion: `DELETE /api/users/me` (confirmed by re-typing the email address) and a "Delete my account" card on the Profile page; the `user delete` CLI command runs the same service flow
-- Pause the Slack connections of users inactive for 90 days and the connections failing for 30 days (`pause-slack-connections` cron, disabled by default): their provider grant is revoked and they show as Paused with a reconnect action; inactive users are warned by email 7 days before, and every user is emailed with a reconnect link once paused
+- Pause the OAuth connections (every provider) of users inactive for 90 days and the connections failing for 30 days (`pause-integration-connections` cron, disabled by default): their provider grant is revoked and they show as Paused with a reconnect action; inactive users are warned by email 7 days before, and users are emailed with a reconnect link once paused, one email listing all their affected connections
 - Change the password from Profile > Authentication methods
 - Show attendee replies (answer and comment) to Google Calendar invitations received in Gmail
 - Show every comment and reply of a GitHub discussion in its preview, collapsing the already read ones

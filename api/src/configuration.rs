@@ -81,7 +81,7 @@ pub struct CronSettings {
     #[serde(default)]
     pub retry_oauth_grant_revocations: RetryOAuthGrantRevocationsCronSettings,
     #[serde(default)]
-    pub pause_slack_connections: PauseSlackConnectionsCronSettings,
+    pub pause_integration_connections: PauseIntegrationConnectionsCronSettings,
 }
 
 /// Configuration for the `retry-oauth-grant-revocations` cron, retrying the
@@ -180,65 +180,68 @@ fn default_refresh_oauth_tokens_lock_ttl_seconds() -> u64 {
     60
 }
 
-/// Configuration for the `pause-slack-connections` cron.
+/// Configuration for the `pause-integration-connections` cron.
 ///
-/// Slack keeps sending events for every user who authorized the app as long
-/// as their token is valid, and the refresh-oauth-tokens cron keeps rotated
-/// tokens valid forever. This cron revokes the Slack grant, and pauses the
-/// connection, of users inactive for longer than `inactivity_threshold_days`
-/// and of connections `Failing` for longer than `failing_threshold_days`.
-/// Inactive users are warned by email `inactivity_warning_days` beforehand,
-/// and every user is emailed once their connection is paused.
-/// Disabled by default: it revokes grants at Slack.
+/// A provider keeps a grant valid as long as its token is (Slack keeps sending
+/// events for it), and the refresh-oauth-tokens cron keeps rotated tokens
+/// valid forever. This cron revokes the grant, and pauses the connection, of
+/// every OAuth provider connection of users inactive for longer than
+/// `inactivity_threshold_days`, and of those `Failing` for longer than
+/// `failing_threshold_days`. Inactive users are warned by email
+/// `inactivity_warning_days` beforehand, and users are emailed once their
+/// connections are paused: one email per user, listing all their connections.
+/// Disabled by default: it revokes grants at the providers.
 #[derive(Deserialize, Clone, Debug)]
-pub struct PauseSlackConnectionsCronSettings {
+pub struct PauseIntegrationConnectionsCronSettings {
     #[serde(default)]
     pub is_enabled: bool,
     /// Cron expression with a seconds field, e.g. `0 0 3 * * *`
-    #[serde(default = "default_pause_slack_connections_schedule")]
+    #[serde(default = "default_pause_integration_connections_schedule")]
     pub schedule: String,
-    /// Pause the Slack connections of users inactive for longer than this
-    #[serde(default = "default_pause_slack_connections_inactivity_threshold_days")]
+    /// Pause the OAuth connections of users inactive for longer than this
+    #[serde(default = "default_pause_integration_connections_inactivity_threshold_days")]
     pub inactivity_threshold_days: i64,
-    /// Warn inactive users by email this many days before pausing their Slack
+    /// Warn inactive users by email this many days before pausing their OAuth
     /// connections. A connection is never paused for inactivity less than this
     /// many days after its warning. 0 disables the warning.
-    #[serde(default = "default_pause_slack_connections_inactivity_warning_days")]
+    #[serde(default = "default_pause_integration_connections_inactivity_warning_days")]
     pub inactivity_warning_days: i64,
-    /// Pause the Slack connections `Failing` for longer than this
-    #[serde(default = "default_pause_slack_connections_failing_threshold_days")]
+    /// Pause the OAuth connections `Failing` for longer than this
+    #[serde(default = "default_pause_integration_connections_failing_threshold_days")]
     pub failing_threshold_days: i64,
     /// TTL of the per-tick deduplication lock key in Redis
-    #[serde(default = "default_pause_slack_connections_lock_ttl_seconds")]
+    #[serde(default = "default_pause_integration_connections_lock_ttl_seconds")]
     pub lock_ttl_seconds: u64,
 }
 
-impl Default for PauseSlackConnectionsCronSettings {
+impl Default for PauseIntegrationConnectionsCronSettings {
     fn default() -> Self {
         Self {
             is_enabled: false,
-            schedule: default_pause_slack_connections_schedule(),
-            inactivity_threshold_days: default_pause_slack_connections_inactivity_threshold_days(),
-            inactivity_warning_days: default_pause_slack_connections_inactivity_warning_days(),
-            failing_threshold_days: default_pause_slack_connections_failing_threshold_days(),
-            lock_ttl_seconds: default_pause_slack_connections_lock_ttl_seconds(),
+            schedule: default_pause_integration_connections_schedule(),
+            inactivity_threshold_days:
+                default_pause_integration_connections_inactivity_threshold_days(),
+            inactivity_warning_days: default_pause_integration_connections_inactivity_warning_days(
+            ),
+            failing_threshold_days: default_pause_integration_connections_failing_threshold_days(),
+            lock_ttl_seconds: default_pause_integration_connections_lock_ttl_seconds(),
         }
     }
 }
 
-fn default_pause_slack_connections_schedule() -> String {
+fn default_pause_integration_connections_schedule() -> String {
     "0 0 3 * * *".to_string()
 }
-fn default_pause_slack_connections_inactivity_threshold_days() -> i64 {
+fn default_pause_integration_connections_inactivity_threshold_days() -> i64 {
     90
 }
-pub(crate) fn default_pause_slack_connections_inactivity_warning_days() -> i64 {
+pub(crate) fn default_pause_integration_connections_inactivity_warning_days() -> i64 {
     7
 }
-fn default_pause_slack_connections_failing_threshold_days() -> i64 {
+fn default_pause_integration_connections_failing_threshold_days() -> i64 {
     30
 }
-fn default_pause_slack_connections_lock_ttl_seconds() -> u64 {
+fn default_pause_integration_connections_lock_ttl_seconds() -> u64 {
     300
 }
 

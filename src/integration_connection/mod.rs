@@ -290,8 +290,9 @@ macro_attr! {
         /// The user has not used Universal Inbox for longer than the
         /// configured inactivity threshold.
         Inactivity,
-        /// The connection has been `Failing` for longer than the configured
-        /// threshold, while its grant was still valid at the provider.
+        /// The connection, of any OAuth provider, has been `Failing` for
+        /// longer than the configured threshold, while its grant may still
+        /// have been valid at the provider.
         LongFailing,
     }
 }

@@ -1425,17 +1425,25 @@ impl IntegrationConnectionService {
         })
     }
 
+    /// The OAuth providers, sorted for stable logs.
+    fn oauth_provider_kinds(&self) -> Vec<IntegrationProviderKind> {
+        let mut provider_kinds: Vec<IntegrationProviderKind> =
+            self.oauth2_providers.keys().copied().collect();
+        provider_kinds.sort_by_key(|provider_kind| provider_kind.to_string());
+        provider_kinds
+    }
+
     /// Warn by email the users inactive since `inactive_before` that their
-    /// `Validated` `provider_kind` connections will be paused on `pause_on`
-    /// for inactivity. A user is warned once per inactivity period. Users
-    /// that cannot be emailed (testing accounts, no email address) are
-    /// recorded as warned without an email, so that their pause is not held
-    /// back. Returns `(warned_count, failed_count)`.
+    /// `Validated` OAuth connections will be paused on `pause_on` for
+    /// inactivity, with one email per user listing all of them. A user is
+    /// warned once per inactivity period. Users that cannot be emailed
+    /// (testing accounts, no email address) are recorded as warned without an
+    /// email, so that their pause is not held back.
+    /// Returns `(warned_users_count, failed_users_count)`.
     #[tracing::instrument(
         level = "info",
         skip(self),
         fields(
-            { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
             { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339(),
             { attr::INTEGRATION_CONNECTION_PAUSE_ON } = pause_on.to_rfc3339(),
             { attr::ERROR_TYPE } = tracing::field::Empty
@@ -1443,132 +1451,136 @@ impl IntegrationConnectionService {
     )]
     pub async fn warn_integration_connections_of_inactive_users(
         &self,
-        provider_kind: IntegrationProviderKind,
         inactive_before: DateTime<Utc>,
         pause_on: DateTime<Utc>,
     ) -> Result<(usize, usize), UniversalInboxError> {
         let result: Result<(usize, usize), UniversalInboxError> = async move {
-        let mut transaction = self.begin().await.context(
-            "Failed to create new transaction while listing integration connections to warn of inactivity",
-        )?;
-        let integration_connection_ids = self
-            .repository
-            .find_integration_connections_to_warn_of_inactivity(
-                &mut transaction,
-                provider_kind,
-                inactive_before,
-            )
-            .await?;
-        transaction.commit().await.context(
-            "Failed to commit while listing integration connections to warn of inactivity",
-        )?;
-        info!(
-            "Found {} {provider_kind} integration connection(s) to warn of inactivity",
-            integration_connection_ids.len()
-        );
-
-        let inactive_for_days = (Utc::now() - inactive_before).num_days();
-        let mut warned = 0usize;
-        let mut failed = 0usize;
-        for integration_connection_id in integration_connection_ids {
-            let mut transaction = self.begin().await.context(format!(
-                "Failed to create new transaction while warning integration connection {integration_connection_id} of inactivity"
-            ))?;
-            match self
-                .warn_integration_connection_of_inactivity(
+            let mut transaction = self.begin().await.context(
+                "Failed to create new transaction while listing integration connections to warn of inactivity",
+            )?;
+            let integration_connections = self
+                .repository
+                .find_integration_connections_to_warn_of_inactivity(
                     &mut transaction,
-                    integration_connection_id,
+                    &self.oauth_provider_kinds(),
                     inactive_before,
-                    inactive_for_days,
-                    pause_on,
                 )
-                .await
-            {
-                Ok(is_warned) => {
-                    transaction.commit().await.context(format!(
-                        "Failed to commit while warning integration connection {integration_connection_id} of inactivity"
-                    ))?;
-                    if is_warned {
-                        warned += 1;
+                .await?;
+            transaction.commit().await.context(
+                "Failed to commit while listing integration connections to warn of inactivity",
+            )?;
+            let integration_connection_ids_per_user = group_by_user(integration_connections);
+            info!(
+                "Found {} user(s) to warn of the inactivity pause of their integration connections",
+                integration_connection_ids_per_user.len()
+            );
+
+            let inactive_for_days = (Utc::now() - inactive_before).num_days();
+            let mut warned = 0usize;
+            let mut failed = 0usize;
+            for (user_id, integration_connection_ids) in integration_connection_ids_per_user {
+                let mut transaction = self.begin().await.context(format!(
+                    "Failed to create new transaction while warning user {user_id} of inactivity"
+                ))?;
+                match self
+                    .warn_user_of_inactivity(
+                        &mut transaction,
+                        user_id,
+                        integration_connection_ids,
+                        inactive_before,
+                        inactive_for_days,
+                        pause_on,
+                    )
+                    .await
+                {
+                    Ok(is_warned) => {
+                        transaction.commit().await.context(format!(
+                            "Failed to commit while warning user {user_id} of inactivity"
+                        ))?;
+                        if is_warned {
+                            warned += 1;
+                        }
+                    }
+                    Err(err) => {
+                        error!(
+                            "Failed to warn user {user_id} of the inactivity pause of their integration connections: {err:?}"
+                        );
+                        failed += 1;
                     }
                 }
-                Err(err) => {
-                    error!(
-                        "Failed to warn {provider_kind} integration connection {integration_connection_id} of inactivity: {err:?}"
-                    );
-                    failed += 1;
-                }
             }
-        }
 
-        info!(
-            "Warned {warned} {provider_kind} integration connection(s) of inactivity, {failed} failed"
-        );
-        Ok((warned, failed))
-    }.await;
+            info!("Warned {warned} user(s) of inactivity, {failed} failed");
+            Ok((warned, failed))
+        }
+        .await;
         result.record_span_error()
     }
 
-    /// Warn one connection, see
-    /// [`Self::warn_integration_connections_of_inactive_users`]. The warning is
-    /// recorded before the email is sent, in the same transaction: a failed
-    /// email rolls it back and the warning is retried on the next run.
-    /// Returns whether it was warned: one whose user became active again, or
-    /// that was disconnected, since it was listed is left alone.
+    /// Warn one user about all their connections, see
+    /// [`Self::warn_integration_connections_of_inactive_users`]. The warnings
+    /// are recorded before the email is sent, in the same transaction: a
+    /// failed email rolls them all back and the user is warned again on the
+    /// next run. Returns whether the user was warned: connections whose user
+    /// became active again, or that were disconnected, since they were listed
+    /// are left alone.
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string())
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
-    async fn warn_integration_connection_of_inactivity(
+    async fn warn_user_of_inactivity(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        integration_connection_id: IntegrationConnectionId,
+        user_id: UserId,
+        integration_connection_ids: Vec<IntegrationConnectionId>,
         inactive_before: DateTime<Utc>,
         inactive_for_days: i64,
         pause_on: DateTime<Utc>,
     ) -> Result<bool, UniversalInboxError> {
-        if !self
-            .repository
-            .mark_inactivity_warning_sent(
-                executor,
-                integration_connection_id,
-                inactive_before,
-                Utc::now(),
-            )
-            .await?
-        {
+        let mut provider_names = Vec::new();
+        for integration_connection_id in integration_connection_ids {
+            if !self
+                .repository
+                .mark_inactivity_warning_sent(
+                    executor,
+                    integration_connection_id,
+                    inactive_before,
+                    Utc::now(),
+                )
+                .await?
+            {
+                continue;
+            }
+            if let Some(integration_connection) = self
+                .repository
+                .get_integration_connection(executor, integration_connection_id)
+                .await?
+            {
+                provider_names.push(integration_connection.provider.kind().to_string());
+            }
+        }
+        if provider_names.is_empty() {
             return Ok(false);
         }
-        let Some(integration_connection) = self
-            .repository
-            .get_integration_connection(executor, integration_connection_id)
-            .await?
-        else {
-            return Ok(false);
-        };
-        let Some(user) = self
-            .repository
-            .get_user(executor, integration_connection.user_id)
-            .await?
-        else {
+        let Some(user) = self.repository.get_user(executor, user_id).await? else {
             return Ok(false);
         };
 
+        provider_names.sort();
+        provider_names.dedup();
+        info!(
+            "Warning user {user_id} that their {} integration connection(s) will be paused for inactivity",
+            provider_names.join(", ")
+        );
         let template = EmailTemplate::IntegrationConnectionPauseWarning {
             first_name: user.first_name.clone(),
-            provider_name: integration_connection.provider.kind().to_string(),
+            provider_names,
             inactive_for_days,
             pause_date: pause_on.date_naive(),
             app_url: self.front_base_url.clone(),
         };
         self.send_email_to_user(user, template).await?;
-
-        info!(
-            "Warned user {} that their {} integration connection {integration_connection_id} will be paused for inactivity",
-            integration_connection.user_id,
-            integration_connection.provider.kind()
-        );
         Ok(true)
     }
 
@@ -1593,17 +1605,16 @@ impl IntegrationConnectionService {
             .await
     }
 
-    /// Pause the `Validated` `provider_kind` connections of users inactive
-    /// since `inactive_before`, see [`Self::pause_integration_connections`].
-    /// With `warned_before`, only those whose user was warned of the pause
-    /// before `warned_before` (see
+    /// Pause the `Validated` OAuth connections of users inactive since
+    /// `inactive_before`, see [`Self::pause_integration_connections`]. With
+    /// `warned_before`, only those whose user was warned of the pause before
+    /// `warned_before` (see
     /// [`Self::warn_integration_connections_of_inactive_users`]).
     /// Returns `(paused_count, failed_count)`.
     #[tracing::instrument(
         level = "info",
         skip(self),
         fields(
-            { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
             { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339(),
             { attr::INTEGRATION_CONNECTION_WARNED_BEFORE } = warned_before.map(|warned_before| warned_before.to_rfc3339()),
             { attr::ERROR_TYPE } = tracing::field::Empty
@@ -1611,66 +1622,62 @@ impl IntegrationConnectionService {
     )]
     pub async fn pause_integration_connections_of_inactive_users(
         &self,
-        provider_kind: IntegrationProviderKind,
         inactive_before: DateTime<Utc>,
         warned_before: Option<DateTime<Utc>>,
     ) -> Result<(usize, usize), UniversalInboxError> {
         let result: Result<(usize, usize), UniversalInboxError> = async move {
-        let mut transaction = self.begin().await.context(
-            "Failed to create new transaction while listing integration connections of inactive users",
-        )?;
-        let integration_connection_ids = self
-            .repository
-            .find_validated_integration_connections_of_inactive_users(
-                &mut transaction,
-                provider_kind,
-                inactive_before,
-                warned_before,
-            )
-            .await?;
-        transaction
-            .commit()
-            .await
-            .context("Failed to commit while listing integration connections of inactive users")?;
+            let mut transaction = self.begin().await.context(
+                "Failed to create new transaction while listing integration connections of inactive users",
+            )?;
+            let integration_connections = self
+                .repository
+                .find_validated_integration_connections_of_inactive_users(
+                    &mut transaction,
+                    &self.oauth_provider_kinds(),
+                    inactive_before,
+                    warned_before,
+                )
+                .await?;
+            transaction.commit().await.context(
+                "Failed to commit while listing integration connections of inactive users",
+            )?;
 
-        self.pause_integration_connections(
-            provider_kind,
-            integration_connection_ids,
-            IntegrationConnectionPausedReason::Inactivity,
-        )
-        .await
-    }.await;
+            self.pause_integration_connections(
+                integration_connections,
+                IntegrationConnectionPausedReason::Inactivity,
+            )
+            .await
+        }
+        .await;
         result.record_span_error()
     }
 
-    /// Pause the `provider_kind` connections `Failing` since before
-    /// `failing_before`, see [`Self::pause_integration_connections`]. A failing
-    /// connection syncs nothing, but its grant may still be valid at the
-    /// provider (Slack then keeps sending its events).
+    /// Pause the OAuth connections `Failing` since before `failing_before`,
+    /// see [`Self::pause_integration_connections`]. A failing connection syncs
+    /// nothing, but its grant may still be valid at the provider (Slack then
+    /// keeps sending its events).
     /// Returns `(paused_count, failed_count)`.
     #[tracing::instrument(
         level = "info",
         skip(self),
         fields(
-            { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string(),
             { attr::INTEGRATION_CONNECTION_FAILING_BEFORE } = failing_before.to_rfc3339(),
             { attr::ERROR_TYPE } = tracing::field::Empty
         )
     )]
     pub async fn pause_long_failing_integration_connections(
         &self,
-        provider_kind: IntegrationProviderKind,
         failing_before: DateTime<Utc>,
     ) -> Result<(usize, usize), UniversalInboxError> {
         let result: Result<(usize, usize), UniversalInboxError> = async move {
             let mut transaction = self.begin().await.context(
-            "Failed to create new transaction while listing long failing integration connections",
-        )?;
-            let integration_connection_ids = self
+                "Failed to create new transaction while listing long failing integration connections",
+            )?;
+            let integration_connections = self
                 .repository
                 .find_long_failing_integration_connections(
                     &mut transaction,
-                    provider_kind,
+                    &self.oauth_provider_kinds(),
                     failing_before,
                 )
                 .await?;
@@ -1680,8 +1687,7 @@ impl IntegrationConnectionService {
                 .context("Failed to commit while listing long failing integration connections")?;
 
             self.pause_integration_connections(
-                provider_kind,
-                integration_connection_ids,
+                integration_connections,
                 IntegrationConnectionPausedReason::LongFailing,
             )
             .await
@@ -1692,23 +1698,25 @@ impl IntegrationConnectionService {
 
     /// Revoke the grant of each connection at the provider (so Slack, for
     /// instance, stops sending events for it; a failed revocation is queued
-    /// for retry), delete its credential, move it to `Paused` and email its
-    /// user. Each connection is handled in its own transaction so
-    /// that one failure does not hold back the others.
+    /// for retry), delete its credential and move it to `Paused`. Each
+    /// connection is handled in its own transaction so that one failure does
+    /// not hold back the others. Each user is then emailed once, listing all
+    /// their paused connections.
     async fn pause_integration_connections(
         &self,
-        provider_kind: IntegrationProviderKind,
-        integration_connection_ids: Vec<IntegrationConnectionId>,
+        integration_connections: Vec<(IntegrationConnectionId, UserId)>,
         paused_reason: IntegrationConnectionPausedReason,
     ) -> Result<(usize, usize), UniversalInboxError> {
         info!(
-            "Found {} {provider_kind} integration connection(s) to pause ({paused_reason})",
-            integration_connection_ids.len()
+            "Found {} integration connection(s) to pause ({paused_reason})",
+            integration_connections.len()
         );
 
         let mut paused = 0usize;
         let mut failed = 0usize;
-        for integration_connection_id in integration_connection_ids {
+        let mut paused_provider_names_per_user: Vec<(User, Vec<String>)> = Vec::new();
+        let mut user_indexes: HashMap<UserId, usize> = HashMap::new();
+        for (integration_connection_id, _) in integration_connections {
             let mut transaction = self.begin().await.context(format!(
                 "Failed to create new transaction while pausing integration connection {integration_connection_id}"
             ))?;
@@ -1726,32 +1734,46 @@ impl IntegrationConnectionService {
                     ))?;
                     if let Some((integration_connection, user)) = paused_integration_connection {
                         paused += 1;
-                        // Best effort: the connection stays paused either way.
-                        let template = EmailTemplate::IntegrationConnectionPaused {
-                            first_name: user.first_name.clone(),
-                            provider_name: integration_connection.provider.kind().to_string(),
-                            paused_reason,
-                            reconnect_url: self.settings_url()?,
-                        };
-                        if let Err(err) = self.send_email_to_user(user, template).await {
-                            error!(
-                                "Failed to email the user of paused {provider_kind} integration connection {integration_connection_id}: {err:?}"
-                            );
+                        let provider_name = integration_connection.provider.kind().to_string();
+                        match user_indexes.get(&user.id) {
+                            Some(&index) => {
+                                paused_provider_names_per_user[index].1.push(provider_name)
+                            }
+                            None => {
+                                user_indexes.insert(user.id, paused_provider_names_per_user.len());
+                                paused_provider_names_per_user.push((user, vec![provider_name]));
+                            }
                         }
                     }
                 }
                 Err(err) => {
                     error!(
-                        "Failed to pause {provider_kind} integration connection {integration_connection_id}: {err:?}"
+                        "Failed to pause integration connection {integration_connection_id}: {err:?}"
                     );
                     failed += 1;
                 }
             }
         }
 
-        info!(
-            "Paused {paused} {provider_kind} integration connection(s) ({paused_reason}), {failed} failed"
-        );
+        // Best effort: the connections stay paused either way.
+        for (user, mut provider_names) in paused_provider_names_per_user {
+            provider_names.sort();
+            provider_names.dedup();
+            let user_id = user.id;
+            let template = EmailTemplate::IntegrationConnectionPaused {
+                first_name: user.first_name.clone(),
+                provider_names,
+                paused_reason,
+                reconnect_url: self.settings_url()?,
+            };
+            if let Err(err) = self.send_email_to_user(user, template).await {
+                error!(
+                    "Failed to email user {user_id} about their paused integration connections: {err:?}"
+                );
+            }
+        }
+
+        info!("Paused {paused} integration connection(s) ({paused_reason}), {failed} failed");
         Ok((paused, failed))
     }
 
@@ -2986,6 +3008,25 @@ async fn cached_get_integration_connection_config_for_provider_user_id(
             connection.provider.config()
         }
     }))
+}
+
+/// Group `(connection, user)` pairs by user, keeping the order in which users
+/// first appear.
+fn group_by_user(
+    integration_connections: Vec<(IntegrationConnectionId, UserId)>,
+) -> Vec<(UserId, Vec<IntegrationConnectionId>)> {
+    let mut groups: Vec<(UserId, Vec<IntegrationConnectionId>)> = Vec::new();
+    let mut user_indexes: HashMap<UserId, usize> = HashMap::new();
+    for (integration_connection_id, user_id) in integration_connections {
+        match user_indexes.get(&user_id) {
+            Some(&index) => groups[index].1.push(integration_connection_id),
+            None => {
+                user_indexes.insert(user_id, groups.len());
+                groups.push((user_id, vec![integration_connection_id]));
+            }
+        }
+    }
+    groups
 }
 
 #[cfg(test)]

@@ -284,7 +284,6 @@ async fn test_inactivity_pause_sets_aside_and_reconnect_restores(
         .read()
         .await
         .pause_integration_connections_of_inactive_users(
-            IntegrationProviderKind::Slack,
             Utc::now() - chrono::TimeDelta::days(90),
             None,
         )

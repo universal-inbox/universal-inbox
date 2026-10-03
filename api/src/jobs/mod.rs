@@ -52,11 +52,11 @@ pub enum UniversalInboxJob {
         max_revocations: usize,
         retry_policy: GrantRevocationRetryPolicy,
     },
-    PauseSlackConnections {
+    PauseIntegrationConnections {
         inactivity_threshold_days: i64,
         /// Defaulted for jobs queued before it existed
         #[serde(
-            default = "crate::configuration::default_pause_slack_connections_inactivity_warning_days"
+            default = "crate::configuration::default_pause_integration_connections_inactivity_warning_days"
         )]
         inactivity_warning_days: i64,
         failing_threshold_days: i64,
@@ -72,7 +72,7 @@ impl UniversalInboxJob {
             Self::ProcessNotificationSideEffects { .. } => "ProcessNotificationSideEffects",
             Self::RefreshOAuthTokens { .. } => "RefreshOAuthTokens",
             Self::RetryOAuthGrantRevocations { .. } => "RetryOAuthGrantRevocations",
-            Self::PauseSlackConnections { .. } => "PauseSlackConnections",
+            Self::PauseIntegrationConnections { .. } => "PauseIntegrationConnections",
         }
     }
 }
@@ -147,12 +147,12 @@ pub async fn handle_universal_inbox_job(
             )
             .await
         }
-        UniversalInboxJob::PauseSlackConnections {
+        UniversalInboxJob::PauseIntegrationConnections {
             inactivity_threshold_days,
             inactivity_warning_days,
             failing_threshold_days,
         } => {
-            oauth::pause_slack_connections(
+            oauth::pause_integration_connections(
                 (*integration_connection_service).clone(),
                 inactivity_threshold_days,
                 inactivity_warning_days,
