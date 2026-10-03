@@ -65,3 +65,17 @@ repos:
         files: \.rs$
         stages: [pre-commit]
         priority: 20
+
+  # Lives in the root project, not api/: prek runs same-depth projects (api/, web/)
+  # concurrently, and `just web build-ci` would race web's `build-assets` on web/public.
+  # The root project only runs after every nested project has finished.
+  - repo: local
+    hooks:
+      - id: test-browser
+        name: Test the web application with the browser
+        language: system
+        pass_filenames: false
+        entry: just api test-browser
+        files: ^api/.*\.rs$
+        stages: [pre-commit]
+        priority: 30
