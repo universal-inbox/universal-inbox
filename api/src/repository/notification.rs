@@ -16,6 +16,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     repository::{Repository, task::TaskRow},
     universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus},
@@ -138,7 +139,7 @@ impl NotificationRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = id.to_string()),
+        fields({ attr::NOTIFICATION_ID } = id.to_string()),
         err
     )]
     async fn get_one_notification(
@@ -197,7 +198,7 @@ impl NotificationRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = id.to_string()),
+        fields({ attr::NOTIFICATION_ID } = id.to_string()),
         err
     )]
     async fn get_one_notification_with_task(
@@ -291,7 +292,7 @@ impl NotificationRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(source_id = source_id.to_string(), user.id = user_id.to_string()),
+        fields({ attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_id.to_string(), { attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn get_notification_for_source_id(
@@ -353,7 +354,7 @@ impl NotificationRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = id.to_string()),
+        fields({ attr::NOTIFICATION_ID } = id.to_string()),
         err
     )]
     async fn does_notification_exist(
@@ -383,12 +384,12 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            status = ?status,
-            include_snoozed_notifications = include_snoozed_notifications,
-            task_id = task_id.map(|id| id.to_string()),
-            order_by = ?order_by,
-            from_sources = ?from_sources,
-            user.id = user_id.to_string()
+            { attr::NOTIFICATION_STATUS } = ?status,
+            { attr::NOTIFICATION_LIST_INCLUDE_SNOOZED } = include_snoozed_notifications,
+            { attr::TASK_ID } = task_id.map(|id| id.to_string()),
+            { attr::NOTIFICATION_LIST_ORDER_BY } = ?order_by,
+            { attr::NOTIFICATION_LIST_SOURCES } = ?from_sources,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -662,7 +663,7 @@ impl NotificationRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = notification.id.to_string()),
+        fields({ attr::NOTIFICATION_ID } = notification.id.to_string()),
         err
     )]
     async fn create_notification(
@@ -729,9 +730,9 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            kind = kind.to_string(),
-            status = status.to_string(),
-            user.id = user_id.to_string()
+            { attr::SYNC_SOURCE_KIND } = kind.to_string(),
+            { attr::NOTIFICATION_STATUS } = status.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -831,9 +832,9 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
-            kind = kind.to_string(),
-            update_snoozed_until = update_snoozed_until
+            { attr::NOTIFICATION_ID } = notification.id.to_string(),
+            { attr::SYNC_SOURCE_KIND } = kind.to_string(),
+            { attr::NOTIFICATION_UPDATE_SNOOZED_UNTIL } = update_snoozed_until
         ),
         err
     )]
@@ -1051,8 +1052,8 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification_id.to_string(),
-            user.id = for_user_id.to_string()
+            { attr::NOTIFICATION_ID } = notification_id.to_string(),
+            { attr::USER_ID } = for_user_id.to_string()
         ),
         err
     )]
@@ -1200,8 +1201,8 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            task_id = task_id.to_string(),
-            notification_kind = notification_kind.map(|kind| kind.to_string())
+            { attr::TASK_ID } = task_id.to_string(),
+            { attr::NOTIFICATION_KIND } = notification_kind.map(|kind| kind.to_string())
         ),
         err
     )]
@@ -1337,9 +1338,9 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
-            from_sources = ?from_sources,
-            user.id = user_id.to_string()
+            { attr::NOTIFICATION_STATUS } = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
+            { attr::NOTIFICATION_LIST_SOURCES } = ?from_sources,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1367,8 +1368,8 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            notification_ids = notification_ids.iter().map(|id| id.to_string()).collect::<Vec<String>>().join(","),
-            user.id = user_id.to_string()
+            { attr::NOTIFICATION_IDS } = notification_ids.iter().map(|id| id.to_string()).collect::<Vec<String>>().join(","),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1392,8 +1393,8 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            linear_issue_id = %linear_issue_id,
-            user.id = user_id.to_string()
+            { attr::LINEAR_ISSUE_ID } = %linear_issue_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1487,8 +1488,8 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            notification_kind = kind.to_string(),
-            user.id = user_id.to_string()
+            { attr::NOTIFICATION_KIND } = kind.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1505,8 +1506,8 @@ impl NotificationRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            notification_kind = kind.to_string(),
-            user.id = user_id.to_string()
+            { attr::NOTIFICATION_KIND } = kind.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]

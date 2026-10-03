@@ -57,6 +57,7 @@ use universal_inbox::{
     user::{Password, User, UserId},
 };
 
+use crate::observability::attr;
 use crate::{
     configuration::Settings,
     integrations::{
@@ -295,7 +296,7 @@ pub async fn generate_empty_user(
     name = "connect-integration-for-user",
     level = "info",
     skip_all,
-    fields(user.id = %user_id, provider = %provider_kind),
+    fields({ attr::USER_ID } = %user_id, { attr::INTEGRATION_PROVIDER_KIND } = %provider_kind),
     err
 )]
 pub async fn connect_integration_for_user(
@@ -339,7 +340,7 @@ pub async fn connect_integration_for_user(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(name = "generate-notifications-for-user", level = "info", skip_all, fields(user.id = %user_id), err)]
+#[tracing::instrument(name = "generate-notifications-for-user", level = "info", skip_all, fields({ attr::USER_ID } = %user_id), err)]
 pub async fn generate_notifications_for_user(
     user_service: Arc<UserService>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,

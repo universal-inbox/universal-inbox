@@ -53,6 +53,7 @@ use universal_inbox::{
     },
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::{
         notification::ThirdPartyNotificationSourceService, oauth2::AccessToken,
@@ -391,7 +392,7 @@ impl SlackService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = %user_id, integration_connection.id = %integration_connection_id)
+        fields({ attr::USER_ID } = %user_id, { attr::INTEGRATION_CONNECTION_ID } = %integration_connection_id)
     )]
     pub async fn search_emojis(
         &self,
@@ -495,7 +496,7 @@ impl SlackService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(integration_connection.id = integration_connection.id.to_string()),
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection.id.to_string()),
         err
     )]
     pub async fn ensure_team_context(
@@ -611,7 +612,7 @@ impl SlackService {
         user_id: UserId,
     ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
         let current_span = tracing::Span::current();
-        current_span.set_attribute("user.id", user_id.to_string());
+        current_span.set_attribute(attr::USER_ID, user_id.to_string());
 
         match &slack_push_event_callback.event {
             SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent {
@@ -621,7 +622,7 @@ impl SlackService {
                 event_ts,
                 ..
             }) => {
-                current_span.set_attribute("slack.fetch.item_type", "slack_reaction");
+                current_span.set_attribute(attr::SLACK_FETCH_ITEM_TYPE, "slack_reaction");
                 self.fetch_item_from_slack_reaction(
                     executor,
                     slack_push_event_callback,
@@ -641,7 +642,7 @@ impl SlackService {
                 event_ts,
                 ..
             }) => {
-                current_span.set_attribute("slack.fetch.item_type", "slack_reaction");
+                current_span.set_attribute(attr::SLACK_FETCH_ITEM_TYPE, "slack_reaction");
                 self.fetch_item_from_slack_reaction(
                     executor,
                     slack_push_event_callback,
@@ -655,7 +656,7 @@ impl SlackService {
                 .await
             }
             SlackEventCallbackBody::Message(SlackMessageEvent { origin, .. }) => {
-                current_span.set_attribute("slack.fetch.item_type", "slack_thread");
+                current_span.set_attribute(attr::SLACK_FETCH_ITEM_TYPE, "slack_thread");
                 self.fetch_item_from_slack_message(
                     executor,
                     slack_push_event_callback,
@@ -666,8 +667,8 @@ impl SlackService {
             }
             // Not yet implemented resource type
             _ => {
-                current_span.set_attribute("slack.fetch.outcome", "skipped");
-                current_span.set_attribute("slack.fetch.skip_reason", "unsupported_event_type");
+                current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "skipped");
+                current_span.set_attribute(attr::SLACK_FETCH_SKIP_REASON, "unsupported_event_type");
                 Ok(None)
             }
         }
@@ -764,8 +765,8 @@ impl SlackService {
         user_id: UserId,
     ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
         let current_span = tracing::Span::current();
-        current_span.set_attribute("user.id", user_id.to_string());
-        current_span.set_attribute("slack.reaction_name", slack_reaction_name.to_string());
+        current_span.set_attribute(attr::USER_ID, user_id.to_string());
+        current_span.set_attribute(attr::SLACK_REACTION_NAME, slack_reaction_name.to_string());
 
         let (access_token, integration_connection) = self
             .integration_connection_service
@@ -846,18 +847,18 @@ impl SlackService {
                 origin: SlackMessageOrigin { channel: None, .. },
                 ..
             }) => {
-                current_span.set_attribute("slack.fetch.outcome", "skipped");
-                current_span.set_attribute("slack.fetch.skip_reason", "no_channel");
+                current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "skipped");
+                current_span.set_attribute(attr::SLACK_FETCH_SKIP_REASON, "no_channel");
                 return Ok(None);
             }
             SlackReactionsItem::File(_) => {
-                current_span.set_attribute("slack.fetch.outcome", "skipped");
-                current_span.set_attribute("slack.fetch.skip_reason", "file_reaction");
+                current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "skipped");
+                current_span.set_attribute(attr::SLACK_FETCH_SKIP_REASON, "file_reaction");
                 return Ok(None);
             }
         };
 
-        current_span.set_attribute("slack.fetch.outcome", "fetched");
+        current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "fetched");
         Ok(Some(
             slack_reaction.into_third_party_item(user_id, integration_connection.id),
         ))
@@ -873,7 +874,7 @@ impl SlackService {
         user_id: UserId,
     ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
         let current_span = tracing::Span::current();
-        current_span.set_attribute("user.id", user_id.to_string());
+        current_span.set_attribute(attr::USER_ID, user_id.to_string());
 
         let (access_token, integration_connection) = self
             .integration_connection_service
@@ -890,11 +891,11 @@ impl SlackService {
                 .with_team_id(slack_push_event_callback.team_id.clone());
 
         let Some(channel_id) = &origin.channel else {
-            current_span.set_attribute("slack.fetch.outcome", "skipped");
-            current_span.set_attribute("slack.fetch.skip_reason", "no_channel_id");
+            current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "skipped");
+            current_span.set_attribute(attr::SLACK_FETCH_SKIP_REASON, "no_channel_id");
             return Ok(None);
         };
-        current_span.set_attribute("slack.channel_id", channel_id.to_string());
+        current_span.set_attribute(attr::SLACK_CHANNEL_ID, channel_id.to_string());
         let root_ts = origin.thread_ts.as_ref().unwrap_or(&origin.ts);
         let messages = self
             .fetch_thread(
@@ -954,7 +955,7 @@ impl SlackService {
             user_slack_id: integration_connection.provider_user_id.clone(),
         };
 
-        current_span.set_attribute("slack.fetch.outcome", "fetched");
+        current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "fetched");
         Ok(Some(
             slack_thread.into_third_party_item(user_id, integration_connection.id),
         ))
@@ -1511,7 +1512,7 @@ impl ThirdPartyItemSourceService<SlackThread> for SlackService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn fetch_items(
@@ -1665,9 +1666,9 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
+            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1702,8 +1703,8 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = source_item.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1734,8 +1735,8 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = source_item.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1779,9 +1780,9 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
+            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1826,8 +1827,8 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = source_item.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1853,8 +1854,8 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = source_item.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = source_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1894,9 +1895,9 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            source_id = source.item.id(),
-            third_party_item_id = source_third_party_item.id.to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source.item.id(),
+            { attr::THIRD_PARTY_ITEM_ID } = source_third_party_item.id.to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1961,9 +1962,9 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -1987,9 +1988,9 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -2035,9 +2036,9 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id,
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]

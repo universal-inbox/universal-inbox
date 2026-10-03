@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::middlewares::jwt_auth::Authenticated;
+use crate::observability::attr;
 use actix_http::body::BoxBody;
 use actix_web::{
     HttpResponse, Scope,
@@ -101,7 +102,7 @@ pub async fn list_tasks(
         {
             warn!(
                 ?error,
-                user.id = %user_id,
+                { attr::USER_ID } = %user_id,
                 "Failed to schedule integration syncs while listing tasks; serving tasks anyway"
             );
         }

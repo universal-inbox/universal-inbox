@@ -6,6 +6,7 @@ use std::{future::Future, time::Duration};
 use crate::{
     configuration::{DEFAULT_TRUSTED_PROXY_HOPS, Settings},
     middlewares::jwt_auth::Authenticated,
+    universal_inbox::UniversalInboxError,
     utils::rate_limit::{forwarded_for_chain, mask_forwarded_for},
 };
 use actix_http::body::MessageBody;
@@ -40,7 +41,10 @@ use crate::{
     utils::jwt::Claims,
 };
 
+pub mod attributes;
 pub mod redaction;
+
+pub use attributes as attr;
 
 use redaction::{RedactingLogProcessor, RedactingSpanProcessor};
 
@@ -217,7 +221,7 @@ pub fn install_panic_hook() {
             .location()
             .map(ToString::to_string)
             .unwrap_or_default();
-        tracing::error!(panic.location = %location, "The application panicked: {message}");
+        tracing::error!({ attr::PANIC_LOCATION } = %location, "The application panicked: {message}");
 
         if let Some((tracer_provider, logger_provider)) = TELEMETRY_PROVIDERS.get() {
             // Best effort: the process is going down and there is nowhere
@@ -371,16 +375,16 @@ impl std::ops::Deref for RedactedRequest<'_> {
 /// (see [`mask_forwarded_for`]); `http.client_ip` is dropped at export anyway.
 fn record_forwarded_for(span: &Span, request: &ServiceRequest) {
     span.record(
-        "rate_limit.trusted_proxy_hops",
+        attr::RATE_LIMIT_TRUSTED_PROXY_HOPS,
         request
             .app_data::<web::Data<Settings>>()
             .map(|settings| settings.application.security.trusted_proxy_hops)
             .unwrap_or(DEFAULT_TRUSTED_PROXY_HOPS),
     );
     if let Some(chain) = forwarded_for_chain(request.headers()) {
-        span.record("http.x_forwarded_for.entries", chain.split(',').count());
+        span.record(attr::HTTP_X_FORWARDED_FOR_ENTRIES, chain.split(',').count());
         span.record(
-            "http.x_forwarded_for.masked",
+            attr::HTTP_X_FORWARDED_FOR_MASKED,
             tracing::field::display(mask_forwarded_for(&chain)),
         );
     }
@@ -414,10 +418,11 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
                 tracing_actix_web::root_span!(
                     level = tracing::Level::INFO,
                     request,
-                    user.id = %user_id,
-                    http.x_forwarded_for.masked = tracing::field::Empty,
-                    http.x_forwarded_for.entries = tracing::field::Empty,
-                    rate_limit.trusted_proxy_hops = tracing::field::Empty,
+                    { attr::USER_ID } = %user_id,
+                    { attr::ERROR_TYPE } = tracing::field::Empty,
+                    { attr::HTTP_X_FORWARDED_FOR_MASKED } = tracing::field::Empty,
+                    { attr::HTTP_X_FORWARDED_FOR_ENTRIES } = tracing::field::Empty,
+                    { attr::RATE_LIMIT_TRUSTED_PROXY_HOPS } = tracing::field::Empty,
                 )
             }
             // No user authenticated
@@ -425,9 +430,10 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
                 tracing_actix_web::root_span!(
                     level = tracing::Level::INFO,
                     request,
-                    http.x_forwarded_for.masked = tracing::field::Empty,
-                    http.x_forwarded_for.entries = tracing::field::Empty,
-                    rate_limit.trusted_proxy_hops = tracing::field::Empty,
+                    { attr::ERROR_TYPE } = tracing::field::Empty,
+                    { attr::HTTP_X_FORWARDED_FOR_MASKED } = tracing::field::Empty,
+                    { attr::HTTP_X_FORWARDED_FOR_ENTRIES } = tracing::field::Empty,
+                    { attr::RATE_LIMIT_TRUSTED_PROXY_HOPS } = tracing::field::Empty,
                 )
             }
         };
@@ -446,12 +452,34 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
             Err(error) => error.as_response_error().status_code(),
         };
         if status == StatusCode::UNAUTHORIZED {
-            span.record("http.status_code", i32::from(status.as_u16()));
-            span.record("otel.status_code", "OK");
+            span.record(attr::HTTP_STATUS_CODE, i32::from(status.as_u16()));
+            span.record(attr::OTEL_STATUS_CODE, "OK");
             return;
+        }
+        if let Some(error_type) = error_type(outcome, status) {
+            span.record(attr::ERROR_TYPE, error_type);
         }
         DefaultRootSpanBuilder::on_request_end(span, outcome);
     }
+}
+
+/// The `error.type` of a failed request: the [`UniversalInboxError`] variant
+/// when the handler returned one, else the status code of a server error
+/// (OpenTelemetry HTTP semantic conventions).
+fn error_type<B>(
+    outcome: &Result<ServiceResponse<B>, actix_web::Error>,
+    status: StatusCode,
+) -> Option<String> {
+    let error = match outcome {
+        Ok(response) => response.response().error(),
+        Err(error) => Some(error),
+    };
+    if let Some(error) = error.and_then(|error| error.as_error::<UniversalInboxError>()) {
+        return Some(error.error_type().to_string());
+    }
+    status
+        .is_server_error()
+        .then(|| status.as_u16().to_string())
 }
 
 pub fn spawn_blocking_with_tracing<F, R>(f: F) -> JoinHandle<R>

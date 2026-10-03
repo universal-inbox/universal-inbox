@@ -17,6 +17,7 @@ use universal_inbox::{
     },
 };
 
+use crate::observability::attr;
 use crate::{
     repository::Repository,
     universal_inbox::{
@@ -238,7 +239,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = id.to_string()),
+        fields({ attr::USER_ID } = id.to_string()),
         err
     )]
     async fn get_user(
@@ -280,7 +281,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn acquire_user_advisory_lock(
@@ -305,7 +306,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn touch_user_last_active_at(
@@ -432,7 +433,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string())
+        fields({ attr::USER_ID } = user_id.to_string())
     )]
     async fn delete_user(
         &self,
@@ -456,7 +457,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(auth_user_id = auth_user_id.to_string()),
+        fields({ attr::AUTH_PROVIDER_USER_ID } = auth_user_id.to_string()),
         err
     )]
     async fn get_user_by_auth_id(
@@ -538,7 +539,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user.id.to_string()),
+        fields({ attr::USER_ID } = user.id.to_string()),
         err
     )]
     async fn create_user(
@@ -599,7 +600,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string(), kind = user_auth.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string(), { attr::USER_AUTH_KIND } = user_auth.to_string()),
         err
     )]
     async fn create_user_auth(
@@ -707,7 +708,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string(), kind = kind.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string(), { attr::USER_AUTH_KIND } = kind.to_string()),
         err
     )]
     async fn delete_user_auth(
@@ -744,7 +745,7 @@ impl UserRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            auth_user_id = auth_user_id.to_string(),
+            { attr::AUTH_PROVIDER_USER_ID } = auth_user_id.to_string(),
         ),
         err
     )]
@@ -818,9 +819,9 @@ impl UserRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            user.id = user_id.to_string(),
-            email_validated_at = email_validated_at.map(|d| d.to_rfc3339()),
-            email_validation_sent_at = email_validation_sent_at.map(|d| d.to_rfc3339()),
+            { attr::USER_ID } = user_id.to_string(),
+            { attr::USER_EMAIL_VALIDATED_AT } = email_validated_at.map(|d| d.to_rfc3339()),
+            { attr::USER_EMAIL_VALIDATION_SENT_AT } = email_validation_sent_at.map(|d| d.to_rfc3339()),
         ),
         err
     )]
@@ -929,7 +930,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn mark_email_as_validated(
@@ -963,7 +964,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn get_user_email_validation_token(
@@ -987,7 +988,7 @@ impl UserRepository for Repository {
         Ok(row.and_then(|row| row.map(|token| token.into())))
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
     async fn upsert_pending_email_change(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1020,7 +1021,7 @@ impl UserRepository for Repository {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
     async fn get_pending_email_change(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1057,7 +1058,7 @@ impl UserRepository for Repository {
         .transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
     async fn delete_pending_email_change(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1079,7 +1080,7 @@ impl UserRepository for Repository {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()), err)]
     async fn apply_verified_email_change(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1130,7 +1131,7 @@ impl UserRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            password_reset_sent_at = password_reset_sent_at.map(|d| d.to_rfc3339()),
+            { attr::USER_PASSWORD_RESET_SENT_AT } = password_reset_sent_at.map(|d| d.to_rfc3339()),
         ),
         err
     )]
@@ -1213,7 +1214,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn update_password(
@@ -1307,7 +1308,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn get_password_reset_token(
@@ -1380,7 +1381,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string(), kind = kind.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string(), { attr::USER_AUTH_KIND } = kind.to_string()),
         err
     )]
     async fn get_user_auth(
@@ -1427,7 +1428,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string(), for_update = for_update),
+        fields({ attr::USER_ID } = user_id.to_string(), { attr::USER_FOR_UPDATE } = for_update),
         err
     )]
     async fn get_all_user_auths(
@@ -1519,7 +1520,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn update_passkey(
@@ -1595,7 +1596,7 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn update_user_profile(

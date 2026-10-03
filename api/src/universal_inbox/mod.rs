@@ -123,6 +123,33 @@ pub enum UniversalInboxError {
     Unexpected(#[from] anyhow::Error),
 }
 
+impl UniversalInboxError {
+    /// Low-cardinality error class recorded as the `error.type` span attribute
+    pub fn error_type(&self) -> &'static str {
+        match self {
+            Self::InvalidEnumData { .. } => "InvalidEnumData",
+            Self::InvalidUrlData { .. } => "InvalidUrlData",
+            Self::InvalidInputData { .. } => "InvalidInputData",
+            Self::InvalidParameters(_) => "InvalidParameters",
+            Self::AlreadyExists { .. } => "AlreadyExists",
+            Self::Conflict(_) => "Conflict",
+            Self::UnsupportedAction(_) => "UnsupportedAction",
+            Self::ItemNotFound(_) => "ItemNotFound",
+            Self::DatabaseError { .. } => "DatabaseError",
+            Self::DatabaseUnavailable { .. } => "DatabaseUnavailable",
+            Self::Unauthorized(_) => "Unauthorized",
+            Self::Forbidden(_) => "Forbidden",
+            Self::TooManyLoginAttempts { .. } => "TooManyLoginAttempts",
+            Self::TooManyRequests { .. } => "TooManyRequests",
+            Self::Recoverable(_) => "Recoverable",
+            Self::OAuth2InvalidGrant(_) => "OAuth2InvalidGrant",
+            Self::PaymentRequired { .. } => "PaymentRequired",
+            Self::UpstreamServiceError { .. } => "UpstreamServiceError",
+            Self::Unexpected(_) => "Unexpected",
+        }
+    }
+}
+
 /// HTTP-status class for [`UniversalInboxError::UpstreamServiceError`]. Keeps
 /// the status decision in the producing subsystem while the core type stays
 /// free of `actix` / `http` imports.

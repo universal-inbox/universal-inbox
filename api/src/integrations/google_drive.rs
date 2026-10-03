@@ -40,6 +40,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::{
         notification::ThirdPartyNotificationSourceService, oauth2::AccessToken,
@@ -405,7 +406,7 @@ impl ThirdPartyItemSourceService<GoogleDriveComment> for GoogleDriveService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn fetch_items(
@@ -557,8 +558,8 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
         level = "debug",
         skip_all,
         fields(
-            source_id = source_third_party_item.source_id,
-            user.id = user_id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string(),
         ),
         err
     )]
@@ -599,8 +600,8 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
         level = "debug",
         skip_all,
         fields(
-            source_id = source_item.source_id,
-            user.id = _user_id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_item.source_id,
+            { attr::USER_ID } = _user_id.to_string(),
         ),
         err
     )]
@@ -619,8 +620,8 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
         level = "debug",
         skip_all,
         fields(
-            source_id = source_item.source_id,
-            user.id = _user_id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_item.source_id,
+            { attr::USER_ID } = _user_id.to_string(),
         ),
         err
     )]
@@ -639,8 +640,8 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
         level = "debug",
         skip_all,
         fields(
-            source_id = source_item.source_id,
-            user.id = _user_id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_item.source_id,
+            { attr::USER_ID } = _user_id.to_string(),
         ),
         err
     )]

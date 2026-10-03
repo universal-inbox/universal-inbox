@@ -9,6 +9,7 @@ use universal_inbox::{
     user::{UserId, UserPreferences, UserPreferencesPatch},
 };
 
+use crate::observability::attr;
 use crate::{repository::Repository, universal_inbox::UniversalInboxError};
 
 #[async_trait]
@@ -32,7 +33,7 @@ impl UserPreferencesRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn get_user_preferences(
@@ -70,7 +71,7 @@ impl UserPreferencesRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     async fn create_or_update_user_preferences(

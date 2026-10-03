@@ -8,7 +8,7 @@ use universal_inbox::{
     integration_connection::provider::IntegrationProviderKind, user::UserId,
 };
 
-use crate::{repository::Repository, universal_inbox::UniversalInboxError};
+use crate::{observability::attr, repository::Repository, universal_inbox::UniversalInboxError};
 
 /// A stored OAuth credential with encrypted tokens.
 /// The tokens are stored as encrypted byte arrays and must be decrypted
@@ -76,7 +76,12 @@ pub trait OAuthCredentialRepository {
 
 #[async_trait]
 impl OAuthCredentialRepository for Repository {
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
+        err
+    )]
     async fn store_oauth_credential(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -143,7 +148,12 @@ impl OAuthCredentialRepository for Repository {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
+        err
+    )]
     async fn get_oauth_credential(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -187,7 +197,12 @@ impl OAuthCredentialRepository for Repository {
         }))
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
+        err
+    )]
     async fn lock_oauth_credential(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -232,7 +247,12 @@ impl OAuthCredentialRepository for Repository {
         }))
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::INTEGRATION_CONNECTION_ID } = integration_connection_id.to_string()),
+        err
+    )]
     async fn delete_oauth_credential(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -260,7 +280,12 @@ impl OAuthCredentialRepository for Repository {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, err)]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::INTEGRATION_PROVIDER_KIND } = provider_kind.map(|kind| kind.to_string())),
+        err
+    )]
     async fn list_expiring_credentials(
         &self,
         executor: &mut Transaction<'_, Postgres>,

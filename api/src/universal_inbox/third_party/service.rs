@@ -23,6 +23,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     integrations::{
         api::APIService, linear::LinearService, slack::SlackService,
@@ -98,8 +99,8 @@ impl ThirdPartyItemService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_kind = third_party_item_data.kind().to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_KIND } = third_party_item_data.kind().to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -230,8 +231,8 @@ impl ThirdPartyItemService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_kind = third_party_item_data.kind().to_string(),
-            user.id = user_id.to_string()
+            { attr::THIRD_PARTY_ITEM_KIND } = third_party_item_data.kind().to_string(),
+            { attr::USER_ID } = user_id.to_string()
         ),
         err
     )]
@@ -298,7 +299,7 @@ impl ThirdPartyItemService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     pub async fn sync_items<T, U>(
@@ -406,8 +407,8 @@ impl ThirdPartyItemService {
         level = "debug",
         skip_all,
         fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id
         ),
         err
     )]
@@ -442,8 +443,8 @@ impl ThirdPartyItemService {
         level = "debug",
         skip_all,
         fields(
-            task_id = task.id.to_string(),
-            overwrite_existing_sink_item = overwrite_existing_sink_item
+            { attr::TASK_ID } = task.id.to_string(),
+            { attr::TASK_OVERWRITE_EXISTING_SINK_ITEM } = overwrite_existing_sink_item
         ),
         err
     )]

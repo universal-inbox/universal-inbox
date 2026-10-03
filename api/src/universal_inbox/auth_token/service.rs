@@ -16,6 +16,7 @@ use universal_inbox::{
     user::UserId,
 };
 
+use crate::observability::attr;
 use crate::{
     configuration::HttpSessionSettings,
     middlewares::jwt_auth::{BearerTokenChecker, JWT},
@@ -65,7 +66,7 @@ impl AuthenticationTokenService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(is_session_token = is_session_token, user.id = user_id.to_string()),
+        fields({ attr::AUTH_TOKEN_IS_SESSION } = is_session_token, { attr::USER_ID } = user_id.to_string()),
         err
     )]
     pub async fn create_auth_token(
@@ -118,7 +119,7 @@ impl AuthenticationTokenService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string()),
         err
     )]
     pub async fn fetch_auth_tokens_for_user(
@@ -134,7 +135,7 @@ impl AuthenticationTokenService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string(), auth_token.id = auth_token_id.to_string()),
+        fields({ attr::USER_ID } = user_id.to_string(), { attr::AUTH_TOKEN_ID } = auth_token_id.to_string()),
         err
     )]
     pub async fn revoke_auth_token(
