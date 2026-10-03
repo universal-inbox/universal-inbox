@@ -104,6 +104,9 @@ Each worktree gets **its own ports**, NOT 5432/6379. On create, worktrunk
 - **Always prefix with `direnv exec .`.** Bare `devbox run` does NOT source `.local_envrc`,
   so it silently falls back to ports 5432/6379 — wrong DB, and it collides with any local
   Docker postgres on 5432.
+- **Claude Code Bash calls load the worktree env automatically** (`SessionStart` hook
+  `.claude/hooks/direnv-session-start.sh`), even if the session started before `.envrc` was
+  allowed. `direnv exec .` stays required for git hooks, other agents and plain terminals.
 - **Stop the branch's services before `wt remove` or `wt merge`.** Run from the worktree:
   `direnv exec . just down` (stops pg, redis and app services on this worktree's
   `PROCESS_COMPOSE_PORT`), then `direnv exec . just status` to confirm nothing runs. The
