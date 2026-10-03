@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
+use chrono::{TimeDelta, Utc};
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
@@ -76,5 +77,52 @@ pub async fn retry_oauth_grant_revocations(
         .retry_due_grant_revocations(max_revocations, &retry_policy)
         .await?;
     info!("OAuth grant revocation retries complete: {completed} completed, {failed} failed");
+    Ok(())
+}
+
+#[tracing::instrument(
+    name = "pause-slack-connections",
+    level = "info",
+    skip(integration_connection_service),
+    err
+)]
+pub async fn pause_slack_connections(
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    inactivity_threshold_days: i64,
+    failing_threshold_days: i64,
+) -> Result<(), UniversalInboxError> {
+    let days_ago = |days: i64| {
+        TimeDelta::try_days(days)
+            .map(|delta| Utc::now() - delta)
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow!("Invalid number of days: {days}"))
+            })
+    };
+    let inactive_before = days_ago(inactivity_threshold_days)?;
+    let failing_before = days_ago(failing_threshold_days)?;
+    let service = integration_connection_service.read().await;
+
+    info!(
+        "Pausing Slack connections of users inactive for more than {inactivity_threshold_days} days"
+    );
+    let (paused_inactive, failed_inactive) = service
+        .pause_integration_connections_of_inactive_users(
+            IntegrationProviderKind::Slack,
+            inactive_before,
+        )
+        .await?;
+
+    info!("Pausing Slack connections failing for more than {failing_threshold_days} days");
+    let (paused_failing, failed_failing) = service
+        .pause_long_failing_integration_connections(IntegrationProviderKind::Slack, failing_before)
+        .await?;
+
+    let failed = failed_inactive + failed_failing;
+    if failed > 0 {
+        error!("{failed} Slack connection(s) could not be paused");
+    }
+    info!(
+        "Paused {paused_inactive} Slack connection(s) of inactive users and {paused_failing} long failing Slack connection(s)"
+    );
     Ok(())
 }

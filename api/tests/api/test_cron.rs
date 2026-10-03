@@ -7,12 +7,15 @@ use rstest::*;
 use uuid::Uuid;
 
 use universal_inbox_api::{
-    configuration::{RefreshOAuthTokensCronSettings, Settings, VacuumJobsCronSettings},
+    configuration::{
+        PauseSlackConnectionsCronSettings, RefreshOAuthTokensCronSettings, Settings,
+        VacuumJobsCronSettings,
+    },
     jobs::{
         UniversalInboxJob,
         cron::{
-            handle_refresh_oauth_tokens_cron_tick, handle_vacuum_jobs_cron_tick,
-            try_acquire_cron_tick_lock,
+            handle_pause_slack_connections_cron_tick, handle_refresh_oauth_tokens_cron_tick,
+            handle_vacuum_jobs_cron_tick, try_acquire_cron_tick_lock,
         },
     },
     utils::cache::Cache,
@@ -64,6 +67,45 @@ async fn test_refresh_oauth_tokens_cron_tick_enqueues_job_once(
     // Simulate 2 worker processes handling the same cron tick
     for _ in 0..2 {
         handle_refresh_oauth_tokens_cron_tick(
+            Default::default(),
+            CronContext::new(tick),
+            Data::new(redis_storage.clone()),
+            Data::new(cache.clone()),
+            Data::new(cron_settings.clone()),
+        )
+        .await
+        .expect("Failed to handle cron tick");
+    }
+
+    let queued_jobs = redis_storage
+        .len()
+        .await
+        .expect("Failed to get Redis storage length");
+    assert_eq!(
+        queued_jobs, 1,
+        "the same tick handled by 2 processes should enqueue exactly 1 job"
+    );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_pause_slack_connections_cron_tick_enqueues_job_once(
+    settings: Settings,
+    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
+) {
+    let mut redis_storage = redis_storage.await;
+    let cache = Cache::new(settings.redis.connection_string())
+        .await
+        .expect("Failed to create cache");
+    let cron_settings = PauseSlackConnectionsCronSettings {
+        inactivity_threshold_days: 42,
+        ..Default::default()
+    };
+    let tick = cron_tick();
+
+    // Simulate 2 worker processes handling the same cron tick
+    for _ in 0..2 {
+        handle_pause_slack_connections_cron_tick(
             Default::default(),
             CronContext::new(tick),
             Data::new(redis_storage.clone()),
@@ -460,4 +502,15 @@ fn test_refresh_oauth_tokens_cron_settings(settings: Settings) {
     assert_eq!(cron_settings.schedule, "0 */5 * * * *");
     assert_eq!(cron_settings.minutes_before_expiry, 10);
     assert_eq!(cron_settings.lock_ttl_seconds, 60);
+}
+
+#[rstest]
+fn test_pause_slack_connections_cron_settings(settings: Settings) {
+    let cron_settings = settings.application.cron.pause_slack_connections;
+    // Disabled by default: it revokes grants at Slack
+    assert!(!cron_settings.is_enabled);
+    assert_eq!(cron_settings.schedule, "0 0 3 * * *");
+    assert_eq!(cron_settings.inactivity_threshold_days, 90);
+    assert_eq!(cron_settings.failing_threshold_days, 30);
+    assert_eq!(cron_settings.lock_ttl_seconds, 300);
 }

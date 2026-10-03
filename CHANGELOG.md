@@ -16,6 +16,7 @@
 - Add per-task scheduled time, duration, and timezone configuration in integration settings and the planning modal
 - Sync per-task time, duration, and timezone to TickTick (duration modeled as a start/due time range)
 - Self-service account deletion: `DELETE /api/users/me` (confirmed by re-typing the email address) and a "Delete my account" card on the Profile page; the `user delete` CLI command runs the same service flow
+- Pause the Slack connections of users inactive for 90 days and the connections failing for 30 days (`pause-slack-connections` cron, disabled by default): their provider grant is revoked and they show as Paused with a reconnect action
 
 ### Changed
 
@@ -49,6 +50,7 @@
 - Preserve precision of numeric-looking environment variables in the config loader
 - Scope the `slack:list_emojis` Redis cache entry by workspace team id so custom emojis from one workspace are no longer served to users of other workspaces
 - Completing a Slack-sourced task no longer fails when its Slack reaction was already removed
+- Mark a Slack connection as Failing when Slack rejects its refresh token (`invalid_refresh_token` / `invalid_grant`)
 
 ## 2026-03-17
 

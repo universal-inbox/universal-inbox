@@ -11,7 +11,8 @@ use log::warn;
 use universal_inbox::{
     IntegrationProviderStaticConfig,
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionPausedReason,
+        IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         provider::{IntegrationProvider, IntegrationProviderKind},
     },
@@ -127,7 +128,11 @@ impl IntegrationHealth {
 
             let name = kind.to_string();
             match connection.status {
-                IntegrationConnectionStatus::Failing => failed.push(name),
+                // Paused for inactivity: it stopped syncing and only a
+                // reconnect brings it back, exactly like a failure.
+                IntegrationConnectionStatus::Failing | IntegrationConnectionStatus::Paused => {
+                    failed.push(name)
+                }
                 IntegrationConnectionStatus::Validated => {
                     if connection.auto_paused_by_plan_at.is_some() {
                         // Checked before the scope test on purpose: a paused
@@ -653,6 +658,21 @@ pub fn IntegrationSettings(
                 ..
             })) => Some(("error", message, None)),
             Some(Some(IntegrationConnection {
+                status: IntegrationConnectionStatus::Paused,
+                paused_reason,
+                ..
+            })) => Some((
+                "pending",
+                match paused_reason {
+                    Some(IntegrationConnectionPausedReason::LongFailing) => {
+                        "Paused after failing for too long — reconnect to resume"
+                    }
+                    _ => "Paused after a long inactivity — reconnect to resume",
+                }
+                .to_string(),
+                None,
+            )),
+            Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Failing,
                 ..
             })) => Some((
@@ -739,13 +759,18 @@ pub fn IntegrationSettings(
         Some(Some(ref ic)) if ic.status == IntegrationConnectionStatus::Failing => {
             (StatusLeafVariant::Error, "Error")
         }
+        Some(Some(ref ic)) if ic.status == IntegrationConnectionStatus::Paused => {
+            (StatusLeafVariant::SyncIssue, "Paused")
+        }
         _ => (StatusLeafVariant::Disconnected, "Not connected"),
     };
 
     let has_connection = matches!(
         connection(),
         Some(Some(IntegrationConnection {
-            status: IntegrationConnectionStatus::Validated | IntegrationConnectionStatus::Failing,
+            status: IntegrationConnectionStatus::Validated
+                | IntegrationConnectionStatus::Failing
+                | IntegrationConnectionStatus::Paused,
             ..
         }))
     );
@@ -759,7 +784,7 @@ pub fn IntegrationSettings(
 
     let needs_reconnect = match connection() {
         Some(Some(IntegrationConnection {
-            status: IntegrationConnectionStatus::Failing,
+            status: IntegrationConnectionStatus::Failing | IntegrationConnectionStatus::Paused,
             ..
         })) => true,
         Some(Some(_)) => has_connection && !has_all_oauth_scopes,
@@ -903,7 +928,7 @@ pub fn IntegrationSettings(
                                             icon_class: "icon-[lucide--refresh-cw]".to_string(),
                                             onclick: move |_| {
                                                 match connection() {
-                                                    Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Failing, .. })) => on_reconnect.call(c),
+                                                    Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Failing | IntegrationConnectionStatus::Paused, .. })) => on_reconnect.call(c),
                                                     Some(Some(c)) if !has_all_oauth_scopes => on_reconnect.call(c),
                                                     _ => {}
                                                 }

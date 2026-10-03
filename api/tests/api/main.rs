@@ -23,6 +23,7 @@ mod test_multi_task_manager;
 mod test_notifications;
 mod test_oauth2_cimd;
 mod test_oauth_callback;
+mod test_pause_slack_connections;
 mod test_set_aside_notifications;
 mod test_slack_bridge;
 mod test_slack_notifications;

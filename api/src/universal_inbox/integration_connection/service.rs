@@ -22,7 +22,8 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionPausedReason,
+        IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         provider::{IntegrationConnectionContext, IntegrationProviderKind},
     },
@@ -969,7 +970,12 @@ impl IntegrationConnectionService {
 
         let mut revoked = 0;
         for integration_connection in integration_connections {
-            if integration_connection.status == IntegrationConnectionStatus::Created {
+            // A paused connection has no credential left, and pausing it
+            // revoked its token, which makes Slack send this very event.
+            if matches!(
+                integration_connection.status,
+                IntegrationConnectionStatus::Created | IntegrationConnectionStatus::Paused
+            ) {
                 continue;
             }
             let credential = self
@@ -1397,6 +1403,204 @@ impl IntegrationConnectionService {
             updated: false,
             result: None,
         })
+    }
+
+    /// Pause the `Validated` `provider_kind` connections of users inactive
+    /// since `inactive_before`, see [`Self::pause_integration_connections`].
+    /// Returns `(paused_count, failed_count)`.
+    #[tracing::instrument(
+        level = "info",
+        skip(self),
+        fields(
+            provider_kind = provider_kind.to_string(),
+            inactive_before = inactive_before.to_rfc3339()
+        ),
+        err
+    )]
+    pub async fn pause_integration_connections_of_inactive_users(
+        &self,
+        provider_kind: IntegrationProviderKind,
+        inactive_before: DateTime<Utc>,
+    ) -> Result<(usize, usize), UniversalInboxError> {
+        let mut transaction = self.begin().await.context(
+            "Failed to create new transaction while listing integration connections of inactive users",
+        )?;
+        let integration_connection_ids = self
+            .repository
+            .find_validated_integration_connections_of_inactive_users(
+                &mut transaction,
+                provider_kind,
+                inactive_before,
+            )
+            .await?;
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit while listing integration connections of inactive users")?;
+
+        self.pause_integration_connections(
+            provider_kind,
+            integration_connection_ids,
+            IntegrationConnectionPausedReason::Inactivity,
+        )
+        .await
+    }
+
+    /// Pause the `provider_kind` connections `Failing` since before
+    /// `failing_before`, see [`Self::pause_integration_connections`]. A failing
+    /// connection syncs nothing, but its grant may still be valid at the
+    /// provider (Slack then keeps sending its events).
+    /// Returns `(paused_count, failed_count)`.
+    #[tracing::instrument(
+        level = "info",
+        skip(self),
+        fields(
+            provider_kind = provider_kind.to_string(),
+            failing_before = failing_before.to_rfc3339()
+        ),
+        err
+    )]
+    pub async fn pause_long_failing_integration_connections(
+        &self,
+        provider_kind: IntegrationProviderKind,
+        failing_before: DateTime<Utc>,
+    ) -> Result<(usize, usize), UniversalInboxError> {
+        let mut transaction = self.begin().await.context(
+            "Failed to create new transaction while listing long failing integration connections",
+        )?;
+        let integration_connection_ids = self
+            .repository
+            .find_long_failing_integration_connections(
+                &mut transaction,
+                provider_kind,
+                failing_before,
+            )
+            .await?;
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit while listing long failing integration connections")?;
+
+        self.pause_integration_connections(
+            provider_kind,
+            integration_connection_ids,
+            IntegrationConnectionPausedReason::LongFailing,
+        )
+        .await
+    }
+
+    /// Revoke the grant of each connection at the provider (so Slack, for
+    /// instance, stops sending events for it; a failed revocation is queued
+    /// for retry), delete its credential and move it to `Paused`. Each connection is handled in its own transaction so
+    /// that one failure does not hold back the others.
+    async fn pause_integration_connections(
+        &self,
+        provider_kind: IntegrationProviderKind,
+        integration_connection_ids: Vec<IntegrationConnectionId>,
+        paused_reason: IntegrationConnectionPausedReason,
+    ) -> Result<(usize, usize), UniversalInboxError> {
+        info!(
+            "Found {} {provider_kind} integration connection(s) to pause ({paused_reason})",
+            integration_connection_ids.len()
+        );
+
+        let mut paused = 0usize;
+        let mut failed = 0usize;
+        for integration_connection_id in integration_connection_ids {
+            let mut transaction = self.begin().await.context(format!(
+                "Failed to create new transaction while pausing integration connection {integration_connection_id}"
+            ))?;
+            match self
+                .pause_integration_connection(
+                    &mut transaction,
+                    integration_connection_id,
+                    paused_reason,
+                )
+                .await
+            {
+                Ok(is_paused) => {
+                    transaction.commit().await.context(format!(
+                        "Failed to commit while pausing integration connection {integration_connection_id}"
+                    ))?;
+                    if is_paused {
+                        paused += 1;
+                    }
+                }
+                Err(err) => {
+                    error!(
+                        "Failed to pause {provider_kind} integration connection {integration_connection_id}: {err:?}"
+                    );
+                    failed += 1;
+                }
+            }
+        }
+
+        info!(
+            "Paused {paused} {provider_kind} integration connection(s) ({paused_reason}), {failed} failed"
+        );
+        Ok((paused, failed))
+    }
+
+    /// Pause one connection, see [`Self::pause_integration_connections`].
+    /// Returns whether it was paused: one the user disconnected or reconnected
+    /// since it was listed is left alone.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection_id = integration_connection_id.to_string(),
+            paused_reason = paused_reason.to_string()
+        ),
+        err
+    )]
+    async fn pause_integration_connection(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        paused_reason: IntegrationConnectionPausedReason,
+    ) -> Result<bool, UniversalInboxError> {
+        let Some(integration_connection) = self
+            .repository
+            .get_integration_connection(executor, integration_connection_id)
+            .await?
+        else {
+            return Ok(false);
+        };
+        let is_still_eligible = match paused_reason {
+            IntegrationConnectionPausedReason::Inactivity => integration_connection.is_connected(),
+            IntegrationConnectionPausedReason::LongFailing => integration_connection.is_failing(),
+        };
+        if !is_still_eligible {
+            return Ok(false);
+        }
+
+        self.revoke_provider_grant(executor, &integration_connection)
+            .await?;
+        self.repository
+            .delete_oauth_credential(executor, integration_connection_id)
+            .await?;
+        let paused_integration_connection = self
+            .repository
+            .pause_integration_connection(
+                executor,
+                integration_connection_id,
+                Utc::now(),
+                paused_reason,
+            )
+            .await?;
+
+        // Pausing stops feeding the inbox just as disconnecting does.
+        if let Some(paused_integration_connection) = &paused_integration_connection {
+            self.reconcile_set_aside_notifications(executor, paused_integration_connection)
+                .await?;
+        }
+
+        info!(
+            "Paused the {} integration connection {integration_connection_id} of user {} ({paused_reason})",
+            integration_connection.provider.kind(),
+            integration_connection.user_id
+        );
+        Ok(true)
     }
 
     #[tracing::instrument(

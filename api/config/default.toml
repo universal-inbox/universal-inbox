@@ -53,6 +53,18 @@ max_delay_in_seconds = 86400
 max_attempts = 20
 lock_ttl_seconds = 60
 
+# Revoke the Slack grant and pause the Slack connection of users who have not
+# used Universal Inbox for `inactivity_threshold_days`, and of connections
+# failing for `failing_threshold_days`, so Slack stops sending their events.
+# Reconnecting the integration resumes it.
+[application.cron.pause_slack_connections]
+is_enabled = false
+# Cron expression with a seconds field
+schedule = "0 0 3 * * *"
+inactivity_threshold_days = 90
+failing_threshold_days = 30
+lock_ttl_seconds = 300
+
 [application.email]
 smtp_server = "smtp.example.com"
 smtp_port = 465

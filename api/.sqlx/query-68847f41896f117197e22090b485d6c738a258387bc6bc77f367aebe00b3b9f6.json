@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "is_revoked",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "authentication_token",
+            "name": "is_revoked"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "expire_at",
-        "type_info": "Timestamp"
+        "type_info": "Timestamp",
+        "origin": {
+          "Table": {
+            "table": "authentication_token",
+            "name": "expire_at"
+          }
+        }
       }
     ],
     "parameters": {

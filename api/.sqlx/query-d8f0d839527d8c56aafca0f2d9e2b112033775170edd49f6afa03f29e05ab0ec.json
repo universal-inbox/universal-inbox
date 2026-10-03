@@ -32,7 +32,8 @@
               "Enum": [
                 "Created",
                 "Validated",
-                "Failing"
+                "Failing",
+                "Paused"
               ]
             }
           }

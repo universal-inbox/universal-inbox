@@ -221,6 +221,16 @@ pub trait UserRepository {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError>;
+
+    /// Set the user's `last_active_at` to `now`, unless it is already more
+    /// recent than `not_before`. Returns whether the row was written.
+    async fn touch_user_last_active_at(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        now: DateTime<Utc>,
+        not_before: DateTime<Utc>,
+    ) -> Result<bool, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -290,6 +300,42 @@ impl UserRepository for Repository {
                 }
             })?;
         Ok(())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    async fn touch_user_last_active_at(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        now: DateTime<Utc>,
+        not_before: DateTime<Utc>,
+    ) -> Result<bool, UniversalInboxError> {
+        let result = sqlx::query!(
+            r#"
+                UPDATE "user"
+                SET last_active_at = $2
+                WHERE id = $1
+                  AND last_active_at < $3
+            "#,
+            user_id.0,
+            now.naive_utc(),
+            not_before.naive_utc(),
+        )
+        .execute(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!("Failed to update last activity of user {user_id}: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+        Ok(result.rows_affected() > 0)
     }
 
     #[tracing::instrument(level = "debug", skip_all)]

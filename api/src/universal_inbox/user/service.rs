@@ -1,8 +1,12 @@
-use std::{str::FromStr, sync::Arc};
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::{Context, anyhow};
 use argon2::{Argon2, Params, PasswordHasher, PasswordVerifier};
-use chrono::{TimeDelta, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use email_address::EmailAddress;
 use openidconnect::{
     AccessToken, AuthorizationCode, CsrfToken, EmptyAdditionalClaims, EndSessionUrl, IdToken,
@@ -58,6 +62,11 @@ const PASSWORD_RESET_VALIDITY_MINUTES: i64 = 60;
 /// How long the verification link of a pending email change stays valid.
 const EMAIL_CHANGE_VALIDITY_HOURS: i64 = 24;
 
+/// Minimum delay between two writes of a user's `last_active_at`. The
+/// inactivity policy counts in days, so finer precision would only cost
+/// writes.
+const USER_ACTIVITY_RECORDING_INTERVAL_HOURS: i64 = 24;
+
 pub struct UserService {
     repository: Arc<Repository>,
     application_settings: ApplicationSettings,
@@ -68,6 +77,9 @@ pub struct UserService {
     login_throttle: Option<LoginThrottle>,
     /// Used on account deletion to revoke the user's provider OAuth grants.
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    /// When this process last recorded each user's activity, so that most
+    /// authenticated requests skip the database entirely.
+    recorded_user_activities: Mutex<HashMap<UserId, DateTime<Utc>>>,
 }
 
 impl UserService {
@@ -86,7 +98,49 @@ impl UserService {
             webauthn,
             login_throttle,
             integration_connection_service,
+            recorded_user_activities: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Record that the user just used Universal Inbox, for the inactivity
+    /// policy pausing the integrations of long-gone users. Writes
+    /// `last_active_at` at most once per
+    /// [`USER_ACTIVITY_RECORDING_INTERVAL_HOURS`]; returns whether it wrote.
+    #[tracing::instrument(level = "debug", skip(self), err)]
+    pub async fn record_user_activity(&self, user_id: UserId) -> Result<bool, UniversalInboxError> {
+        let now = Utc::now();
+        let not_before = now - TimeDelta::hours(USER_ACTIVITY_RECORDING_INTERVAL_HOURS);
+        let recorded_recently = self
+            .recorded_user_activities
+            .lock()
+            .map_err(|_| anyhow!("User activities cache lock is poisoned"))?
+            .get(&user_id)
+            .is_some_and(|recorded_at| *recorded_at > not_before);
+        if recorded_recently {
+            return Ok(false);
+        }
+
+        let mut transaction = self
+            .begin()
+            .await
+            .context("Failed to create new transaction while recording user activity")?;
+        let written = self
+            .repository
+            .touch_user_last_active_at(&mut transaction, user_id, now, not_before)
+            .await?;
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit while recording user activity")?;
+
+        let mut recorded_user_activities = self
+            .recorded_user_activities
+            .lock()
+            .map_err(|_| anyhow!("User activities cache lock is poisoned"))?;
+        // Drop stale entries so the memo only holds recently active users.
+        recorded_user_activities.retain(|_, recorded_at| *recorded_at > not_before);
+        recorded_user_activities.insert(user_id, now);
+        Ok(written)
     }
 
     pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
