@@ -19,7 +19,19 @@ actix-cors = "0.7.0"
 actix-files = "0.7"
 actix-http = "3.0.0"
 actix-session = { version = "0.11.0", features = ["cookie-session"] }
-actix-web = "4.0.0"
+# Default features minus `http2`: the app only serves HTTP/1.1 (TLS and HTTP/2
+# terminate at the edge proxy), and `http2` pulls an h2 0.3 that no longer
+# receives fixes.
+actix-web = { version = "4.0.0", default-features = false, features = [
+  "macros",
+  "compress-brotli",
+  "compress-gzip",
+  "compress-zstd",
+  "cookies",
+  "unicode",
+  "compat",
+  "ws",
+] }
 anyhow = { workspace = true }
 apalis = { version = "0.7", features = ["limit"] }
 apalis-cron = { version = "0.7" }

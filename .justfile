@@ -92,6 +92,9 @@ check-format:
 lint-dockerfile:
     hadolint Dockerfile
 
+check-deny:
+    cargo deny check advisories sources bans
+
 @check-commit:
     env SKIP= prek run -a
 

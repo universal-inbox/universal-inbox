@@ -1,0 +1,25 @@
+# cargo-deny configuration, run on every PR (`just check-deny`).
+# Keep advisory ignores in sync with `.cargo/audit.toml` (daily cargo-audit cron).
+
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+# Unmaintained crates only fail the check when they are direct dependencies.
+unmaintained = "workspace"
+yanked = "warn"
+ignore = [
+  # rsa: Marvin timing side channel on private-key decryption. No fixed release yet.
+  # rsa is only used by openidconnect to verify ID token signatures with public keys.
+  { id = "RUSTSEC-2023-0071", reason = "rsa only verifies signatures with public keys; no fixed release" },
+]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
