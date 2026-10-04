@@ -62,6 +62,7 @@
 - The toast shown after answering a Google Calendar invitation now matches the chosen answer
 - Slack webhook events now reach Slack connections created before their workspace id was recorded (backfilled by the `slack backfill-team-id` command and on the next Slack sync)
 - Convert every Google Calendar email into its invitation, including occurrences of recurring events and cancelled events
+- Keep the text of an email readable in dark mode when its light background comes from a nested table
 
 ## 2026-03-17
 
