@@ -2,12 +2,12 @@ use std::sync::LazyLock;
 
 use actix_files::{Files, NamedFile};
 use actix_web::{
-    Error,
+    Error, HttpResponse,
     body::MessageBody,
     dev::{HttpServiceFactory, ServiceRequest, ServiceResponse, fn_service},
     http::{
-        StatusCode,
-        header::{CACHE_CONTROL, HeaderValue},
+        Method, StatusCode,
+        header::{ALLOW, CACHE_CONTROL, HeaderValue},
     },
     middleware::{Next, from_fn},
     web,
@@ -16,6 +16,7 @@ use regex::Regex;
 
 const IMMUTABLE: HeaderValue = HeaderValue::from_static("public, max-age=31536000, immutable");
 const NO_CACHE: HeaderValue = HeaderValue::from_static("no-cache");
+const ALLOWED_METHODS: HeaderValue = HeaderValue::from_static("GET, HEAD");
 
 /// Trunk's release build appends a 16 hex digits content hash to the bundle
 /// files and the snippets directory (`universal-inbox-web-<hash>_bg.wasm`,
@@ -47,15 +48,35 @@ pub fn spa_service(mount: &str, static_dir: &str) -> impl HttpServiceFactory + u
 
     web::scope("")
         .wrap(from_fn(set_cache_control))
+        .wrap(from_fn(set_allow_header))
         .service(files)
         .default_service(fn_service(move |req| serve_index(req, index_file.clone())))
 }
 
 async fn serve_index(req: ServiceRequest, index_file: String) -> Result<ServiceResponse, Error> {
     let (req, _) = req.into_parts();
+    // Static content is read-only: `Files` already rejects other methods, the
+    // fallback must not answer them with the application page either.
+    if !matches!(*req.method(), Method::GET | Method::HEAD) {
+        let res = HttpResponse::MethodNotAllowed().finish();
+        return Ok(ServiceResponse::new(req, res));
+    }
     let mut res = NamedFile::open(&index_file)?.into_response(&req);
     res.headers_mut().insert(CACHE_CONTROL, NO_CACHE);
     Ok(ServiceResponse::new(req, res))
+}
+
+/// Advertise the methods static content accepts on every `405` response
+/// (`Files` answers them without an `Allow` header).
+async fn set_allow_header(
+    req: ServiceRequest,
+    next: Next<impl MessageBody>,
+) -> Result<ServiceResponse<impl MessageBody>, Error> {
+    let mut res = next.call(req).await?;
+    if res.status() == StatusCode::METHOD_NOT_ALLOWED {
+        res.headers_mut().insert(ALLOW, ALLOWED_METHODS);
+    }
+    Ok(res)
 }
 
 async fn set_cache_control(

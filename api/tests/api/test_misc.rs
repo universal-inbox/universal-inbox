@@ -369,7 +369,7 @@ mod invalid_static_paths {
 mod static_files {
     use super::*;
 
-    use pretty_assertions::assert_eq;
+    use pretty_assertions::{assert_eq, assert_ne};
 
     const HASHED_WASM_PATH: &str = "/app-0123456789abcdef_bg.wasm";
     const IMMUTABLE: &str = "public, max-age=31536000, immutable";
@@ -447,5 +447,83 @@ mod static_files {
 
         assert_eq!(response.status(), 200);
         assert_eq!(header(&response, "cache-control"), Some("no-cache"));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_spa_fallback_is_served_on_get_and_head(
+        #[future] tested_app: TestedApp,
+        #[values(reqwest::Method::GET, reqwest::Method::HEAD)] method: reqwest::Method,
+    ) {
+        let app = tested_app.await;
+
+        let response = reqwest::Client::new()
+            .request(method, format!("{}/notifications/some-id", app.app_address))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            header(&response, "content-type"),
+            Some("text/html; charset=utf-8")
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_static_content_rejects_other_methods(
+        #[future] tested_app: TestedApp,
+        #[values("/", "/notifications/some-id", "/style.css")] path: &str,
+        #[values(
+            reqwest::Method::POST,
+            reqwest::Method::PUT,
+            reqwest::Method::DELETE,
+            reqwest::Method::PATCH
+        )]
+        method: reqwest::Method,
+    ) {
+        let app = tested_app.await;
+
+        let response = reqwest::Client::new()
+            .request(method, format!("{}{path}", app.app_address))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 405);
+        assert_ne!(
+            header(&response, "content-type"),
+            Some("text/html; charset=utf-8")
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_spa_fallback_advertises_allowed_methods(#[future] tested_app: TestedApp) {
+        let app = tested_app.await;
+
+        let response = reqwest::Client::new()
+            .post(format!("{}/notifications/some-id", app.app_address))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 405);
+        assert_eq!(header(&response, "allow"), Some("GET, HEAD"));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_invalid_static_path_rejects_post_with_not_found(#[future] tested_app: TestedApp) {
+        let app = tested_app.await;
+
+        let response = reqwest::Client::new()
+            .post(format!("{}/.env", app.app_address))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 404);
     }
 }
