@@ -4,16 +4,29 @@ use rstest::*;
 
 use universal_inbox::user::{UserAuthKind, UserAuthMethod, UserAuthMethodDisplayInfo};
 
+use universal_inbox_api::mailer::EmailTemplate;
+
 use crate::helpers::{
     TestedApp,
     auth::{AuthenticatedApp, authenticated_app, get_all_user_auths},
     tested_app_with_domain_blacklist, tested_app_with_local_auth,
     user::{
-        add_local_auth_response, finish_add_passkey_registration_response,
+        add_local_auth_response, emails_sent_to, finish_add_passkey_registration_response,
         link_oidc_pkce_session_response, list_auth_methods, list_auth_methods_response,
         register_user, remove_auth_method_response, start_add_passkey_registration_response,
     },
 };
+
+async fn assert_auth_method_added_email_sent(app: &TestedApp, email: &str, expected_method: &str) {
+    let emails = emails_sent_to(app, &email.parse().unwrap()).await;
+    assert!(
+        emails.iter().any(|template| matches!(
+            template,
+            EmailTemplate::AuthMethodAdded { method, .. } if method == expected_method
+        )),
+        "{emails:?}"
+    );
+}
 
 mod list_auth_methods {
     use super::*;
@@ -112,6 +125,8 @@ mod add_local_auth_method {
         // Verify in the database
         let user_auths = get_all_user_auths(&app, user.id).await;
         assert_eq!(user_auths.len(), 2);
+
+        assert_auth_method_added_email_sent(&app, "test@example.com", "A password").await;
     }
 
     #[rstest]
@@ -196,6 +211,8 @@ mod add_passkey_auth_method {
         // Verify in the database
         let user_auths = get_all_user_auths(&app, user.id).await;
         assert_eq!(user_auths.len(), 2);
+
+        assert_auth_method_added_email_sent(&app, "john@doe.name", "A passkey").await;
     }
 
     #[rstest]
@@ -346,6 +363,8 @@ mod add_oidc_auth_method {
         // Verify in the database
         let user_auths = get_all_user_auths(&app, user.id).await;
         assert_eq!(user_auths.len(), 2);
+
+        assert_auth_method_added_email_sent(&app, "john@doe.name", "Single sign-on").await;
     }
 
     #[rstest]
@@ -544,6 +563,15 @@ mod remove_auth_method {
         // Verify in the database
         let user_auths = get_all_user_auths(&app, user.id).await;
         assert_eq!(user_auths.len(), 1);
+
+        let emails = emails_sent_to(&app, &"test@example.com".parse().unwrap()).await;
+        assert!(
+            emails.iter().any(|template| matches!(
+                template,
+                EmailTemplate::AuthMethodRemoved { method, .. } if method == "A password"
+            )),
+            "{emails:?}"
+        );
     }
 
     #[rstest]

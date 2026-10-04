@@ -89,6 +89,25 @@ pub enum EmailTemplate {
         first_name: Option<String>,
         password_reset_url: Url,
     },
+    /// `method` is the display name of the login method ("a password",
+    /// "a passkey", "Google").
+    AuthMethodAdded {
+        first_name: Option<String>,
+        method: String,
+        password_reset_url: Url,
+    },
+    AuthMethodRemoved {
+        first_name: Option<String>,
+        method: String,
+        password_reset_url: Url,
+    },
+    /// Sent to the current address when a change to `new_email_masked` is
+    /// requested, before the new address is verified.
+    EmailChangeRequested {
+        first_name: Option<String>,
+        new_email_masked: String,
+        password_reset_url: Url,
+    },
     /// Sent once per user, listing all their connections to be paused.
     IntegrationConnectionPauseWarning {
         first_name: Option<String>,
@@ -120,6 +139,15 @@ impl EmailTemplate {
             EmailTemplate::PasswordChanged { .. } => {
                 "Your Universal Inbox password was changed".to_string()
             }
+            EmailTemplate::AuthMethodAdded { .. } => {
+                "A login method was added to your Universal Inbox account".to_string()
+            }
+            EmailTemplate::AuthMethodRemoved { .. } => {
+                "A login method was removed from your Universal Inbox account".to_string()
+            }
+            EmailTemplate::EmailChangeRequested { .. } => {
+                "A change of your Universal Inbox email address was requested".to_string()
+            }
             EmailTemplate::IntegrationConnectionPauseWarning { provider_names, .. } => {
                 let (connections, _) = connections_of(provider_names);
                 format!("Your {connections} will soon be paused")
@@ -139,6 +167,9 @@ impl EmailTemplate {
             | EmailTemplate::RegistrationAttemptOnExistingAccount { first_name, .. }
             | EmailTemplate::AccountLockout { first_name, .. }
             | EmailTemplate::PasswordChanged { first_name, .. }
+            | EmailTemplate::AuthMethodAdded { first_name, .. }
+            | EmailTemplate::AuthMethodRemoved { first_name, .. }
+            | EmailTemplate::EmailChangeRequested { first_name, .. }
             | EmailTemplate::IntegrationConnectionPauseWarning { first_name, .. }
             | EmailTemplate::IntegrationConnectionPaused { first_name, .. } => {
                 first_name.as_deref()
@@ -160,6 +191,17 @@ impl EmailTemplate {
             }
             EmailTemplate::PasswordChanged { .. } => {
                 "The password of your Universal Inbox account was just changed, and your other sessions were signed out. If this was you, there is nothing else to do. If this wasn't you, reset your password right away.".to_string()
+            }
+            EmailTemplate::AuthMethodAdded { method, .. } => {
+                format!("{method} was just added as a way to log in to your Universal Inbox account. If this was you, there is nothing else to do. If this wasn't you, reset your password right away and review the login methods in your settings.")
+            }
+            EmailTemplate::AuthMethodRemoved { method, .. } => {
+                format!("{method} was just removed from the ways to log in to your Universal Inbox account. If this was you, there is nothing else to do. If this wasn't you, reset your password right away and review the login methods in your settings.")
+            }
+            EmailTemplate::EmailChangeRequested {
+                new_email_masked, ..
+            } => {
+                format!("A request was made to change the email address of your Universal Inbox account to {new_email_masked}. The change only applies once the new address is verified. If this was you, there is nothing else to do. If this wasn't you, reset your password right away.")
             }
             EmailTemplate::IntegrationConnectionPauseWarning {
                 provider_names,
@@ -216,6 +258,15 @@ impl EmailTemplate {
             }
             EmailTemplate::AccountLockout { login_url, .. } => ("Go to login", login_url),
             EmailTemplate::PasswordChanged {
+                password_reset_url, ..
+            }
+            | EmailTemplate::AuthMethodAdded {
+                password_reset_url, ..
+            }
+            | EmailTemplate::AuthMethodRemoved {
+                password_reset_url, ..
+            }
+            | EmailTemplate::EmailChangeRequested {
                 password_reset_url, ..
             } => ("Reset your password", password_reset_url),
             EmailTemplate::IntegrationConnectionPauseWarning { app_url, .. } => {
@@ -466,6 +517,51 @@ mod tests {
         mailgen
             .render_text(&template.build_email_body(&intro))
             .unwrap()
+    }
+
+    #[rstest]
+    #[case::method_added(
+        EmailTemplate::AuthMethodAdded {
+            first_name: Some("John".to_string()),
+            method: "A passkey".to_string(),
+            password_reset_url: "https://app.universal-inbox.com/password-reset".parse().unwrap(),
+        },
+        "A login method was added to your Universal Inbox account",
+        "A passkey was just added"
+    )]
+    #[case::method_removed(
+        EmailTemplate::AuthMethodRemoved {
+            first_name: Some("John".to_string()),
+            method: "Google".to_string(),
+            password_reset_url: "https://app.universal-inbox.com/password-reset".parse().unwrap(),
+        },
+        "A login method was removed from your Universal Inbox account",
+        "Google was just removed"
+    )]
+    #[case::email_change_requested(
+        EmailTemplate::EmailChangeRequested {
+            first_name: Some("John".to_string()),
+            new_email_masked: "j***@example.com".to_string(),
+            password_reset_url: "https://app.universal-inbox.com/password-reset".parse().unwrap(),
+        },
+        "A change of your Universal Inbox email address was requested",
+        "to j***@example.com"
+    )]
+    fn test_security_notification_emails(
+        #[case] template: EmailTemplate,
+        #[case] subject: &str,
+        #[case] intro_excerpt: &str,
+    ) {
+        assert_eq!(template.subject(), subject);
+        let intro = template.intro();
+        assert!(intro.contains(intro_excerpt), "{intro}");
+        assert!(intro.contains("If this wasn't you"), "{intro}");
+        let text = render(&template);
+        assert!(text.contains("John"), "{text}");
+        assert!(
+            text.contains("https://app.universal-inbox.com/password-reset"),
+            "{text}"
+        );
     }
 
     #[rstest]
