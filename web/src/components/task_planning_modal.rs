@@ -17,8 +17,8 @@ use universal_inbox::{
     },
     notification::{NotificationId, NotificationWithTask},
     task::{
-        DueDate, ProjectId, ProjectSummary, TaskCreation, TaskId, TaskPlanning, TaskPriority,
-        integrations::todoist::TODOIST_INBOX_PROJECT,
+        DueDate, ProjectId, ProjectSummary, TASK_TITLE_MAX_LENGTH, TaskCreation, TaskId,
+        TaskPlanning, TaskPriority, integrations::todoist::TODOIST_INBOX_PROJECT,
     },
     third_party::integrations::ticktick::TICKTICK_INBOX_PROJECT,
 };
@@ -275,6 +275,7 @@ pub fn TaskPlanningModal(
                                                 id: "task-title-input",
                                                 name: "task-title-input",
                                                 r#type: "text",
+                                                maxlength: TASK_TITLE_MAX_LENGTH as i64,
                                                 "aria-required": "true",
                                                 autofocus: true,
                                                 class: "flex-1 min-w-0 h-full bg-transparent border-none p-0 outline-none focus:outline-none focus-visible:outline-none placeholder:text-ui-base-muted",

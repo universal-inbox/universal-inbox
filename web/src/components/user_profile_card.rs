@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 use gravatar_rs::Generator;
 
-use universal_inbox::user::UserPatch;
+use universal_inbox::user::{USER_NAME_MAX_LENGTH, UserPatch};
 
 use universal_inbox::user::UserAuthKind;
 
@@ -99,6 +99,7 @@ pub fn UserProfileCard() -> Element {
                                     id: "profFirstName",
                                     name: "first_name",
                                     r#type: "text",
+                                    maxlength: USER_NAME_MAX_LENGTH as i64,
                                     value: "{first_name}",
                                     oninput: move |evt| first_name.set(evt.value()),
                                 }
@@ -111,6 +112,7 @@ pub fn UserProfileCard() -> Element {
                                     id: "profLastName",
                                     name: "last_name",
                                     r#type: "text",
+                                    maxlength: USER_NAME_MAX_LENGTH as i64,
                                     value: "{last_name}",
                                     oninput: move |evt| last_name.set(evt.value()),
                                 }

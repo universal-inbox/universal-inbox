@@ -25,6 +25,33 @@ pub struct WebPage {
     pub favicon: Option<Url>,
 }
 
+/// Maximum length, in characters, of a web page title sent by an API client.
+pub const WEB_PAGE_TITLE_MAX_LENGTH: usize = 1024;
+
+impl WebPage {
+    /// Checks a web page sent by an API client: links must be `http(s)` URLs
+    /// and the title must fit [`WEB_PAGE_TITLE_MAX_LENGTH`].
+    pub fn validate(&self) -> Result<(), anyhow::Error> {
+        let is_web_url = |url: &Url| matches!(url.scheme(), "http" | "https");
+        if !is_web_url(&self.url) {
+            return Err(anyhow!("Web page URL must be an http(s) URL"));
+        }
+        if self
+            .favicon
+            .as_ref()
+            .is_some_and(|favicon| !is_web_url(favicon))
+        {
+            return Err(anyhow!("Web page favicon must be an http(s) URL"));
+        }
+        if self.title.chars().count() > WEB_PAGE_TITLE_MAX_LENGTH {
+            return Err(anyhow!(
+                "Web page title must be at most {WEB_PAGE_TITLE_MAX_LENGTH} characters"
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl HasHtmlUrl for WebPage {
     fn get_html_url(&self) -> Url {
         self.url.clone()
@@ -101,5 +128,44 @@ impl<'de> Deserialize<'de> for APISource {
             "universalinboxextension" => Ok(APISource::UniversalInboxExtension),
             _ => Ok(APISource::Other(s)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+
+    fn web_page(url: &str, title: &str, favicon: Option<&str>) -> WebPage {
+        WebPage {
+            url: url.parse().unwrap(),
+            title: title.to_string(),
+            timestamp: Utc::now(),
+            source: APISource::UniversalInboxExtension,
+            favicon: favicon.map(|favicon| favicon.parse().unwrap()),
+        }
+    }
+
+    #[rstest]
+    #[case::https(
+        web_page("https://example.com", "title", Some("https://example.com/f.ico")),
+        true
+    )]
+    #[case::http(web_page("http://example.com", "", None), true)]
+    #[case::title_at_limit(
+        web_page("https://example.com", &"é".repeat(WEB_PAGE_TITLE_MAX_LENGTH), None),
+        true
+    )]
+    #[case::javascript_url(web_page("javascript:alert(1)", "title", None), false)]
+    #[case::data_favicon(
+        web_page("https://example.com", "title", Some("data:image/png;base64,AAAA")),
+        false
+    )]
+    #[case::title_too_long(
+        web_page("https://example.com", &"é".repeat(WEB_PAGE_TITLE_MAX_LENGTH + 1), None),
+        false
+    )]
+    fn test_validate_web_page(#[case] page: WebPage, #[case] is_valid: bool) {
+        assert_eq!(page.validate().is_ok(), is_valid);
     }
 }

@@ -1130,3 +1130,38 @@ mod patch_notification {
         );
     }
 }
+
+mod create_task_from_notification_validation {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use universal_inbox::task::{TASK_TITLE_MAX_LENGTH, TaskCreation, TaskPriority};
+
+    use crate::helpers::notification::create_task_from_notification_response;
+
+    // Validation runs before the notification lookup: an unknown id is enough.
+    #[rstest]
+    #[tokio::test]
+    async fn test_create_task_from_notification_rejects_too_long_title(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+
+        let response = create_task_from_notification_response(
+            &app.client,
+            &app.app.api_address,
+            Uuid::new_v4().into(),
+            Some(TaskCreation {
+                title: "a".repeat(TASK_TITLE_MAX_LENGTH as usize + 1),
+                body: None,
+                project_name: None,
+                due_at: None,
+                priority: TaskPriority::P4,
+                task_provider_kind: None,
+                time_config: None,
+            }),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+}

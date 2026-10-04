@@ -26,7 +26,7 @@ use crate::{
             thread_message::ThreadedMessage,
         },
     },
-    utils::format_elapsed_time,
+    utils::{format_elapsed_time, sanitize_html},
 };
 
 const EXPAND_ICON: &str = "icon-[lucide--unfold-vertical]";
@@ -187,7 +187,7 @@ pub fn GithubDiscussionPreview(
                         variant: CardVariant::Default,
                         div {
                             class: "w-full max-w-full prose prose-sm dark:prose-invert",
-                            dangerous_inner_html: "{discussion.body}"
+                            dangerous_inner_html: sanitize_html(&discussion.body)
                         }
                     }
                 }
@@ -210,7 +210,7 @@ pub fn GithubDiscussionPreview(
                         }
                         div {
                             class: "w-full max-w-full prose prose-sm dark:prose-invert",
-                            dangerous_inner_html: "{answer.body}"
+                            dangerous_inner_html: sanitize_html(&answer.body)
                         }
                     }
                 }
@@ -443,7 +443,7 @@ fn DiscussionMessage(
             body: rsx! {
                 div {
                     class: "w-full max-w-full prose prose-sm dark:prose-invert",
-                    dangerous_inner_html: "{comment.body}"
+                    dangerous_inner_html: sanitize_html(&comment.body)
                 }
             },
         }

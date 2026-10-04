@@ -28,7 +28,7 @@ use crate::{
             STATUS_ROW_NAME_CLASS, StatusDot, StatusRow, StatusSection, StatusVariant,
         },
     },
-    utils::format_elapsed_time,
+    utils::{format_elapsed_time, sanitize_html},
 };
 
 #[component]
@@ -272,7 +272,7 @@ fn GithubPullRequestDetails(
                     variant: CardVariant::Default,
                     p {
                         class: "w-full max-w-full prose prose-sm dark:prose-invert",
-                        dangerous_inner_html: "{github_pull_request().body}"
+                        dangerous_inner_html: sanitize_html(&github_pull_request().body)
                     }
                 }
             }
@@ -617,7 +617,7 @@ fn GithubReviewRow(review: GithubReview) -> Element {
 
                 div {
                     class: "bg-neutral text-neutral-content p-2 my-1 rounded-sm",
-                    dangerous_inner_html: "{review_body}"
+                    dangerous_inner_html: sanitize_html(&review_body)
                 }
             }
         }
@@ -804,7 +804,7 @@ fn GithubCommentRow(comment: ReadSignal<GithubIssueComment>) -> Element {
                 author_subtitle: subtitle,
                 sent_at: Some(c.created_at),
                 body: rsx! {
-                    span { class: "prose prose-sm", dangerous_inner_html: "{body_html}" }
+                    span { class: "prose prose-sm", dangerous_inner_html: sanitize_html(&body_html) }
                 },
             }
         }

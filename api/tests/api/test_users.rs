@@ -10,7 +10,8 @@ use universal_inbox::{
     SuccessResponse,
     auth::auth_token::AuthenticationToken,
     user::{
-        EmailValidationToken, Password, PasswordResetToken, User, UserAuthKind, UserId, UserPatch,
+        EmailValidationToken, Password, PasswordResetToken, USER_NAME_MAX_LENGTH, User,
+        UserAuthKind, UserId, UserPatch,
     },
 };
 
@@ -1219,6 +1220,54 @@ mod patch_user {
         let fetched_user = get_current_user(&client, &app).await;
         assert_eq!(fetched_user.first_name, Some("John".to_string()));
         assert_eq!(fetched_user.last_name, Some("Doe".to_string()));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_user_rejects_too_long_name(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+        let (client, _user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        let patch = UserPatch {
+            first_name: Some("a".repeat(USER_NAME_MAX_LENGTH as usize + 1)),
+            last_name: None,
+            email: None,
+        };
+
+        let response = patch_user_response(&client, &app, &patch).await;
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+
+        let fetched_user = get_current_user(&client, &app).await;
+        assert_eq!(fetched_user.first_name, None);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_user_rejects_unknown_field(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+        let (client, _user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        let response = client
+            .patch(format!("{}users/me", app.api_address))
+            .json(&serde_json::json!({ "first_name": "John", "is_admin": true }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
     }
 
     async fn follow_email_verification_link(
