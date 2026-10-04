@@ -300,6 +300,9 @@ pub async fn patch_user(
     authenticated: Authenticated<Claims>,
     patch: web::Json<UserPatch>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    patch
+        .validate()
+        .map_err(UniversalInboxError::InvalidParameters)?;
     // An email change sends a verification email: rate-limit like the other
     // email-sending endpoints.
     if patch.email.is_some()

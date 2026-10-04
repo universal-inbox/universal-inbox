@@ -23,6 +23,7 @@ use crate::{
         },
     },
     services::notification_service::NotificationCommand,
+    utils::sanitize_html,
 };
 
 #[component]
@@ -121,12 +122,10 @@ pub fn GoogleCalendarEventPreview(
     });
 
     let sanitized_description = use_memo(move || {
-        google_calendar_event().description.as_ref().map(|desc| {
-            ammonia::Builder::default()
-                .set_tag_attribute_value("a", "target", "_blank")
-                .clean(desc)
-                .to_string()
-        })
+        google_calendar_event()
+            .description
+            .as_ref()
+            .map(|desc| sanitize_html(desc))
     });
 
     let dock_yes_class = if is_accepted() {
@@ -566,34 +565,4 @@ fn weekday_full_name(weekday: &rrule::NWeekday) -> String {
         _ => "",
     }
     .to_string()
-}
-
-#[cfg(test)]
-mod google_calendar_preview_tests {
-    use wasm_bindgen_test::*;
-
-    #[wasm_bindgen_test]
-    fn test_html_sanitization_in_description() {
-        // Test that HTML in Google Calendar event descriptions is properly sanitized
-        let malicious_html = r#"<script>alert('xss')</script><p>Safe content</p><img src="javascript:alert('xss')">"#;
-        let sanitized = ammonia::clean(malicious_html);
-
-        // Should remove dangerous script tags but keep safe HTML
-        assert!(!sanitized.contains("<script>"));
-        assert!(!sanitized.contains("javascript:"));
-        assert!(sanitized.contains("<p>Safe content</p>"));
-    }
-
-    #[wasm_bindgen_test]
-    fn test_basic_html_preservation() {
-        // Test that basic HTML formatting is preserved
-        let basic_html = r#"<p>Meeting notes:</p><ul><li>Item 1</li><li>Item 2</li></ul><br><strong>Important</strong>"#;
-        let sanitized = ammonia::clean(basic_html);
-
-        // Should preserve basic formatting tags
-        assert!(sanitized.contains("<p>Meeting notes:</p>"));
-        assert!(sanitized.contains("<ul>"));
-        assert!(sanitized.contains("<li>Item 1</li>"));
-        assert!(sanitized.contains("<strong>Important</strong>"));
-    }
 }

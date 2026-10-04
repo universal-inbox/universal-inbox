@@ -129,9 +129,17 @@ impl User {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
+/// Maximum length, in characters, of a user's first or last name.
+pub const USER_NAME_MAX_LENGTH: u64 = 100;
+
+/// Body of `PATCH /api/users/me`. Callers validate it (`Validate`) at the
+/// request boundary; internal flows (e.g. an OIDC profile) build it unchecked.
+#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct UserPatch {
+    #[validate(length(max = USER_NAME_MAX_LENGTH))]
     pub first_name: Option<String>,
+    #[validate(length(max = USER_NAME_MAX_LENGTH))]
     pub last_name: Option<String>,
     pub email: Option<EmailAddress>,
 }
@@ -401,5 +409,38 @@ mod account_deletion_confirmation_tests {
         assert!(user.is_account_deletion_confirmed("DELETE"));
         assert!(user.is_account_deletion_confirmed("delete"));
         assert!(!user.is_account_deletion_confirmed(""));
+    }
+}
+
+#[cfg(test)]
+mod user_patch_validation_tests {
+    use super::*;
+
+    fn patch(first_name: Option<String>, last_name: Option<String>) -> UserPatch {
+        UserPatch {
+            first_name,
+            last_name,
+            email: None,
+        }
+    }
+
+    #[test]
+    fn names_up_to_the_limit_are_valid() {
+        let name = "é".repeat(USER_NAME_MAX_LENGTH as usize);
+        assert!(patch(Some(name.clone()), Some(name)).validate().is_ok());
+        assert!(patch(None, None).validate().is_ok());
+    }
+
+    #[test]
+    fn names_over_the_limit_are_invalid() {
+        let name = "é".repeat(USER_NAME_MAX_LENGTH as usize + 1);
+        assert!(patch(Some(name.clone()), None).validate().is_err());
+        assert!(patch(None, Some(name)).validate().is_err());
+    }
+
+    #[test]
+    fn unknown_fields_are_rejected() {
+        assert!(serde_json::from_str::<UserPatch>(r#"{"first_name": "John", "id": "x"}"#).is_err());
+        assert!(serde_json::from_str::<UserPatch>(r#"{"first_name": "John"}"#).is_ok());
     }
 }
