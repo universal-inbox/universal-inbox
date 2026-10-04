@@ -27,6 +27,7 @@ use crate::helpers::{
         get_current_user, get_current_user_response, get_password_reset_token,
         get_pending_email_change_token, get_user_email_validation_token, login_user_response,
         logout_user_response, patch_user_response, register_user, register_user_response,
+        reset_password_response,
     },
 };
 
@@ -216,15 +217,9 @@ mod password_policy {
         assert_eq!(response.status(), http::StatusCode::OK);
         let password_reset_token = get_password_reset_token(&app, user.id).await.unwrap();
 
-        let response = anonymous_client
-            .post(format!(
-                "{}users/{}/password-reset/{password_reset_token}",
-                app.api_address, user.id
-            ))
-            .json(&Password("".to_string()))
-            .send()
-            .await
-            .unwrap();
+        let response =
+            reset_password_response(&anonymous_client, &app, user.id, password_reset_token, "")
+                .await;
         assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
     }
 }
@@ -858,17 +853,27 @@ mod password_reset {
         assert_eq!(response.status(), http::StatusCode::OK);
 
         let password_reset_token = get_password_reset_token(&app, user.id).await.unwrap();
-        // Email template contains frontend URL which is supposed to call this API endpoint
-        let api_password_reset_url = format!(
-            "{}users/{}/password-reset/{password_reset_token}",
-            app.api_address, user.id
-        );
+        // The emailed frontend URL carries the token to the reset page, which
+        // sends it to the API in the request body (never in the API URL)
         let response = new_client
-            .post(api_password_reset_url)
+            .post(format!(
+                "{}users/{}/password-reset/{password_reset_token}",
+                app.api_address, user.id
+            ))
             .json(&Password::from_str("New-very-harD-pasSword-5").unwrap())
             .send()
             .await
             .unwrap();
+        assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+
+        let response = reset_password_response(
+            &new_client,
+            &app,
+            user.id,
+            password_reset_token,
+            "New-very-harD-pasSword-5",
+        )
+        .await;
         assert_eq!(response.status(), http::StatusCode::OK);
 
         let password_reset_token = get_password_reset_token(&app, user.id).await;
@@ -911,17 +916,15 @@ mod password_reset {
 
         let password_reset_token = get_password_reset_token(&app, user.id).await.unwrap();
         let unknown_user_id = UserId(Uuid::new_v4());
-        let api_password_reset_url = format!(
-            "{}users/{unknown_user_id}/password-reset/{password_reset_token}",
-            app.api_address
-        );
 
-        let response = anonymous_client
-            .post(api_password_reset_url)
-            .json(&Password::from_str("New-very-harD-pasSword-5").unwrap())
-            .send()
-            .await
-            .unwrap();
+        let response = reset_password_response(
+            &anonymous_client,
+            &app,
+            unknown_user_id,
+            password_reset_token,
+            "New-very-harD-pasSword-5",
+        )
+        .await;
         assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
 
         let body: HashMap<String, String> = response.json().await.unwrap();
@@ -965,15 +968,14 @@ mod password_reset {
         .unwrap();
         transaction.commit().await.unwrap();
 
-        let response = anonymous_client
-            .post(format!(
-                "{}users/{}/password-reset/{password_reset_token}",
-                app.api_address, user.id
-            ))
-            .json(&Password::from_str("New-very-harD-pasSword-5").unwrap())
-            .send()
-            .await
-            .unwrap();
+        let response = reset_password_response(
+            &anonymous_client,
+            &app,
+            user.id,
+            password_reset_token,
+            "New-very-harD-pasSword-5",
+        )
+        .await;
         assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
 
         // The old password still works, the new one does not
@@ -1009,17 +1011,15 @@ mod password_reset {
         assert_eq!(response.status(), http::StatusCode::OK);
 
         let invalid_password_reset_token = PasswordResetToken(Uuid::new_v4());
-        let api_password_reset_url = format!(
-            "{}users/{}/password-reset/{invalid_password_reset_token}",
-            app.api_address, user.id
-        );
 
-        let response = anonymous_client
-            .post(api_password_reset_url)
-            .json(&Password::from_str("New-very-harD-pasSword-5").unwrap())
-            .send()
-            .await
-            .unwrap();
+        let response = reset_password_response(
+            &anonymous_client,
+            &app,
+            user.id,
+            invalid_password_reset_token,
+            "New-very-harD-pasSword-5",
+        )
+        .await;
         assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
 
         let body: HashMap<String, String> = response.json().await.unwrap();

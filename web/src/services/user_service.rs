@@ -15,8 +15,8 @@ use universal_inbox::{
     auth::{AuthorizeSessionResponse, CloseSessionResponse},
     user::{
         Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordChange,
-        PasswordResetToken, RegisterUserParameters, User, UserAuthKind, UserAuthMethod, UserId,
-        UserPatch, Username,
+        PasswordReset, PasswordResetToken, RegisterUserParameters, User, UserAuthKind,
+        UserAuthMethod, UserId, UserPatch, Username,
     },
 };
 
@@ -201,8 +201,11 @@ pub async fn user_service(
                 let result: Result<SuccessResponse> = call_api(
                     Method::POST,
                     &api_base_url,
-                    format!("users/{user_id}/password-reset/{password_reset_token}").as_str(),
-                    Some(new_password),
+                    format!("users/{user_id}/password-reset").as_str(),
+                    Some(PasswordReset {
+                        password_reset_token,
+                        new_password,
+                    }),
                     None,
                 )
                 .await;
