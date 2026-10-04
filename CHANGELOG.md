@@ -43,6 +43,7 @@
 - Harden authentication — IP-based rate limiting on auth/OAuth2 endpoints, atomic refresh-token rotation with reuse detection, and nonce/origin-bound, non-enumerable passkey ceremonies
 - Stop leaking the Crisp HMAC signing key via `/api/front_config` (now `Cache-Control: private`), tighten CORS, and add `frame-ancestors` / `X-Frame-Options` clickjacking protection
 - Run the Docker runtime stage as non-root on a pinned base image and pin third-party CI/CD actions to commit SHAs
+- Check dependencies with cargo-deny (advisories, sources, bans) on every PR and main push, and let Dependabot update the Cargo workspace and the web npm package
 - Update `quinn-proto` to 0.11.14 to fix RUSTSEC-2026-0037 (DoS via invalid QUIC transport parameters)
 - Replace `typed_id` + `paste` crates with inline implementation to resolve RUSTSEC-2024-0436 (unmaintained `paste` crate)
 - Downgrade `zip` from yanked 7.4.0 to 7.2.0 (resolves GH#133)

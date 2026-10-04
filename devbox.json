@@ -4,6 +4,7 @@
         "trunk": "latest",
         "rustup": "latest",
         "cargo-audit": "latest",
+        "cargo-deny": "latest",
         "cargo-nextest": "latest",
         "cargo-outdated": "latest",
         "just": "latest",

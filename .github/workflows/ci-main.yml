@@ -36,6 +36,15 @@ jobs:
         with:
           dockerfile: Dockerfile
 
+  supply-chain:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check advisories sources bans
+
   rustfmt:
     needs: base
     name: Rustfmt
