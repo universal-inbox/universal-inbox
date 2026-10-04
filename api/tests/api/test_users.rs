@@ -433,6 +433,15 @@ mod login_user {
         .await;
 
         assert_eq!(login_response.status(), http::StatusCode::OK);
+        let session_cookie = login_response
+            .cookies()
+            .find(|cookie| cookie.name() == cookie_name)
+            .expect("the login sets the session cookie");
+        assert!(session_cookie.secure());
+        assert!(session_cookie.http_only());
+        assert!(session_cookie.same_site_lax());
+        assert_eq!(session_cookie.path(), Some("/"));
+        assert_eq!(session_cookie.domain(), None);
         let logged_user: User = login_response.json().await.unwrap();
         assert_eq!(logged_user.id, user.id);
 
