@@ -7,8 +7,8 @@ use webauthn_rs::prelude::{CreationChallengeResponse, RegisterPublicKeyCredentia
 use universal_inbox::{
     auth::SessionAuthValidationParameters,
     user::{
-        Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
-        User, UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
+        Credentials, EmailValidationToken, Password, PasswordReset, PasswordResetToken,
+        RegisterUserParameters, User, UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
     },
 };
 
@@ -171,6 +171,24 @@ pub async fn get_password_reset_token(
         .unwrap();
     transaction.commit().await.unwrap();
     token
+}
+
+pub async fn reset_password_response(
+    client: &Client,
+    app: &TestedApp,
+    user_id: UserId,
+    password_reset_token: PasswordResetToken,
+    new_password: &str,
+) -> reqwest::Response {
+    client
+        .post(format!("{}users/{user_id}/password-reset", app.api_address))
+        .json(&PasswordReset {
+            password_reset_token,
+            new_password: SecretBox::new(Box::new(Password(new_password.to_string()))),
+        })
+        .send()
+        .await
+        .unwrap()
 }
 
 pub async fn list_auth_methods_response(client: &Client, app: &TestedApp) -> reqwest::Response {

@@ -25,8 +25,8 @@ use universal_inbox::{
     auth::auth_token::{AuthenticationToken, AuthenticationTokenId, TruncatedAuthenticationToken},
     user::{
         Credentials, DeleteAccountParameters, EmailValidationToken, Password, PasswordChange,
-        PasswordResetToken, RegisterUserParameters, UserAuthKind, UserAuthMethod, UserId,
-        UserPatch, UserPreferences, UserPreferencesPatch, Username,
+        PasswordReset, RegisterUserParameters, UserAuthKind, UserAuthMethod, UserId, UserPatch,
+        UserPreferences, UserPreferencesPatch, Username,
     },
 };
 
@@ -235,10 +235,7 @@ pub fn scope(auth_rate_limiter: Arc<AuthRateLimiter>) -> Scope {
             web::resource("/{user_id}/email-verification/{email_validation_token}")
                 .route(web::get().to(verify_email)),
         )
-        .service(
-            web::resource("/{user_id}/password-reset/{password_reset_token}")
-                .route(web::post().to(reset_password)),
-        )
+        .service(web::resource("/{user_id}/password-reset").route(web::post().to(reset_password)))
         .service(
             web::scope("/passkeys")
                 .service(
@@ -929,13 +926,17 @@ pub async fn reset_password(
     req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
     rate_limiter: web::Data<Arc<AuthRateLimiter>>,
-    path_info: web::Path<(UserId, PasswordResetToken)>,
-    password: web::Json<SecretBox<Password>>,
+    path_info: web::Path<UserId>,
+    password_reset: web::Json<PasswordReset>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(*response);
     }
-    let (user_id, password_reset_token) = path_info.into_inner();
+    let user_id = path_info.into_inner();
+    let PasswordReset {
+        password_reset_token,
+        new_password,
+    } = password_reset.into_inner();
     let service = user_service.clone();
     let mut transaction = service.begin().await.context(format!(
         "Failed to create new transaction while resetting the password of {user_id}"
@@ -946,7 +947,7 @@ pub async fn reset_password(
             &mut transaction,
             user_id,
             password_reset_token,
-            password.into_inner(),
+            new_password,
         )
         .await?;
 

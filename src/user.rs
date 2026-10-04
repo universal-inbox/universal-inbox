@@ -158,6 +158,14 @@ pub struct PasswordChange {
     pub new_password: SecretBox<Password>,
 }
 
+/// Body of a password reset request: the one-time token from the reset email
+/// travels in the body (not the URL) so it stays out of access logs.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PasswordReset {
+    pub password_reset_token: PasswordResetToken,
+    pub new_password: SecretBox<Password>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(transparent)]
 pub struct Password(pub String);
