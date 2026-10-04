@@ -3,7 +3,7 @@ use std::{num::NonZeroU32, sync::Arc};
 use crate::middlewares::jwt_auth::Authenticated;
 use actix_http::body::BoxBody;
 use actix_session::Session;
-use actix_web::{HttpRequest, HttpResponse, Scope, web};
+use actix_web::{HttpRequest, HttpResponse, Scope, http::header, web};
 use anyhow::{Context, anyhow};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{TimeDelta, Utc};
@@ -42,7 +42,7 @@ use crate::{
         cache::Cache,
         jwt::{Claims, JWT_SESSION_KEY},
         origin::check_request_origin,
-        rate_limit::{IpRateLimiter, check_ip_rate_limit},
+        rate_limit::{IpRateLimiter, UserRateLimiters, check_ip_rate_limit, check_user_rate_limit},
     },
 };
 
@@ -182,6 +182,7 @@ pub fn scope(auth_rate_limiter: Arc<AuthRateLimiter>) -> Scope {
                     web::resource("/email-verification")
                         .route(web::post().to(send_verification_email)),
                 )
+                .service(web::resource("/export").route(web::get().to(export_user_data)))
                 .service(
                     web::scope("/auth-methods")
                         .service(web::resource("").route(web::get().to(list_auth_methods)))
@@ -887,6 +888,44 @@ pub async fn verify_email(
         })
         .context("Cannot serialize response")?,
     ))
+}
+
+/// Hands the authenticated user a JSON file with all their data. No Origin
+/// check: this GET changes nothing, is opened as a top-level download (no
+/// Origin header), and CORS keeps other sites from reading the response.
+pub async fn export_user_data(
+    user_service: web::Data<Arc<UserService>>,
+    user_rate_limiters: web::Data<UserRateLimiters>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    check_user_rate_limit(&user_rate_limiters.export, user_id)?;
+    let service = user_service.clone();
+    let mut transaction = service.begin().await.context(format!(
+        "Failed to create new transaction while exporting data of {user_id}"
+    ))?;
+
+    let export = service.export_user_data(&mut transaction, user_id).await?;
+
+    transaction.commit().await.context(format!(
+        "Failed to commit while exporting data of {user_id}"
+    ))?;
+
+    let filename = format!(
+        "universal-inbox-export-{}.json",
+        export.exported_at.format("%Y-%m-%d")
+    );
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .insert_header((
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{filename}\""),
+        ))
+        .body(serde_json::to_string(&export).context("Cannot serialize user data export")?))
 }
 
 pub async fn send_password_reset_email(
