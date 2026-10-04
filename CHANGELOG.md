@@ -21,6 +21,7 @@
 - Change the password from Profile > Authentication methods
 - Show attendee replies (answer and comment) to Google Calendar invitations received in Gmail
 - Show every comment and reply of a GitHub discussion in its preview, collapsing the already read ones
+- Show a check mark on GitHub discussion notifications that have an accepted answer
 
 ### Changed
 
