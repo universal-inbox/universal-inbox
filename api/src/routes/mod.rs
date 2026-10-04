@@ -49,6 +49,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::UnsupportedAction(_) => StatusCode::BAD_REQUEST,
             UniversalInboxError::DatabaseError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::DatabaseUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            UniversalInboxError::SessionStoreUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             UniversalInboxError::OAuth2InvalidGrant(_) => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::PaymentRequired { .. } => StatusCode::PAYMENT_REQUIRED,
         }
@@ -75,8 +76,11 @@ impl ResponseError for UniversalInboxError {
             res.headers_mut().insert(header::RETRY_AFTER, value);
         }
 
-        // Pool exhaustion is transient: tell the caller to retry shortly.
-        if let UniversalInboxError::DatabaseUnavailable { .. } = self {
+        // Pool exhaustion and a session store outage are transient: tell the
+        // caller to retry shortly.
+        if let UniversalInboxError::DatabaseUnavailable { .. }
+        | UniversalInboxError::SessionStoreUnavailable(_) = self
+        {
             res.headers_mut().insert(
                 header::RETRY_AFTER,
                 header::HeaderValue::from_static(DATABASE_UNAVAILABLE_RETRY_AFTER_SECONDS),
@@ -204,6 +208,7 @@ mod tests {
                 source: sqlx::Error::PoolTimedOut,
                 message: String::new(),
             },
+            UniversalInboxError::SessionStoreUnavailable(anyhow::anyhow!("")),
             UniversalInboxError::Unauthorized(anyhow::anyhow!("")),
             UniversalInboxError::Forbidden(String::new()),
             UniversalInboxError::TooManyLoginAttempts {

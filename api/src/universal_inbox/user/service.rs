@@ -81,6 +81,7 @@ impl SessionTokenChecker for UserSessionChecker {
     fn is_active(
         &self,
         subject: String,
+        token_id: String,
         issued_at: i64,
     ) -> LocalBoxFuture<'static, Result<bool, UniversalInboxError>> {
         let service = self.0.clone();
@@ -89,7 +90,9 @@ impl SessionTokenChecker for UserSessionChecker {
                 .parse::<UserId>()
                 .context("Wrong user ID format")
                 .map_err(UniversalInboxError::Unexpected)?;
-            Ok(service.is_session_active(user_id, issued_at).await)
+            service
+                .is_session_active(user_id, &token_id, issued_at)
+                .await
         }
         .boxed_local()
     }
@@ -101,11 +104,11 @@ pub struct UserService {
     mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
     webauthn: Arc<Webauthn>,
     /// Per-account login throttle. `None` when local password auth is not
-    /// configured (nothing to throttle) or when Redis is unavailable at startup.
+    /// configured (nothing to throttle).
     login_throttle: Option<LoginThrottle>,
-    /// Revokes a user's sessions on password change or reset. `None` when
-    /// Redis is unavailable at startup.
-    session_revocation: Option<SessionRevocation>,
+    /// Revokes a session on logout, and all of a user's sessions on password
+    /// change or reset.
+    session_revocation: SessionRevocation,
     /// Used on account deletion to revoke the user's provider OAuth grants.
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     /// When this process last recorded each user's activity, so that most
@@ -120,7 +123,7 @@ impl UserService {
         mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
         webauthn: Arc<Webauthn>,
         login_throttle: Option<LoginThrottle>,
-        session_revocation: Option<SessionRevocation>,
+        session_revocation: SessionRevocation,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     ) -> UserService {
         UserService {
@@ -1014,13 +1017,29 @@ impl UserService {
         Ok(email)
     }
 
+    /// Close the session whose JWT has the `token_id` (`jti`) claim and expires
+    /// at `expires_at` (unix seconds), and return where to send the browser.
+    ///
+    /// The session is revoked server-side first, so a copy of its cookie stops
+    /// authenticating. If the revocation cannot be stored, the logout fails
+    /// with `SessionStoreUnavailable` (503) and the caller can retry.
     #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
     pub async fn close_session(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         user_auth_kind: Option<UserAuthKind>,
+        token_id: &str,
+        expires_at: i64,
     ) -> Result<Url, UniversalInboxError> {
+        self.session_revocation
+            .revoke_session(token_id, expires_at)
+            .await
+            .map_err(|err| {
+                error!("Failed to revoke the session of user {user_id} on logout: {err:?}");
+                UniversalInboxError::SessionStoreUnavailable(anyhow!(err))
+            })?;
+
         let Some(user_auth_kind) = user_auth_kind else {
             return Ok(self.application_settings.front_base_url.clone());
         };
@@ -1257,8 +1276,11 @@ impl UserService {
     /// once per lock episode) and returns a generic `Unauthorized` that does not
     /// reveal whether the account exists. A correct password resets the counter.
     ///
-    /// Throttle (Redis) errors fail open: the per-IP limiter still applies and
-    /// we prefer availability over locking everyone out during a Redis outage.
+    /// Throttle (Redis) errors fail open, a deliberate choice: the per-IP
+    /// limiter still applies and we prefer availability over locking everyone
+    /// out during a Redis outage. They are logged at `error` level so the
+    /// outage is alerted on. Session checks, by contrast, fail closed (see
+    /// [`UserService::is_session_active`]).
     #[tracing::instrument(
         level = "debug",
         skip_all,
@@ -1288,7 +1310,7 @@ impl UserService {
                     });
                 }
                 Ok(None) => {}
-                Err(err) => warn!("Login throttle check failed, allowing attempt: {err:?}"),
+                Err(err) => error!("Login throttle check failed, allowing attempt: {err:?}"),
             }
         }
 
@@ -1326,7 +1348,7 @@ impl UserService {
         match throttle.consume_request(scope, email).await {
             Ok(retry_after_seconds) => retry_after_seconds,
             Err(err) => {
-                warn!("Account rate limit check failed, allowing request: {err:?}");
+                error!("Account rate limit check failed, allowing request: {err:?}");
                 None
             }
         }
@@ -1354,7 +1376,7 @@ impl UserService {
                 }
             }
             Ok(_) => {}
-            Err(err) => warn!("Failed to record failed login attempt: {err:?}"),
+            Err(err) => error!("Failed to record failed login attempt: {err:?}"),
         }
     }
 
@@ -1943,34 +1965,32 @@ impl UserService {
     /// the login throttle: a Redis failure is logged and must not prevent the
     /// password update that triggered it.
     async fn revoke_sessions(&self, user_id: UserId) {
-        let Some(session_revocation) = &self.session_revocation else {
-            return;
-        };
-        if let Err(err) = session_revocation
+        if let Err(err) = self
+            .session_revocation
             .revoke_sessions(user_id, Utc::now())
             .await
         {
-            warn!("Failed to revoke the sessions of user {user_id}: {err:?}");
+            error!("Failed to revoke the sessions of user {user_id}: {err:?}");
         }
     }
 
-    /// Whether a session JWT of `user_id` issued at `issued_at` (unix seconds)
-    /// is still valid. Fails open on Redis errors so that a Redis outage does
-    /// not log everyone out.
-    pub async fn is_session_active(&self, user_id: UserId, issued_at: i64) -> bool {
-        let Some(session_revocation) = &self.session_revocation else {
-            return true;
-        };
-        match session_revocation
-            .is_session_active(user_id, issued_at)
+    /// Whether the session JWT of `user_id` with the `token_id` (`jti`) claim,
+    /// issued at `issued_at` (unix seconds), is still valid. Fails closed: a
+    /// Redis error is returned as `SessionStoreUnavailable` (503) rather than
+    /// letting a possibly revoked session through.
+    pub async fn is_session_active(
+        &self,
+        user_id: UserId,
+        token_id: &str,
+        issued_at: i64,
+    ) -> Result<bool, UniversalInboxError> {
+        self.session_revocation
+            .is_session_active(user_id, token_id, issued_at)
             .await
-        {
-            Ok(is_active) => is_active,
-            Err(err) => {
-                warn!("Session revocation check failed, allowing session: {err:?}");
-                true
-            }
-        }
+            .map_err(|err| {
+                error!("Session revocation check failed, rejecting session: {err:?}");
+                UniversalInboxError::SessionStoreUnavailable(anyhow!(err))
+            })
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user.id.to_string()))]

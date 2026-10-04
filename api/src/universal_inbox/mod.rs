@@ -81,6 +81,11 @@ pub enum UniversalInboxError {
         source: sqlx::Error,
         message: String,
     },
+    /// Mapped to HTTP 503 + `Retry-After`. The session revocation store (Redis)
+    /// could not be reached: session checks fail closed, so the request is
+    /// rejected rather than authenticated without them.
+    #[error("Session store unavailable")]
+    SessionStoreUnavailable(#[source] anyhow::Error),
     #[error("Unauthorized access: {0}")]
     Unauthorized(anyhow::Error),
     #[error("Forbidden access: {0}")]
@@ -137,6 +142,7 @@ impl UniversalInboxError {
             Self::ItemNotFound(_) => "ItemNotFound",
             Self::DatabaseError { .. } => "DatabaseError",
             Self::DatabaseUnavailable { .. } => "DatabaseUnavailable",
+            Self::SessionStoreUnavailable(_) => "SessionStoreUnavailable",
             Self::Unauthorized(_) => "Unauthorized",
             Self::Forbidden(_) => "Forbidden",
             Self::TooManyLoginAttempts { .. } => "TooManyLoginAttempts",
@@ -189,6 +195,7 @@ impl UniversalInboxError {
             | UniversalInboxError::InvalidUrlData { .. }
             | UniversalInboxError::DatabaseError { .. }
             | UniversalInboxError::DatabaseUnavailable { .. }
+            | UniversalInboxError::SessionStoreUnavailable(_)
             | UniversalInboxError::Recoverable(_)
             | UniversalInboxError::OAuth2InvalidGrant(_)
             | UniversalInboxError::Unexpected(_) => false,

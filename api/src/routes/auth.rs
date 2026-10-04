@@ -393,7 +393,13 @@ pub async fn close_session(
         .context("Failed to create new transaction while closing user session")?;
 
     let logout_url = service
-        .close_session(&mut transaction, user_id, user_auth_kind)
+        .close_session(
+            &mut transaction,
+            user_id,
+            user_auth_kind,
+            &authenticated.claims.jti,
+            authenticated.claims.exp as i64,
+        )
         .await?;
 
     transaction
