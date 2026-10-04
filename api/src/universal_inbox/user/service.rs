@@ -58,9 +58,12 @@ use crate::{
     universal_inbox::integration_connection::service::IntegrationConnectionService,
     universal_inbox::{
         UniversalInboxError, UpdateStatus,
-        user::model::{
-            AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
-            UserDataExport,
+        user::{
+            common_passwords::is_common_password,
+            model::{
+                AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
+                UserDataExport,
+            },
         },
     },
     utils::{
@@ -1487,6 +1490,11 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         credentials: Credentials,
     ) -> Result<User, UniversalInboxError> {
+        // No password longer than the policy maximum can match: reject it
+        // before spending an Argon2 hash on attacker-sized input.
+        Password::check_max_length(&credentials.password.expose_secret().0)
+            .map_err(UniversalInboxError::Unauthorized)?;
+
         // Use a default password hash to prevent timing attacks
         let mut expected_password_hash = SecretBox::new(Box::new(PasswordHash(
             "$argon2id$v=19$m=20000,t=2,p=1$\
@@ -1531,6 +1539,12 @@ impl UserService {
                 user_error: err.to_string(),
             }
         })?;
+        if is_common_password(&password.expose_secret().0) {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: "This password is too common, please choose another one".to_string(),
+            });
+        }
         let Some(AuthenticationSettings::Local(local_auth_settings)) = &self
             .application_settings
             .security

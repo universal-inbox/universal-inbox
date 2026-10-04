@@ -30,6 +30,7 @@ pub mod markdown;
 pub mod notification_preview;
 pub mod notifications_list;
 pub mod oauth_clients_card;
+pub mod password_strength_meter;
 pub mod preview_card_header;
 pub mod priority_field;
 pub mod project_search_field;

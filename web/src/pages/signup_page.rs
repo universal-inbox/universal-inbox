@@ -7,7 +7,7 @@ use log::error;
 
 use universal_inbox::{
     FrontAuthenticationConfig,
-    user::{PASSWORD_MIN_LENGTH, Password},
+    user::{NewPassword, PASSWORD_MIN_LENGTH},
 };
 
 use crate::{
@@ -16,6 +16,7 @@ use crate::{
         auth_widgets::{AuthDivider, GoogleBtn, LegalFooter, PasskeyBtn, PrimaryBtn},
         floating_label_inputs::FloatingLabelInputText,
         loading::Loading,
+        password_strength_meter::PasswordStrengthMeter,
         ui::PageHeader,
     },
     config::{APP_CONFIG, get_api_base_url},
@@ -99,7 +100,7 @@ pub fn SignupPage() -> Element {
                     placeholder: "you@company.com".to_string(),
                 }
 
-                FloatingLabelInputText::<Password> {
+                FloatingLabelInputText::<NewPassword> {
                     name: "password".to_string(),
                     label: Some("Password".to_string()),
                     required: true,
@@ -108,7 +109,11 @@ pub fn SignupPage() -> Element {
                     r#type: "password".to_string(),
                     field_icon_class: "icon-[lucide--lock]".to_string(),
                     placeholder: format!("At least {PASSWORD_MIN_LENGTH} characters"),
-                    help: "Use 10+ characters with a mix of letters, numbers and symbols.".to_string(),
+                    help: "Use a long passphrase; common passwords are rejected.".to_string(),
+                }
+
+                div { class: "-mt-2 mb-4",
+                    PasswordStrengthMeter { value: password, user_inputs: vec![email()] }
                 }
 
                 div { class: "h-1.5" }

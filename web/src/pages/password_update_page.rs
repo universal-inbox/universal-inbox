@@ -3,12 +3,13 @@
 use dioxus::prelude::*;
 use log::error;
 
-use universal_inbox::user::{PASSWORD_MIN_LENGTH, Password, PasswordResetToken, UserId};
+use universal_inbox::user::{NewPassword, PASSWORD_MIN_LENGTH, PasswordResetToken, UserId};
 
 use crate::{
     components::{
         auth_widgets::{Backlink, PrimaryBtn},
         floating_label_inputs::FloatingLabelInputText,
+        password_strength_meter::PasswordStrengthMeter,
         ui::PageHeader,
     },
     form::FormValues,
@@ -44,7 +45,7 @@ pub fn PasswordUpdatePage(user_id: UserId, password_reset_token: PasswordResetTo
                 }
             },
 
-            FloatingLabelInputText::<Password> {
+            FloatingLabelInputText::<NewPassword> {
                 name: "password".to_string(),
                 label: Some("New password".to_string()),
                 required: true,
@@ -54,7 +55,11 @@ pub fn PasswordUpdatePage(user_id: UserId, password_reset_token: PasswordResetTo
                 r#type: "password".to_string(),
                 field_icon_class: "icon-[lucide--lock]".to_string(),
                 placeholder: format!("At least {PASSWORD_MIN_LENGTH} characters"),
-                help: "Use 10+ characters with a mix of letters, numbers and symbols.".to_string(),
+                help: "Use a long passphrase; common passwords are rejected.".to_string(),
+            }
+
+            div { class: "-mt-2 mb-4",
+                PasswordStrengthMeter { value: password }
             }
 
             PrimaryBtn { button_type: "submit".to_string(), "Reset password" }

@@ -539,8 +539,12 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
 ) {
     let app = tested_app_with_local_auth.await;
 
-    let (other_client, other_user) =
-        create_user_and_login(&app, "jane@doe.net".parse().unwrap(), "password").await;
+    let (other_client, other_user) = create_user_and_login(
+        &app,
+        "jane@doe.net".parse().unwrap(),
+        "Very-harD-pasSword-5",
+    )
+    .await;
 
     let other_github_integration_connection = create_and_mock_integration_connection(
         &app,
@@ -564,8 +568,12 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     )
     .await;
 
-    let (client, user) =
-        create_user_and_login(&app, "john@doe.net".parse().unwrap(), "password").await;
+    let (client, user) = create_user_and_login(
+        &app,
+        "john@doe.net".parse().unwrap(),
+        "Very-harD-pasSword-5",
+    )
+    .await;
 
     let github_integration_connection = create_and_mock_integration_connection(
         &app,

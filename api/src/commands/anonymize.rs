@@ -10,7 +10,7 @@ use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::universal_inbox::{UniversalInboxError, user::service::UserService};
 
-const DEFAULT_PASSWORD: &str = "test123456";
+const DEFAULT_PASSWORD: &str = "test-password-123456";
 
 #[tracing::instrument(name = "anonymize-database", level = "info", skip_all, fields({ attr::ERROR_TYPE } = tracing::field::Empty))]
 pub async fn anonymize_database(user_service: Arc<UserService>) -> Result<(), UniversalInboxError> {

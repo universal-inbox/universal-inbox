@@ -1,3 +1,4 @@
+use argon2::{Argon2, PasswordHasher};
 use email_address::EmailAddress;
 use reqwest::Client;
 use secrecy::SecretBox;
@@ -8,8 +9,9 @@ use webauthn_rs::prelude::{CreationChallengeResponse, RegisterPublicKeyCredentia
 use universal_inbox::{
     auth::SessionAuthValidationParameters,
     user::{
-        Credentials, EmailValidationToken, Password, PasswordReset, PasswordResetToken,
-        RegisterUserParameters, User, UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
+        Credentials, EmailValidationToken, Password, PasswordHash, PasswordReset,
+        PasswordResetToken, RegisterUserParameters, User, UserAuthKind, UserAuthMethod, UserId,
+        UserPatch, Username,
     },
 };
 
@@ -275,6 +277,35 @@ pub async fn create_user(app: &TestedApp, email: Pii<EmailAddress>, password: &s
                 password_hash: service
                     .get_new_password_hash(SecretBox::new(Box::new(password.parse().unwrap())))
                     .unwrap(),
+                password_reset_at: None,
+                password_reset_sent_at: None,
+            })),
+        )
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    new_user
+}
+
+/// Create a local user whose password was set under an older, looser policy:
+/// the hash is computed directly, bypassing the password policy.
+pub async fn create_user_with_legacy_password(
+    app: &TestedApp,
+    email: Pii<EmailAddress>,
+    legacy_password: &str,
+) -> User {
+    let password_hash = Argon2::default()
+        .hash_password(legacy_password.as_bytes())
+        .unwrap()
+        .to_string();
+    let mut transaction = app.repository.begin().await.unwrap();
+    let new_user = app
+        .repository
+        .create_user(
+            &mut transaction,
+            User::new(None, None, email),
+            UserAuth::Local(Box::new(LocalUserAuth {
+                password_hash: SecretBox::new(Box::new(PasswordHash(password_hash))),
                 password_reset_at: None,
                 password_reset_sent_at: None,
             })),

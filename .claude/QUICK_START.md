@@ -83,7 +83,7 @@ Don't skip the hook with `--no-verify`.
 ## Test Data
 
 ```bash
-just api generate-user   # seeds test+{uuid}@test.com / test123456 with sample data
+just api generate-user   # seeds test+{uuid}@test.com / test-password-123456 with sample data
 ```
 
 ## Worktree (worktrunk) — per-worktree ports

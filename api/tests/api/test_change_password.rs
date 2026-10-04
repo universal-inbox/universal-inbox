@@ -195,6 +195,8 @@ async fn test_change_password_is_throttled_like_login(
 
 #[rstest]
 #[case::too_short("short")]
+#[case::too_long(&NEW_PASSWORD.repeat(6))]
+#[case::common("1qaz2wsx3edc")]
 #[case::same_as_current(PASSWORD)]
 #[tokio::test]
 async fn test_change_password_rejects_invalid_new_password(

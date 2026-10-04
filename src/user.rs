@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use anyhow::anyhow;
 use chrono::{DateTime, Timelike, Utc};
 use email_address::EmailAddress;
-use secrecy::{CloneableSecret, SecretBox, SerializableSecret, zeroize::Zeroize};
+use secrecy::{CloneableSecret, ExposeSecret, SecretBox, SerializableSecret, zeroize::Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use uuid::Uuid;
@@ -95,6 +95,9 @@ pub struct RegisterUserParameters {
 
 impl RegisterUserParameters {
     pub fn try_new(credentials: Credentials) -> Result<Self, anyhow::Error> {
+        // Registration sets a new password: apply the full policy, unlike
+        // `Credentials` parsing, which also serves logins.
+        Password::check_policy(&credentials.password.expose_secret().0)?;
         let params = Self { credentials };
 
         params.validate()?;
@@ -182,24 +185,33 @@ impl Zeroize for Password {
 impl CloneableSecret for Password {}
 impl SerializableSecret for Password {}
 
-/// Bounds of the password policy applied to every new password.
-pub const PASSWORD_MIN_LENGTH: usize = 6;
+/// Bounds of the password policy applied to every new password, counted in
+/// characters (ASVS 2.1.1 / 2.1.2).
+pub const PASSWORD_MIN_LENGTH: usize = 12;
 /// Upper bound keeping Argon2 hashing cost bounded for attacker-sized input.
-pub const PASSWORD_MAX_LENGTH: usize = 1024;
+/// Longer passwords are rejected, never truncated. Also applied to login
+/// attempts.
+pub const PASSWORD_MAX_LENGTH: usize = 128;
 
 impl Password {
     /// Check a new password against the password policy. `Password` is
     /// deserialized straight from JSON (`serde(transparent)`), so the API
     /// must call this explicitly before hashing a new password; it is not
-    /// applied when checking a login attempt against an existing password.
+    /// applied when checking a login attempt against an existing password,
+    /// which may have been set under an older, shorter minimum.
     pub fn check_policy(password: &str) -> Result<(), anyhow::Error> {
-        let length = password.chars().count();
-        if length < PASSWORD_MIN_LENGTH {
+        if password.chars().count() < PASSWORD_MIN_LENGTH {
             return Err(anyhow!(
                 "Password must be at least {PASSWORD_MIN_LENGTH} characters long"
             ));
         }
-        if length > PASSWORD_MAX_LENGTH {
+        Self::check_max_length(password)
+    }
+
+    /// Check the upper bound only: the part of the policy that also applies
+    /// to a password typed to log in or to confirm an existing password.
+    pub fn check_max_length(password: &str) -> Result<(), anyhow::Error> {
+        if password.chars().count() > PASSWORD_MAX_LENGTH {
             return Err(anyhow!(
                 "Password must be at most {PASSWORD_MAX_LENGTH} characters long"
             ));
@@ -208,13 +220,39 @@ impl Password {
     }
 }
 
+/// Parses an existing password (login, current password): only the upper
+/// bound is checked. Use [`NewPassword`] to parse a password being set.
 impl FromStr for Password {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::check_policy(s)?;
+        if s.is_empty() {
+            return Err(anyhow!("Password is required"));
+        }
+        Self::check_max_length(s)?;
 
         Ok(Self(s.to_string()))
+    }
+}
+
+/// A password being set (registration, reset, new local auth method or
+/// password change): parsing applies the full password policy.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewPassword(pub Password);
+
+impl FromStr for NewPassword {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Password::check_policy(s)?;
+
+        Ok(Self(Password(s.to_string())))
+    }
+}
+
+impl From<NewPassword> for Password {
+    fn from(new_password: NewPassword) -> Self {
+        new_password.0
     }
 }
 
@@ -396,6 +434,47 @@ pub struct UserPreferences {
 pub struct UserPreferencesPatch {
     pub default_task_manager_provider_kind: Option<Option<IntegrationProviderKind>>,
     pub open_links_in_background: Option<bool>,
+}
+
+#[cfg(test)]
+mod password_policy_tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case::too_short(11, false)]
+    #[case::min_length(12, true)]
+    #[case::max_length(128, true)]
+    #[case::too_long(129, false)]
+    fn a_new_password_must_fit_the_length_bounds(#[case] length: usize, #[case] is_valid: bool) {
+        assert_eq!("a".repeat(length).parse::<NewPassword>().is_ok(), is_valid);
+    }
+
+    #[test]
+    fn length_is_counted_in_characters_not_bytes() {
+        // 12 characters, 36 bytes
+        assert!("€".repeat(12).parse::<NewPassword>().is_ok());
+        // 128 characters, 384 bytes
+        assert!("€".repeat(128).parse::<NewPassword>().is_ok());
+        assert!("€".repeat(129).parse::<NewPassword>().is_err());
+    }
+
+    #[rstest]
+    #[case::short_legacy_password(6, true)]
+    #[case::max_length(128, true)]
+    #[case::too_long(129, false)]
+    fn an_existing_password_is_only_checked_against_the_max_length(
+        #[case] length: usize,
+        #[case] is_valid: bool,
+    ) {
+        assert_eq!("a".repeat(length).parse::<Password>().is_ok(), is_valid);
+    }
+
+    #[test]
+    fn an_existing_password_cannot_be_empty() {
+        assert!("".parse::<Password>().is_err());
+    }
 }
 
 #[cfg(test)]
