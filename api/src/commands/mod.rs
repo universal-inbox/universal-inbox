@@ -463,6 +463,12 @@ impl Cli {
             }
 
             Commands::StartWorkers { count } => {
+                // Workers decrypt OAuth tokens and use the DB/SMTP credentials:
+                // apply the same committed-secrets guard as `run_server`.
+                settings
+                    .check_committed_secrets()
+                    .map_err(|message| UniversalInboxError::Unexpected(anyhow::anyhow!(message)))?;
+
                 info!(
                     "Connecting to Redis server for job queuing on {}",
                     &settings.redis.safe_connection_string()
