@@ -17,6 +17,7 @@ pub mod datepicker;
 pub mod delete_account_card;
 pub mod delete_all_confirmation_modal;
 pub mod emoji_search_field;
+pub mod export_data_card;
 pub mod field_grid;
 pub mod floating_label_inputs;
 pub mod flyonui;

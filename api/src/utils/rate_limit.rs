@@ -47,6 +47,9 @@ pub type IpRateLimiter = RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, Def
 const SYNC_RATE_LIMIT_PER_MINUTE: u32 = 10;
 /// Bulk notification patches a user may send per minute.
 const BULK_PATCH_RATE_LIMIT_PER_MINUTE: u32 = 30;
+/// Data exports a user may request per minute: an export loads every
+/// notification and task of the user.
+const EXPORT_RATE_LIMIT_PER_MINUTE: u32 = 2;
 
 /// A keyed governor rate limiter scoped on the authenticated user.
 pub type UserRateLimiter = RateLimiter<UserId, DefaultKeyedStateStore<UserId>, DefaultClock>;
@@ -58,6 +61,7 @@ pub type UserRateLimiter = RateLimiter<UserId, DefaultKeyedStateStore<UserId>, D
 pub struct UserRateLimiters {
     pub sync: Arc<UserRateLimiter>,
     pub bulk_patch: Arc<UserRateLimiter>,
+    pub export: Arc<UserRateLimiter>,
 }
 
 impl UserRateLimiters {
@@ -70,6 +74,7 @@ impl UserRateLimiters {
         Self {
             sync: per_minute(SYNC_RATE_LIMIT_PER_MINUTE),
             bulk_patch: per_minute(BULK_PATCH_RATE_LIMIT_PER_MINUTE),
+            export: per_minute(EXPORT_RATE_LIMIT_PER_MINUTE),
         }
     }
 }

@@ -37,6 +37,7 @@ use universal_inbox::{
 
 use crate::observability::attr;
 use crate::{
+    billing::repository::BillingRepository,
     billing::service::BillingService,
     configuration::{
         ApplicationSettings, AuthenticationSettings, OIDCAuthorizationCodePKCEFlowSettings,
@@ -46,6 +47,11 @@ use crate::{
     middlewares::jwt_auth::SessionTokenChecker,
     observability::spawn_blocking_with_tracing,
     repository::Repository,
+    repository::auth_token::AuthenticationTokenRepository,
+    repository::integration_connection::IntegrationConnectionRepository,
+    repository::notification::NotificationRepository,
+    repository::oauth2::OAuth2Repository,
+    repository::task::TaskRepository,
     repository::user::UserRepository,
     repository::user_preferences::UserPreferencesRepository,
     universal_inbox::integration_connection::service::IntegrationConnectionService,
@@ -53,6 +59,7 @@ use crate::{
         UniversalInboxError, UpdateStatus,
         user::model::{
             AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
+            UserDataExport,
         },
     },
     utils::{
@@ -207,6 +214,55 @@ impl UserService {
         }
 
         Ok(user_result)
+    }
+
+    /// Gathers all the data stored for `user_id` for the user data export.
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
+    pub async fn export_user_data(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<UserDataExport, UniversalInboxError> {
+        // Read from the repository rather than `get_user` so the export does
+        // not carry the server-computed chat support signature.
+        let user = self
+            .repository
+            .get_user(executor, user_id)
+            .await?
+            .ok_or_else(|| {
+                UniversalInboxError::ItemNotFound(format!("User {user_id} not found"))
+            })?;
+
+        Ok(UserDataExport {
+            exported_at: Utc::now(),
+            user,
+            preferences: self.get_user_preferences(executor, user_id).await?,
+            auth_methods: self.list_user_auth_methods(executor, user_id).await?,
+            authentication_tokens: self
+                .repository
+                .fetch_auth_tokens_for_user(executor, user_id, true)
+                .await?,
+            oauth2_authorized_clients: self
+                .repository
+                .list_authorized_clients(executor, user_id)
+                .await?,
+            integration_connections: self
+                .repository
+                .fetch_all_integration_connections(executor, user_id, None, false)
+                .await?,
+            subscription: self
+                .repository
+                .get_user_subscription(executor, user_id)
+                .await?,
+            notifications: self
+                .repository
+                .fetch_all_notifications_for_user(executor, user_id)
+                .await?,
+            tasks: self
+                .repository
+                .fetch_all_tasks_for_user(executor, user_id)
+                .await?,
+        })
     }
 
     pub async fn get_user_by_email(

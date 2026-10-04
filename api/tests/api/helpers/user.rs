@@ -191,6 +191,14 @@ pub async fn reset_password_response(
         .unwrap()
 }
 
+pub async fn export_user_data_response(client: &Client, api_address: &str) -> reqwest::Response {
+    client
+        .get(format!("{api_address}users/me/export"))
+        .send()
+        .await
+        .unwrap()
+}
+
 pub async fn list_auth_methods_response(client: &Client, app: &TestedApp) -> reqwest::Response {
     client
         .get(format!("{}users/me/auth-methods", app.api_address))

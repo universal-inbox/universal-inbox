@@ -55,6 +55,12 @@ pub trait NotificationRepository {
         page_token: Option<PageToken>,
         user_id: UserId,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError>;
+    /// Every notification of the user, whatever its status, for the user data export
+    async fn fetch_all_notifications_for_user(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Vec<Notification>, UniversalInboxError>;
     async fn get_one_notification_with_task(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -810,6 +816,75 @@ impl NotificationRepository for Repository {
             .map_err(|err| {
                 let message =
                     format!("Failed to update stale notification status from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        rows.iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<Notification>, UniversalInboxError>>()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = user_id.to_string())
+    )]
+    async fn fetch_all_notifications_for_user(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                SELECT
+                  notification.id as notification__id,
+                  notification.title as notification__title,
+                  notification.status as notification__status,
+                  notification.created_at as notification__created_at,
+                  notification.updated_at as notification__updated_at,
+                  notification.last_read_at as notification__last_read_at,
+                  notification.snoozed_until as notification__snoozed_until,
+                  notification.task_id as notification__task_id,
+                  notification.user_id as notification__user_id,
+                  notification.kind as notification__kind,
+                  source_item.id as notification__source_item__id,
+                  source_item.source_id as notification__source_item__source_id,
+                  source_item.data as notification__source_item__data,
+                  source_item.created_at as notification__source_item__created_at,
+                  source_item.updated_at as notification__source_item__updated_at,
+                  source_item.user_id as notification__source_item__user_id,
+                  source_item.integration_connection_id as notification__source_item__integration_connection_id,
+                  nested_source_item.id as notification__source_item__si__id,
+                  nested_source_item.source_id as notification__source_item__si__source_id,
+                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.created_at as notification__source_item__si__created_at,
+                  nested_source_item.updated_at as notification__source_item__si__updated_at,
+                  nested_source_item.user_id as notification__source_item__si__user_id,
+                  nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id
+                FROM notification
+                INNER JOIN third_party_item AS source_item
+                  ON notification.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS nested_source_item
+                  ON source_item.source_item_id = nested_source_item.id
+                WHERE
+            "#,
+        );
+        query_builder
+            .push(" notification.user_id = ")
+            .push_bind(user_id.0)
+            .push(" ORDER BY notification.created_at ASC");
+
+        let rows = query_builder
+            .build_query_as::<NotificationRow>()
+            .fetch_all(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to fetch all notifications of user {user_id} from storage: {err}"
+                );
                 UniversalInboxError::DatabaseError {
                     source: err,
                     message,

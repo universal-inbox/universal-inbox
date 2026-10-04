@@ -5,10 +5,14 @@ use email_address::EmailAddress;
 use secrecy::SecretBox;
 use serde::{Deserialize, Serialize};
 use universal_inbox::{
-    auth::AuthIdToken,
+    auth::{AuthIdToken, auth_token::TruncatedAuthenticationToken, oauth2::AuthorizedOAuth2Client},
+    billing::UserSubscription,
+    integration_connection::IntegrationConnection,
+    notification::Notification,
+    task::Task,
     user::{
-        EmailValidationToken, PasswordHash, UserAuthKind, UserAuthMethod,
-        UserAuthMethodDisplayInfo, Username,
+        EmailValidationToken, PasswordHash, User, UserAuthKind, UserAuthMethod,
+        UserAuthMethodDisplayInfo, UserPreferences, Username,
     },
 };
 use webauthn_rs::prelude::*;
@@ -114,4 +118,22 @@ pub struct PendingEmailChange {
     pub new_email: EmailAddress,
     pub validation_token: EmailValidationToken,
     pub requested_at: DateTime<Utc>,
+}
+
+/// Everything Universal Inbox stores about a user, as handed out by
+/// `GET /users/me/export`. Only types without secrets go in here: auth methods
+/// instead of `UserAuth`, truncated API tokens, and connections without their
+/// OAuth credentials (stored apart, in `oauth_credential`).
+#[derive(Debug, Serialize)]
+pub struct UserDataExport {
+    pub exported_at: DateTime<Utc>,
+    pub user: User,
+    pub preferences: Option<UserPreferences>,
+    pub auth_methods: Vec<UserAuthMethod>,
+    pub authentication_tokens: Vec<TruncatedAuthenticationToken>,
+    pub oauth2_authorized_clients: Vec<AuthorizedOAuth2Client>,
+    pub integration_connections: Vec<IntegrationConnection>,
+    pub subscription: Option<UserSubscription>,
+    pub notifications: Vec<Notification>,
+    pub tasks: Vec<Task>,
 }
