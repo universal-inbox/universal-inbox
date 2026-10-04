@@ -622,6 +622,34 @@ impl HttpSessionSettings {
     }
 }
 
+/// OAuth token encryption keys committed to this repository
+/// (`api/config/test.toml`). Tokens encrypted with them can be decrypted by
+/// anyone, so they are only acceptable in the `dev` and `test` environments.
+const COMMITTED_TOKEN_ENCRYPTION_KEYS: &[&str] =
+    &["7c996b56d9fef258ada8da44ad983733dbb0ac8edb4e3bb58b2f2290ff675a9b"];
+
+/// Placeholder passwords shipped in `api/config/default.toml` for the database
+/// and SMTP server. Only acceptable in the `dev` and `test` environments.
+const DEFAULT_PASSWORDS: &[&str] = &["password"];
+
+/// Refuse a secret `value` found in `committed` outside the `dev` / `test`
+/// environments. The error names the setting but never echoes the value.
+fn refuse_committed_value(
+    name: &str,
+    value: &str,
+    committed: &[&str],
+    environment: &str,
+    remedy: &str,
+) -> Result<(), String> {
+    if committed.contains(&value) && !ENVIRONMENTS_ALLOWING_COMMITTED_KEYS.contains(&environment) {
+        return Err(format!(
+            "`{name}` is a value committed to the Universal Inbox repository and cannot be \
+             used in the `{environment}` environment. {remedy}"
+        ));
+    }
+    Ok(())
+}
+
 fn default_lock_timeout_in_milliseconds() -> u64 {
     3_000
 }
@@ -1086,6 +1114,38 @@ impl Settings {
 
     pub fn new() -> Result<Self, ConfigError> {
         Settings::new_from_file(None)
+    }
+
+    /// Refuse to run with secrets committed to the repository (signing keys,
+    /// token encryption key, placeholder DB/SMTP passwords) outside the `dev` /
+    /// `test` environments.
+    pub fn check_committed_secrets(&self) -> Result<(), String> {
+        let environment = self.application.environment.as_str();
+        self.application
+            .http_session
+            .check_signing_keys(environment)?;
+        refuse_committed_value(
+            "oauth2.token_encryption_key",
+            &self.oauth2.token_encryption_key,
+            COMMITTED_TOKEN_ENCRYPTION_KEYS,
+            environment,
+            "Generate your own with `openssl rand -hex 32`.",
+        )?;
+        refuse_committed_value(
+            "database.password",
+            &self.database.password,
+            DEFAULT_PASSWORDS,
+            environment,
+            "Set UNIVERSAL_INBOX__DATABASE__PASSWORD to the database user's password.",
+        )?;
+        refuse_committed_value(
+            "application.email.smtp_password",
+            &self.application.email.smtp_password.expose_secret().0,
+            DEFAULT_PASSWORDS,
+            environment,
+            "Set UNIVERSAL_INBOX__APPLICATION__EMAIL__SMTP_PASSWORD to the SMTP server's \
+             password.",
+        )
     }
 
     pub fn required_oauth_scopes(&self) -> HashMap<IntegrationProviderKind, Vec<String>> {
@@ -1579,7 +1639,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod signing_key_tests {
+mod committed_secret_tests {
     use super::*;
     use rstest::*;
 
@@ -1613,5 +1673,61 @@ mod signing_key_tests {
                 .is_ok(),
             accepted
         );
+    }
+
+    const TOKEN_KEY: &str = COMMITTED_TOKEN_ENCRYPTION_KEYS[0];
+
+    #[rstest]
+    #[case::token_key_in_dev("dev", TOKEN_KEY, COMMITTED_TOKEN_ENCRYPTION_KEYS, true)]
+    #[case::token_key_in_test("test", TOKEN_KEY, COMMITTED_TOKEN_ENCRYPTION_KEYS, true)]
+    #[case::token_key_in_prod("prod", TOKEN_KEY, COMMITTED_TOKEN_ENCRYPTION_KEYS, false)]
+    #[case::token_key_in_default("default", TOKEN_KEY, COMMITTED_TOKEN_ENCRYPTION_KEYS, false)]
+    #[case::own_token_key_in_prod("prod", "my-own-key", COMMITTED_TOKEN_ENCRYPTION_KEYS, true)]
+    #[case::default_password_in_dev("dev", "password", DEFAULT_PASSWORDS, true)]
+    #[case::default_password_in_test("test", "password", DEFAULT_PASSWORDS, true)]
+    #[case::default_password_in_prod("prod", "password", DEFAULT_PASSWORDS, false)]
+    #[case::default_password_in_default("default", "password", DEFAULT_PASSWORDS, false)]
+    #[case::own_password_in_prod("prod", "s3cr3t", DEFAULT_PASSWORDS, true)]
+    fn test_refuse_committed_value(
+        #[case] environment: &str,
+        #[case] value: &str,
+        #[case] committed: &[&str],
+        #[case] accepted: bool,
+    ) {
+        let result =
+            refuse_committed_value("some.setting", value, committed, environment, "Fix it.");
+
+        assert_eq!(result.is_ok(), accepted);
+        if let Err(message) = result {
+            assert!(message.contains("`some.setting`"));
+            assert!(!message.contains(value));
+        }
+    }
+
+    #[test]
+    fn test_check_committed_secrets() {
+        let mut settings = Settings::new_from_file(Some("config/test".to_string()))
+            .expect("Cannot load test configuration");
+        settings.database.password = "password".to_string();
+        settings.application.email.smtp_password =
+            SecretBox::new(Box::new(SmtpPassword("password".to_string())));
+        assert!(settings.check_committed_secrets().is_ok());
+
+        settings.application.environment = "prod".to_string();
+        settings.application.http_session = http_session("my-own-secret", "my-own-jwt-key");
+        let error = settings.check_committed_secrets().unwrap_err();
+        assert!(error.contains("oauth2.token_encryption_key"));
+
+        settings.oauth2.token_encryption_key = "my-own-key".to_string();
+        let error = settings.check_committed_secrets().unwrap_err();
+        assert!(error.contains("database.password"));
+
+        settings.database.password = "s3cr3t".to_string();
+        let error = settings.check_committed_secrets().unwrap_err();
+        assert!(error.contains("application.email.smtp_password"));
+
+        settings.application.email.smtp_password =
+            SecretBox::new(Box::new(SmtpPassword("s3cr3t".to_string())));
+        assert!(settings.check_committed_secrets().is_ok());
     }
 }
