@@ -261,8 +261,11 @@ mod patch_resource {
         .await;
         assert_eq!(response.status(), 500);
 
-        let body = response.text().await.expect("Cannot get response body");
-        assert!(body.contains("Failed to mark Github notification `1` as done"));
+        let body: serde_json::Value = response.json().await.expect("Cannot get response body");
+        assert_eq!(
+            body["message"],
+            "An internal error occurred. Please retry later or contact support with the correlation id."
+        );
 
         let notification: Box<NotificationWithTask> = get_resource(
             &app.client,

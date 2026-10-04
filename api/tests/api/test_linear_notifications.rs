@@ -155,10 +155,10 @@ mod patch_resource {
         .await;
 
         assert_eq!(patch_response.status(), 500);
-        let body = patch_response.text().await.unwrap();
+        let body: serde_json::Value = patch_response.json().await.unwrap();
         assert_eq!(
-            body,
-            r#"{"message":"Recoverable error: Errors occured while querying Linear API: Entity not found"}"#
+            body["message"],
+            "An internal error occurred. Please retry later or contact support with the correlation id."
         );
     }
 
@@ -216,10 +216,10 @@ mod patch_resource {
         .await;
 
         assert_eq!(patch_response.status(), 500);
-        let body = patch_response.text().await.unwrap();
+        let body: serde_json::Value = patch_response.json().await.unwrap();
         assert_eq!(
-            body,
-            r#"{"message":"Linear API call failed with an unknown error"}"#
+            body["message"],
+            "An internal error occurred. Please retry later or contact support with the correlation id."
         );
     }
 

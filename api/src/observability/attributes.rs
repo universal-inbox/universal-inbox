@@ -18,6 +18,8 @@
 pub const USER_ID: &str = "user.id";
 pub const ERROR_TYPE: &str = "error.type";
 pub const ERROR_MESSAGE: &str = "error.message";
+// Trace id handed to clients on server errors to match a report with logs
+pub const CORRELATION_ID: &str = "correlation.id";
 pub const HTTP_REQUEST_METHOD: &str = "http.request.method";
 pub const HTTP_REQUEST_HEADER_ORIGIN: &str = "http.request.header.origin";
 pub const URL_PATH: &str = "url.path";

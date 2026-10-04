@@ -10,7 +10,7 @@ use std::{
 use crate::middlewares::jwt_auth::Authenticated;
 use crate::observability::attr;
 use actix_web::{
-    HttpMessage, HttpResponse,
+    HttpMessage, HttpResponse, ResponseError,
     body::EitherBody,
     dev::{HttpServiceFactory, Service, ServiceRequest, ServiceResponse, Transform},
     http::{Method, header},
@@ -47,8 +47,9 @@ use crate::{
         required_scope, search_tasks_output_schema, sync_notifications_output_schema,
         sync_tasks_output_schema, update_task_output_schema,
     },
+    routes::{self, INTERNAL_ERROR_MESSAGE},
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
     },
     utils::jwt::Claims,
@@ -534,7 +535,7 @@ impl UniversalInboxMcpServer {
             }
             Err(ToolCallError::Execution(err)) => {
                 Ok(CallToolResult::error(vec![ContentBlock::text(
-                    err.to_string(),
+                    tool_execution_error_message(&err),
                 )]))
             }
             Err(ToolCallError::UnknownTool(tool_name)) => Err(ErrorData::invalid_params(
@@ -767,6 +768,30 @@ mod allowed_hosts_tests {
     }
 }
 
+/// The message returned to the MCP client for a failed tool call. Like the
+/// REST API, server errors never expose their details (database or upstream
+/// internals): they are logged in full with the correlation id the client
+/// receives. Client errors keep their message so the model can self-correct.
+fn tool_execution_error_message(err: &anyhow::Error) -> String {
+    match err.downcast_ref::<UniversalInboxError>() {
+        Some(error) if error.status_code().is_server_error() => {
+            let correlation_id = routes::correlation_id();
+            tracing::error!(
+                error = ?error,
+                { attr::CORRELATION_ID } = correlation_id.as_deref(),
+                "MCP tool call failed with a server error"
+            );
+            match correlation_id {
+                Some(correlation_id) => {
+                    format!("{INTERNAL_ERROR_MESSAGE} (correlation id: {correlation_id})")
+                }
+                None => INTERNAL_ERROR_MESSAGE.to_string(),
+            }
+        }
+        _ => err.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod registration_tests {
     use super::*;
@@ -933,5 +958,33 @@ mod registration_tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn tool_execution_error_message_hides_server_error_details() {
+        let err = anyhow::Error::from(UniversalInboxError::DatabaseError {
+            source: sqlx::Error::Protocol("relation \"secret_table\" does not exist".into()),
+            message: "Failed to fetch secret_table row".to_string(),
+        });
+
+        let message = tool_execution_error_message(&err);
+
+        assert!(
+            message.starts_with(INTERNAL_ERROR_MESSAGE),
+            "got: {message}"
+        );
+        assert!(!message.contains("secret_table"), "got: {message}");
+    }
+
+    #[test]
+    fn tool_execution_error_message_keeps_client_error_details() {
+        let err = anyhow::Error::from(UniversalInboxError::ItemNotFound(
+            "Notification 42 not found".to_string(),
+        ));
+
+        assert_eq!(
+            tool_execution_error_message(&err),
+            "Item not found: Notification 42 not found"
+        );
     }
 }
