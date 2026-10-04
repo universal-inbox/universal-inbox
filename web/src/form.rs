@@ -4,7 +4,7 @@ use email_address::EmailAddress;
 use secrecy::SecretBox;
 
 use universal_inbox::user::{
-    Credentials, Password, PasswordChange, RegisterUserParameters, UserPatch, Username,
+    Credentials, NewPassword, Password, PasswordChange, RegisterUserParameters, UserPatch, Username,
 };
 
 pub struct FormValues(pub Vec<(String, FormValue)>);
@@ -66,16 +66,18 @@ impl TryFrom<FormValues> for EmailAddress {
     }
 }
 
+/// A password being set (reset, new local auth method): the full password
+/// policy applies.
 impl TryFrom<FormValues> for SecretBox<Password> {
     type Error = anyhow::Error;
 
     fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
-        let password = form_values
+        let password: NewPassword = form_values
             .get_text("password")
             .ok_or_else(|| anyhow!("password is required"))?
             .parse()?;
 
-        Ok(SecretBox::new(Box::new(password)))
+        Ok(SecretBox::new(Box::new(password.into())))
     }
 }
 
@@ -95,7 +97,8 @@ impl TryFrom<FormValues> for PasswordChange {
         let new_password: Password = form_values
             .get_text("new_password")
             .ok_or_else(|| anyhow!("new password is required"))?
-            .parse()?;
+            .parse::<NewPassword>()?
+            .into();
         let new_password_confirmation = form_values
             .get_text("new_password_confirmation")
             .ok_or_else(|| anyhow!("new password confirmation is required"))?;

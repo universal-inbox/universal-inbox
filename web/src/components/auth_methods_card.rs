@@ -7,7 +7,8 @@ use secrecy::SecretBox;
 use universal_inbox::{
     FrontAuthenticationConfig,
     user::{
-        Password, PasswordChange, UserAuthKind, UserAuthMethod, UserAuthMethodDisplayInfo, Username,
+        NewPassword, Password, PasswordChange, UserAuthKind, UserAuthMethod,
+        UserAuthMethodDisplayInfo, Username,
     },
 };
 
@@ -15,6 +16,7 @@ use crate::{
     components::{
         floating_label_inputs::FloatingLabelInputText,
         loading::Loading,
+        password_strength_meter::PasswordStrengthMeter,
         ui::{
             Badge, BadgeTone, BadgeVariant, Button, ButtonVariant, Card, CardHeader, CardVariant,
         },
@@ -123,7 +125,7 @@ pub fn AuthMethodsCard() -> Element {
                                     }
                                 },
 
-                                FloatingLabelInputText::<Password> {
+                                FloatingLabelInputText::<NewPassword> {
                                     name: "password".to_string(),
                                     label: Some("Password".to_string()),
                                     required: true,
@@ -132,6 +134,8 @@ pub fn AuthMethodsCard() -> Element {
                                     force_validation: force_password_validation(),
                                     r#type: "password".to_string(),
                                 }
+
+                                PasswordStrengthMeter { value: password }
 
                                 div {
                                     class: "flex gap-2 mt-1",
@@ -357,7 +361,7 @@ fn ChangePasswordForm() -> Element {
                 r#type: "password".to_string(),
             }
 
-            FloatingLabelInputText::<Password> {
+            FloatingLabelInputText::<NewPassword> {
                 name: "new_password".to_string(),
                 label: Some("New password".to_string()),
                 required: true,
@@ -365,6 +369,8 @@ fn ChangePasswordForm() -> Element {
                 force_validation: force_validation(),
                 r#type: "password".to_string(),
             }
+
+            PasswordStrengthMeter { value: new_password }
 
             FloatingLabelInputText::<String> {
                 name: "new_password_confirmation".to_string(),

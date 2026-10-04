@@ -35,7 +35,7 @@ use crate::common::{build_and_spawn, setup_test_env};
 pub use crate::common::test_db::TestDb;
 pub use crate::common::{db_connection, redis_storage, settings, tracing_setup};
 
-pub const DEFAULT_PASSWORD: &str = "test123456";
+pub const DEFAULT_PASSWORD: &str = "test-password-123456";
 
 pub struct BrowserTestedApp {
     pub app_url: String,

@@ -149,10 +149,10 @@ from stdin in non-TTY mode and either updates the existing Local auth
 row or creates one if the user only had OIDC/Passkey:
 
 ```bash
-echo "test123456" | direnv exec . just api reset-password "<email>"
+echo "test-password-123456" | direnv exec . just api reset-password "<email>"
 ```
 
-Use `test123456` as the password by convention — it matches the
+Use `test-password-123456` as the password by convention — it matches the
 project's seeded test users (`DEFAULT_PASSWORD` in `api/tests/browser/helpers.rs`) so it's
 already in everyone's muscle memory.
 
@@ -195,7 +195,7 @@ Ready to debug notification <notification_id>
   Login URL:       http://localhost:<DX_SERVE_PORT>/login
   Notification:    http://localhost:<DX_SERVE_PORT>/notifications/<notification_id>
   Email:           <email>
-  Password:        test123456
+  Password:        test-password-123456
   API:             http://localhost:<API_PORT>
   Process-compose: http://localhost:<PROCESS_COMPOSE_PORT>
 
