@@ -25,6 +25,7 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::{
+    commands::integration_connection::pause_without_email,
     configuration::Settings,
     integrations::oauth2::RefreshToken,
     jobs::oauth::pause_integration_connections,
@@ -33,6 +34,7 @@ use universal_inbox_api::{
         integration_connection::IntegrationConnectionRepository,
         oauth_credential::{OAuthCredentialRepository, StoredOAuthCredential},
     },
+    universal_inbox::integration_connection::service::PauseWithoutEmailReport,
 };
 
 use crate::helpers::{
@@ -1017,4 +1019,194 @@ async fn test_testing_account_is_paused_without_emails(
         IntegrationConnectionStatus::Paused
     );
     assert_eq!(pause_emails(&app).await, vec![]);
+}
+
+/// Before enabling the cron, `integration-connection pause-without-email`
+/// pauses the connections it would otherwise email about.
+async fn run_pause_without_email(
+    app: &AuthenticatedApp,
+    inactive_before: DateTime<Utc>,
+    dry_run: bool,
+) -> PauseWithoutEmailReport {
+    pause_without_email(
+        app.app.integration_connection_service.clone(),
+        inactive_before,
+        FAILING_THRESHOLD_DAYS,
+        dry_run,
+    )
+    .await
+    .unwrap()
+}
+
+/// Every connection of a user inactive since `inactive_before` is paused
+/// without any email, even one failing for less than the failing threshold,
+/// so that enabling the cron afterwards does not email them either.
+#[rstest]
+#[tokio::test]
+async fn test_pause_without_email_pauses_the_connections_of_inactive_users(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    let slack_connection = connect_slack(&app, &settings, None).await;
+    let linear_connection = connect_linear(&app, &settings).await;
+    set_failing_since(
+        &app,
+        &linear_connection,
+        Utc::now() - TimeDelta::days(1),
+        true,
+    )
+    .await;
+    set_last_active_at(&app.app, app.user.id, Utc::now() - TimeDelta::days(30)).await;
+    let slack_revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
+    let linear_revocation = mock_linear_revocation(&app).await;
+
+    let report = run_pause_without_email(&app, Utc::now() - TimeDelta::days(1), false).await;
+
+    assert_eq!(
+        report,
+        PauseWithoutEmailReport {
+            paused_inactive: 1,
+            paused_failing: 1,
+            ..Default::default()
+        }
+    );
+    let slack_connection = reload(&app, &slack_connection).await;
+    assert_eq!(slack_connection.status, IntegrationConnectionStatus::Paused);
+    assert_eq!(
+        slack_connection.paused_reason,
+        Some(IntegrationConnectionPausedReason::Inactivity)
+    );
+    assert!(slack_connection.should_set_aside_notifications());
+    let linear_connection = reload(&app, &linear_connection).await;
+    assert_eq!(
+        linear_connection.status,
+        IntegrationConnectionStatus::Paused
+    );
+    assert_eq!(
+        linear_connection.paused_reason,
+        Some(IntegrationConnectionPausedReason::LongFailing)
+    );
+    assert_eq!(slack_revocation.received_requests().await.len(), 1);
+    assert_eq!(linear_revocation.received_requests().await.len(), 1);
+    assert!(
+        fetch_oauth_credential(&app, &slack_connection)
+            .await
+            .is_none()
+    );
+    assert!(
+        fetch_oauth_credential(&app, &linear_connection)
+            .await
+            .is_none()
+    );
+    assert_eq!(pause_emails(&app).await, vec![]);
+
+    // Enabling the cron afterwards neither warns nor emails them.
+    set_last_active_at(&app.app, app.user.id, Utc::now() - TimeDelta::days(365)).await;
+    run_pause_integration_connections(&app, INACTIVITY_WARNING_DAYS).await;
+    assert_eq!(pause_emails(&app).await, vec![]);
+}
+
+/// The connections of active users are left alone, except those already
+/// failing for more than the failing threshold.
+#[rstest]
+#[case::failing_past_the_threshold(TimeDelta::days(FAILING_THRESHOLD_DAYS + 1), true)]
+#[case::failing_before_the_threshold(TimeDelta::days(FAILING_THRESHOLD_DAYS - 1), false)]
+#[tokio::test]
+async fn test_pause_without_email_pauses_only_long_failing_connections_of_active_users(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    #[case] failing_for: TimeDelta,
+    #[case] expect_paused: bool,
+) {
+    let app = authenticated_app.await;
+    let slack_connection = connect_slack(&app, &settings, None).await;
+    let linear_connection = connect_linear(&app, &settings).await;
+    set_failing_since(&app, &linear_connection, Utc::now() - failing_for, true).await;
+    let slack_revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
+    let linear_revocation = mock_linear_revocation(&app).await;
+
+    let report = run_pause_without_email(&app, Utc::now() - TimeDelta::days(1), false).await;
+
+    assert_eq!(
+        report,
+        PauseWithoutEmailReport {
+            paused_failing: usize::from(expect_paused),
+            ..Default::default()
+        }
+    );
+    assert_eq!(
+        reload(&app, &slack_connection).await.status,
+        IntegrationConnectionStatus::Validated
+    );
+    assert_eq!(slack_revocation.received_requests().await.len(), 0);
+    let linear_connection = reload(&app, &linear_connection).await;
+    if expect_paused {
+        assert_eq!(
+            linear_connection.status,
+            IntegrationConnectionStatus::Paused
+        );
+        assert_eq!(
+            linear_connection.paused_reason,
+            Some(IntegrationConnectionPausedReason::LongFailing)
+        );
+        assert_eq!(linear_revocation.received_requests().await.len(), 1);
+    } else {
+        assert_eq!(
+            linear_connection.status,
+            IntegrationConnectionStatus::Failing
+        );
+        assert_eq!(linear_revocation.received_requests().await.len(), 0);
+    }
+    assert_eq!(pause_emails(&app).await, vec![]);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_pause_without_email_dry_run_changes_nothing(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    let slack_connection = connect_slack(&app, &settings, None).await;
+    set_last_active_at(&app.app, app.user.id, Utc::now() - TimeDelta::days(30)).await;
+    let slack_revocation = mock_slack_revocation(&app, "slack_test_user_access_token").await;
+
+    let report = run_pause_without_email(&app, Utc::now() - TimeDelta::days(1), true).await;
+
+    assert_eq!(
+        report,
+        PauseWithoutEmailReport {
+            paused_inactive: 1,
+            ..Default::default()
+        }
+    );
+    assert_eq!(
+        reload(&app, &slack_connection).await.status,
+        IntegrationConnectionStatus::Validated
+    );
+    assert_eq!(slack_revocation.received_requests().await.len(), 0);
+    assert!(
+        fetch_oauth_credential(&app, &slack_connection)
+            .await
+            .is_some()
+    );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_pause_without_email_rejects_a_future_inactivity_date(
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+
+    let result = pause_without_email(
+        app.app.integration_connection_service.clone(),
+        Utc::now() + TimeDelta::days(1),
+        FAILING_THRESHOLD_DAYS,
+        false,
+    )
+    .await;
+
+    assert!(result.is_err());
 }

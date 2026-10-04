@@ -277,12 +277,15 @@ pub trait IntegrationConnectionRepository {
     /// failing since before
     /// `failing_before`. A connection marked `Failing` by its syncs is failing
     /// since its first failed sync; one marked `Failing` by a token refresh
-    /// has no such timestamp and falls back to its last update.
+    /// has no such timestamp and falls back to its last update. With
+    /// `user_inactive_before`, also those, failing for any time, whose owner
+    /// has not been active since then.
     async fn find_long_failing_integration_connections(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         provider_kinds: &[IntegrationProviderKind],
         failing_before: DateTime<Utc>,
+        user_inactive_before: Option<DateTime<Utc>>,
     ) -> Result<Vec<(IntegrationConnectionId, UserId)>, UniversalInboxError>;
 
     /// Move a connection to `Paused`, setting `paused_at` and `paused_reason`
@@ -2078,7 +2081,8 @@ impl IntegrationConnectionRepository for Repository {
         level = "debug",
         skip_all,
         fields(
-            { attr::INTEGRATION_CONNECTION_FAILING_BEFORE } = failing_before.to_rfc3339()
+            { attr::INTEGRATION_CONNECTION_FAILING_BEFORE } = failing_before.to_rfc3339(),
+            { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = user_inactive_before.map(|inactive_before| inactive_before.to_rfc3339())
         )
     )]
     async fn find_long_failing_integration_connections(
@@ -2086,6 +2090,7 @@ impl IntegrationConnectionRepository for Repository {
         executor: &mut Transaction<'_, Postgres>,
         provider_kinds: &[IntegrationProviderKind],
         failing_before: DateTime<Utc>,
+        user_inactive_before: Option<DateTime<Utc>>,
     ) -> Result<Vec<(IntegrationConnectionId, UserId)>, UniversalInboxError> {
         let provider_kind_names: Vec<String> = provider_kinds
             .iter()
@@ -2093,17 +2098,26 @@ impl IntegrationConnectionRepository for Repository {
             .collect();
         let rows = sqlx::query!(
             r#"
-                SELECT id, user_id
+                SELECT integration_connection.id, integration_connection.user_id
                 FROM integration_connection
-                WHERE provider_kind::TEXT = ANY($1)
-                  AND status = 'Failing'
-                  AND COALESCE(
-                    LEAST(first_notifications_sync_failed_at, first_tasks_sync_failed_at),
-                    updated_at
-                  ) < $2
+                INNER JOIN "user" ON "user".id = integration_connection.user_id
+                WHERE integration_connection.provider_kind::TEXT = ANY($1)
+                  AND integration_connection.status = 'Failing'
+                  AND (
+                    COALESCE(
+                      LEAST(
+                        integration_connection.first_notifications_sync_failed_at,
+                        integration_connection.first_tasks_sync_failed_at
+                      ),
+                      integration_connection.updated_at
+                    ) < $2
+                    OR "user".last_active_at < $3::TIMESTAMP
+                  )
             "#,
             &provider_kind_names,
             failing_before.naive_utc(),
+            user_inactive_before.map(|inactive_before| inactive_before.naive_utc())
+                as Option<NaiveDateTime>,
         )
         .fetch_all(&mut **executor)
         .await
