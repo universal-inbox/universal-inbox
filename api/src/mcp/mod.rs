@@ -17,7 +17,7 @@ use actix_web::{
     web,
 };
 
-use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DefaultKeyedStateStore};
+use governor::Quota;
 use rmcp::{
     ErrorData, ServerHandler,
     handler::server::{tool::ToolRouter, wrapper::Parameters},
@@ -52,6 +52,7 @@ use crate::{
         notification::service::NotificationService, task::service::TaskService,
     },
     utils::jwt::Claims,
+    utils::rate_limit::{UserRateLimiter, UserRateLimiters},
 };
 
 pub mod session_store;
@@ -66,8 +67,6 @@ const MCP_RATE_LIMIT_PER_MINUTE: u32 = 120;
 /// Protocol versions this server can negotiate.
 const SUPPORTED_PROTOCOL_VERSIONS: &[&str] =
     &["2025-06-18", "2025-03-26", "2024-11-05", "2025-11-25"];
-
-pub type McpRateLimiter = RateLimiter<UserId, DefaultKeyedStateStore<UserId>, DefaultClock>;
 
 /// Build the `StreamableHttpService` once so the `LocalSessionManager` is shared
 /// across all Actix-web worker threads.  Call this **before** `HttpServer::new`
@@ -85,6 +84,7 @@ pub fn build_http_service(
     task_service: Arc<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     job_storage: JobStorage,
+    user_rate_limiters: UserRateLimiters,
     session_store: Arc<dyn SessionStore>,
     allowed_hosts: Vec<String>,
 ) -> StreamableHttpService<UniversalInboxMcpServer, LocalSessionManager> {
@@ -98,6 +98,7 @@ pub fn build_http_service(
         task_service,
         integration_connection_service,
         job_storage,
+        user_rate_limiters,
     };
 
     StreamableHttpService::builder()
@@ -139,17 +140,17 @@ pub fn mcp_allowed_hosts(front_base_url: &url::Url, extra_allowed_hosts: &[Strin
     hosts
 }
 
-pub fn build_rate_limiter() -> Arc<McpRateLimiter> {
+pub fn build_rate_limiter() -> Arc<UserRateLimiter> {
     let quota = Quota::per_minute(
         NonZeroU32::new(MCP_RATE_LIMIT_PER_MINUTE).expect("rate limit must be non-zero"),
     );
-    Arc::new(McpRateLimiter::keyed(quota))
+    Arc::new(UserRateLimiter::keyed(quota))
 }
 
 pub fn scope(
     http_service: StreamableHttpService<UniversalInboxMcpServer, LocalSessionManager>,
     session_owners: McpSessionOwnerStore,
-    rate_limiter: Arc<McpRateLimiter>,
+    rate_limiter: Arc<UserRateLimiter>,
     resource_url: String,
     extra_allowed_origins: Vec<String>,
 ) -> impl HttpServiceFactory {
@@ -175,7 +176,7 @@ pub fn scope(
 struct RequireAuthenticated {
     allowed_origins: Vec<String>,
     session_owners: McpSessionOwnerStore,
-    rate_limiter: Arc<McpRateLimiter>,
+    rate_limiter: Arc<UserRateLimiter>,
     resource_metadata_url: String,
     resource_url: String,
 }
@@ -208,7 +209,7 @@ struct RequireAuthenticatedMiddleware<S> {
     service: Rc<S>,
     allowed_origins: Vec<String>,
     session_owners: McpSessionOwnerStore,
-    rate_limiter: Arc<McpRateLimiter>,
+    rate_limiter: Arc<UserRateLimiter>,
     resource_metadata_url: String,
     resource_url: String,
 }

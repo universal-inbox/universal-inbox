@@ -33,6 +33,7 @@ use crate::{
         UpdateStatus, integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
     },
+    utils::rate_limit::{UserRateLimiters, check_user_rate_limit},
 };
 
 #[derive(Clone)]
@@ -41,6 +42,7 @@ pub struct McpServices {
     pub task_service: Arc<RwLock<TaskService>>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     pub job_storage: JobStorage,
+    pub user_rate_limiters: UserRateLimiters,
 }
 
 pub enum ToolCallError {
@@ -326,6 +328,8 @@ pub async fn execute_tool(
         }
         "bulk_act_notifications" => {
             let args: BulkActNotificationsArgs = parse_args(arguments)?;
+            check_user_rate_limit(&services.user_rate_limiters.bulk_patch, user_id)
+                .map_err(ToolCallError::execution)?;
             let selection = bulk_act_selection(args)?;
             let service = services.notification_service.read().await;
             let mut transaction = service.begin().await.map_err(ToolCallError::execution)?;
@@ -388,6 +392,8 @@ pub async fn execute_tool(
         }
         "sync_notifications" => {
             let args: SyncNotificationsArgs = parse_args(arguments)?;
+            check_user_rate_limit(&services.user_rate_limiters.sync, user_id)
+                .map_err(ToolCallError::execution)?;
             let service = services.notification_service.read().await;
             let notifications: Vec<Notification> = if let Some(source) = args.source {
                 service
@@ -492,6 +498,8 @@ pub async fn execute_tool(
         }
         "sync_tasks" => {
             let args: SyncTasksArgs = parse_args(arguments)?;
+            check_user_rate_limit(&services.user_rate_limiters.sync, user_id)
+                .map_err(ToolCallError::execution)?;
             let service = services.task_service.read().await;
             let results: Vec<TaskCreationResult> = if let Some(source) = args.source {
                 service
