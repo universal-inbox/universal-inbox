@@ -56,6 +56,7 @@
 - Static content answers 405 with an `Allow` header to methods other than GET and HEAD
 - Logging out revokes the session server-side; session checks fail closed with a 503 when Redis is unavailable, and the API no longer starts without Redis
 - Name the session cookie `__Host-id` with explicit `Secure`, `HttpOnly` and `Path=/` attributes (signs every user out once)
+- Server errors on the REST API and the MCP tools return a generic message with a correlation id instead of the error details, which are logged with the same id
 
 ### Fixed
 
