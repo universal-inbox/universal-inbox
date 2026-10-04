@@ -52,6 +52,7 @@
 - Limit the length of user-supplied task, project and profile name fields, reject unknown fields in request bodies, and sanitize the HTML of GitHub, Google Calendar and Google Drive previews
 - Per-user rate limits on syncs (10 per minute, shared by notifications and tasks) and bulk notification updates (30 per minute), on the REST API and the MCP tools, answered with 429 and `Retry-After`
 - Refuse to start outside dev and test with the committed OAuth token encryption key or the placeholder database and SMTP passwords
+- Send `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin` on every response, and default API responses to `Cache-Control: no-store` and `Content-Disposition: attachment` when the handler sets none
 
 ### Fixed
 

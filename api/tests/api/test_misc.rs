@@ -6,7 +6,7 @@ use crate::helpers::{TestedApp, tested_app};
 mod content_security_policy {
     use super::*;
 
-    use pretty_assertions::assert_eq;
+    use pretty_assertions::{assert_eq, assert_ne};
 
     #[rstest]
     #[tokio::test]
@@ -50,6 +50,13 @@ mod content_security_policy {
                 "max-age=63072000; includeSubDomains; preload"
             ))
         );
+        assert_common_security_headers(response.headers());
+        // The SPA page is not an API response: it must be rendered inline
+        // (actix-files sets `inline` itself).
+        assert_ne!(
+            response.headers().get("content-disposition"),
+            Some(&HeaderValue::from_static("attachment"))
+        );
     }
 
     #[rstest]
@@ -87,6 +94,116 @@ mod content_security_policy {
             Some(&HeaderValue::from_static(
                 "max-age=63072000; includeSubDomains; preload"
             ))
+        );
+        assert_common_security_headers(response.headers());
+        // `/ping` is not under the API path: no API-only headers.
+        assert!(response.headers().get("content-disposition").is_none());
+        assert_ne!(
+            response.headers().get("cache-control"),
+            Some(&HeaderValue::from_static("no-store"))
+        );
+    }
+}
+
+/// Headers emitted on every response, whatever its path or content type.
+fn assert_common_security_headers(headers: &reqwest::header::HeaderMap) {
+    assert_eq!(
+        headers.get("x-content-type-options"),
+        Some(&HeaderValue::from_static("nosniff"))
+    );
+    assert_eq!(
+        headers.get("referrer-policy"),
+        Some(&HeaderValue::from_static("strict-origin-when-cross-origin"))
+    );
+}
+
+mod api_response_headers {
+    use super::*;
+
+    use pretty_assertions::assert_eq;
+
+    use crate::helpers::auth::{AuthenticatedApp, authenticated_app};
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_authenticated_api_response_is_not_cached_nor_rendered(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+
+        let response = app
+            .client
+            .get(format!("{}notifications", app.app.api_address))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            response.headers().get("cache-control"),
+            Some(&HeaderValue::from_static("no-store"))
+        );
+        assert_eq!(
+            response.headers().get("content-disposition"),
+            Some(&HeaderValue::from_static("attachment"))
+        );
+        assert_common_security_headers(response.headers());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_api_error_response_is_not_cached_nor_rendered(#[future] tested_app: TestedApp) {
+        let app = tested_app.await;
+
+        let response = reqwest::Client::new()
+            .get(format!("{}notifications", app.api_address))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 401);
+        assert_eq!(
+            response.headers().get("cache-control"),
+            Some(&HeaderValue::from_static("no-store"))
+        );
+        assert_eq!(
+            response.headers().get("content-disposition"),
+            Some(&HeaderValue::from_static("attachment"))
+        );
+        assert_common_security_headers(response.headers());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_explicit_cache_control_is_kept(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+
+        let response = app
+            .client
+            .get(format!("{}front_config", app.app.api_address))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            response.headers().get("cache-control"),
+            Some(&HeaderValue::from_static("private, max-age=5"))
+        );
+
+        let response = app
+            .client
+            .get(format!("{}tasks/search", app.app.api_address))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            response.headers().get("cache-control"),
+            Some(&HeaderValue::from_static("private, max-age=600"))
+        );
+        assert_eq!(
+            response.headers().get("content-disposition"),
+            Some(&HeaderValue::from_static("attachment"))
         );
     }
 }

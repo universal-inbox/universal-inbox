@@ -10,7 +10,7 @@
 //!    to Paid" button.
 //! 2. Clicking "Upgrade to Paid" calls `POST /api/billing/checkout-session` and
 //!    redirects to the faked Stripe Checkout URL (which points back at the test
-//!    server's own `/api/ping`, so the browser can really land on it) — this is
+//!    server's own `/ping`, so the browser can really land on it) — this is
 //!    the exact path that regressed when the checkout session lacked
 //!    `customer_update[address]=auto` for `automatic_tax`, so arriving there
 //!    proves that call now succeeds.

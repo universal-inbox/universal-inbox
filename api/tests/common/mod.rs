@@ -357,11 +357,13 @@ pub async fn build_and_spawn(
 /// Query marker distinguishing the fake Checkout / Portal destinations.
 ///
 /// The fake Stripe URLs point back at the test server's own unauthenticated
-/// `/api/ping`, because the browser has to actually *land* on them for the
+/// `/ping`, because the browser has to actually *land* on them for the
 /// redirect to be observable: a top-level navigation to an off-origin sentinel
 /// host never resolves (and `page.route` does not reliably intercept a
 /// main-frame navigation here), and Chrome flatly blocks top-level `data:`
-/// navigation. `/api/ping` is real, resolvable, and tiny.
+/// navigation. `/ping` is real, resolvable, and tiny. It must stay outside the
+/// API scope: API responses are forced to `Content-Disposition: attachment`,
+/// so the browser would download `/api/ping` instead of navigating to it.
 pub const FAKE_CHECKOUT_MARKER: &str = "stripe_checkout=1";
 pub const FAKE_PORTAL_MARKER: &str = "stripe_portal=1";
 pub const FAKE_STRIPE_CUSTOMER_ID: &str = "cus_fake_test";
@@ -378,7 +380,7 @@ pub fn fake_portal_url(app_base_url: &url::Url) -> url::Url {
 
 fn fake_stripe_url(app_base_url: &url::Url, marker: &str) -> url::Url {
     let mut url = app_base_url
-        .join("/api/ping")
+        .join("/ping")
         .expect("static fake Stripe path joins");
     url.set_query(Some(marker));
     url
