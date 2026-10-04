@@ -48,4 +48,5 @@ mod test_third_party;
 mod test_ticktick_tasks;
 mod test_todoist_notifications;
 mod test_todoist_tasks;
+mod test_user_rate_limits;
 mod test_users;

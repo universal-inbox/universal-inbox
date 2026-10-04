@@ -49,6 +49,7 @@
 - Keep OAuth credentials and OIDC ID tokens out of traces: secret types no longer print their value, and the exporter redacts any JWT left in spans / log bodies
 - Changing or resetting a password signs the user out of their other sessions and sends them a confirmation email
 - Limit the length of user-supplied task, project and profile name fields, reject unknown fields in request bodies, and sanitize the HTML of GitHub, Google Calendar and Google Drive previews
+- Per-user rate limits on syncs (10 per minute, shared by notifications and tasks) and bulk notification updates (30 per minute), on the REST API and the MCP tools, answered with 429 and `Retry-After`
 
 ### Fixed
 

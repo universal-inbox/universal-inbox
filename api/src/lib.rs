@@ -261,6 +261,10 @@ pub async fn run_server(
 
     info!("Listening on {}", listen_address);
 
+    // Per-user budgets for costly authenticated endpoints (syncs, bulk
+    // patches, MCP tools), shared across workers so a user cannot reset a
+    // budget by hopping between workers.
+    let user_rate_limiters = utils::rate_limit::UserRateLimiters::new();
     // Build the MCP service and rate limiter once so they are shared across
     // all Actix-web worker threads (each worker clones these Arc-backed values).
     let mcp_http_service = mcp::build_http_service(
@@ -268,6 +272,7 @@ pub async fn run_server(
         task_service.clone(),
         integration_connection_service.clone(),
         redis_storage.clone(),
+        user_rate_limiters.clone(),
         mcp_session_store,
         mcp_allowed_hosts,
     );
@@ -323,6 +328,7 @@ pub async fn run_server(
                 format!("{front_base_url}{api_path}mcp"),
                 mcp_extra_allowed_origins.clone(),
             ))
+            .app_data(web::Data::new(user_rate_limiters.clone()))
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))

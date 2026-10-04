@@ -15,15 +15,25 @@
 //! attacker who strips the header floods the unspecified bucket while
 //! legitimate clients keep their own buckets). Refusing with `400 Bad
 //! Request` matches the OAuth2 limiter.
+//!
+//! Authenticated endpoints that are costly per call (upstream syncs, bulk
+//! patches) use [`UserRateLimiters`] instead, keyed on the user.
 
-use std::net::IpAddr;
+use std::{net::IpAddr, num::NonZeroU32, sync::Arc};
 
 use actix_web::{HttpRequest, HttpResponse, http::header::HeaderMap, web};
-use governor::{RateLimiter, clock::DefaultClock, state::keyed::DefaultKeyedStateStore};
+use governor::{
+    Quota, RateLimiter,
+    clock::{Clock, DefaultClock},
+    state::keyed::DefaultKeyedStateStore,
+};
 use tracing::warn;
+
+use universal_inbox::user::UserId;
 
 use crate::configuration::{DEFAULT_TRUSTED_PROXY_HOPS, Settings};
 use crate::observability::attr;
+use crate::universal_inbox::UniversalInboxError;
 
 /// Above this many tracked addresses, stale buckets are evicted: the keyed
 /// store never shrinks on its own, and every distinct address adds an entry.
@@ -31,6 +41,67 @@ const MAX_TRACKED_KEYS_BEFORE_CLEANUP: usize = 10_000;
 
 /// A keyed governor rate limiter scoped on the caller's real IP.
 pub type IpRateLimiter = RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, DefaultClock>;
+
+/// Sync requests (notifications and tasks share one budget) a user may send
+/// per minute: a synchronous sync calls the upstream APIs inline.
+const SYNC_RATE_LIMIT_PER_MINUTE: u32 = 10;
+/// Bulk notification patches a user may send per minute.
+const BULK_PATCH_RATE_LIMIT_PER_MINUTE: u32 = 30;
+
+/// A keyed governor rate limiter scoped on the authenticated user.
+pub type UserRateLimiter = RateLimiter<UserId, DefaultKeyedStateStore<UserId>, DefaultClock>;
+
+/// Per-user budgets for authenticated endpoints that are costly per call.
+/// Built once at startup and shared by every worker, so a user cannot reset
+/// a budget by hitting another worker.
+#[derive(Clone)]
+pub struct UserRateLimiters {
+    pub sync: Arc<UserRateLimiter>,
+    pub bulk_patch: Arc<UserRateLimiter>,
+}
+
+impl UserRateLimiters {
+    pub fn new() -> Self {
+        let per_minute = |requests: u32| {
+            Arc::new(UserRateLimiter::keyed(Quota::per_minute(
+                NonZeroU32::new(requests).expect("rate limit must be non-zero"),
+            )))
+        };
+        Self {
+            sync: per_minute(SYNC_RATE_LIMIT_PER_MINUTE),
+            bulk_patch: per_minute(BULK_PATCH_RATE_LIMIT_PER_MINUTE),
+        }
+    }
+}
+
+impl Default for UserRateLimiters {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Check whether `user_id` fits within the limiter's budget, or return
+/// `TooManyRequests` (429 + `Retry-After`) with the seconds until it refills.
+pub fn check_user_rate_limit(
+    rate_limiter: &UserRateLimiter,
+    user_id: UserId,
+) -> Result<(), UniversalInboxError> {
+    if rate_limiter.len() > MAX_TRACKED_KEYS_BEFORE_CLEANUP {
+        rate_limiter.retain_recent();
+        rate_limiter.shrink_to_fit();
+    }
+    rate_limiter.check_key(&user_id).map_err(|not_until| {
+        let wait_time = not_until.wait_time_from(DefaultClock::default().now());
+        let retry_after_seconds = wait_time.as_secs_f64().ceil().max(1.0) as u64;
+        warn!(
+            { attr::USER_ID } = %user_id,
+            retry_after_seconds, "Request rejected: per-user rate limit exceeded"
+        );
+        UniversalInboxError::TooManyRequests {
+            retry_after_seconds,
+        }
+    })
+}
 
 /// Check whether the given request fits within the per-IP budget.
 ///
@@ -216,6 +287,23 @@ fn parse_remote_addr(raw: &str) -> Option<IpAddr> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn check_user_rate_limit_rejects_over_budget_per_user() {
+        let limiter = UserRateLimiter::keyed(Quota::per_minute(NonZeroU32::new(2).unwrap()));
+        let user: UserId = uuid::Uuid::new_v4().into();
+        let other_user: UserId = uuid::Uuid::new_v4().into();
+
+        assert!(check_user_rate_limit(&limiter, user).is_ok());
+        assert!(check_user_rate_limit(&limiter, user).is_ok());
+        match check_user_rate_limit(&limiter, user) {
+            Err(UniversalInboxError::TooManyRequests {
+                retry_after_seconds,
+            }) => assert!((1..=60).contains(&retry_after_seconds)),
+            other => panic!("expected TooManyRequests, got {other:?}"),
+        }
+        assert!(check_user_rate_limit(&limiter, other_user).is_ok());
+    }
 
     #[test]
     fn mask_forwarded_for_hides_public_addresses_only() {
