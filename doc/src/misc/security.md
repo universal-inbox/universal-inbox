@@ -45,3 +45,20 @@ Universal Inbox's integrations (GitHub, Linear, Slack, Todoist, TickTick, Google
 API keys are an alternative to OAuth for tools that do not implement the MCP authorization spec (for example, the [Raycast extension](raycast.md)). The Security page lists every key you have created, when it was last used, and lets you revoke any key you no longer need.
 
 For details on creating and using API keys, see [API usage](api_usage.md).
+
+## Third-party scripts
+
+The web app loads two scripts from vendor servers:
+
+| Script | Loaded from | Purpose |
+| --- | --- | --- |
+| Headway widget | `cdn.headwayapp.co` | Shows the product changelog |
+| Crisp chat | `client.crisp.chat` | Support chat, only when support chat is configured on the instance |
+
+The vendors manage these scripts and publish them at URLs with no version, so they change without notice. Neither script is pinned with [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity): a pinned hash would stop working at the vendor's next update. This is an accepted risk, limited by the following controls:
+
+- The Content Security Policy only allows scripts from the application itself and from these two vendor hosts. Network and frame access is limited the same way.
+- Headway displays the changelog inside an iframe served from its own domain (`headway-widget.net`), isolated from the application page.
+- The Crisp loader library is pinned to an exact version in the web app's lockfile. The chat loads only when an instance enables support chat.
+
+If a vendor starts publishing versioned, immutable script URLs, we will pin those scripts with Subresource Integrity.
