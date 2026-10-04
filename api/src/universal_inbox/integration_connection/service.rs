@@ -66,6 +66,16 @@ use crate::{
     },
 };
 
+/// Outcome of [`IntegrationConnectionService::pause_existing_integration_connections_without_email`].
+/// In a dry run, `paused_*` count the connections that would be paused.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct PauseWithoutEmailReport {
+    pub paused_inactive: usize,
+    pub failed_inactive: usize,
+    pub paused_failing: usize,
+    pub failed_failing: usize,
+}
+
 /// Exponential backoff of the `retry-oauth-grant-revocations` cron.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrantRevocationRetryPolicy {
@@ -1668,6 +1678,7 @@ impl IntegrationConnectionService {
             self.pause_integration_connections(
                 integration_connections,
                 IntegrationConnectionPausedReason::Inactivity,
+                true,
             )
             .await
         }
@@ -1702,6 +1713,7 @@ impl IntegrationConnectionService {
                     &mut transaction,
                     &self.oauth_provider_kinds(),
                     failing_before,
+                    None,
                 )
                 .await?;
             transaction
@@ -1712,8 +1724,116 @@ impl IntegrationConnectionService {
             self.pause_integration_connections(
                 integration_connections,
                 IntegrationConnectionPausedReason::LongFailing,
+                true,
             )
             .await
+        }
+        .await;
+        result.record_span_error()
+    }
+
+    /// One-off pause, before enabling the `pause-integration-connections`
+    /// cron, of the connections it would otherwise email about: the
+    /// `Validated` connections of users not active since `inactive_before`
+    /// (paused for inactivity, without any warning) and the `Failing` ones
+    /// failing since before `failing_before` or whose user is inactive (paused
+    /// as long failing). No email is sent, so only the users who become
+    /// inactive, or whose connections start failing, afterwards are emailed
+    /// by the cron. With `dry_run`, only lists them.
+    #[tracing::instrument(
+        level = "info",
+        skip_all,
+        fields(
+            { attr::INTEGRATION_CONNECTION_INACTIVE_BEFORE } = inactive_before.to_rfc3339(),
+            { attr::INTEGRATION_CONNECTION_FAILING_BEFORE } = failing_before.to_rfc3339(),
+            { attr::COMMAND_DRY_RUN } = dry_run,
+            { attr::ERROR_TYPE } = tracing::field::Empty
+        )
+    )]
+    pub async fn pause_existing_integration_connections_without_email(
+        &self,
+        inactive_before: DateTime<Utc>,
+        failing_before: DateTime<Utc>,
+        dry_run: bool,
+    ) -> Result<PauseWithoutEmailReport, UniversalInboxError> {
+        let result: Result<PauseWithoutEmailReport, UniversalInboxError> = async move {
+            let mut transaction = self.begin().await.context(
+                "Failed to create new transaction while listing integration connections to pause without email",
+            )?;
+            let inactive_users_connections = self
+                .repository
+                .find_validated_integration_connections_of_inactive_users(
+                    &mut transaction,
+                    &self.oauth_provider_kinds(),
+                    inactive_before,
+                    None,
+                )
+                .await?;
+            let failing_connections = self
+                .repository
+                .find_long_failing_integration_connections(
+                    &mut transaction,
+                    &self.oauth_provider_kinds(),
+                    failing_before,
+                    Some(inactive_before),
+                )
+                .await?;
+
+            if dry_run {
+                for (paused_reason, integration_connections) in [
+                    (
+                        IntegrationConnectionPausedReason::Inactivity,
+                        &inactive_users_connections,
+                    ),
+                    (
+                        IntegrationConnectionPausedReason::LongFailing,
+                        &failing_connections,
+                    ),
+                ] {
+                    for (integration_connection_id, user_id) in integration_connections {
+                        let provider_kind = self
+                            .repository
+                            .get_integration_connection(&mut transaction, *integration_connection_id)
+                            .await?
+                            .map(|integration_connection| integration_connection.provider.kind());
+                        info!(
+                            "[dry-run] Would pause {provider_kind:?} integration connection {integration_connection_id} of user {user_id} ({paused_reason})"
+                        );
+                    }
+                }
+                transaction.commit().await.context(
+                    "Failed to commit while listing integration connections to pause without email",
+                )?;
+                return Ok(PauseWithoutEmailReport {
+                    paused_inactive: inactive_users_connections.len(),
+                    paused_failing: failing_connections.len(),
+                    ..Default::default()
+                });
+            }
+            transaction.commit().await.context(
+                "Failed to commit while listing integration connections to pause without email",
+            )?;
+
+            let (paused_inactive, failed_inactive) = self
+                .pause_integration_connections(
+                    inactive_users_connections,
+                    IntegrationConnectionPausedReason::Inactivity,
+                    false,
+                )
+                .await?;
+            let (paused_failing, failed_failing) = self
+                .pause_integration_connections(
+                    failing_connections,
+                    IntegrationConnectionPausedReason::LongFailing,
+                    false,
+                )
+                .await?;
+            Ok(PauseWithoutEmailReport {
+                paused_inactive,
+                failed_inactive,
+                paused_failing,
+                failed_failing,
+            })
         }
         .await;
         result.record_span_error()
@@ -1723,12 +1843,13 @@ impl IntegrationConnectionService {
     /// instance, stops sending events for it; a failed revocation is queued
     /// for retry), delete its credential and move it to `Paused`. Each
     /// connection is handled in its own transaction so that one failure does
-    /// not hold back the others. Each user is then emailed once, listing all
-    /// their paused connections.
+    /// not hold back the others. With `notify`, each user is then emailed
+    /// once, listing all their paused connections.
     async fn pause_integration_connections(
         &self,
         integration_connections: Vec<(IntegrationConnectionId, UserId)>,
         paused_reason: IntegrationConnectionPausedReason,
+        notify: bool,
     ) -> Result<(usize, usize), UniversalInboxError> {
         info!(
             "Found {} integration connection(s) to pause ({paused_reason})",
@@ -1779,6 +1900,11 @@ impl IntegrationConnectionService {
         }
 
         // Best effort: the connections stay paused either way.
+        let paused_provider_names_per_user = if notify {
+            paused_provider_names_per_user
+        } else {
+            Vec::new()
+        };
         for (user, mut provider_names) in paused_provider_names_per_user {
             provider_names.sort();
             provider_names.dedup();

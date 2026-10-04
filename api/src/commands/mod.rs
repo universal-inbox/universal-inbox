@@ -31,6 +31,7 @@ use crate::{
 
 pub mod anonymize;
 pub mod generate;
+pub mod integration_connection;
 pub mod oauth;
 #[cfg(feature = "screenshots")]
 pub mod screenshots;
@@ -143,6 +144,12 @@ pub enum Commands {
         command: SlackCommands,
     },
 
+    /// Integration connections maintenance tasks
+    IntegrationConnection {
+        #[clap(subcommand)]
+        command: IntegrationConnectionCommands,
+    },
+
     /// Manage Stripe-backed billing state (reconciliation, etc.).
     /// No-op when `[billing]` is absent from configuration.
     Billing {
@@ -242,6 +249,27 @@ pub enum SlackCommands {
         /// Only backfill integration connections of given user
         #[arg(short, long)]
         user_id: Option<UserId>,
+        #[arg(short, long)]
+        dry_run: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum IntegrationConnectionCommands {
+    /// Pause, without any email, the OAuth connections of users not active
+    /// since `--inactive-before` and the connections failing for more than
+    /// `--failing-threshold-days` (one-off, before enabling the
+    /// `pause_integration_connections` cron, so that it only emails users
+    /// who become inactive or whose connections start failing afterwards)
+    PauseWithoutEmail {
+        /// Pause the connections of users not active since this date-time
+        /// (RFC 3339, e.g. `2026-10-05T12:00:00Z`)
+        #[arg(short, long)]
+        inactive_before: chrono::DateTime<chrono::Utc>,
+        /// Pause the connections failing for more than this many days
+        /// (default: `application.cron.pause_integration_connections.failing_threshold_days`)
+        #[arg(short, long)]
+        failing_threshold_days: Option<i64>,
         #[arg(short, long)]
         dry_run: bool,
     },
@@ -626,6 +654,27 @@ impl Cli {
                     integration_connection_service,
                     slack_service,
                     *user_id,
+                    *dry_run,
+                )
+                .await
+                .map(|_| ()),
+            },
+
+            Commands::IntegrationConnection { command } => match command {
+                IntegrationConnectionCommands::PauseWithoutEmail {
+                    inactive_before,
+                    failing_threshold_days,
+                    dry_run,
+                } => integration_connection::pause_without_email(
+                    integration_connection_service,
+                    *inactive_before,
+                    failing_threshold_days.unwrap_or(
+                        settings
+                            .application
+                            .cron
+                            .pause_integration_connections
+                            .failing_threshold_days,
+                    ),
                     *dry_run,
                 )
                 .await

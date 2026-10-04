@@ -190,7 +190,9 @@ fn default_refresh_oauth_tokens_lock_ttl_seconds() -> u64 {
 /// `failing_threshold_days`. Inactive users are warned by email
 /// `inactivity_warning_days` beforehand, and users are emailed once their
 /// connections are paused: one email per user, listing all their connections.
-/// Disabled by default: it revokes grants at the providers.
+/// Disabled by default: it revokes grants at the providers. On an instance
+/// with existing users, run `integration-connection pause-without-email`
+/// before enabling it, so that their connections are paused without email.
 #[derive(Deserialize, Clone, Debug)]
 pub struct PauseIntegrationConnectionsCronSettings {
     #[serde(default)]

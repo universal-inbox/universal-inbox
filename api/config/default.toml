@@ -61,6 +61,11 @@ lock_ttl_seconds = 60
 # `inactivity_warning_days` before their connections are paused (0 disables
 # the warning), and users are emailed once their connections are paused, one
 # email per user listing all their connections.
+# Before enabling it on an instance with existing users, run
+# `integration-connection pause-without-email --inactive-before <date>` once:
+# it pauses, without any email, the connections of users inactive since then
+# and the already long failing ones, so the cron only emails about the users
+# who become inactive, and the connections that start failing, afterwards.
 [application.cron.pause_integration_connections]
 is_enabled = false
 # Cron expression with a seconds field
