@@ -187,8 +187,9 @@ pub async fn run_server(
     // Setup HTTP session + JWT auth
     let session_secret_key = Key::from(settings.application.http_session.secret_key.as_bytes());
     let max_age_days = settings.application.http_session.max_age_days;
-    // Port-scoped cookie name so parallel localhost instances don't share a
-    // session cookie. See [`session_cookie_name`].
+    // `__Host-` cookie name in deployed envs, port-scoped on localhost so
+    // parallel instances don't share a session cookie. See
+    // [`session_cookie_name`].
     let session_cookie_name =
         session_cookie_name(&settings.application.front_base_url, listen_address.port());
     let jwt_signing_keys =
@@ -432,6 +433,12 @@ pub async fn run_server(
                     PersistentSession::default().session_ttl(Duration::days(max_age_days)),
                 )
                 .cookie_name(session_cookie_name)
+                // Set explicitly rather than relying on actix-session defaults:
+                // the `__Host-` prefix requires Secure, Path=/ and no Domain.
+                .cookie_secure(true)
+                .cookie_http_only(true)
+                .cookie_path("/".to_string())
+                .cookie_domain(None)
                 .cookie_same_site(SameSite::Lax)
                 .cookie_content_security(CookieContentSecurity::Signed)
                 .build(),
@@ -1370,10 +1377,13 @@ fn build_csp_header(settings: &Settings, script_hashes: &[String]) -> String {
 /// folded into the cookie *name* (the one cookie attribute that does
 /// distinguish them) for loopback front-ends.
 ///
-/// On real hosts the stable `id` name is kept, so several replicas behind a
-/// load balancer continue to share sessions (they each listen on the same
-/// container port, but more importantly we never want per-replica cookie
-/// fragmentation in production).
+/// On real hosts the stable `__Host-id` name is used, so several replicas
+/// behind a load balancer continue to share sessions (we never want
+/// per-replica cookie fragmentation in production). The `__Host-` prefix makes
+/// browsers accept the cookie only when it is Secure, has Path=/ and no Domain,
+/// so a sibling subdomain or a plain-http page cannot set or overwrite it.
+/// Loopback front-ends are often served over plain http, so they keep the
+/// unprefixed name.
 pub fn session_cookie_name(front_base_url: &url::Url, port: u16) -> String {
     let is_loopback = matches!(
         front_base_url.host_str(),
@@ -1382,7 +1392,7 @@ pub fn session_cookie_name(front_base_url: &url::Url, port: u16) -> String {
     if is_loopback {
         format!("id-{port}")
     } else {
-        "id".to_string()
+        "__Host-id".to_string()
     }
 }
 
@@ -1405,7 +1415,24 @@ fn reset_cookies<B>(
 
 #[cfg(test)]
 mod tests {
-    use super::inline_script_hashes;
+    use rstest::rstest;
+
+    use super::{inline_script_hashes, session_cookie_name};
+
+    #[test]
+    fn session_cookie_name_uses_host_prefix_on_real_hosts() {
+        let url = "https://app.example.com/".parse().unwrap();
+        assert_eq!(session_cookie_name(&url, 8000), "__Host-id");
+    }
+
+    #[rstest]
+    #[case("http://localhost:8080/")]
+    #[case("http://127.0.0.1:8080/")]
+    #[case("http://[::1]:8080/")]
+    fn session_cookie_name_is_port_scoped_on_loopback(#[case] front_base_url: &str) {
+        let url = front_base_url.parse().unwrap();
+        assert_eq!(session_cookie_name(&url, 8000), "id-8000");
+    }
 
     /// base64(sha256(`console.log("test");`)).
     const CONSOLE_LOG_HASH: &str = "uAESwGgY2G0W8BhcAjQ5tDZK88YZcbjq65DW8JTcims=";
