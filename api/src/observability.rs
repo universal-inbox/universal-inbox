@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io;
 use std::str::FromStr;
 use std::sync::OnceLock;
 use std::{future::Future, time::Duration};
@@ -34,7 +35,9 @@ use tonic::metadata::AsciiMetadataKey;
 use tracing::{Instrument, Span, Subscriber, subscriber::set_global_default};
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder};
 use tracing_log::LogTracer;
-use tracing_subscriber::{EnvFilter, Layer, Registry, layer::SubscriberExt, registry::LookupSpan};
+use tracing_subscriber::{
+    EnvFilter, Layer, Registry, fmt::MakeWriter, layer::SubscriberExt, registry::LookupSpan,
+};
 
 use crate::{
     configuration::{LogFormat, OtlpExporterProtocol, TracingSettings},
@@ -194,16 +197,64 @@ fn build_fmt_layer<S>(log_format: LogFormat) -> Box<dyn Layer<S> + Send + Sync>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
+    build_fmt_layer_with_writer(log_format, RedactingMakeWriter(io::stdout))
+}
+
+fn build_fmt_layer_with_writer<S, W>(
+    log_format: LogFormat,
+    make_writer: W,
+) -> Box<dyn Layer<S> + Send + Sync>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    W: for<'w> MakeWriter<'w> + Send + Sync + 'static,
+{
     match log_format {
-        LogFormat::Pretty => tracing_subscriber::fmt::layer().pretty().boxed(),
+        LogFormat::Pretty => tracing_subscriber::fmt::layer()
+            .pretty()
+            .with_writer(make_writer)
+            .boxed(),
         // `flatten_event` puts `message` and `level` at the top level, where
         // log collectors such as Datadog read them without a custom pipeline.
         LogFormat::Json => tracing_subscriber::fmt::layer()
             .json()
+            .with_writer(make_writer)
             .with_ansi(false)
             .flatten_event(true)
             .with_current_span(true)
             .boxed(),
+    }
+}
+
+/// A [`MakeWriter`] whose writers strip email addresses and JWTs (see
+/// [`redaction::redact`]) from log lines, the stdout counterpart of the OTLP
+/// redacting processors. A safety net only: instrumented code must not log
+/// personal data or secrets in the first place.
+#[derive(Clone, Copy)]
+struct RedactingMakeWriter<M>(M);
+
+impl<'a, M: MakeWriter<'a>> MakeWriter<'a> for RedactingMakeWriter<M> {
+    type Writer = RedactingWriter<M::Writer>;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        RedactingWriter(self.0.make_writer())
+    }
+}
+
+/// The fmt layer formats a whole event and hands it over in a single `write`
+/// call, so a pattern is never split across two buffers.
+struct RedactingWriter<W>(W);
+
+impl<W: io::Write> io::Write for RedactingWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match std::str::from_utf8(buf) {
+            Ok(text) => self.0.write_all(redaction::redact(text).as_bytes())?,
+            Err(_) => self.0.write_all(buf)?,
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
     }
 }
 
@@ -294,7 +345,7 @@ const ONE_TIME_TOKEN_PATH_SEGMENTS: &[&str] = &["email-verification", "password-
 
 /// `path` with every one-time token segment (see
 /// [`ONE_TIME_TOKEN_PATH_SEGMENTS`]) replaced by `REDACTED`.
-fn redact_path(path: &str) -> String {
+pub fn redact_path(path: &str) -> String {
     let mut segments: Vec<&str> = path.split('/').collect();
     for index in 2..segments.len().saturating_sub(1) {
         if segments[index - 2] == "users"
@@ -760,8 +811,55 @@ mod tests {
 
 #[cfg(test)]
 mod redaction_tests {
+    use std::sync::{Arc, Mutex};
+
     use super::*;
     use rstest::*;
+
+    #[derive(Clone, Default)]
+    struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+    impl io::Write for SharedBuffer {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for SharedBuffer {
+        type Writer = SharedBuffer;
+
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    #[rstest]
+    #[case::pretty(LogFormat::Pretty)]
+    #[case::json(LogFormat::Json)]
+    fn test_stdout_log_lines_are_redacted(#[case] log_format: LogFormat) {
+        let buffer = SharedBuffer::default();
+        let subscriber = Registry::default().with(build_fmt_layer_with_writer(
+            log_format,
+            RedactingMakeWriter(buffer.clone()),
+        ));
+
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(
+                "user john.doe@example.com sent eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl"
+            );
+        });
+
+        let output = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+        assert!(output.contains(redaction::REDACTED_EMAIL), "{output}");
+        assert!(output.contains(redaction::REDACTED_JWT), "{output}");
+        assert!(!output.contains("john.doe@example.com"), "{output}");
+        assert!(!output.contains("eyJhbGciOiJIUzI1NiJ9"), "{output}");
+    }
 
     #[rstest]
     #[case::no_query("/api/notifications", "/api/notifications")]

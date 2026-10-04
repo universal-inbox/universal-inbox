@@ -239,7 +239,6 @@ pub fn App() -> Element {
         .map(|(_, v)| v.to_string());
     let local_storage = get_local_storage().unwrap();
     if let Some(auth_code) = auth_code {
-        debug!("auth: Storing auth-oidc-callback-code {auth_code:?}");
         local_storage
             .set_item("auth-oidc-callback-code", &auth_code)
             .map_err(|err| JsError::try_from(err).unwrap())

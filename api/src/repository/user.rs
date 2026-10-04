@@ -658,7 +658,7 @@ impl UserRepository for Repository {
             user_id.0,
             user_auth.to_string() as _,
             auth_user_id.map(|id| id.to_string()),
-            auth_id_token.map(|token| token.0),
+            auth_id_token.map(|token| token.expose_secret().to_string()),
             password_hash.map(|hash| hash.expose_secret().0.to_string()),
             username.map(|username| username.to_string()),
             passkey.map(|passkey| Json(passkey.clone())) as Option<Json<Passkey>>,
@@ -750,7 +750,7 @@ impl UserRepository for Repository {
         let mut query_builder = QueryBuilder::new("UPDATE user_auth SET");
         query_builder
             .push(" auth_id_token = ")
-            .push_bind(auth_id_token.as_str().to_string())
+            .push_bind(auth_id_token.expose_secret().to_string())
             .push(r#" FROM "user" "#)
             .push(" WHERE ");
         let mut separated = query_builder.separated(" AND ");
@@ -775,7 +775,7 @@ impl UserRepository for Repository {
                   (SELECT"#,
             )
             .push(" auth_id_token != ")
-            .push_bind(auth_id_token.as_str().to_string())
+            .push_bind(auth_id_token.expose_secret().to_string())
             .push(" FROM user_auth WHERE auth_user_id = ")
             .push_bind(auth_user_id.to_string())
             .push(r#") as "is_updated""#);
@@ -1804,7 +1804,7 @@ impl TryFrom<&UserAuthRow> for UserAuth {
                 auth_user_id: AuthUserId(row.auth_user_id.clone().context(
                     "Expected to find OIDC user ID in storage with OIDCAuthorizationCodePKCE authentication",
                 )?),
-                auth_id_token: AuthIdToken(row.auth_id_token.clone().context(
+                auth_id_token: AuthIdToken::from(row.auth_id_token.clone().context(
                     "Expected to find OIDC ID token in storage with OIDCAuthorizationCodePKCE authentication",
                 )?),
             })),
@@ -1812,7 +1812,7 @@ impl TryFrom<&UserAuthRow> for UserAuth {
                 auth_user_id: AuthUserId(row.auth_user_id.clone().context(
                     "Expected to find OIDC user ID in storage with OIDCGoogleAuthorizationCode authentication",
                 )?),
-                auth_id_token: AuthIdToken(row.auth_id_token.clone().context(
+                auth_id_token: AuthIdToken::from(row.auth_id_token.clone().context(
                     "Expected to find OIDC ID token in storage with OIDCGoogleAuthorizationCode authentication",
                 )?),
             })),
@@ -1889,7 +1889,7 @@ impl TryFrom<&UserAndUserAuthRow> for UserAuth {
                 auth_user_id: AuthUserId(row.user_auth_row.auth_user_id.clone().context(
                     "Expected to find OIDC user ID in storage with OIDCAuthorizationCodePKCE authentication",
                 )?),
-                auth_id_token: AuthIdToken(row.user_auth_row.auth_id_token.clone().context(
+                auth_id_token: AuthIdToken::from(row.user_auth_row.auth_id_token.clone().context(
                     "Expected to find OIDC ID token in storage with OIDCAuthorizationCodePKCE authentication",
                 )?),
             })),
@@ -1897,7 +1897,7 @@ impl TryFrom<&UserAndUserAuthRow> for UserAuth {
                 auth_user_id: AuthUserId(row.user_auth_row.auth_user_id.clone().context(
                     "Expected to find OIDC user ID in storage with OIDCGoogleAuthorizationCode authentication",
                 )?),
-                auth_id_token: AuthIdToken(row.user_auth_row.auth_id_token.clone().context(
+                auth_id_token: AuthIdToken::from(row.user_auth_row.auth_id_token.clone().context(
                     "Expected to find OIDC ID token in storage with OIDCGoogleAuthorizationCode authentication",
                 )?),
             })),
