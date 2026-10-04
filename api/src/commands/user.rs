@@ -15,7 +15,7 @@ use tabled::{
 use tokio::sync::RwLock;
 use universal_inbox::pii::Pii;
 
-use universal_inbox::user::{Password, UserAuthKind, UserId};
+use universal_inbox::user::{NewPassword, Password, UserAuthKind, UserId};
 
 use crate::observability::RecordSpanError;
 use crate::observability::attr;
@@ -335,7 +335,10 @@ pub async fn reset_password(
                 .to_string()
         };
 
-        let password: Password = password_input.parse().context("Invalid password")?;
+        let password: Password = password_input
+            .parse::<NewPassword>()
+            .context("Invalid password")?
+            .into();
         let password = SecretBox::new(Box::new(password));
 
         let service = user_service.clone();

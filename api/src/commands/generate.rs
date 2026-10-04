@@ -92,7 +92,7 @@ use crate::{
     },
 };
 
-pub const DEFAULT_PASSWORD: &str = "test123456";
+pub const DEFAULT_PASSWORD: &str = "test-password-123456";
 const SEED_FIXTURES_SUBDIR: &str = "fixtures/seed";
 
 fn seed_fixture_path(fixture_file_name: &str) -> Result<String, UniversalInboxError> {

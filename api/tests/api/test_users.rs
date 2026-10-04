@@ -25,10 +25,10 @@ use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app, fetch_auth_tokens_for_user, get_user_auth},
     settings, tested_app_with_local_auth,
     user::{
-        get_current_user, get_current_user_response, get_password_reset_token,
-        get_pending_email_change_token, get_user_email_validation_token, login_user_response,
-        logout_user_response, patch_user_response, register_user, register_user_response,
-        reset_password_response,
+        create_user_with_legacy_password, get_current_user, get_current_user_response,
+        get_password_reset_token, get_pending_email_change_token, get_user_email_validation_token,
+        login_user_response, logout_user_response, patch_user_response, register_user,
+        register_user_response, reset_password_response,
     },
 };
 
@@ -183,6 +183,10 @@ mod password_policy {
     #[rstest]
     #[case::empty("")]
     #[case::too_short("abc")]
+    #[case::one_character_short("Kp9!vQ2#mX4")]
+    #[case::too_long(&"Kp9!vQ2#mX4z".repeat(11)[..129])]
+    #[case::common("1qaz2wsx3edc")]
+    #[case::common_with_other_case("1QAZ2wsx3EDC")]
     #[tokio::test]
     async fn test_register_user_rejects_weak_password(
         #[future] tested_app_with_local_auth: TestedApp,
@@ -200,9 +204,76 @@ mod password_policy {
     }
 
     #[rstest]
+    #[case::min_length("Kp9!vQ2#mX4z")]
+    #[case::max_length(&"Kp9!vQ2#mX4z".repeat(11)[..128])]
+    #[tokio::test]
+    async fn test_register_user_accepts_password_within_bounds(
+        #[future] tested_app_with_local_auth: TestedApp,
+        #[case] password: &str,
+    ) {
+        let app = tested_app_with_local_auth.await;
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let response =
+            register_user_response(&client, &app, "bounds@doe.name".parse().unwrap(), password)
+                .await;
+        assert_eq!(response.status(), http::StatusCode::OK);
+
+        let response = login_user_response(
+            &reqwest::Client::new(),
+            &app,
+            "bounds@doe.name".parse().unwrap(),
+            password,
+        )
+        .await;
+        assert_eq!(response.status(), http::StatusCode::OK);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_login_with_legacy_short_password(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+        let email: Pii<EmailAddress> = "legacy@doe.name".parse().unwrap();
+        create_user_with_legacy_password(&app, email.clone(), "short1").await;
+
+        let response = login_user_response(&reqwest::Client::new(), &app, email, "short1").await;
+        assert_eq!(response.status(), http::StatusCode::OK);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_login_with_too_long_password(#[future] tested_app_with_local_auth: TestedApp) {
+        let app = tested_app_with_local_auth.await;
+        let email: Pii<EmailAddress> = "john@doe.name".parse().unwrap();
+        register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
+
+        let response = login_user_response(
+            &reqwest::Client::new(),
+            &app,
+            email,
+            &"Very-harD-pasSword-5".repeat(7),
+        )
+        .await;
+        assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+        let body: HashMap<String, String> = response.json().await.unwrap();
+        assert_eq!(
+            body.get("message").unwrap(),
+            "Unauthorized access: Invalid email address or password"
+        );
+    }
+
+    #[rstest]
+    #[case::empty("")]
+    #[case::common("1qaz2wsx3edc")]
     #[tokio::test]
     async fn test_reset_password_rejects_weak_password(
         #[future] tested_app_with_local_auth: TestedApp,
+        #[case] new_password: &str,
     ) {
         let app = tested_app_with_local_auth.await;
         let email: Pii<EmailAddress> = "john@doe.name".parse().unwrap();
@@ -218,9 +289,14 @@ mod password_policy {
         assert_eq!(response.status(), http::StatusCode::OK);
         let password_reset_token = get_password_reset_token(&app, user.id).await.unwrap();
 
-        let response =
-            reset_password_response(&anonymous_client, &app, user.id, password_reset_token, "")
-                .await;
+        let response = reset_password_response(
+            &anonymous_client,
+            &app,
+            user.id,
+            password_reset_token,
+            new_password,
+        )
+        .await;
         assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
     }
 }

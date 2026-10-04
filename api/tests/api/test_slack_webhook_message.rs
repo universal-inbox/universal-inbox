@@ -184,8 +184,12 @@ mod webhook {
         // - first (read) message from user U01
         // - second (unread) message from user U02 (this message is also the one that is received in the event)
         slack_oauth_credential.provider_user_id = Some("U02".to_string());
-        let (client, user) =
-            create_user_and_login(&app, "john@doe.net".parse().unwrap(), "password").await;
+        let (client, user) = create_user_and_login(
+            &app,
+            "john@doe.net".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
 
         let slack_integration_connection = create_and_mock_integration_connection(
             &app,
@@ -448,8 +452,12 @@ mod job {
         slack_oauth_credential.provider_user_id = Some("U02".to_string());
         slack_oauth_credential.access_token =
             AccessToken("slack_other_user_access_token".to_string());
-        let (client_u02, user_u02) =
-            create_user_and_login(&app, "john@doe.net".parse().unwrap(), "password").await;
+        let (client_u02, user_u02) = create_user_and_login(
+            &app,
+            "john@doe.net".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
         create_and_mock_integration_connection(
             &app,
             user_u02.id,
@@ -468,8 +476,12 @@ mod job {
         slack_oauth_credential.provider_user_id = Some("U01".to_string());
         slack_oauth_credential.access_token =
             AccessToken("slack_test_user_access_token".to_string());
-        let (client_u01, user_u01) =
-            create_user_and_login(&app, "jane@doe.net".parse().unwrap(), "password").await;
+        let (client_u01, user_u01) = create_user_and_login(
+            &app,
+            "jane@doe.net".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
         create_and_mock_integration_connection(
             &app,
             user_u01.id,
@@ -1572,8 +1584,12 @@ mod job {
         slack_oauth_credential.provider_user_id = Some("U02".to_string());
         slack_oauth_credential.access_token =
             AccessToken("slack_other_user_access_token".to_string());
-        let (client_u02, user_u02) =
-            create_user_and_login(&app, "john@doe.net".parse().unwrap(), "password").await;
+        let (client_u02, user_u02) = create_user_and_login(
+            &app,
+            "john@doe.net".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
 
         let slack_integration_connection_u02 = create_and_mock_integration_connection(
             &app,
@@ -1646,8 +1662,12 @@ mod job {
         .await;
 
         // Creating user U01 and its Slack connection
-        let (client_u01, user_u01) =
-            create_user_and_login(&app, "jane@doe.net".parse().unwrap(), "password").await;
+        let (client_u01, user_u01) = create_user_and_login(
+            &app,
+            "jane@doe.net".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
         slack_oauth_credential.provider_user_id = Some("U01".to_string());
         slack_oauth_credential.access_token =
             AccessToken("slack_test_user_access_token".to_string());

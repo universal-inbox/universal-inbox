@@ -63,6 +63,7 @@
 - Redact one-time tokens, email addresses and JWTs from stdout logs, stop logging the OIDC state, nonce and authorization URL, and drop the OIDC callback code from browser storage once used
 - Send the password-reset token in the request body (`POST /users/{user_id}/password-reset`) instead of the URL path
 - Wrap email addresses in a `Pii<T>` type whose `Debug` output hides the value, so they cannot reach logs by accident
+- New passwords must be 12 to 128 characters and must not be a common password, checked server-side; password forms show a strength meter
 
 ### Fixed
 

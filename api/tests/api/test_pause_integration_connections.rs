@@ -490,12 +490,12 @@ async fn test_authenticated_requests_record_user_activity_once_a_day(
 ) {
     let app = tested_app_with_local_auth.await;
     let email: Pii<EmailAddress> = "inactive@example.com".parse().unwrap();
-    let user = create_user(&app, email.clone(), "password").await;
+    let user = create_user(&app, email.clone(), "Very-harD-pasSword-5").await;
     let client = reqwest::Client::builder()
         .cookie_store(true)
         .build()
         .unwrap();
-    let login_response = login_user_response(&client, &app, email, "password").await;
+    let login_response = login_user_response(&client, &app, email, "Very-harD-pasSword-5").await;
     assert_eq!(login_response.status(), http::StatusCode::OK);
 
     let long_ago = Utc::now() - TimeDelta::days(30);
