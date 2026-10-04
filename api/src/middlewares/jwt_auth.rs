@@ -10,11 +10,10 @@
 //!
 //! Tokens read from the `Authorization` header are additionally passed to an optional
 //! [`BearerTokenChecker`], which rejects stored API tokens that were revoked or have
-//! expired. Session JWTs are not stored: logout clears the session cookie
-//! (`session.purge()`), and OAuth2 access is revoked by deleting refresh tokens.
+//! expired. OAuth2 access is revoked by deleting refresh tokens.
 //! Tokens read from the session cookie are passed to an optional
-//! [`SessionTokenChecker`], which rejects sessions issued before the user's sessions
-//! were revoked (password change or reset).
+//! [`SessionTokenChecker`], which rejects sessions that were logged out, or issued
+//! before the user's sessions were revoked (password change or reset).
 
 use std::{
     future::{Ready, ready},
@@ -48,11 +47,13 @@ pub trait BearerTokenChecker {
 }
 
 /// Decides whether a validly signed session JWT (read from the session cookie) is
-/// still accepted, given its subject and issue time.
+/// still accepted, given its subject, token ID and issue time. An error rejects the
+/// request: session checks fail closed.
 pub trait SessionTokenChecker {
     fn is_active(
         &self,
         subject: String,
+        token_id: String,
         issued_at: i64,
     ) -> LocalBoxFuture<'static, Result<bool, UniversalInboxError>>;
 }
@@ -60,6 +61,8 @@ pub trait SessionTokenChecker {
 /// The claims a [`SessionTokenChecker`] needs from a decoded JWT.
 pub trait SessionClaims {
     fn subject(&self) -> &str;
+    /// Unique ID of the token (`jti` claim).
+    fn token_id(&self) -> &str;
     /// Issue time, in seconds since the Unix epoch.
     fn issued_at(&self) -> i64;
 }
@@ -67,6 +70,10 @@ pub trait SessionClaims {
 impl SessionClaims for Claims {
     fn subject(&self) -> &str {
         &self.sub
+    }
+
+    fn token_id(&self) -> &str {
+        &self.jti
     }
 
     fn issued_at(&self) -> i64 {
@@ -339,6 +346,7 @@ where
                             checker
                                 .is_active(
                                     decoded.claims.subject().to_string(),
+                                    decoded.claims.token_id().to_string(),
                                     decoded.claims.issued_at(),
                                 )
                                 .await
@@ -431,6 +439,10 @@ mod tests {
     impl SessionClaims for TestClaims {
         fn subject(&self) -> &str {
             &self.sub
+        }
+
+        fn token_id(&self) -> &str {
+            "test-token-id"
         }
 
         fn issued_at(&self) -> i64 {
@@ -687,6 +699,7 @@ mod tests {
         fn is_active(
             &self,
             subject: String,
+            _token_id: String,
             _issued_at: i64,
         ) -> LocalBoxFuture<'static, Result<bool, UniversalInboxError>> {
             let is_active = subject != self.revoked_subject;
@@ -722,6 +735,45 @@ mod tests {
         }
         let resp = app.call(req.to_request()).await.unwrap();
         assert_eq!(actix_http::StatusCode::UNAUTHORIZED, resp.status());
+    }
+
+    /// Fails like an unreachable session store.
+    struct FailingSessionChecker;
+
+    impl SessionTokenChecker for FailingSessionChecker {
+        fn is_active(
+            &self,
+            _subject: String,
+            _token_id: String,
+            _issued_at: i64,
+        ) -> LocalBoxFuture<'static, Result<bool, UniversalInboxError>> {
+            async move {
+                Err(UniversalInboxError::SessionStoreUnavailable(anyhow!(
+                    "connection refused"
+                )))
+            }
+            .boxed_local()
+        }
+    }
+
+    #[actix_web::test]
+    async fn session_check_failure_rejects_the_session_cookie() {
+        let (enc, dec) = generate_keys();
+        let token = make_token(&enc, "cookie-user", 3600);
+        let settings = AuthenticateMiddlewareSettings {
+            session_token_checker: Some(Arc::new(FailingSessionChecker)),
+            ..settings(dec)
+        };
+        let app = init_app_with_settings(settings, Some(token)).await;
+
+        let login_resp =
+            test::call_service(&app, test::TestRequest::get().uri("/login").to_request()).await;
+        let mut req = test::TestRequest::get().uri("/protected");
+        for cookie in login_resp.response().cookies() {
+            req = req.cookie(cookie);
+        }
+        let resp = app.call(req.to_request()).await.unwrap();
+        assert_eq!(actix_http::StatusCode::SERVICE_UNAVAILABLE, resp.status());
     }
 
     #[actix_web::test]
