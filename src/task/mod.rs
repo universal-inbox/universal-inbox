@@ -14,6 +14,7 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
 use url::Url;
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::{
     HasHtmlUrl,
@@ -386,10 +387,23 @@ macro_attr! {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, JsonSchema)]
+/// Maximum length, in characters, of a task title set by a user.
+pub const TASK_TITLE_MAX_LENGTH: u64 = 1024;
+/// Maximum length, in characters, of a task body set by a user.
+pub const TASK_BODY_MAX_LENGTH: u64 = 65_536;
+/// Maximum length, in characters, of a task project name set by a user.
+pub const TASK_PROJECT_NAME_MAX_LENGTH: u64 = 255;
+
+/// A user's request to create a task. Callers validate it (`Validate`) at the
+/// request boundary (HTTP, MCP).
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, JsonSchema, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct TaskCreation {
+    #[validate(length(min = 1, max = TASK_TITLE_MAX_LENGTH))]
     pub title: String,
+    #[validate(length(max = TASK_BODY_MAX_LENGTH))]
     pub body: Option<String>,
+    #[validate(length(max = TASK_PROJECT_NAME_MAX_LENGTH))]
     pub project_name: Option<String>,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
@@ -606,6 +620,92 @@ pub trait TaskSource: IntegrationProviderSource {
 
 #[cfg(test)]
 mod tests {
+
+    mod request_validation {
+        use super::super::{service::TaskPatch, *};
+        use rstest::*;
+
+        fn task_creation(title: &str) -> TaskCreation {
+            TaskCreation {
+                title: title.to_string(),
+                body: None,
+                project_name: None,
+                due_at: None,
+                priority: TaskPriority::P4,
+                task_provider_kind: None,
+                time_config: None,
+            }
+        }
+
+        fn chars(count: u64) -> String {
+            "é".repeat(count as usize)
+        }
+
+        #[rstest]
+        #[case::title_at_limit(task_creation(&chars(TASK_TITLE_MAX_LENGTH)), true)]
+        #[case::empty_title(task_creation(""), false)]
+        #[case::title_too_long(task_creation(&chars(TASK_TITLE_MAX_LENGTH + 1)), false)]
+        #[case::body_at_limit(
+            TaskCreation { body: Some(chars(TASK_BODY_MAX_LENGTH)), ..task_creation("t") },
+            true
+        )]
+        #[case::body_too_long(
+            TaskCreation { body: Some(chars(TASK_BODY_MAX_LENGTH + 1)), ..task_creation("t") },
+            false
+        )]
+        #[case::project_name_too_long(
+            TaskCreation {
+                project_name: Some(chars(TASK_PROJECT_NAME_MAX_LENGTH + 1)),
+                ..task_creation("t")
+            },
+            false
+        )]
+        fn test_validate_task_creation(#[case] creation: TaskCreation, #[case] is_valid: bool) {
+            assert_eq!(creation.validate().is_ok(), is_valid);
+        }
+
+        #[rstest]
+        #[case::empty_patch(TaskPatch::default(), true)]
+        #[case::title_at_limit(
+            TaskPatch { title: Some(chars(TASK_TITLE_MAX_LENGTH)), ..Default::default() },
+            true
+        )]
+        #[case::empty_title(TaskPatch { title: Some(String::new()), ..Default::default() }, false)]
+        #[case::title_too_long(
+            TaskPatch { title: Some(chars(TASK_TITLE_MAX_LENGTH + 1)), ..Default::default() },
+            false
+        )]
+        #[case::body_too_long(
+            TaskPatch { body: Some(chars(TASK_BODY_MAX_LENGTH + 1)), ..Default::default() },
+            false
+        )]
+        #[case::project_name_too_long(
+            TaskPatch {
+                project_name: Some(chars(TASK_PROJECT_NAME_MAX_LENGTH + 1)),
+                ..Default::default()
+            },
+            false
+        )]
+        fn test_validate_task_patch(#[case] patch: TaskPatch, #[case] is_valid: bool) {
+            assert_eq!(patch.validate().is_ok(), is_valid);
+        }
+
+        #[rstest]
+        fn test_task_requests_reject_unknown_fields() {
+            assert!(
+                serde_json::from_str::<TaskPatch>(r#"{"title": "t", "user_id": "x"}"#).is_err()
+            );
+            assert!(
+                serde_json::from_str::<TaskCreation>(
+                    r#"{"title": "t", "priority": 4, "user_id": "x"}"#
+                )
+                .is_err()
+            );
+            assert!(
+                serde_json::from_str::<TaskCreation>(r#"{"title": "t", "priority": 4}"#).is_ok()
+            );
+        }
+    }
 
     mod due_date_parsing {
         use super::super::*;

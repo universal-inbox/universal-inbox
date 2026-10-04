@@ -508,6 +508,65 @@ mod patch_task {
     }
 }
 
+mod patch_task_validation {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use universal_inbox::task::{
+        TASK_BODY_MAX_LENGTH, TASK_PROJECT_NAME_MAX_LENGTH, TASK_TITLE_MAX_LENGTH,
+    };
+
+    // Validation runs before the task lookup: an unknown task id is enough.
+    #[rstest]
+    #[case::empty_title(TaskPatch { title: Some(String::new()), ..Default::default() })]
+    #[case::title_too_long(TaskPatch {
+        title: Some("a".repeat(TASK_TITLE_MAX_LENGTH as usize + 1)),
+        ..Default::default()
+    })]
+    #[case::body_too_long(TaskPatch {
+        body: Some("a".repeat(TASK_BODY_MAX_LENGTH as usize + 1)),
+        ..Default::default()
+    })]
+    #[case::project_name_too_long(TaskPatch {
+        project_name: Some("a".repeat(TASK_PROJECT_NAME_MAX_LENGTH as usize + 1)),
+        ..Default::default()
+    })]
+    #[tokio::test]
+    async fn test_patch_task_rejects_invalid_patch(
+        #[future] authenticated_app: AuthenticatedApp,
+        #[case] patch: TaskPatch,
+    ) {
+        let app = authenticated_app.await;
+
+        let response = patch_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            Uuid::new_v4(),
+            &patch,
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_task_rejects_unknown_field(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+
+        let response = patch_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            Uuid::new_v4(),
+            &json!({ "status": "Done", "user_id": Uuid::new_v4() }),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+}
+
 mod search_tasks {
     use crate::helpers::task::search_tasks;
 

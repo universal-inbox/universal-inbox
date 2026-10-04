@@ -16,7 +16,7 @@ use crate::{
         threaded_message::ThreadedMessage,
         ui::{Tag, TagVariant},
     },
-    utils::format_elapsed_time,
+    utils::{format_elapsed_time, sanitize_html},
 };
 
 #[component]
@@ -207,12 +207,7 @@ fn DriveCommentRow(
     dimmed: bool,
 ) -> Element {
     let avatar_url: Option<Url> = avatar_link.and_then(|link| link.parse::<Url>().ok());
-    let cleaned_html_content = html_content.as_ref().map(|html| {
-        ammonia::Builder::default()
-            .set_tag_attribute_value("a", "target", "_blank")
-            .clean(html)
-            .to_string()
-    });
+    let cleaned_html_content = html_content.as_ref().map(|html| sanitize_html(html));
     let body_text = content.clone();
 
     rsx! {

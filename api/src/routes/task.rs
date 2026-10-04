@@ -14,6 +14,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::RwLock;
 use tracing::warn;
+use validator::Validate;
 
 use universal_inbox::{
     Page,
@@ -256,6 +257,9 @@ pub async fn patch_task(
         .context("Wrong user ID format")?;
     let task_id = path.into_inner();
     let task_patch = patch.into_inner();
+    task_patch
+        .validate()
+        .map_err(UniversalInboxError::InvalidParameters)?;
     let service = task_service.read().await;
     let mut transaction = service
         .begin()

@@ -533,6 +533,35 @@ mod protocol {
         .await;
         let body: Value = mcp_json(invalid_arguments).await;
         assert_eq!(body["error"]["code"], -32602);
+
+        // Arguments that deserialize but break a length limit
+        let client3 = mcp_client();
+        let (session_id, _) = mcp_initialize(&client3, &app.app, &token).await;
+        let too_long_title = mcp_call(
+            &client3,
+            &app.app,
+            &token,
+            json!({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "update_task",
+                    "arguments": {
+                        "task_id": Uuid::new_v4(),
+                        "patch": {
+                            "title": "a".repeat(
+                                universal_inbox::task::TASK_TITLE_MAX_LENGTH as usize + 1
+                            )
+                        }
+                    }
+                }
+            }),
+            session_id.as_deref(),
+        )
+        .await;
+        let body: Value = mcp_json(too_long_title).await;
+        assert_eq!(body["error"]["code"], -32602);
     }
 
     /// Every way a `mode: list` batch can be malformed is a statement about the

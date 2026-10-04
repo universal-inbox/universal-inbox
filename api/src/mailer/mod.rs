@@ -3,9 +3,10 @@ use std::fmt::Debug;
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use chrono::NaiveDate;
+use email_address::EmailAddress;
 use enum_display::EnumDisplay;
 use lettre::{
-    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
+    Address, AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
     message::{Mailbox, MultiPart},
     transport::smtp::authentication::Credentials,
 };
@@ -313,23 +314,7 @@ impl SmtpMailer {
         let email_html_body = mailgen
             .render_html(&email_body)
             .context("Failed to render email as HTML")?;
-        let to = if let Some(first_name) = user.first_name {
-            if let Some(last_name) = user.last_name {
-                format!("{} {} <{}>", first_name, last_name, email)
-                    .parse()
-                    .context("Failed to parse user email `to` header")?
-            } else {
-                email
-                    .to_string()
-                    .parse()
-                    .context("Failed to parse user email `to` header")?
-            }
-        } else {
-            email
-                .to_string()
-                .parse()
-                .context("Failed to parse user email `to` header")?
-        };
+        let to = build_to_mailbox(user.first_name, user.last_name, &email)?;
 
         Ok(Message::builder()
             .from(self.from_header.clone())
@@ -383,11 +368,61 @@ impl Mailer for SmtpMailer {
     }
 }
 
+/// Builds the `To` mailbox from the user's name and address. The display name
+/// goes through lettre's `Mailbox`, which quotes and encodes it, so it is never
+/// parsed as part of the address.
+fn build_to_mailbox(
+    first_name: Option<String>,
+    last_name: Option<String>,
+    email: &EmailAddress,
+) -> Result<Mailbox, UniversalInboxError> {
+    let address: Address = email
+        .as_str()
+        .parse()
+        .context("Failed to parse user email address")?;
+    let name = [first_name, last_name]
+        .into_iter()
+        .flatten()
+        .map(|part| part.trim().to_string())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    Ok(Mailbox::new((!name.is_empty()).then_some(name), address))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
     use rstest::*;
+
+    #[rstest]
+    #[case::full_name(Some("John"), Some("Doe"), "John Doe <john@example.com>")]
+    #[case::first_name_only(Some("John"), None, "John <john@example.com>")]
+    #[case::no_name(None, None, "john@example.com")]
+    #[case::blank_name(Some(" "), None, "john@example.com")]
+    #[case::special_chars(
+        Some("Doe, John"),
+        Some("<evil@example.com>"),
+        "\"Doe, John <evil@example.com>\" <john@example.com>"
+    )]
+    fn test_build_to_mailbox(
+        #[case] first_name: Option<&str>,
+        #[case] last_name: Option<&str>,
+        #[case] expected: &str,
+    ) {
+        let email: EmailAddress = "john@example.com".parse().unwrap();
+        let mailbox = build_to_mailbox(
+            first_name.map(str::to_string),
+            last_name.map(str::to_string),
+            &email,
+        )
+        .unwrap();
+
+        assert_eq!(mailbox.email.to_string(), "john@example.com");
+        assert_eq!(mailbox.to_string(), expected);
+    }
 
     fn render(template: &EmailTemplate) -> String {
         let mailgen = Mailgen::new(

@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 use tracing::warn;
+use validator::Validate;
 
 use universal_inbox::{
     Page, PageToken,
@@ -170,9 +171,10 @@ pub(crate) enum BulkNotificationAction {
     Unsubscribe,
 }
 
-#[derive(Deserialize, Serialize, JsonSchema)]
+#[derive(Deserialize, Serialize, JsonSchema, Validate)]
 pub(crate) struct CreateTaskFromNotificationArgs {
     notification_id: NotificationId,
+    #[validate(nested)]
     task_creation: Option<TaskCreation>,
 }
 
@@ -207,9 +209,10 @@ pub(crate) struct SearchTasksArgs {
     matches: String,
 }
 
-#[derive(Deserialize, Serialize, JsonSchema)]
+#[derive(Deserialize, Serialize, JsonSchema, Validate)]
 pub(crate) struct UpdateTaskArgs {
     task_id: TaskId,
+    #[validate(nested)]
     patch: TaskPatch,
 }
 
@@ -362,7 +365,7 @@ pub async fn execute_tool(
             })
         }
         "create_task_from_notification" => {
-            let args: CreateTaskFromNotificationArgs = parse_args(arguments)?;
+            let args: CreateTaskFromNotificationArgs = parse_validated_args(arguments)?;
             let service = services.notification_service.read().await;
             let mut transaction = service.begin().await.map_err(ToolCallError::execution)?;
             let notification = service
@@ -474,7 +477,7 @@ pub async fn execute_tool(
             serialize_result(SearchTasksResult { tasks })
         }
         "update_task" => {
-            let args: UpdateTaskArgs = parse_args(arguments)?;
+            let args: UpdateTaskArgs = parse_validated_args(arguments)?;
             let service = services.task_service.read().await;
             let mut transaction = service.begin().await.map_err(ToolCallError::execution)?;
             let updated = service
@@ -521,6 +524,19 @@ where
     serde_json::from_value(arguments.unwrap_or_else(|| json!({})))
         .context("Invalid tool arguments")
         .map_err(ToolCallError::invalid_arguments)
+}
+
+/// `parse_args`, then enforce the arguments' `Validate` rules (e.g. length
+/// limits on user-supplied text).
+fn parse_validated_args<T>(arguments: Option<Value>) -> Result<T, ToolCallError>
+where
+    T: for<'de> Deserialize<'de> + Validate,
+{
+    let args: T = parse_args(arguments)?;
+    args.validate()
+        .context("Invalid tool arguments")
+        .map_err(ToolCallError::invalid_arguments)?;
+    Ok(args)
 }
 
 fn notification_patch_from_action(

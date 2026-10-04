@@ -48,6 +48,7 @@
 - Downgrade `zip` from yanked 7.4.0 to 7.2.0 (resolves GH#133)
 - Keep OAuth credentials and OIDC ID tokens out of traces: secret types no longer print their value, and the exporter redacts any JWT left in spans / log bodies
 - Changing or resetting a password signs the user out of their other sessions and sends them a confirmation email
+- Limit the length of user-supplied task, project and profile name fields, reject unknown fields in request bodies, and sanitize the HTML of GitHub, Google Calendar and Google Drive previews
 
 ### Fixed
 

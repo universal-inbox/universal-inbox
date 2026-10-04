@@ -21,6 +21,7 @@ pub struct NotificationPatch {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct InvitationPatch {
     pub response_status: GoogleCalendarEventAttendeeResponseStatus,
 }

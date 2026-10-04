@@ -11,6 +11,7 @@ use serde_json::json;
 use serde_with::{StringWithSeparator, formats::CommaSeparator, serde_as};
 use tokio::sync::RwLock;
 use tracing::warn;
+use validator::Validate;
 
 use universal_inbox::{
     Page, PageToken,
@@ -365,6 +366,11 @@ pub async fn create_task_from_notification(
         .context("Wrong user ID format")?;
     let notification_id = path.into_inner();
     let task_creation = task_creation.map(|tc| tc.into_inner());
+    if let Some(task_creation) = &task_creation {
+        task_creation
+            .validate()
+            .map_err(UniversalInboxError::InvalidParameters)?;
+    }
     let service = notification_service.read().await;
     let mut transaction = service
         .begin()

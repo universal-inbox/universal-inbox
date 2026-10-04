@@ -333,11 +333,49 @@ pub fn format_elapsed_time(updated_at: DateTime<Utc>) -> String {
     }
 }
 
+/// Sanitizes third-party HTML (GitHub, Google Calendar, Google Drive) before it
+/// is rendered with `dangerous_inner_html`: scripts, event handlers and
+/// `javascript:` URLs are removed, links open in a new tab, and read-only
+/// checkboxes are kept for GitHub task lists.
+pub fn sanitize_html(html: &str) -> String {
+    ammonia::Builder::default()
+        .set_tag_attribute_value("a", "target", "_blank")
+        .add_tags(&["input"])
+        .add_tag_attributes("input", &["type", "checked", "disabled"])
+        .clean(html)
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::{Duration, Utc};
     use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    fn test_sanitize_html_removes_scripts() {
+        let sanitized = sanitize_html(
+            r#"<script>alert(1)</script><p onclick="alert(1)">Safe</p><img src="x" onerror="alert(1)"><a href="javascript:alert(1)">link</a>"#,
+        );
+
+        assert!(!sanitized.contains("<script"));
+        assert!(!sanitized.contains("onclick"));
+        assert!(!sanitized.contains("onerror"));
+        assert!(!sanitized.contains("javascript:"));
+        assert!(sanitized.contains("<p>Safe</p>"));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_sanitize_html_keeps_github_task_lists_and_links() {
+        let sanitized = sanitize_html(
+            r#"<ul><li><input type="checkbox" checked="" disabled="" onchange="alert(1)"> done</li></ul><a href="https://github.com">gh</a>"#,
+        );
+
+        assert!(sanitized.contains(r#"<input type="checkbox" checked="" disabled="">"#));
+        assert!(!sanitized.contains("onchange"));
+        assert!(sanitized.contains(r#"href="https://github.com""#));
+        assert!(sanitized.contains(r#"target="_blank""#));
+    }
 
     #[wasm_bindgen_test]
     fn test_format_elapsed_time() {

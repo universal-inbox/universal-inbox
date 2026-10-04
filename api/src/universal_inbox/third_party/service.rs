@@ -248,6 +248,12 @@ impl ThirdPartyItemService {
             .await?;
         let new_third_party_item = match third_party_item_data {
             ThirdPartyItemData::WebPage(web_page) => {
+                web_page
+                    .validate()
+                    .map_err(|err| UniversalInboxError::InvalidInputData {
+                        source: None,
+                        user_error: err.to_string(),
+                    })?;
                 web_page.into_third_party_item(user_id, integration_connection.id)
             }
             _ => {
