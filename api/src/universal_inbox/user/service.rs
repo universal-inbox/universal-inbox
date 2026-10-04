@@ -1093,10 +1093,11 @@ impl UserService {
                                 "User with ID {user_id} does not have OIDCAuthorizationCodePKCE auth parameters"
                             ))?;
                         };
-                        let id_token = CoreIdToken::from_str(user_auth.auth_id_token.as_str())
-                            .context(
-                                "Could not parse stored OIDC ID token, this should not happen",
-                            )?;
+                        let id_token =
+                            CoreIdToken::from_str(user_auth.auth_id_token.expose_secret())
+                                .context(
+                                    "Could not parse stored OIDC ID token, this should not happen",
+                                )?;
 
                         Ok(logout_request
                             .set_id_token_hint(&id_token)
