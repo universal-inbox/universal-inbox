@@ -143,8 +143,11 @@ mod patch_resource {
         .await;
 
         assert_eq!(patch_response.status(), 500);
-        let body = patch_response.text().await.unwrap();
-        assert_eq!(body, r#"{"message":"Failed to modify Google Mail thread"}"#);
+        let body: serde_json::Value = patch_response.json().await.unwrap();
+        assert_eq!(
+            body["message"],
+            "An internal error occurred. Please retry later or contact support with the correlation id."
+        );
     }
 
     #[rstest]
