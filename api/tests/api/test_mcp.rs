@@ -2856,3 +2856,42 @@ mod oauth2 {
         );
     }
 }
+
+mod rate_limits {
+    use super::*;
+
+    /// Mirrors `SYNC_RATE_LIMIT_PER_MINUTE` in `api/src/utils/rate_limit.rs`.
+    const SYNC_BUDGET: usize = 10;
+
+    #[rstest]
+    #[tokio::test]
+    async fn sync_tools_share_the_per_user_sync_budget(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+
+        // Half the budget on notifications, half on tasks: both draw from the
+        // same budget as the REST sync endpoints.
+        for i in 0..SYNC_BUDGET {
+            let tool_name = if i % 2 == 0 {
+                "sync_notifications"
+            } else {
+                "sync_tasks"
+            };
+            let body = mcp_tool_call(&app.app, &token, tool_name, json!({})).await;
+            assert_eq!(body["result"]["isError"], false, "call {i}: {body}");
+        }
+
+        let body = mcp_tool_call(&app.app, &token, "sync_tasks", json!({})).await;
+        assert_eq!(body["result"]["isError"], true, "got: {body}");
+        assert!(
+            body["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("Too many requests"),
+            "got: {body}"
+        );
+    }
+}

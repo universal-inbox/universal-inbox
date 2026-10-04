@@ -32,7 +32,10 @@ use crate::{
         UniversalInboxError, UpdateStatus,
         integration_connection::service::IntegrationConnectionService, task::service::TaskService,
     },
-    utils::jwt::Claims,
+    utils::{
+        jwt::Claims,
+        rate_limit::{UserRateLimiters, check_user_rate_limit},
+    },
 };
 
 pub fn scope() -> Scope {
@@ -195,6 +198,7 @@ pub async fn sync_tasks(
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     authenticated: Authenticated<Claims>,
     storage: web::Data<JobStorage>,
+    user_rate_limiters: web::Data<UserRateLimiters>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let source = params.source;
     let mut storage = storage.as_ref().clone();
@@ -208,6 +212,7 @@ pub async fn sync_tasks(
         .sub
         .parse::<UserId>()
         .context("Wrong user ID format")?;
+    check_user_rate_limit(&user_rate_limiters.sync, user_id)?;
     if params.asynchronous.unwrap_or(true) {
         let service = integration_connection_service.read().await;
         let mut transaction = service
