@@ -164,7 +164,7 @@ mod close_session {
                 serde_urlencoded::to_string([
                     (
                         "id_token_hint",
-                        user_auth.auth_id_token.as_str().to_string()
+                        user_auth.auth_id_token.expose_secret().to_string()
                     ),
                     (
                         "post_logout_redirect_uri",

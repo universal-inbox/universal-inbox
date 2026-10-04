@@ -225,7 +225,7 @@ pub async fn authenticate_authorization_code_flow(api_base_url: &Url) -> Result<
         .await?
         .to_string();
     UI_MODEL.write().authentication_state = AuthenticationState::RedirectingToAuthProvider;
-    debug!("auth: Redirecting to auth provider: {auth_url}");
+    debug!("auth: Redirecting to auth provider");
     redirect_to(&auth_url)
 }
 
@@ -251,6 +251,10 @@ async fn authenticate_pkce_flow(
 
     if let Some(auth_code) = auth_code {
         // We are on the auth callback URL with a code from the auth provider, so we can fetch the access token
+        // The code is single-use: drop it from the local storage whatever the exchange outcome
+        get_local_storage()?
+            .remove_item("auth-oidc-callback-code")
+            .map_err(|err| JsError::try_from(err).unwrap())?;
         UI_MODEL.write().authentication_state = AuthenticationState::FetchingAccessToken;
         let (access_token, auth_id_token) =
             fetch_access_token(oidc_provider, AuthorizationCode::new(auth_code)).await?;
@@ -260,7 +264,7 @@ async fn authenticate_pkce_flow(
         UI_MODEL.write().authentication_state = AuthenticationState::RedirectingToAuthProvider;
         // let auth_url = build_auth_url(client).await?.to_string();
         let auth_url = build_auth_url(oidc_provider).await?.to_string();
-        debug!("auth: Redirecting to auth provider: {auth_url}");
+        debug!("auth: Redirecting to auth provider");
         redirect_to(&auth_url)
     }
 }

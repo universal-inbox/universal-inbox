@@ -411,7 +411,7 @@ pub async fn run_server(
                         target: observability::ACCESS_LOG_TARGET,
                         "{} {} {}",
                         res.request().method(),
-                        res.request().uri().path(),
+                        observability::redact_path(res.request().uri().path()),
                         res.status()
                     );
                     Ok(res)

@@ -43,18 +43,17 @@ pub async fn send_verification_email(
 ) -> Result<(), UniversalInboxError> {
     let result: Result<(), UniversalInboxError> =
         async move {
-            info!("Sending email verification to {user_email}");
+            info!("Sending email verification");
             let service = user_service.clone();
 
-            let mut transaction = service.begin().await.context(format!(
-                "Failed to create new transaction while sending verification email to {user_email}"
-            ))?;
+            let mut transaction = service
+                .begin()
+                .await
+                .context("Failed to create new transaction while sending verification email")?;
             let user = service
                 .get_user_by_email(&mut transaction, user_email)
                 .await?
-                .context(format!(
-                    "Unable to find user with email address {user_email}"
-                ))?;
+                .context("Unable to find a user with the given email address")?;
 
             let result = service
                 .send_verification_email(&mut transaction, user.id, dry_run)
@@ -74,7 +73,7 @@ pub async fn send_verification_email(
                     Ok(())
                 }
                 Err(err) => {
-                    error!("Failed to send email verification to {user_email}");
+                    error!("Failed to send email verification to user {}", user.id);
                     transaction.rollback().await.context(
                         "Failed to rollback transaction while sending verification email",
                     )?;
@@ -101,12 +100,10 @@ pub async fn send_password_reset_email(
     dry_run: bool,
 ) -> Result<(), UniversalInboxError> {
     let result: Result<(), UniversalInboxError> = async move {
-    info!("Sending the password reset email to {user_email}");
+    info!("Sending the password reset email");
     let service = user_service.clone();
 
-    let mut transaction = service.begin().await.context(format!(
-        "Failed to create new transaction while send the password reset email for {user_email}"
-    ))?;
+    let mut transaction = service.begin().await.context("Failed to create new transaction while sending the password reset email")?;
 
     let result = service
         .send_password_reset_email(&mut transaction, user_email.clone(), dry_run)
@@ -116,20 +113,16 @@ pub async fn send_password_reset_email(
         Ok(_) => {
             if dry_run {
                 transaction.rollback().await.context(
-                    format!("Failed to rollback (dry-run) transaction while send the password reset email for {user_email}")
+                    "Failed to rollback (dry-run) transaction while sending the password reset email"
                 )?;
             } else {
-                transaction.commit().await.context(format!(
-                    "Failed to commit transaction while send the password reset email for {user_email}"
-                ))?;
+                transaction.commit().await.context("Failed to commit transaction while sending the password reset email")?;
             }
             Ok(())
         }
         Err(err) => {
-            error!("Failed to send the password reset email for {user_email}");
-            transaction.rollback().await.context(format!(
-                "Failed to rollback transaction while send the password reset email for {user_email}"
-            ))?;
+            error!("Failed to send the password reset email");
+            transaction.rollback().await.context("Failed to rollback transaction while sending the password reset email")?;
             Err(err)
         }
     }
@@ -149,48 +142,48 @@ pub async fn generate_jwt_token(
     user_email: &EmailAddress,
 ) -> Result<(), UniversalInboxError> {
     let result: Result<(), UniversalInboxError> = async move {
-    let service = user_service.clone();
+        let service = user_service.clone();
 
-    let mut transaction = service.begin().await.context(format!(
-        "Failed to create new transaction while generating new authentication token for {user_email}"
-    ))?;
+        let mut transaction = service.begin().await.context(
+            "Failed to create new transaction while generating new authentication token",
+        )?;
 
-    let user = service
-        .get_user_by_email(&mut transaction, user_email)
-        .await?
-        .context(format!(
-            "Unable to find user with email address {user_email}"
-        ))?;
+        let user = service
+            .get_user_by_email(&mut transaction, user_email)
+            .await?
+            .context("Unable to find a user with the given email address")?;
 
-    let auth_token_service = auth_token_service.read().await;
+        let auth_token_service = auth_token_service.read().await;
 
-    let auth_token = auth_token_service
-        .create_auth_token(
-            &mut transaction,
-            false,
-            user.id,
-            Some(Utc::now() + TimeDelta::try_days(30 * 6).unwrap()),
-            true,
-        )
-        .await?;
+        let auth_token = auth_token_service
+            .create_auth_token(
+                &mut transaction,
+                false,
+                user.id,
+                Some(Utc::now() + TimeDelta::try_days(30 * 6).unwrap()),
+                true,
+            )
+            .await?;
 
-    transaction.commit().await.context(format!(
-        "Failed to commit transaction while generating new authentication token for {user_email}"
-    ))?;
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction while generating new authentication token")?;
 
-    // The token is a live bearer credential: never send it through
-    // `tracing`, whose subscribers ship log lines to stdout logging and the
-    // OTLP exporter. Print it once, on stdout only, for the operator to copy.
-    // Only its id goes to the logs; revoke it with
-    // `DELETE /api/users/me/authentication-tokens/{id}` if it leaks.
-    info!(
-        "New API token {} generated for user {} (expires {:?})",
-        auth_token.id, user.id, auth_token.expire_at
-    );
-    println!("{}", auth_token.jwt_token.expose_secret().0);
+        // The token is a live bearer credential: never send it through
+        // `tracing`, whose subscribers ship log lines to stdout logging and the
+        // OTLP exporter. Print it once, on stdout only, for the operator to copy.
+        // Only its id goes to the logs; revoke it with
+        // `DELETE /api/users/me/authentication-tokens/{id}` if it leaks.
+        info!(
+            "New API token {} generated for user {} (expires {:?})",
+            auth_token.id, user.id, auth_token.expire_at
+        );
+        println!("{}", auth_token.jwt_token.expose_secret().0);
 
-    Ok(())
-}.await;
+        Ok(())
+    }
+    .await;
     result.record_span_error()
 }
 
@@ -344,16 +337,15 @@ pub async fn reset_password(
         let password = SecretBox::new(Box::new(password));
 
         let service = user_service.clone();
-        let mut transaction = service.begin().await.context(format!(
-            "Failed to create new transaction while resetting password for {user_email}"
-        ))?;
+        let mut transaction = service
+            .begin()
+            .await
+            .context("Failed to create new transaction while resetting password")?;
 
         let user = service
             .get_user_by_email(&mut transaction, user_email)
             .await?
-            .context(format!(
-                "Unable to find user with email address {user_email}"
-            ))?;
+            .context("Unable to find a user with the given email address")?;
 
         let has_local_auth = service
             .get_user_auth(&mut transaction, user.id, UserAuthKind::Local)
@@ -364,20 +356,25 @@ pub async fn reset_password(
             service
                 .set_password(&mut transaction, user.id, password)
                 .await?;
-            info!("Password updated for user {user_email}");
+            info!("Password updated for user {}", user.id);
         } else {
             service
                 .add_local_auth_method(&mut transaction, user.id, password)
                 .await?;
             eprintln!(
-                "Note: User {user_email} had no Local auth method. A new one has been created."
+                "Note: User {} had no Local auth method. A new one has been created.",
+                user.id
             );
-            info!("Local auth method created with password for user {user_email}");
+            info!(
+                "Local auth method created with password for user {}",
+                user.id
+            );
         }
 
-        transaction.commit().await.context(format!(
-            "Failed to commit transaction while resetting password for {user_email}"
-        ))?;
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction while resetting password")?;
 
         Ok(())
     }

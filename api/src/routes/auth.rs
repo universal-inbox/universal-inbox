@@ -88,7 +88,7 @@ pub async fn authenticate_session(
         )));
     };
 
-    let id_token = CoreIdToken::from_str(params.auth_id_token.as_str())
+    let id_token = CoreIdToken::from_str(params.auth_id_token.expose_secret())
         .context("Could not parse OIDC ID token")?;
     let access_token = params.access_token.clone();
     let user = service
@@ -143,7 +143,7 @@ async fn build_oidc_authorization_response(
         .get::<Url>(OIDC_AUTHORIZATION_URL_SESSION_KEY)
         .context("Failed to extract OIDC authorization URL from the session")?
     {
-        debug!("Redirecting to authorization URL found in the user's session: {authorization_url}");
+        debug!("Redirecting to the authorization URL found in the user's session");
         return Ok(HttpResponse::Ok().content_type("application/json").body(
             serde_json::to_string(&AuthorizeSessionResponse { authorization_url })
                 .context("Failed to serialize the authorization URL")?,
@@ -165,11 +165,6 @@ async fn build_oidc_authorization_response(
     let (authorization_url, csrf_token, nonce) =
         user_service.build_auth_url(openid_connect_settings).await?;
 
-    debug!(
-        "store CSRF token: {:?} & nonce: {:?}",
-        csrf_token.secret(),
-        nonce
-    );
     session
         .insert(OIDC_CSRF_TOKEN_SESSION_KEY, csrf_token)
         .context("Failed to insert CSRF token into the session")?;
@@ -183,7 +178,7 @@ async fn build_oidc_authorization_response(
         )
         .context("Failed to insert OIDC authorization URL into the session")?;
 
-    debug!("Redirecting to newly built authorization URL: {authorization_url}");
+    debug!("Redirecting to a newly built authorization URL");
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&AuthorizeSessionResponse { authorization_url })
             .context("Failed to serialize the authorization URL")?,
@@ -265,11 +260,6 @@ pub async fn authenticated_session(
         .context(format!(
             "Missing `{OIDC_CSRF_TOKEN_SESSION_KEY}` session key"
         ))?;
-    debug!(
-        "fetched CSRF token: {:?} vs state: {:?}",
-        csrf_token.secret(),
-        authenticated_session_request.state.secret()
-    );
     if authenticated_session_request.state.secret() != csrf_token.secret() {
         return Err(UniversalInboxError::Unauthorized(anyhow!(
             "Invalid CSRF token"
@@ -457,7 +447,7 @@ pub async fn link_oidc_pkce_session(
         )));
     };
 
-    let id_token = CoreIdToken::from_str(params.auth_id_token.as_str())
+    let id_token = CoreIdToken::from_str(params.auth_id_token.expose_secret())
         .context("Could not parse OIDC ID token")?;
     let access_token = params.access_token.clone();
     let auth_method: UserAuthMethod = service
