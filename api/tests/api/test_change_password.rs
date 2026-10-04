@@ -2,8 +2,6 @@
 //! authenticated local-auth user changes their password, which signs out their
 //! other sessions and emails them.
 
-use std::str::FromStr;
-
 use chrono::Utc;
 use email_address::EmailAddress;
 use reqwest::{Client, StatusCode};
@@ -20,7 +18,7 @@ use crate::helpers::{
     tested_app_with_domain_blacklist, tested_app_with_local_auth,
     user::{
         create_user, create_user_and_login, front_origin_header, get_current_user_response,
-        get_password_reset_token, login_user_response,
+        get_password_reset_token, login_user_response, reset_password_response,
     },
 };
 
@@ -279,15 +277,14 @@ async fn test_reset_password_revokes_sessions(#[future] tested_app_with_local_au
     let password_reset_token = get_password_reset_token(&app, user.id).await.unwrap();
 
     wait_for_next_second().await;
-    let response = anonymous_client
-        .post(format!(
-            "{}users/{}/password-reset/{password_reset_token}",
-            app.api_address, user.id
-        ))
-        .json(&Password::from_str(NEW_PASSWORD).unwrap())
-        .send()
-        .await
-        .unwrap();
+    let response = reset_password_response(
+        &anonymous_client,
+        &app,
+        user.id,
+        password_reset_token,
+        NEW_PASSWORD,
+    )
+    .await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let response = get_current_user_response(&logged_in_client, &app).await;
