@@ -55,6 +55,7 @@
 - Send `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin` on every response, and default API responses to `Cache-Control: no-store` and `Content-Disposition: attachment` when the handler sets none
 - Static content answers 405 with an `Allow` header to methods other than GET and HEAD
 - Logging out revokes the session server-side; session checks fail closed with a 503 when Redis is unavailable, and the API no longer starts without Redis
+- Name the session cookie `__Host-id` with explicit `Secure`, `HttpOnly` and `Path=/` attributes (signs every user out once)
 
 ### Fixed
 
