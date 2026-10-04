@@ -400,6 +400,7 @@ pub async fn run_server(
 
         let csp_header_value = csp_header_value.clone();
         let api_version = api_version.clone();
+        let api_path_prefix = api_path.clone();
         let mut app = App::new()
             .wrap_fn(move |req, srv| {
                 let fut = srv.call(req);
@@ -446,10 +447,11 @@ pub async fn run_server(
             .wrap_fn(move |req, srv| {
                 let csp_header_value = csp_header_value.clone();
                 let api_version = api_version.clone();
+                let is_api_request = req.path().starts_with(api_path_prefix.as_str());
                 let fut = srv.call(req);
                 async move {
                     let mut res = fut.await?;
-                    if res
+                    let is_html = res
                         .headers()
                         .get(header::CONTENT_TYPE)
                         .map(|value| {
@@ -458,8 +460,8 @@ pub async fn run_server(
                                 .map(|s| s.starts_with("text/html"))
                                 .unwrap_or_default()
                         })
-                        .unwrap_or_default()
-                    {
+                        .unwrap_or_default();
+                    if is_html {
                         res.headers_mut().insert(
                             header::CONTENT_SECURITY_POLICY,
                             header::HeaderValue::from_str(&csp_header_value).unwrap(),
@@ -484,6 +486,44 @@ pub async fn run_server(
                             "max-age=63072000; includeSubDomains; preload",
                         ),
                     );
+                    // Stop browsers from MIME-sniffing a response into a
+                    // different (e.g. executable) content type.
+                    res.headers_mut().insert(
+                        header::X_CONTENT_TYPE_OPTIONS,
+                        header::HeaderValue::from_static("nosniff"),
+                    );
+                    // Send only the origin on cross-origin requests and no
+                    // referrer at all on HTTPS -> HTTP downgrades, so that
+                    // in-app URLs never leak to third parties.
+                    res.headers_mut().insert(
+                        header::REFERRER_POLICY,
+                        header::HeaderValue::from_static("strict-origin-when-cross-origin"),
+                    );
+                    if is_api_request {
+                        // API responses carry user data: keep them out of any
+                        // browser or intermediary cache, unless the handler
+                        // explicitly chose a caching policy.
+                        if !res.headers().contains_key(header::CACHE_CONTROL) {
+                            res.headers_mut().insert(
+                                header::CACHE_CONTROL,
+                                header::HeaderValue::from_static("no-store"),
+                            );
+                        }
+                        // Never render an API response inline if a browser
+                        // navigates to it directly. Redirects (OAuth flows)
+                        // are left untouched so that browsers follow them. A
+                        // disposition set by the handler (e.g. a download
+                        // filename) is kept.
+                        if !is_html
+                            && !res.status().is_redirection()
+                            && !res.headers().contains_key(header::CONTENT_DISPOSITION)
+                        {
+                            res.headers_mut().insert(
+                                header::CONTENT_DISPOSITION,
+                                header::HeaderValue::from_static("attachment"),
+                            );
+                        }
+                    }
                     if let Some(ref version) = api_version {
                         res.headers_mut().insert(
                             header::HeaderName::from_static("x-app-version"),
