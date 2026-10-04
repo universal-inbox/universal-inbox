@@ -175,6 +175,102 @@ mod close_session {
             )
         );
     }
+
+    mod revocation {
+        use std::sync::Arc;
+
+        use email_address::EmailAddress;
+        use reqwest::{
+            Client, StatusCode,
+            cookie::{CookieStore, Jar},
+            header::{COOKIE, HeaderValue},
+        };
+        use uuid::Uuid;
+
+        use crate::helpers::{
+            tested_app_with_local_auth,
+            user::{create_user, get_current_user_response, login_user_response},
+        };
+
+        use super::*;
+
+        const PASSWORD: &str = "Very-harD-pasSword-5";
+
+        /// The login throttle is Redis-backed and Redis is shared across test
+        /// apps: use a unique address per test.
+        fn unique_email() -> EmailAddress {
+            format!("logout-{}@example.com", Uuid::new_v4())
+                .parse()
+                .unwrap()
+        }
+
+        /// Log in with a fresh client and return it along with a copy of its
+        /// session cookie, as an attacker who copied it would hold it.
+        async fn login(app: &TestedApp, email: EmailAddress) -> (Client, HeaderValue) {
+            let jar = Arc::new(Jar::default());
+            let client = Client::builder()
+                .cookie_provider(jar.clone())
+                .build()
+                .unwrap();
+            let response = login_user_response(&client, app, email, PASSWORD).await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let cookie = jar
+                .cookies(&app.api_address.parse().unwrap())
+                .expect("the login sets a session cookie");
+            (client, cookie)
+        }
+
+        async fn get_current_user_with_cookie(
+            app: &TestedApp,
+            cookie: &HeaderValue,
+        ) -> reqwest::Response {
+            Client::new()
+                .get(format!("{}users/me", app.api_address))
+                .header(COOKIE, cookie.clone())
+                .send()
+                .await
+                .unwrap()
+        }
+
+        #[rstest]
+        #[tokio::test]
+        async fn test_logged_out_session_cookie_is_rejected(
+            #[future] tested_app_with_local_auth: TestedApp,
+        ) {
+            let app = tested_app_with_local_auth.await;
+            let email = unique_email();
+            create_user(&app, email.clone(), PASSWORD).await;
+            let (client, copied_cookie) = login(&app, email).await;
+            let response = get_current_user_with_cookie(&app, &copied_cookie).await;
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let response = logout_user_response(&client, &app.api_address).await;
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let response = get_current_user_with_cookie(&app, &copied_cookie).await;
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            let response = get_current_user_response(&client, &app).await;
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        #[rstest]
+        #[tokio::test]
+        async fn test_logout_keeps_the_other_sessions_of_the_user(
+            #[future] tested_app_with_local_auth: TestedApp,
+        ) {
+            let app = tested_app_with_local_auth.await;
+            let email = unique_email();
+            create_user(&app, email.clone(), PASSWORD).await;
+            let (client, _) = login(&app, email.clone()).await;
+            let (other_client, _) = login(&app, email).await;
+
+            let response = logout_user_response(&client, &app.api_address).await;
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let response = get_current_user_response(&other_client, &app).await;
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+    }
 }
 
 mod authorize_session {

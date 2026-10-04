@@ -53,7 +53,7 @@ use regex::Regex;
 use ring::digest;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
-use tracing::{Level, Span, error, event, info, warn};
+use tracing::{Level, Span, error, event, info};
 use tracing_actix_web::TracingLogger;
 use utils::cache::Cache;
 use utils::{login_throttle::LoginThrottle, session_revocation::SessionRevocation};
@@ -844,45 +844,35 @@ pub async fn build_services(
 
     // Per-account login throttle (Redis-backed), built once and shared by the
     // UserService. `None` when local password auth is unconfigured (nothing to
-    // throttle) or Redis is unreachable at startup — the per-IP limiter still
-    // applies in that case. See utils::login_throttle.
+    // throttle). See utils::login_throttle.
     //
-    // Session revocation (password change / reset) shares the same Redis
-    // connection. `None` when Redis is unreachable at startup: sessions then
-    // stay valid until they expire. See utils::session_revocation.
-    let (login_throttle, session_revocation) = match Cache::new(settings.redis.connection_string())
+    // Session revocation (logout, password change / reset) shares the same
+    // Redis connection. Session checks fail closed, so the API refuses to start
+    // without Redis rather than run with revocation disabled. See
+    // utils::session_revocation.
+    let cache = Cache::new(settings.redis.connection_string())
         .await
-    {
-        Ok(cache) => {
-            let session_revocation = SessionRevocation::new(
-                cache.connection_manager.clone(),
-                (settings
-                    .application
-                    .http_session
-                    .jwt_token_expiration_in_days
-                    .max(0) as u64)
-                    * 24
-                    * 3600,
-            );
-            let login_throttle = settings
-                .application
-                .security
-                .authentication
-                .iter()
-                .find_map(|auth| match auth {
-                    AuthenticationSettings::Local(local) => Some(local.clone()),
-                    _ => None,
-                })
-                .map(|local| LoginThrottle::new(cache.connection_manager, local));
-            (login_throttle, Some(session_revocation))
-        }
-        Err(err) => {
-            warn!(
-                "Failed to connect to Redis for login throttle; throttling and session revocation disabled: {err:?}"
-            );
-            (None, None)
-        }
-    };
+        .expect("Failed to connect to Redis for session revocation");
+    let session_revocation = SessionRevocation::new(
+        cache.connection_manager.clone(),
+        (settings
+            .application
+            .http_session
+            .jwt_token_expiration_in_days
+            .max(0) as u64)
+            * 24
+            * 3600,
+    );
+    let login_throttle = settings
+        .application
+        .security
+        .authentication
+        .iter()
+        .find_map(|auth| match auth {
+            AuthenticationSettings::Local(local) => Some(local.clone()),
+            _ => None,
+        })
+        .map(|local| LoginThrottle::new(cache.connection_manager, local));
 
     // Build the map of internal OAuth2 providers
     use ::universal_inbox::integration_connection::provider::IntegrationProviderKind;
