@@ -16,6 +16,7 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::{
+    mailer::EmailTemplate,
     repository::user::UserRepository,
     universal_inbox::user::model::{LocalUserAuth, UserAuth},
 };
@@ -439,4 +440,18 @@ pub async fn finish_passkey_registration_response_unauthenticated(
         .send()
         .await
         .unwrap()
+}
+
+/// Templates of the emails sent so far to `email`, oldest first.
+pub async fn emails_sent_to(app: &TestedApp, email: &Pii<EmailAddress>) -> Vec<EmailTemplate> {
+    app.mailer_stub
+        .read()
+        .await
+        .emails_sent
+        .read()
+        .await
+        .iter()
+        .filter(|(user, _)| user.email.as_ref() == Some(email))
+        .map(|(_, template)| template.clone())
+        .collect()
 }
