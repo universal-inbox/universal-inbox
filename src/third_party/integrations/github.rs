@@ -840,6 +840,13 @@ pub struct GithubDiscussion {
     pub comments: Vec<GithubDiscussionThreadComment>,
 }
 
+impl GithubDiscussion {
+    /// Whether a comment has been accepted as the discussion's answer.
+    pub fn is_answered(&self) -> bool {
+        self.answer_chosen_at.is_some()
+    }
+}
+
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GithubDiscussionCategory {
     pub name: String,
@@ -1113,6 +1120,44 @@ mod tests {
                 )
                 .is_err()
             );
+        }
+    }
+
+    mod github_discussion {
+        use super::*;
+        use chrono::TimeZone;
+
+        fn discussion(answer_chosen_at: Option<DateTime<Utc>>) -> GithubDiscussion {
+            let created_at = Utc.with_ymd_and_hms(2026, 10, 1, 0, 0, 0).unwrap();
+            GithubDiscussion {
+                id: "D_1".to_string(),
+                number: 1,
+                url: "https://github.com/o/r/discussions/1".parse().unwrap(),
+                title: "title".to_string(),
+                body: "body".to_string(),
+                repository: GithubRepositorySummary {
+                    name_with_owner: "o/r".to_string(),
+                    url: "https://github.com/o/r".parse().unwrap(),
+                },
+                state_reason: None,
+                closed_at: None,
+                created_at,
+                updated_at: created_at,
+                labels: vec![],
+                comments_count: 0,
+                author: None,
+                answer_chosen_at,
+                answer_chosen_by: None,
+                answer: None,
+                category: None,
+                comments: vec![],
+            }
+        }
+
+        #[rstest]
+        fn test_is_answered() {
+            assert!(!discussion(None).is_answered());
+            assert!(discussion(Some(Utc::now())).is_answered());
         }
     }
 }

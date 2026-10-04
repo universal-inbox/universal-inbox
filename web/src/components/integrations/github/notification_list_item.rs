@@ -148,7 +148,22 @@ pub fn GithubDiscussionNotificationListItem(
             key: "{notification().id}",
             linked_task: notification().task,
             title: "{notification().title}",
-            subtitle: rsx! { GithubNotificationSubtitle { github_notification } },
+            subtitle: rsx! {
+                GithubNotificationSubtitle {
+                    github_notification,
+                    trailing: if github_discussion().is_answered() {
+                        Some(rsx! {
+                            span {
+                                class: "icon-[lucide--circle-check] size-3 shrink-0 text-ui-success",
+                                title: "Answered",
+                                "aria-label": "Answered",
+                            }
+                        })
+                    } else {
+                        None
+                    },
+                }
+            },
             time: "{notification_updated_at}",
             icon: rsx! {
                 div {
@@ -167,7 +182,10 @@ pub fn GithubDiscussionNotificationListItem(
 }
 
 #[component]
-fn GithubNotificationSubtitle(github_notification: ReadSignal<GithubNotification>) -> Element {
+fn GithubNotificationSubtitle(
+    github_notification: ReadSignal<GithubNotification>,
+    #[props(default = None)] trailing: Option<Element>,
+) -> Element {
     rsx! {
         span {
             class: "ui-nrow-meta-text",
@@ -175,6 +193,9 @@ fn GithubNotificationSubtitle(github_notification: ReadSignal<GithubNotification
             if let Some(github_notification_id) = github_notification().extract_id() {
                 " #{github_notification_id}"
             }
+        }
+        if let Some(trailing) = trailing {
+            { trailing }
         }
     }
 }

@@ -62,7 +62,7 @@ pub fn GithubDiscussionPreview(
     });
 
     let discussion = github_discussion();
-    let is_answered = discussion.answer_chosen_at.is_some();
+    let is_answered = discussion.is_answered();
 
     let (state_variant, state_label) = if is_answered {
         (TagVariant::Success, "Answered")
