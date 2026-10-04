@@ -64,6 +64,7 @@
 - Send the password-reset token in the request body (`POST /users/{user_id}/password-reset`) instead of the URL path
 - Wrap email addresses in a `Pii<T>` type whose `Debug` output hides the value, so they cannot reach logs by accident
 - New passwords must be 12 to 128 characters and must not be a common password, checked server-side; password forms show a strength meter
+- Email users when a password reset completes, when a login method (password, passkey, Google) is added or removed, and when an email change is requested
 
 ### Fixed
 

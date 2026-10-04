@@ -25,10 +25,10 @@ use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app, fetch_auth_tokens_for_user, get_user_auth},
     settings, tested_app_with_local_auth,
     user::{
-        create_user_with_legacy_password, get_current_user, get_current_user_response,
-        get_password_reset_token, get_pending_email_change_token, get_user_email_validation_token,
-        login_user_response, logout_user_response, patch_user_response, register_user,
-        register_user_response, reset_password_response,
+        create_user_with_legacy_password, emails_sent_to, get_current_user,
+        get_current_user_response, get_password_reset_token, get_pending_email_change_token,
+        get_user_email_validation_token, login_user_response, logout_user_response,
+        patch_user_response, register_user, register_user_response, reset_password_response,
     },
 };
 
@@ -960,6 +960,12 @@ mod password_reset {
             login_user_response(&new_client, &app, email.clone(), "New-very-harD-pasSword-5").await;
         assert_eq!(login_response.status(), http::StatusCode::OK);
 
+        let emails = emails_sent_to(&app, &email).await;
+        assert!(
+            matches!(emails.last(), Some(EmailTemplate::PasswordChanged { .. })),
+            "{emails:?}"
+        );
+
         let user = get_current_user(&new_client, &app).await;
         let user_auth = get_user_auth(&app, user.id, UserAuthKind::Local).await;
         if let UserAuth::Local(local_user_auth) = user_auth {
@@ -1406,6 +1412,17 @@ mod patch_user {
         // The change is pending: the current, verified address is kept
         assert_eq!(patched_user.email, user.email);
         assert!(patched_user.email_validated_at.is_some());
+
+        // The current address is told about the request
+        let emails = emails_sent_to(&app, &"john@doe.name".parse().unwrap()).await;
+        assert!(
+            emails.iter().any(|template| matches!(
+                template,
+                EmailTemplate::EmailChangeRequested { new_email_masked, .. }
+                    if new_email_masked == "n***@email.name"
+            )),
+            "{emails:?}"
+        );
 
         let token = get_pending_email_change_token(&app, user.id)
             .await

@@ -345,6 +345,12 @@ impl UserService {
         self.repository
             .create_user_auth(executor, user_id, user_auth)
             .await?;
+        self.notify_security_event_for(
+            executor,
+            user_id,
+            SecurityNotification::AuthMethodAdded(UserAuthKind::Local),
+        )
+        .await;
 
         Ok(auth_method)
     }
@@ -420,6 +426,12 @@ impl UserService {
         self.repository
             .create_user_auth(executor, user_id, user_auth)
             .await?;
+        self.notify_security_event_for(
+            executor,
+            user_id,
+            SecurityNotification::AuthMethodAdded(UserAuthKind::Passkey),
+        )
+        .await;
 
         Ok(auth_method)
     }
@@ -458,6 +470,12 @@ impl UserService {
         self.repository
             .delete_user_auth(executor, user_id, kind)
             .await?;
+        self.notify_security_event_for(
+            executor,
+            user_id,
+            SecurityNotification::AuthMethodRemoved(kind),
+        )
+        .await;
 
         Ok(())
     }
@@ -544,6 +562,13 @@ impl UserService {
         self.repository
             .create_user_auth(executor, user_id, user_auth)
             .await?;
+        // Reload: the email may just have been set from the OIDC provider.
+        self.notify_security_event_for(
+            executor,
+            user_id,
+            SecurityNotification::AuthMethodAdded(kind),
+        )
+        .await;
 
         Ok(auth_method)
     }
@@ -858,6 +883,15 @@ impl UserService {
             .await
             .send_email(recipient, template, false)
             .await?;
+
+        // Sent to the current address: the account owner learns about the
+        // request even if the session that made it is not theirs.
+        self.notify_security_event(
+            user.clone(),
+            SecurityNotification::EmailChangeRequested(new_email.clone()),
+        )
+        .await;
+
         Ok(false)
     }
 
@@ -1958,9 +1992,11 @@ impl UserService {
 
         match updated_user {
             UpdateStatus {
-                result: Some(_), ..
+                result: Some(user), ..
             } => {
                 self.revoke_sessions(user_id).await;
+                self.notify_security_event(user, SecurityNotification::PasswordChanged)
+                    .await;
                 Ok(())
             }
             UpdateStatus { result: None, .. } => Err(UniversalInboxError::InvalidInputData {
@@ -2072,10 +2108,8 @@ impl UserService {
 
         self.set_password(executor, user_id, new_password).await?;
 
-        let dry_run = self.application_settings.dry_run;
-        if let Err(err) = self.send_password_changed_email(user, dry_run).await {
-            warn!("Failed to send password changed email: {err:?}");
-        }
+        self.notify_security_event(user, SecurityNotification::PasswordChanged)
+            .await;
 
         Ok(())
     }
@@ -2112,36 +2146,84 @@ impl UserService {
             })
     }
 
+    /// Tell `user` that an authentication detail of their account changed
+    /// (ASVS 2.2.3 / 2.5.5). Best-effort: a failure is logged and never
+    /// fails the change that triggered it.
+    async fn notify_security_event(&self, user: User, notification: SecurityNotification) {
+        if let Err(err) = self
+            .send_security_notification_email(user, notification)
+            .await
+        {
+            warn!("Failed to send security notification email: {err:?}");
+        }
+    }
+
+    /// [`Self::notify_security_event`] for a user known by id only.
+    async fn notify_security_event_for(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        notification: SecurityNotification,
+    ) {
+        match self.repository.get_user(executor, user_id).await {
+            Ok(Some(user)) => self.notify_security_event(user, notification).await,
+            Ok(None) => warn!("Cannot send security notification email to unknown user {user_id}"),
+            Err(err) => {
+                warn!("Failed to load user {user_id} for security notification email: {err:?}")
+            }
+        }
+    }
+
     #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user.id.to_string()))]
-    async fn send_password_changed_email(
+    async fn send_security_notification_email(
         &self,
         user: User,
-        dry_run: bool,
+        notification: SecurityNotification,
     ) -> Result<(), UniversalInboxError> {
         if user.is_testing {
             debug!(
-                "Skipping password changed email for test account {}",
+                "Skipping security notification email for test account {}",
                 user.id
             );
             return Ok(());
         }
+        if !self.is_email_enabled().await {
+            return Ok(());
+        }
 
-        let template = EmailTemplate::PasswordChanged {
-            first_name: user.first_name.clone(),
-            password_reset_url: format!(
-                "{}password-reset",
-                self.application_settings.front_base_url
-            )
-            .parse()
-            .context("Failed to build password reset URL")?,
+        let first_name = user.first_name.clone();
+        let password_reset_url: Url =
+            format!("{}password-reset", self.application_settings.front_base_url)
+                .parse()
+                .context("Failed to build password reset URL")?;
+        let template = match notification {
+            SecurityNotification::PasswordChanged => EmailTemplate::PasswordChanged {
+                first_name,
+                password_reset_url,
+            },
+            SecurityNotification::AuthMethodAdded(kind) => EmailTemplate::AuthMethodAdded {
+                first_name,
+                method: auth_method_display_name(kind).to_string(),
+                password_reset_url,
+            },
+            SecurityNotification::AuthMethodRemoved(kind) => EmailTemplate::AuthMethodRemoved {
+                first_name,
+                method: auth_method_display_name(kind).to_string(),
+                password_reset_url,
+            },
+            SecurityNotification::EmailChangeRequested(new_email) => {
+                EmailTemplate::EmailChangeRequested {
+                    first_name,
+                    new_email_masked: mask_email_address(new_email.expose()),
+                    password_reset_url,
+                }
+            }
         };
         self.mailer
             .read()
             .await
-            .send_email(user, template, dry_run)
-            .await?;
-
-        Ok(())
+            .send_email(user, template, self.application_settings.dry_run)
+            .await
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
@@ -2339,4 +2421,28 @@ impl UserService {
             .create_or_update_user_preferences(executor, user_id, patch)
             .await
     }
+}
+
+/// Authentication change a user is notified about by email.
+enum SecurityNotification {
+    PasswordChanged,
+    AuthMethodAdded(UserAuthKind),
+    AuthMethodRemoved(UserAuthKind),
+    EmailChangeRequested(Pii<EmailAddress>),
+}
+
+fn auth_method_display_name(kind: UserAuthKind) -> &'static str {
+    match kind {
+        UserAuthKind::Local => "A password",
+        UserAuthKind::Passkey => "A passkey",
+        UserAuthKind::OIDCGoogleAuthorizationCode => "Google sign-in",
+        UserAuthKind::OIDCAuthorizationCodePKCE => "Single sign-on",
+    }
+}
+
+/// `john.doe@example.com` reads `j***@example.com`: enough for the owner to
+/// recognize an address, without handing it out in full.
+fn mask_email_address(email: &EmailAddress) -> String {
+    let first_char = email.local_part().chars().next().unwrap_or('*');
+    format!("{first_char}***@{}", email.domain())
 }
