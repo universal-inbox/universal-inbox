@@ -5,7 +5,8 @@ use dioxus_router::hooks::use_route;
 
 use crate::{
     components::{
-        banner_strip::BillingBannerStrip, footer::Footer, sidebar::Sidebar, toast_zone::ToastZone,
+        banner_strip::BillingBannerStrip, footer::Footer,
+        reauthentication_modal::ReauthenticationModal, sidebar::Sidebar, toast_zone::ToastZone,
         universal_inbox_title::UniversalInboxTitle, upgrade_modal::UpgradeModal,
     },
     icons::UILogo,
@@ -107,6 +108,7 @@ pub fn NavBarLayout() -> Element {
             }
             ToastZone {}
             UpgradeModal {}
+            ReauthenticationModal {}
         }
     }
 }

@@ -106,6 +106,10 @@ impl RegisterUserParameters {
     }
 }
 
+/// `code` of the 403 error body returned when a sensitive account operation
+/// needs the user to confirm their identity again.
+pub const REAUTHENTICATION_REQUIRED_CODE: &str = "reauthentication_required";
+
 /// Keyword a user without an email address types to confirm the deletion of
 /// their account (users with an email type their email address instead).
 pub const ACCOUNT_DELETION_CONFIRMATION_KEYWORD: &str = "DELETE";

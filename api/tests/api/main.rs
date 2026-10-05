@@ -26,6 +26,7 @@ mod test_notifications;
 mod test_oauth2_cimd;
 mod test_oauth_callback;
 mod test_pause_integration_connections;
+mod test_reauthentication;
 mod test_set_aside_notifications;
 mod test_slack_backfill_team_id;
 mod test_slack_bridge;

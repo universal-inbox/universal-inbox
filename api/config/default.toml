@@ -115,6 +115,9 @@ mcp_extra_allowed_origins = [
 # How long an email-verification link stays valid (older links are rejected and
 # the user must request a new verification email).
 email_verification_token_validity_in_hours = 24
+# Seconds after a login or re-authentication during which a session may change
+# the account email, add or remove login methods and create API tokens.
+reauthentication_window_in_seconds = 900
 # `Host` header values accepted by the MCP endpoint (DNS-rebinding protection,
 # enforced by rmcp). The host of `front_base_url` and loopback hosts are always
 # accepted; list here any other public hostname the API is reached under

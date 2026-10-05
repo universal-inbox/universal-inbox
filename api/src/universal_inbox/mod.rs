@@ -90,6 +90,11 @@ pub enum UniversalInboxError {
     Unauthorized(anyhow::Error),
     #[error("Forbidden access: {0}")]
     Forbidden(String),
+    /// Mapped to HTTP 403 with code `reauthentication_required`: a sensitive
+    /// account operation needs a login or re-authentication more recent than
+    /// the reauthentication window.
+    #[error("Please confirm your identity to continue")]
+    ReauthenticationRequired,
     #[error("Too many login attempts. Please try again later.")]
     TooManyLoginAttempts { retry_after_seconds: u64 },
     /// Mapped to HTTP 429 + `Retry-After`. A per-account request budget (e.g.
@@ -149,6 +154,7 @@ impl UniversalInboxError {
             Self::SessionStoreUnavailable(_) => "SessionStoreUnavailable",
             Self::Unauthorized(_) => "Unauthorized",
             Self::Forbidden(_) => "Forbidden",
+            Self::ReauthenticationRequired => "ReauthenticationRequired",
             Self::TooManyLoginAttempts { .. } => "TooManyLoginAttempts",
             Self::TooManyRequests { .. } => "TooManyRequests",
             Self::EmailDisabled => "EmailDisabled",
@@ -193,6 +199,7 @@ impl UniversalInboxError {
             | UniversalInboxError::ItemNotFound(_)
             | UniversalInboxError::Unauthorized(_)
             | UniversalInboxError::Forbidden(_)
+            | UniversalInboxError::ReauthenticationRequired
             | UniversalInboxError::TooManyLoginAttempts { .. }
             | UniversalInboxError::TooManyRequests { .. }
             | UniversalInboxError::PaymentRequired { .. } => true,

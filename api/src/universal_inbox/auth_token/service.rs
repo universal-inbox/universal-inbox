@@ -24,7 +24,7 @@ use crate::{
         Repository,
         auth_token::{AuthenticationTokenRepository, hash_jwt_token},
     },
-    universal_inbox::UniversalInboxError,
+    universal_inbox::{UniversalInboxError, user::model::SessionAuthentication},
     utils::jwt::{Claims, JWT_SIGNING_ALGO, JWTBase64EncodedSigningKeys, JWTSigningKeys},
 };
 
@@ -42,10 +42,18 @@ pub struct AuthenticationTokenService {
     repository: Arc<Repository>,
     http_session_settings: HttpSessionSettings,
     jwt_encoding_key: EncodingKey,
+    reauthentication_window: TimeDelta,
 }
 
+/// Validity of an API token created by a user.
+const API_TOKEN_VALIDITY_IN_DAYS: i64 = 30 * 6;
+
 impl AuthenticationTokenService {
-    pub fn new(repository: Arc<Repository>, http_session_settings: HttpSessionSettings) -> Self {
+    pub fn new(
+        repository: Arc<Repository>,
+        http_session_settings: HttpSessionSettings,
+        reauthentication_window: TimeDelta,
+    ) -> Self {
         let jwt_signing_keys =
             JWTSigningKeys::load_from_base64_encoded_keys(JWTBase64EncodedSigningKeys {
                 secret_key: http_session_settings.jwt_secret_key.clone(),
@@ -56,7 +64,34 @@ impl AuthenticationTokenService {
             repository,
             http_session_settings,
             jwt_encoding_key: jwt_signing_keys.encoding_key.clone(),
+            reauthentication_window,
         }
+    }
+
+    /// Create a long-lived API token for `user_id`. A token grants access to
+    /// the whole account, so its creation needs a recent login or
+    /// re-authentication in the calling session (ASVS 3.7.1): an API token
+    /// cannot mint another one.
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
+    pub async fn create_api_token(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        session_authentication: Option<&SessionAuthentication>,
+    ) -> Result<AuthenticationToken, UniversalInboxError> {
+        SessionAuthentication::ensure_recent(
+            session_authentication,
+            user_id,
+            self.reauthentication_window,
+        )?;
+        self.create_auth_token(
+            executor,
+            false,
+            user_id,
+            Some(Utc::now() + TimeDelta::days(API_TOKEN_VALIDITY_IN_DAYS)),
+            true,
+        )
+        .await
     }
 
     pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
