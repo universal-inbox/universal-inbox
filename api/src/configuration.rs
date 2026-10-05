@@ -397,10 +397,20 @@ pub struct SecuritySettings {
     /// trusted.
     #[serde(default = "default_trusted_proxy_hops")]
     pub trusted_proxy_hops: usize,
+    /// How long after logging in (or re-authenticating) a session may run
+    /// sensitive account operations: email change, adding or removing a
+    /// login method, creating an API token. Past it, the user must confirm
+    /// their identity again (ASVS 3.7.1).
+    #[serde(default = "default_reauthentication_window_in_seconds")]
+    pub reauthentication_window_in_seconds: u32,
 }
 
 fn default_email_verification_token_validity_in_hours() -> u32 {
     24
+}
+
+fn default_reauthentication_window_in_seconds() -> u32 {
+    15 * 60
 }
 
 pub const DEFAULT_TRUSTED_PROXY_HOPS: usize = 1;
@@ -1291,6 +1301,7 @@ mod tests {
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,
             trusted_proxy_hops: DEFAULT_TRUSTED_PROXY_HOPS,
+            reauthentication_window_in_seconds: 900,
         };
 
         let result = security_settings.get_authentication_settings(UserAuthKind::Local);
@@ -1328,6 +1339,7 @@ mod tests {
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,
             trusted_proxy_hops: DEFAULT_TRUSTED_PROXY_HOPS,
+            reauthentication_window_in_seconds: 900,
         };
 
         let result =
@@ -1357,6 +1369,7 @@ mod tests {
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,
             trusted_proxy_hops: DEFAULT_TRUSTED_PROXY_HOPS,
+            reauthentication_window_in_seconds: 900,
         };
 
         let result = security_settings
@@ -1410,6 +1423,7 @@ mod tests {
             email_domain_blacklist: HashMap::new(),
             email_verification_token_validity_in_hours: 24,
             trusted_proxy_hops: DEFAULT_TRUSTED_PROXY_HOPS,
+            reauthentication_window_in_seconds: 900,
         };
 
         let result = security_settings.get_authentication_settings(UserAuthKind::Local);

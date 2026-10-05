@@ -34,6 +34,7 @@ pub mod password_strength_meter;
 pub mod preview_card_header;
 pub mod priority_field;
 pub mod project_search_field;
+pub mod reauthentication_modal;
 pub mod resizable_panel;
 pub mod settings_controls;
 pub mod sidebar;

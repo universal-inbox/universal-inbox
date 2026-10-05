@@ -46,10 +46,18 @@ pub enum UserCommand {
     RemoveAuthMethod(UserAuthKind),
     /// Delete the connected user's account; carries the typed confirmation.
     DeleteAccount(String),
+    /// Confirm the identity of the connected user before a sensitive account
+    /// operation (see `REAUTHENTICATION_TRIGGER`).
+    ReauthenticateWithPassword(SecretBox<Password>),
+    ReauthenticateWithPasskey,
+    ReauthenticateWithGoogle,
 }
 
 pub static CONNECTED_USER: GlobalSignal<Option<User>> = Signal::global(|| None);
 pub static AUTH_METHODS: GlobalSignal<Option<Vec<UserAuthMethod>>> = Signal::global(|| None);
+/// Set when the API refuses a sensitive account operation for lack of a
+/// recent login: the re-authentication modal is shown until it is cleared.
+pub static REAUTHENTICATION_TRIGGER: GlobalSignal<bool> = Signal::global(|| false);
 
 /// Per-ceremony nonce hardening for passkey.
 /// The API returns a fresh server-generated
@@ -380,6 +388,39 @@ pub async fn user_service(
                 }
             }
 
+            Some(UserCommand::ReauthenticateWithPassword(password)) => {
+                let result: Result<()> = call_api(
+                    Method::POST,
+                    &api_base_url,
+                    "users/me/reauthentication/password",
+                    Some(password),
+                    Some(ui_model),
+                )
+                .await;
+                complete_reauthentication(result, ui_model);
+            }
+            Some(UserCommand::ReauthenticateWithPasskey) => {
+                let result = reauthenticate_with_passkey(&api_base_url, ui_model).await;
+                complete_reauthentication(result, ui_model);
+            }
+            Some(UserCommand::ReauthenticateWithGoogle) => {
+                // The provider redirects back to the settings page once the
+                // identity is confirmed.
+                let result: Result<AuthorizeSessionResponse> = call_api(
+                    Method::GET,
+                    &api_base_url,
+                    "auth/reauthenticate-oidc/authorize",
+                    None::<i32>,
+                    Some(ui_model),
+                )
+                .await;
+                match result.and_then(|response| redirect_to(response.authorization_url.as_str())) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        ui_model.write().error_message = Some(err.to_string());
+                    }
+                }
+            }
             Some(UserCommand::RemoveAuthMethod(kind)) => {
                 let result: Result<SuccessResponse> = call_api(
                     Method::DELETE,
@@ -554,6 +595,52 @@ async fn finish_passkey_authentication(
             ui_model.write().error_message = Some(err.to_string());
         }
     };
+}
+
+fn complete_reauthentication(result: Result<()>, mut ui_model: Signal<UniversalInboxUIModel>) {
+    match result {
+        Ok(()) => {
+            *REAUTHENTICATION_TRIGGER.write() = false;
+            ui_model.write().confirmation_message =
+                Some("Identity confirmed, you can now retry".to_string());
+        }
+        Err(err) => {
+            ui_model.write().error_message = Some(err.to_string());
+        }
+    }
+}
+
+async fn reauthenticate_with_passkey(
+    api_base_url: &Url,
+    ui_model: Signal<UniversalInboxUIModel>,
+) -> Result<()> {
+    let NoncedChallenge { nonce, challenge } =
+        call_api::<NoncedChallenge<RequestChallengeResponse>, i32>(
+            Method::POST,
+            api_base_url,
+            "users/me/reauthentication/passkey/start",
+            None,
+            Some(ui_model),
+        )
+        .await?;
+    let c_options: web_sys::CredentialRequestOptions = challenge.into();
+    let credentials = PublicKeyCredential::from(
+        get_navigator_credentials(c_options)
+            .await
+            .map_err(|err| anyhow::anyhow!("The passkey could not be used: {err}"))?,
+    );
+    let body = NoncedFinish {
+        nonce: nonce.as_str(),
+        credential: &credentials,
+    };
+    call_api(
+        Method::POST,
+        api_base_url,
+        "users/me/reauthentication/passkey/finish",
+        Some(body),
+        Some(ui_model),
+    )
+    .await
 }
 
 async fn refresh_auth_methods(

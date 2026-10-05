@@ -42,7 +42,7 @@ use apalis::{
 use apalis_cron::{CronStream, Schedule};
 
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
-use chrono::Utc;
+use chrono::{TimeDelta, Utc};
 use configuration::{AuthenticationSettings, CronSettings};
 use csp::{CSP, Directive, Source, Sources};
 use integrations::{api::APIService, google_calendar::GoogleCalendarService, slack::SlackService};
@@ -847,6 +847,13 @@ pub async fn build_services(
     let auth_token_service = Arc::new(RwLock::new(AuthenticationTokenService::new(
         repository.clone(),
         settings.application.http_session.clone(),
+        TimeDelta::seconds(
+            settings
+                .application
+                .security
+                .reauthentication_window_in_seconds
+                .into(),
+        ),
     )));
 
     // Per-account login throttle (Redis-backed), built once and shared by the

@@ -227,6 +227,32 @@ pub async fn tested_app_with_local_auth_without_email(
     .await
 }
 
+/// Reauthentication window of `tested_app_with_short_reauthentication_window`.
+pub const TEST_REAUTHENTICATION_WINDOW_SECONDS: u32 = 2;
+
+/// Local auth app whose sessions must re-authenticate
+/// `TEST_REAUTHENTICATION_WINDOW_SECONDS` after login, so tests can let a
+/// session go stale without waiting the default window.
+#[fixture]
+pub async fn tested_app_with_short_reauthentication_window(
+    mut settings: Settings,
+    #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
+    #[future] db_connection: TestDb,
+    #[future] redis_storage: JobStorage,
+) -> TestedApp {
+    settings
+        .application
+        .security
+        .reauthentication_window_in_seconds = TEST_REAUTHENTICATION_WINDOW_SECONDS;
+    setup_tested_app_with_local_auth(
+        settings,
+        local_auth_settings(),
+        db_connection.await,
+        redis_storage.await,
+    )
+    .await
+}
+
 #[fixture]
 pub async fn tested_app_with_account_rate_limits(
     settings: Settings,

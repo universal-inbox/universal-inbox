@@ -79,6 +79,10 @@ async fn test_export_contains_user_data_without_secrets(
             "{}users/me/authentication-tokens",
             app.app.api_address
         ))
+        .header(
+            reqwest::header::ORIGIN,
+            crate::helpers::user::front_origin_header(&app.app),
+        )
         .send()
         .await
         .unwrap();
@@ -159,6 +163,10 @@ async fn test_export_contains_user_data_without_secrets(
             "{}users/me/authentication-tokens",
             app.app.api_address
         ))
+        .header(
+            reqwest::header::ORIGIN,
+            crate::helpers::user::front_origin_header(&app.app),
+        )
         .send()
         .await
         .unwrap();

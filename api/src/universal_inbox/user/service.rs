@@ -61,8 +61,8 @@ use crate::{
         user::{
             common_passwords::is_common_password,
             model::{
-                AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
-                UserDataExport,
+                AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth,
+                SessionAuthentication, UserAuth, UserDataExport,
             },
         },
     },
@@ -313,10 +313,48 @@ impl UserService {
         self.repository.get_user_auth(executor, user_id, kind).await
     }
 
+    /// Sensitive account operations need a recent login or re-authentication
+    /// in the calling session (see [`SessionAuthentication::ensure_recent`]).
+    pub fn ensure_recently_authenticated(
+        &self,
+        user_id: UserId,
+        session_authentication: Option<&SessionAuthentication>,
+    ) -> Result<(), UniversalInboxError> {
+        SessionAuthentication::ensure_recent(
+            session_authentication,
+            user_id,
+            self.reauthentication_window(),
+        )
+    }
+
+    pub fn reauthentication_window(&self) -> TimeDelta {
+        TimeDelta::seconds(
+            self.application_settings
+                .security
+                .reauthentication_window_in_seconds
+                .into(),
+        )
+    }
+
     // --- Auth method management (add/remove) ---
 
     #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
     pub async fn add_local_auth_method(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        password: SecretBox<Password>,
+        session_authentication: Option<&SessionAuthentication>,
+    ) -> Result<UserAuthMethod, UniversalInboxError> {
+        self.ensure_recently_authenticated(user_id, session_authentication)?;
+        self.create_local_auth_method(executor, user_id, password)
+            .await
+    }
+
+    /// Add a local auth method without the re-authentication check: for
+    /// operator commands, which act on the user's behalf outside any session.
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
+    pub async fn create_local_auth_method(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
@@ -365,7 +403,11 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         username: &Username,
+        session_authentication: Option<&SessionAuthentication>,
     ) -> Result<(CreationChallengeResponse, PasskeyRegistration), UniversalInboxError> {
+        // `finish` is bound to the state this call returns: checking here
+        // covers the whole ceremony.
+        self.ensure_recently_authenticated(user_id, session_authentication)?;
         if self
             .repository
             .get_user_auth(executor, user_id, UserAuthKind::Passkey)
@@ -446,7 +488,9 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         kind: UserAuthKind,
+        session_authentication: Option<&SessionAuthentication>,
     ) -> Result<(), UniversalInboxError> {
+        self.ensure_recently_authenticated(user_id, session_authentication)?;
         // Lock the user's auth rows to prevent concurrent removals from
         // deleting the last authentication method (TOCTOU).
         let auth_methods = self
@@ -609,8 +653,61 @@ impl UserService {
             .await
     }
 
+    /// Confirm the identity of a logged-in user with the Google account
+    /// linked to it (Authorization Code flow callback). The account that
+    /// signed in must be the linked one, and, when the provider reports when
+    /// it authenticated the user, that must be recent.
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
+    pub async fn reauthenticate_for_auth_code_flow(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        openid_connect_settings: &OpenIDConnectSettings,
+        code: AuthorizationCode,
+        nonce: Nonce,
+    ) -> Result<(), UniversalInboxError> {
+        let Some(UserAuth::OIDCGoogleAuthorizationCode(linked_auth)) = self
+            .repository
+            .get_user_auth(executor, user_id, UserAuthKind::OIDCGoogleAuthorizationCode)
+            .await?
+        else {
+            return Err(UniversalInboxError::UnsupportedAction(
+                "This account is not linked to Google: confirm your identity another way"
+                    .to_string(),
+            ));
+        };
+
+        let (_, id_token) = self
+            .fetch_access_token(openid_connect_settings, code, nonce.clone())
+            .await?;
+        let oidc_provider = self
+            .get_openid_connect_provider(openid_connect_settings)
+            .await?;
+        let claims = oidc_provider.verify_id_token_claims(&id_token, &nonce)?;
+
+        if claims.subject().as_str() != linked_auth.auth_user_id.0 {
+            return Err(UniversalInboxError::Forbidden(
+                "Please sign in with the Google account linked to Universal Inbox".to_string(),
+            ));
+        }
+        // Google ignores `max_age` and does not report `auth_time` (checked
+        // live, universal-inbox-6pfj): this proves control of the linked
+        // Google account, like a Google login, not a fresh sign-in. Should a
+        // provider report `auth_time`, it must fall within the window.
+        if let Some(auth_time) = claims.auth_time()
+            && !SessionAuthentication::is_recent(auth_time, self.reauthentication_window())
+        {
+            return Err(UniversalInboxError::Forbidden(
+                "Google did not ask you to sign in again, please retry".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Link an OIDC auth method to an existing user via the PKCE flow.
     #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
+    #[allow(clippy::too_many_arguments)]
     pub async fn link_for_auth_code_pkce_flow(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -619,7 +716,9 @@ impl UserService {
         pkce_flow_settings: &OIDCAuthorizationCodePKCEFlowSettings,
         access_token: AccessToken,
         id_token: CoreIdToken,
+        session_authentication: Option<&SessionAuthentication>,
     ) -> Result<UserAuthMethod, UniversalInboxError> {
+        self.ensure_recently_authenticated(user_id, session_authentication)?;
         let mut oidc_provider = self
             .get_openid_connect_provider(openid_connect_settings)
             .await?;
@@ -726,6 +825,7 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         patch: &UserPatch,
+        session_authentication: Option<&SessionAuthentication>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError> {
         // Block email changes when an OIDC authentication method is linked
         if patch.email.is_some() {
@@ -783,13 +883,17 @@ impl UserService {
             .as_ref()
             .filter(|email| current_user.email.as_ref() != Some(*email));
         let mut current_user = current_user;
-        if let Some(new_email) = requested_email
-            && self
+        if let Some(new_email) = requested_email {
+            // Only a real change of address is sensitive: the profile form
+            // also sends the unchanged email with a name change.
+            self.ensure_recently_authenticated(user_id, session_authentication)?;
+            if self
                 .request_email_change(executor, &current_user, new_email)
                 .await?
-            && let Some(updated_user) = self.repository.get_user(executor, user_id).await?
-        {
-            current_user = updated_user;
+                && let Some(updated_user) = self.repository.get_user(executor, user_id).await?
+            {
+                current_user = updated_user;
+            }
         }
 
         if patch.first_name.is_none() && patch.last_name.is_none() {
@@ -2058,22 +2162,13 @@ impl UserService {
         user_id: UserId,
         password_change: PasswordChange,
     ) -> Result<(), UniversalInboxError> {
-        let user = self
-            .repository
-            .get_user(executor, user_id)
-            .await?
-            .ok_or_else(|| UniversalInboxError::ItemNotFound(format!("Unknown user {user_id}")))?;
-        let (Some(email), Some(UserAuth::Local(_))) = (
-            user.email.clone(),
-            self.repository
-                .get_user_auth(executor, user_id, UserAuthKind::Local)
-                .await?,
-        ) else {
-            return Err(UniversalInboxError::UnsupportedAction(
-                "Cannot change the password of an account without password authentication"
-                    .to_string(),
-            ));
-        };
+        let (user, email) = self
+            .get_user_with_local_auth(
+                executor,
+                user_id,
+                "Cannot change the password of an account without password authentication",
+            )
+            .await?;
 
         let PasswordChange {
             current_password,
@@ -2086,25 +2181,13 @@ impl UserService {
             });
         }
 
-        match self
-            .validate_credentials(
-                executor,
-                Credentials {
-                    email,
-                    password: current_password,
-                },
-            )
-            .await
-        {
-            Ok(_) => {}
-            Err(UniversalInboxError::Unauthorized(_)) => {
-                return Err(UniversalInboxError::InvalidInputData {
-                    source: None,
-                    user_error: "The current password is incorrect".to_string(),
-                });
-            }
-            Err(err) => return Err(err),
-        }
+        self.verify_current_password(
+            executor,
+            email,
+            current_password,
+            "The current password is incorrect",
+        )
+        .await?;
 
         self.set_password(executor, user_id, new_password).await?;
 
@@ -2112,6 +2195,77 @@ impl UserService {
             .await;
 
         Ok(())
+    }
+
+    /// Confirm the identity of a logged-in user with their password, before a
+    /// sensitive account operation (see [`Self::ensure_recently_authenticated`]).
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
+    pub async fn reauthenticate_with_password(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        password: SecretBox<Password>,
+    ) -> Result<(), UniversalInboxError> {
+        let (_, email) = self
+            .get_user_with_local_auth(
+                executor,
+                user_id,
+                "This account has no password: confirm your identity another way",
+            )
+            .await?;
+        self.verify_current_password(executor, email, password, "The password is incorrect")
+            .await
+    }
+
+    /// `user_id` and their email, provided they log in with a password.
+    async fn get_user_with_local_auth(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        unsupported_message: &str,
+    ) -> Result<(User, Pii<EmailAddress>), UniversalInboxError> {
+        let user = self
+            .repository
+            .get_user(executor, user_id)
+            .await?
+            .ok_or_else(|| UniversalInboxError::ItemNotFound(format!("Unknown user {user_id}")))?;
+        let (Some(email), Some(UserAuth::Local(_))) = (
+            user.email.clone(),
+            self.repository
+                .get_user_auth(executor, user_id, UserAuthKind::Local)
+                .await?,
+        ) else {
+            return Err(UniversalInboxError::UnsupportedAction(
+                unsupported_message.to_string(),
+            ));
+        };
+        Ok((user, email))
+    }
+
+    /// Check `password` against the account of `email` like a login: the
+    /// attempt counts against the login throttle and may lock the account.
+    /// A wrong password is a 400 with `incorrect_message`, not a 401, which
+    /// would clear the caller's session cookie.
+    async fn verify_current_password(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        email: Pii<EmailAddress>,
+        password: SecretBox<Password>,
+        incorrect_message: &str,
+    ) -> Result<(), UniversalInboxError> {
+        match self
+            .validate_credentials(executor, Credentials { email, password })
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(UniversalInboxError::Unauthorized(_)) => {
+                Err(UniversalInboxError::InvalidInputData {
+                    source: None,
+                    user_error: incorrect_message.to_string(),
+                })
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Sign out every session of `user_id` issued before now. Best-effort, like
@@ -2389,6 +2543,72 @@ impl UserService {
         }
 
         Ok(user)
+    }
+
+    /// Start a passkey assertion for a logged-in user confirming their
+    /// identity (see [`Self::ensure_recently_authenticated`]). Unlike a
+    /// login, the user is known, so the challenge targets their passkey.
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
+    pub async fn start_passkey_reauthentication(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<(RequestChallengeResponse, PasskeyAuthentication), UniversalInboxError> {
+        let Some(UserAuth::Passkey(passkey_user_auth)) = self
+            .repository
+            .get_user_auth(executor, user_id, UserAuthKind::Passkey)
+            .await?
+        else {
+            return Err(UniversalInboxError::UnsupportedAction(
+                "This account has no passkey: confirm your identity another way".to_string(),
+            ));
+        };
+
+        Ok(self
+            .webauthn
+            .start_passkey_authentication(&[passkey_user_auth.passkey])
+            .context("Failed to start Passkey re-authentication")?)
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
+    pub async fn finish_passkey_reauthentication(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        credentials: PublicKeyCredential,
+        passkey_authentication: PasskeyAuthentication,
+    ) -> Result<(), UniversalInboxError> {
+        let auth_result = self
+            .webauthn
+            .finish_passkey_authentication(&credentials, &passkey_authentication)
+            .map_err(|err| {
+                debug!("Passkey re-authentication failed for user {user_id}: {err:?}");
+                UniversalInboxError::InvalidInputData {
+                    source: None,
+                    user_error: "The passkey could not be verified".to_string(),
+                }
+            })?;
+
+        let Some(UserAuth::Passkey(mut passkey_user_auth)) = self
+            .repository
+            .get_user_auth(executor, user_id, UserAuthKind::Passkey)
+            .await?
+        else {
+            return Err(UniversalInboxError::UnsupportedAction(
+                "This account has no passkey: confirm your identity another way".to_string(),
+            ));
+        };
+        if passkey_user_auth
+            .passkey
+            .update_credential(&auth_result)
+            .unwrap_or_default()
+        {
+            self.repository
+                .update_passkey(executor, &user_id, &passkey_user_auth.passkey)
+                .await?;
+        }
+
+        Ok(())
     }
 
     #[tracing::instrument(

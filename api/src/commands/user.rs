@@ -364,7 +364,7 @@ pub async fn reset_password(
             info!("Password updated for user {}", user.id);
         } else {
             service
-                .add_local_auth_method(&mut transaction, user.id, password)
+                .create_local_auth_method(&mut transaction, user.id, password)
                 .await?;
             eprintln!(
                 "Note: User {} had no Local auth method. A new one has been created.",
