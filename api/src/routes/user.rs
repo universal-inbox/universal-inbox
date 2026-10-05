@@ -6,7 +6,7 @@ use actix_session::Session;
 use actix_web::{HttpRequest, HttpResponse, Scope, http::header, web};
 use anyhow::{Context, anyhow};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{TimeDelta, Utc};
+use chrono::Utc;
 use email_address::EmailAddress;
 use governor::Quota;
 use rand::RngExt;
@@ -34,7 +34,9 @@ use universal_inbox::{
 use crate::{
     billing::service::BillingService,
     configuration::Settings,
-    routes::auth::USER_AUTH_KIND_SESSION_KEY,
+    routes::auth::{
+        USER_AUTH_KIND_SESSION_KEY, record_session_authentication, session_authentication,
+    },
     universal_inbox::{
         UniversalInboxError, UpdateStatus, auth_token::service::AuthenticationTokenService,
         oauth2::service::OAuth2Service, user::service::UserService,
@@ -208,6 +210,21 @@ pub fn scope(auth_rate_limiter: Arc<AuthRateLimiter>) -> Scope {
                         ),
                 )
                 .service(
+                    web::scope("/reauthentication")
+                        .service(
+                            web::resource("/password")
+                                .route(web::post().to(reauthenticate_with_password)),
+                        )
+                        .service(
+                            web::resource("/passkey/start")
+                                .route(web::post().to(start_passkey_reauthentication)),
+                        )
+                        .service(
+                            web::resource("/passkey/finish")
+                                .route(web::post().to(finish_passkey_reauthentication)),
+                        ),
+                )
+                .service(
                     web::resource("/authentication-tokens")
                         .route(web::get().to(list_authentication_tokens))
                         .route(web::post().to(create_authentication_token)),
@@ -297,6 +314,7 @@ pub async fn patch_user(
     user_service: web::Data<Arc<UserService>>,
     rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     authenticated: Authenticated<Claims>,
+    session: Session,
     patch: web::Json<UserPatch>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     patch
@@ -321,7 +339,12 @@ pub async fn patch_user(
         .context("Failed to create new transaction while patching user")?;
 
     let update_status = service
-        .patch_user(&mut transaction, user_id, &patch.into_inner())
+        .patch_user(
+            &mut transaction,
+            user_id,
+            &patch.into_inner(),
+            session_authentication(&session)?.as_ref(),
+        )
         .await?;
 
     transaction
@@ -428,12 +451,193 @@ pub async fn list_auth_methods(
 }
 
 const ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY: &str = "add-passkey-registration-state";
+/// Redis key prefix of an in-flight passkey re-authentication, per user.
+const PASSKEY_REAUTHENTICATION_STATE_KEY: &str = "passkey-reauthentication-state";
+
+/// Confirm the identity of the logged-in user with their password. On success
+/// the session may run sensitive account operations for the reauthentication
+/// window; no new session is issued.
+pub async fn reauthenticate_with_password(
+    req: HttpRequest,
+    user_service: web::Data<Arc<UserService>>,
+    settings: web::Data<Settings>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
+    authenticated: Authenticated<Claims>,
+    session: Session,
+    password: web::Json<SecretBox<Password>>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(*response);
+    }
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(*response);
+    }
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while re-authenticating")?;
+
+    service
+        .reauthenticate_with_password(&mut transaction, user_id, password.into_inner())
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while re-authenticating")?;
+    record_session_authentication(&session, user_id)?;
+
+    Ok(HttpResponse::NoContent().finish())
+}
+
+/// Start confirming the identity of the logged-in user with their passkey.
+/// The ceremony state is kept in Redis for this user and bound to a nonce the
+/// client echoes back on `finish`.
+#[allow(dependency_on_unit_never_type_fallback)]
+pub async fn start_passkey_reauthentication(
+    req: HttpRequest,
+    user_service: web::Data<Arc<UserService>>,
+    settings: web::Data<Settings>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
+    authenticated: Authenticated<Claims>,
+    cache: web::Data<Cache>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(*response);
+    }
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(*response);
+    }
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while starting Passkey re-authentication")?;
+
+    let (request_challenge_response, authentication_state) = service
+        .start_passkey_reauthentication(&mut transaction, user_id)
+        .await?;
+
+    let nonce = generate_passkey_nonce();
+    let bound = NonceBound {
+        nonce: nonce.clone(),
+        state: authentication_state,
+    };
+    let Ok(authentication_state_to_store) = serde_json::to_string(&bound) else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "Failed to serialize Passkey re-authentication state"
+        )));
+    };
+    cache
+        .connection_manager
+        .clone()
+        .set_ex::<_, _, ()>(
+            format!("{PASSKEY_REAUTHENTICATION_STATE_KEY}::{user_id}"),
+            authentication_state_to_store,
+            PASSKEY_CEREMONY_TTL_SECONDS,
+        )
+        .await
+        .context("Failed to store Passkey re-authentication state in Redis")?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while starting Passkey re-authentication")?;
+
+    let mut response_value = serde_json::to_value(&request_challenge_response)
+        .context("Cannot serialize Passkey request challenge")?;
+    if let Some(obj) = response_value.as_object_mut() {
+        obj.insert("nonce".to_string(), serde_json::Value::String(nonce));
+    }
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&response_value)
+            .context("Cannot serialize Passkey request challenge with nonce")?,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn finish_passkey_reauthentication(
+    req: HttpRequest,
+    user_service: web::Data<Arc<UserService>>,
+    settings: web::Data<Settings>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
+    authenticated: Authenticated<Claims>,
+    session: Session,
+    cache: web::Data<Cache>,
+    body: web::Json<PasskeyFinishRequest<PublicKeyCredential>>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(*response);
+    }
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(*response);
+    }
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let PasskeyFinishRequest {
+        nonce: provided_nonce,
+        credential,
+    } = body.into_inner();
+
+    // `get_del`: a ceremony can be finished once only.
+    let stored_state: Option<String> = cache
+        .connection_manager
+        .clone()
+        .get_del(format!("{PASSKEY_REAUTHENTICATION_STATE_KEY}::{user_id}"))
+        .await
+        .context("Failed to fetch Passkey re-authentication state from Redis")?;
+    let Some(stored_state) = stored_state else {
+        return Err(UniversalInboxError::InvalidInputData {
+            source: None,
+            user_error: "No passkey confirmation in progress, please start again".to_string(),
+        });
+    };
+    let Ok(bound) = serde_json::from_str::<NonceBound<PasskeyAuthentication>>(&stored_state) else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "Failed to parse Passkey re-authentication state"
+        )));
+    };
+    verify_passkey_nonce(&bound.nonce, &provided_nonce)?;
+
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while finishing Passkey re-authentication")?;
+
+    service
+        .finish_passkey_reauthentication(&mut transaction, user_id, credential, bound.state)
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while finishing Passkey re-authentication")?;
+    record_session_authentication(&session, user_id)?;
+
+    Ok(HttpResponse::NoContent().finish())
+}
 
 pub async fn add_local_auth_method(
     req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
     settings: web::Data<Settings>,
     authenticated: Authenticated<Claims>,
+    session: Session,
     password: web::Json<SecretBox<Password>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
@@ -451,7 +655,12 @@ pub async fn add_local_auth_method(
         .context("Failed to create new transaction while adding local auth method")?;
 
     let auth_method = service
-        .add_local_auth_method(&mut transaction, user_id, password.into_inner())
+        .add_local_auth_method(
+            &mut transaction,
+            user_id,
+            password.into_inner(),
+            session_authentication(&session)?.as_ref(),
+        )
         .await?;
 
     transaction
@@ -510,6 +719,8 @@ pub async fn change_password(
             auth_token.jwt_token.expose_secret().0.clone(),
         )
         .context("Failed to insert JWT token into the session")?;
+    // The current password was just checked: it counts as a re-authentication.
+    record_session_authentication(&session, user_id)?;
 
     transaction
         .commit()
@@ -551,7 +762,12 @@ pub async fn start_add_passkey_registration(
 
     let username = username.into_inner();
     let (creation_challenge_response, registration_state) = service
-        .start_add_passkey_auth_method(&mut transaction, user_id, &username)
+        .start_add_passkey_auth_method(
+            &mut transaction,
+            user_id,
+            &username,
+            session_authentication(&session)?.as_ref(),
+        )
         .await?;
 
     let nonce = generate_passkey_nonce();
@@ -692,6 +908,7 @@ pub async fn remove_auth_method(
     user_service: web::Data<Arc<UserService>>,
     settings: web::Data<Settings>,
     authenticated: Authenticated<Claims>,
+    session: Session,
     path_info: web::Path<UserAuthKind>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
@@ -710,7 +927,12 @@ pub async fn remove_auth_method(
         .context("Failed to create new transaction while removing auth method")?;
 
     service
-        .remove_auth_method(&mut transaction, user_id, kind)
+        .remove_auth_method(
+            &mut transaction,
+            user_id,
+            kind,
+            session_authentication(&session)?.as_ref(),
+        )
         .await?;
 
     transaction
@@ -808,6 +1030,7 @@ pub async fn login_user(
     session
         .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Local)
         .context("Failed to insert authentication type into the session")?;
+    record_session_authentication(&session, user.id)?;
 
     transaction
         .commit()
@@ -1029,9 +1252,19 @@ pub async fn list_authentication_tokens(
 }
 
 pub async fn create_authentication_token(
+    req: HttpRequest,
     authentication_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    settings: web::Data<Settings>,
+    rate_limiter: web::Data<Arc<AuthRateLimiter>>,
     authenticated: Authenticated<Claims>,
+    session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Err(response) = check_request_origin(&req, &settings.application.front_base_url) {
+        return Ok(*response);
+    }
+    if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
+        return Ok(*response);
+    }
     let user_id = authenticated
         .claims
         .sub
@@ -1043,12 +1276,10 @@ pub async fn create_authentication_token(
         .await
         .context("Failed to create new transaction while creating authentication token")?;
     let result: AuthenticationToken = service
-        .create_auth_token(
+        .create_api_token(
             &mut transaction,
-            false,
             user_id,
-            Some(Utc::now() + TimeDelta::try_days(30 * 6).unwrap()),
-            true,
+            session_authentication(&session)?.as_ref(),
         )
         .await?;
 
@@ -1299,6 +1530,7 @@ pub async fn finish_passkey_registration(
     session
         .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Passkey)
         .context("Failed to insert authentication type into the session")?;
+    record_session_authentication(&session, user_id)?;
 
     transaction
         .commit()
@@ -1529,6 +1761,7 @@ pub async fn finish_passkey_authentication(
     session
         .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Passkey)
         .context("Failed to insert authentication type into the session")?;
+    record_session_authentication(&session, user_id)?;
 
     transaction
         .commit()

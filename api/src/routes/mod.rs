@@ -22,6 +22,8 @@ use opentelemetry::trace::TraceContextExt;
 use serde_json::json;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
+use universal_inbox::user::REAUTHENTICATION_REQUIRED_CODE;
+
 use crate::{
     observability::attr,
     universal_inbox::{UniversalInboxError, UpstreamErrorKind},
@@ -65,6 +67,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::Unexpected(_) => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             UniversalInboxError::Forbidden(_) => StatusCode::FORBIDDEN,
+            UniversalInboxError::ReauthenticationRequired => StatusCode::FORBIDDEN,
             UniversalInboxError::TooManyLoginAttempts { .. } => StatusCode::TOO_MANY_REQUESTS,
             UniversalInboxError::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
             UniversalInboxError::UnsupportedAction(_) => StatusCode::BAD_REQUEST,
@@ -159,6 +162,12 @@ impl ResponseError for UniversalInboxError {
                     "code": code,
                 })
             }
+            // A stable code lets the UI tell this 403 apart and offer to
+            // re-authenticate instead of showing a dead-end error.
+            UniversalInboxError::ReauthenticationRequired => json!({
+                "message": format!("{self}"),
+                "code": REAUTHENTICATION_REQUIRED_CODE,
+            }),
             UniversalInboxError::DatabaseUnavailable { .. }
             | UniversalInboxError::SessionStoreUnavailable(_) => {
                 json!({ "message": SERVICE_UNAVAILABLE_MESSAGE })

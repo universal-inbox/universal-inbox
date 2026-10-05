@@ -10,12 +10,15 @@ use reqwest::{
 use serde_json;
 use url::Url;
 
+use universal_inbox::user::REAUTHENTICATION_REQUIRED_CODE;
+
 use crate::{
     components::toast_zone::{Toast, ToastKind},
     model::{AuthenticationState, UniversalInboxUIModel},
     services::{
         billing_service::{UPGRADE_TRIGGER, UpgradeTrigger},
         toast_service::{ToastCommand, ToastUpdate},
+        user_service::REAUTHENTICATION_TRIGGER,
         version::check_version_mismatch,
     },
 };
@@ -73,6 +76,24 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
             .unwrap_or_else(|| "Upgrade required".to_string());
         *UPGRADE_TRIGGER.write() = Some(UpgradeTrigger { code, message });
         return Err(anyhow!(error_message));
+    }
+
+    // Centralized "confirm your identity" handling: a sensitive account
+    // operation refused for lack of a recent login opens the global
+    // re-authentication modal (via REAUTHENTICATION_TRIGGER), then the error
+    // bubbles like any other.
+    if status == StatusCode::FORBIDDEN {
+        let body: serde_json::Value = response.json().await.unwrap_or(serde_json::Value::Null);
+        if body.get("code").and_then(|value| value.as_str()) == Some(REAUTHENTICATION_REQUIRED_CODE)
+        {
+            *REAUTHENTICATION_TRIGGER.write() = true;
+        }
+        let message = body
+            .get("message")
+            .and_then(|value| value.as_str())
+            .unwrap_or("Error calling Universal Inbox API")
+            .to_string();
+        return Err(anyhow!(message));
     }
 
     // Treat every non-success status (except 304, handled below) as a failure

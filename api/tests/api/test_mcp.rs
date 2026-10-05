@@ -52,6 +52,10 @@ async fn create_api_key(app: &AuthenticatedApp) -> AuthenticationToken {
             "{}users/me/authentication-tokens",
             app.app.api_address
         ))
+        .header(
+            reqwest::header::ORIGIN,
+            crate::helpers::user::front_origin_header(&app.app),
+        )
         .send()
         .await
         .expect("Failed to create API key")
@@ -314,6 +318,10 @@ mod protocol {
                 "{}users/me/authentication-tokens",
                 app.app.api_address
             ))
+            .header(
+                reqwest::header::ORIGIN,
+                crate::helpers::user::front_origin_header(&app.app),
+            )
             .send()
             .await
             .expect("Failed to create API key")
@@ -1282,6 +1290,10 @@ mod oauth2 {
         // Get an API key to authenticate the authorize request
         let api_key: AuthenticationToken = auth_client
             .post(format!("{}users/me/authentication-tokens", app.api_address))
+            .header(
+                reqwest::header::ORIGIN,
+                crate::helpers::user::front_origin_header(app),
+            )
             .send()
             .await
             .expect("Failed to create API key")

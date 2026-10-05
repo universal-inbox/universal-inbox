@@ -81,6 +81,23 @@ impl TryFrom<FormValues> for SecretBox<Password> {
     }
 }
 
+/// The current password typed to confirm the user's identity: only parsed
+/// as an existing password, the new-password policy does not apply.
+pub struct ReauthenticationPassword(pub SecretBox<Password>);
+
+impl TryFrom<FormValues> for ReauthenticationPassword {
+    type Error = anyhow::Error;
+
+    fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
+        let password: Password = form_values
+            .get_text("password")
+            .ok_or_else(|| anyhow!("password is required"))?
+            .parse()?;
+
+        Ok(Self(SecretBox::new(Box::new(password))))
+    }
+}
+
 impl TryFrom<FormValues> for PasswordChange {
     type Error = anyhow::Error;
 

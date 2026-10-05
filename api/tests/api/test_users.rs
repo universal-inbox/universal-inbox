@@ -1132,6 +1132,10 @@ mod create_authentication_token {
                 "{}users/me/authentication-tokens",
                 app.app.api_address
             ))
+            .header(
+                reqwest::header::ORIGIN,
+                crate::helpers::user::front_origin_header(&app.app),
+            )
             .send()
             .await
             .unwrap()
@@ -1190,6 +1194,10 @@ mod create_authentication_token {
                 "{}users/me/authentication-tokens",
                 app.app.api_address
             ))
+            .header(
+                reqwest::header::ORIGIN,
+                crate::helpers::user::front_origin_header(&app.app),
+            )
             .send()
             .await
             .unwrap()
@@ -1233,6 +1241,10 @@ mod create_authentication_token {
                 "{}users/me/authentication-tokens",
                 app.app.api_address
             ))
+            .header(
+                reqwest::header::ORIGIN,
+                crate::helpers::user::front_origin_header(&app.app),
+            )
             .send()
             .await
             .unwrap()
@@ -2512,6 +2524,10 @@ mod delete_user {
                 "{}users/me/authentication-tokens",
                 app.app.api_address
             ))
+            .header(
+                reqwest::header::ORIGIN,
+                crate::helpers::user::front_origin_header(&app.app),
+            )
             .send()
             .await
             .unwrap();

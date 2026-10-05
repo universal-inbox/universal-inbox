@@ -23,8 +23,9 @@ use crate::{
     Claims,
     configuration::{AuthenticationSettings, OIDCFlowSettings, Settings},
     universal_inbox::{
-        UniversalInboxError, auth_token::service::AuthenticationTokenService,
-        user::service::UserService,
+        UniversalInboxError,
+        auth_token::service::AuthenticationTokenService,
+        user::{model::SessionAuthentication, service::UserService},
     },
     utils::jwt::JWT_SESSION_KEY,
 };
@@ -43,6 +44,11 @@ pub fn scope() -> Scope {
         // OIDC linking routes (for adding OIDC auth to existing user)
         .service(web::resource("link-oidc/authorize").route(web::get().to(authorize_link_oidc)))
         .service(web::resource("link-oidc/session").route(web::post().to(link_oidc_pkce_session)))
+        // OIDC re-authentication of an already-authenticated user (Authorization code flow)
+        .service(
+            web::resource("reauthenticate-oidc/authorize")
+                .route(web::get().to(authorize_reauthenticate_oidc)),
+        )
 }
 
 /// Authenticate a user session using the Authorization Code + PKCE flow.
@@ -118,6 +124,7 @@ pub async fn authenticate_session(
             UserAuthKind::OIDCAuthorizationCodePKCE,
         )
         .context("Failed to insert authentication type into the session")?;
+    record_session_authentication(&session, user.id)?;
 
     transaction
         .commit()
@@ -128,7 +135,34 @@ pub async fn authenticate_session(
 }
 
 pub const USER_AUTH_KIND_SESSION_KEY: &str = "user_auth_kind";
+const SESSION_AUTHENTICATION_SESSION_KEY: &str = "authenticated_at";
+
+/// Record in the session that `user_id` just proved their identity (login or
+/// re-authentication). Sensitive account operations check it.
+pub fn record_session_authentication(
+    session: &Session,
+    user_id: UserId,
+) -> Result<(), UniversalInboxError> {
+    session
+        .insert(
+            SESSION_AUTHENTICATION_SESSION_KEY,
+            SessionAuthentication::now(user_id),
+        )
+        .context("Failed to insert the authentication time into the session")?;
+    Ok(())
+}
+
+/// The last identity proof recorded in the session, if any. Requests
+/// authenticated by an API bearer token carry no session, hence none.
+pub fn session_authentication(
+    session: &Session,
+) -> Result<Option<SessionAuthentication>, UniversalInboxError> {
+    Ok(session
+        .get::<SessionAuthentication>(SESSION_AUTHENTICATION_SESSION_KEY)
+        .context("Failed to extract the authentication time from the session")?)
+}
 pub const LINKING_USER_ID_SESSION_KEY: &str = "linking_user_id";
+const REAUTHENTICATING_USER_ID_SESSION_KEY: &str = "reauthenticating_user_id";
 const OIDC_CSRF_TOKEN_SESSION_KEY: &str = "oidc_csrf_token";
 const OIDC_NONCE_SESSION_KEY: &str = "oidc_nonce";
 const OIDC_AUTHORIZATION_URL_SESSION_KEY: &str = "authorization_url";
@@ -195,6 +229,7 @@ pub async fn authorize_session(
     // Clear any stale linking user ID from a previously abandoned link flow,
     // so a normal login cannot be accidentally treated as a linking flow.
     let _ = session.remove(LINKING_USER_ID_SESSION_KEY);
+    let _ = session.remove(REAUTHENTICATING_USER_ID_SESSION_KEY);
     // Also clear any cached OIDC authorization URL so a fresh one (with a fresh
     // CSRF state and nonce) is generated for this login flow. Reusing a URL
     // cached by a prior link-OIDC flow would let the OIDC callback pass the
@@ -217,13 +252,42 @@ pub async fn authorize_link_oidc(
         .sub
         .parse::<UserId>()
         .context("Wrong user ID format")?;
+    // The callback links whatever account comes back: check before starting.
+    user_service
+        .ensure_recently_authenticated(user_id, session_authentication(&session)?.as_ref())?;
 
     session
         .insert(LINKING_USER_ID_SESSION_KEY, user_id)
         .context("Failed to insert linking user ID into the session")?;
+    session.remove(REAUTHENTICATING_USER_ID_SESSION_KEY);
 
     // Clear any cached OIDC authorization URL so a fresh one is always generated
     // for the linking flow.
+    session.remove(OIDC_AUTHORIZATION_URL_SESSION_KEY);
+
+    build_oidc_authorization_response(&user_service, &session, &settings).await
+}
+
+/// Initiate the re-authentication of an already-authenticated user with the
+/// Google account linked to it. Stores REAUTHENTICATING_USER_ID in session so
+/// the callback confirms the identity instead of logging in.
+pub async fn authorize_reauthenticate_oidc(
+    user_service: web::Data<Arc<UserService>>,
+    authenticated: Authenticated<Claims>,
+    session: Session,
+    settings: web::Data<Settings>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+
+    session
+        .insert(REAUTHENTICATING_USER_ID_SESSION_KEY, user_id)
+        .context("Failed to insert re-authenticating user ID into the session")?;
+    session.remove(LINKING_USER_ID_SESSION_KEY);
+    // A fresh authorization URL, with a fresh CSRF state and nonce.
     session.remove(OIDC_AUTHORIZATION_URL_SESSION_KEY);
 
     build_oidc_authorization_response(&user_service, &session, &settings).await
@@ -280,6 +344,14 @@ pub async fn authenticated_session(
             .remove(LINKING_USER_ID_SESSION_KEY)
             .context("Failed to remove linking user ID from the session")?;
     }
+    let reauthenticating_user_id = session
+        .get::<UserId>(REAUTHENTICATING_USER_ID_SESSION_KEY)
+        .context("Failed to extract re-authenticating user ID from the session")?;
+    if reauthenticating_user_id.is_some() {
+        session
+            .remove(REAUTHENTICATING_USER_ID_SESSION_KEY)
+            .context("Failed to remove re-authenticating user ID from the session")?;
+    }
 
     let service = user_service.clone();
     let mut transaction = service
@@ -299,6 +371,30 @@ pub async fn authenticated_session(
                 .to_string()
         )));
     };
+
+    if let Some(user_id) = reauthenticating_user_id {
+        // Re-authentication flow: confirm the identity of the logged-in user
+        service
+            .reauthenticate_for_auth_code_flow(
+                &mut transaction,
+                user_id,
+                openid_connect_settings,
+                authenticated_session_request.code.clone(),
+                nonce,
+            )
+            .await?;
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit while re-authenticating user")?;
+        record_session_authentication(&session, user_id)?;
+
+        return Ok(Redirect::to(format!(
+            "{}settings",
+            settings.application.front_base_url
+        )));
+    }
 
     if let Some(linking_user_id) = linking_user_id {
         // Linking flow: add OIDC auth to existing user
@@ -350,6 +446,7 @@ pub async fn authenticated_session(
             UserAuthKind::OIDCGoogleAuthorizationCode,
         )
         .context("Failed to insert authentication type into the session")?;
+    record_session_authentication(&session, user.id)?;
 
     transaction
         .commit()
@@ -412,6 +509,7 @@ pub async fn link_oidc_pkce_session(
     params: web::Json<SessionAuthValidationParameters>,
     user_service: web::Data<Arc<UserService>>,
     authenticated: Authenticated<Claims>,
+    session: Session,
     settings: web::Data<Settings>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let user_id = authenticated
@@ -419,6 +517,7 @@ pub async fn link_oidc_pkce_session(
         .sub
         .parse::<UserId>()
         .context("Wrong user ID format")?;
+    let session_authentication = session_authentication(&session)?;
 
     let service = user_service.clone();
     let mut transaction = service
@@ -458,6 +557,7 @@ pub async fn link_oidc_pkce_session(
             pkce_flow_settings,
             access_token,
             id_token,
+            session_authentication.as_ref(),
         )
         .await?;
 

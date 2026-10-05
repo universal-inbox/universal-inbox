@@ -128,6 +128,10 @@ async fn test_oauth_callback_rejects_state_issued_to_another_user(
             "{}users/me/authentication-tokens",
             app.app.api_address
         ))
+        .header(
+            reqwest::header::ORIGIN,
+            crate::helpers::user::front_origin_header(&app.app),
+        )
         .send()
         .await
         .expect("Failed to create API key")
@@ -490,6 +494,10 @@ mod google_provider_user_id {
                 "{}users/me/authentication-tokens",
                 app.app.api_address
             ))
+            .header(
+                reqwest::header::ORIGIN,
+                crate::helpers::user::front_origin_header(&app.app),
+            )
             .send()
             .await
             .expect("Failed to create API key")

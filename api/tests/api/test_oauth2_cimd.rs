@@ -32,6 +32,10 @@ async fn create_api_key(app: &AuthenticatedApp) -> AuthenticationToken {
             "{}users/me/authentication-tokens",
             app.app.api_address
         ))
+        .header(
+            reqwest::header::ORIGIN,
+            crate::helpers::user::front_origin_header(&app.app),
+        )
         .send()
         .await
         .expect("Failed to create API key")
