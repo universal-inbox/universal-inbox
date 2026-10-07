@@ -6,6 +6,7 @@ use chrono::{Datelike, Duration, TimeZone, Utc};
 use email_address::EmailAddress;
 use pretty_assertions::assert_eq;
 use rstest::*;
+use universal_inbox::pii::Pii;
 use wiremock::{
     Mock, ResponseTemplate,
     matchers::{method, path, query_param},
@@ -82,7 +83,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     todoist_oauth_credential: OAuthCredentialFixture,
 ) {
     let app = authenticated_app.await;
-    let user_email_address = EmailAddress::from_str("jane.doe@example.com").unwrap();
+    let user_email_address = Pii::<EmailAddress>::from_str("jane.doe@example.com").unwrap();
 
     let _todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
@@ -146,7 +147,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 
     let google_drive_about_response = GoogleDriveAboutResponse {
         user: GoogleDriveUserInfo {
-            email_address: user_email_address.to_string(),
+            email_address: user_email_address.expose().to_string(),
             display_name: "Jane Doe".to_string(),
         },
     };
@@ -261,7 +262,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &google_drive_comment_123,
         &google_drive_comment_456,
         app.user.id,
-        user_email_address.as_ref(),
+        user_email_address.expose().as_ref(),
         "Jane Doe",
     );
 
@@ -288,7 +289,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     assert_eq!(
         updated_notification.source_item.data,
         ThirdPartyItemData::GoogleDriveComment(Box::new(GoogleDriveComment {
-            user_email_address: Some(user_email_address.to_string()),
+            user_email_address: Some(user_email_address.expose().to_string()),
             user_display_name: Some("Jane Doe".to_string()),
             ..google_drive_comment_456
         }))
@@ -343,10 +344,10 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     // is not in the message), the status of the notification remains unchanged.
     let app = authenticated_app.await;
     let google_drive_config = GoogleDriveConfig::enabled();
-    let user_email_address = EmailAddress::from_str("jane.doe@example.com").unwrap();
+    let user_email_address = Pii::<EmailAddress>::from_str("jane.doe@example.com").unwrap();
 
     let content = if has_new_message_addressed_directly {
-        format!("Hello @{user_email_address}")
+        format!("Hello @{}", user_email_address.expose())
     } else {
         "Hello".to_string()
     };
@@ -373,7 +374,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
 
     let google_drive_about_response = GoogleDriveAboutResponse {
         user: GoogleDriveUserInfo {
-            email_address: user_email_address.to_string(),
+            email_address: user_email_address.expose().to_string(),
             display_name: "Jane Doe".to_string(),
         },
     };
@@ -489,12 +490,12 @@ async fn test_sync_notifications_skips_files_returning_404_on_comments(
     // comments. A single 404 must not abort the entire sync — comments on commentable files
     // must still be synced.
     let app = authenticated_app.await;
-    let user_email_address = EmailAddress::from_str("jane.doe@example.com").unwrap();
+    let user_email_address = Pii::<EmailAddress>::from_str("jane.doe@example.com").unwrap();
     let google_drive_config = GoogleDriveConfig::enabled();
 
     let google_drive_about_response = GoogleDriveAboutResponse {
         user: GoogleDriveUserInfo {
-            email_address: user_email_address.to_string(),
+            email_address: user_email_address.expose().to_string(),
             display_name: "Jane Doe".to_string(),
         },
     };
@@ -593,7 +594,7 @@ async fn test_sync_notifications_should_refresh_user_info_of_pinned_account(
 ) {
     let app = authenticated_app.await;
     let previous_context = GoogleDriveContext {
-        user_email_address: EmailAddress::from_str("Previous@example.com").unwrap(),
+        user_email_address: Pii::<EmailAddress>::from_str("Previous@example.com").unwrap(),
         user_display_name: "Previous User".to_string(),
     };
     let google_drive_integration_connection = create_and_mock_integration_connection(
@@ -659,7 +660,7 @@ async fn test_sync_notifications_should_refresh_user_info_of_pinned_account(
             .unwrap();
     let expected_context = if expected_user_info_calls > 0 {
         GoogleDriveContext {
-            user_email_address: EmailAddress::from_str("John.Roe@example.com").unwrap(),
+            user_email_address: Pii::<EmailAddress>::from_str("John.Roe@example.com").unwrap(),
             user_display_name: "John Roe".to_string(),
         }
     } else {

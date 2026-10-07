@@ -10,6 +10,7 @@ use email_address::EmailAddress;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use serde_json::json;
+use universal_inbox::pii::Pii;
 use wiremock::{
     Mock, MockGuard, ResponseTemplate,
     matchers::{body_string_contains, header, method, path},
@@ -488,7 +489,7 @@ async fn test_authenticated_requests_record_user_activity_once_a_day(
     #[future] tested_app_with_local_auth: TestedApp,
 ) {
     let app = tested_app_with_local_auth.await;
-    let email: EmailAddress = "inactive@example.com".parse().unwrap();
+    let email: Pii<EmailAddress> = "inactive@example.com".parse().unwrap();
     let user = create_user(&app, email.clone(), "password").await;
     let client = reqwest::Client::builder()
         .cookie_store(true)

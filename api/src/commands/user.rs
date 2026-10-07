@@ -13,6 +13,7 @@ use tabled::{
     settings::{Color, object::Rows, style::Style},
 };
 use tokio::sync::RwLock;
+use universal_inbox::pii::Pii;
 
 use universal_inbox::user::{Password, UserAuthKind, UserId};
 
@@ -38,7 +39,7 @@ use crate::{
 )]
 pub async fn send_verification_email(
     user_service: Arc<UserService>,
-    user_email: &EmailAddress,
+    user_email: &Pii<EmailAddress>,
     dry_run: bool,
 ) -> Result<(), UniversalInboxError> {
     let result: Result<(), UniversalInboxError> =
@@ -96,7 +97,7 @@ pub async fn send_verification_email(
 )]
 pub async fn send_password_reset_email(
     user_service: Arc<UserService>,
-    user_email: &EmailAddress,
+    user_email: &Pii<EmailAddress>,
     dry_run: bool,
 ) -> Result<(), UniversalInboxError> {
     let result: Result<(), UniversalInboxError> = async move {
@@ -139,7 +140,7 @@ pub async fn send_password_reset_email(
 pub async fn generate_jwt_token(
     user_service: Arc<UserService>,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
-    user_email: &EmailAddress,
+    user_email: &Pii<EmailAddress>,
 ) -> Result<(), UniversalInboxError> {
     let result: Result<(), UniversalInboxError> = async move {
         let service = user_service.clone();
@@ -216,7 +217,7 @@ pub async fn list_users(user_service: Arc<UserService>) -> Result<(), UniversalI
                     user.id.to_string(),
                     user.email
                         .as_ref()
-                        .map(|email| sanitize_for_terminal(email.as_ref()))
+                        .map(|email| sanitize_for_terminal(email.expose().as_ref()))
                         .unwrap_or_default(),
                     usernames.join(", "),
                     auth_kinds.join(", "),
@@ -307,12 +308,13 @@ pub async fn delete_user(
 )]
 pub async fn reset_password(
     user_service: Arc<UserService>,
-    user_email: &EmailAddress,
+    user_email: &Pii<EmailAddress>,
 ) -> Result<(), UniversalInboxError> {
     let result: Result<(), UniversalInboxError> = async move {
         let password_input = if io::stdin().is_terminal() {
-            let p1 = rpassword::prompt_password(format!("New password for {user_email}: "))
-                .context("Failed to read password")?;
+            let p1 =
+                rpassword::prompt_password(format!("New password for {}: ", user_email.expose()))
+                    .context("Failed to read password")?;
             let p2 = rpassword::prompt_password("Confirm password: ")
                 .context("Failed to read password confirmation")?;
             if p1 != p2 {

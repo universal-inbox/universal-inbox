@@ -4,6 +4,7 @@ use email_address::EmailAddress;
 use itertools::Itertools;
 use rstest::*;
 use secrecy::ExposeSecret;
+use universal_inbox::pii::Pii;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -204,7 +205,7 @@ mod password_policy {
         #[future] tested_app_with_local_auth: TestedApp,
     ) {
         let app = tested_app_with_local_auth.await;
-        let email: EmailAddress = "john@doe.name".parse().unwrap();
+        let email: Pii<EmailAddress> = "john@doe.name".parse().unwrap();
         let (_, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
 
         let anonymous_client = reqwest::Client::new();
@@ -794,7 +795,7 @@ mod password_reset {
         #[future] tested_app_with_local_auth: TestedApp,
     ) {
         let app = tested_app_with_local_auth.await;
-        let email: EmailAddress = "john@doe.name".parse().unwrap();
+        let email: Pii<EmailAddress> = "john@doe.name".parse().unwrap();
 
         let (_client, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
 
@@ -835,7 +836,7 @@ mod password_reset {
     #[tokio::test]
     async fn test_reset_password(#[future] tested_app_with_local_auth: TestedApp) {
         let app = tested_app_with_local_auth.await;
-        let email: EmailAddress = "john@doe.name".parse().unwrap();
+        let email: Pii<EmailAddress> = "john@doe.name".parse().unwrap();
 
         let (_client, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
 
@@ -897,7 +898,7 @@ mod password_reset {
     #[tokio::test]
     async fn test_reset_password_unknown_user(#[future] tested_app_with_local_auth: TestedApp) {
         let app = tested_app_with_local_auth.await;
-        let email: EmailAddress = "john@doe.name".parse().unwrap();
+        let email: Pii<EmailAddress> = "john@doe.name".parse().unwrap();
 
         let (_, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
 
@@ -939,7 +940,7 @@ mod password_reset {
     #[tokio::test]
     async fn test_reset_password_expired_token(#[future] tested_app_with_local_auth: TestedApp) {
         let app = tested_app_with_local_auth.await;
-        let email: EmailAddress = "john@doe.name".parse().unwrap();
+        let email: Pii<EmailAddress> = "john@doe.name".parse().unwrap();
 
         let (_, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
 
@@ -993,7 +994,7 @@ mod password_reset {
     #[tokio::test]
     async fn test_reset_password_invalid_token(#[future] tested_app_with_local_auth: TestedApp) {
         let app = tested_app_with_local_auth.await;
-        let email: EmailAddress = "john@doe.name".parse().unwrap();
+        let email: Pii<EmailAddress> = "john@doe.name".parse().unwrap();
 
         let (_, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
 
@@ -2497,7 +2498,7 @@ mod delete_user {
             assert!(owned_before[table] > 0, "{table} should have been seeded");
         }
 
-        let email = app.user.email.as_ref().unwrap().to_string();
+        let email = app.user.email.as_ref().unwrap().expose().to_string();
         let response = delete_current_user_response(&app.client, &app.app, &email).await;
         assert_eq!(response.status(), 200);
         let body: SuccessResponse = response.json().await.unwrap();

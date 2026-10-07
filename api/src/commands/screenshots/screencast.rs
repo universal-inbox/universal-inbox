@@ -20,7 +20,9 @@ use playwright_rs::{Page, Viewport, expect};
 use serde::Serialize;
 use tokio::{sync::RwLock, time::sleep};
 use tracing::{info, warn};
-use universal_inbox::{integration_connection::provider::IntegrationProviderKind, user::UserId};
+use universal_inbox::{
+    integration_connection::provider::IntegrationProviderKind, pii::Pii, user::UserId,
+};
 use uuid::Uuid;
 
 use crate::observability::RecordSpanError;
@@ -269,7 +271,6 @@ pub async fn record_landing_screencast(
         let email = generate::generate_empty_user(user_service.clone())
             .await
             .context("Failed to generate empty user")?;
-        info!("Empty user generated: {email}");
 
         let user_id = lookup_user_id(&user_service, &email)
             .await
@@ -309,7 +310,7 @@ pub async fn record_landing_screencast(
                 warn!("Failed to delete recording user {user_id}: {err:?}");
             }
         } else {
-            warn!("--keep-user set: leaving recording user {email} in the database");
+            warn!("--keep-user set: leaving recording user {user_id} in the database");
         }
 
         outcome
@@ -355,7 +356,7 @@ async fn run_recording(
         name: "_login_prologue".to_string(),
         start_ms: 0,
     });
-    info!("[beat 0 prologue] visible login as {email}");
+    info!("[beat 0 prologue] visible login");
     if let Err(err) = slow_login(&page, base_url, email).await {
         let _ = context.close().await;
         return Err(UniversalInboxError::Unexpected(anyhow!(
@@ -629,9 +630,9 @@ async fn lookup_user_id(
     user_service: &Arc<UserService>,
     email: &str,
 ) -> Result<UserId, UniversalInboxError> {
-    let parsed: email_address::EmailAddress = email
+    let parsed: Pii<email_address::EmailAddress> = email
         .parse()
-        .with_context(|| format!("Invalid email returned by generate_empty_user: {email}"))?;
+        .context("Invalid email returned by generate_empty_user")?;
 
     let mut tx = user_service
         .begin()
@@ -642,7 +643,7 @@ async fn lookup_user_id(
         .await?
         .ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!(
-                "Could not find freshly-created recording user by email {email}"
+                "Could not find freshly-created recording user by email"
             ))
         })?;
     tx.rollback().await.ok();

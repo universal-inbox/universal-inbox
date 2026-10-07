@@ -370,6 +370,7 @@ mod update_integration_connection_config {
     use std::str::FromStr;
 
     use email_address::EmailAddress;
+    use universal_inbox::pii::Pii;
 
     use crate::helpers::notification::google_mail::create_notification_from_google_mail_thread;
 
@@ -397,7 +398,7 @@ mod update_integration_connection_config {
             IntegrationConnectionStatus::Validated,
             Some(IntegrationConnectionContext::GoogleMail(
                 GoogleMailContext {
-                    user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
+                    user_email_address: Pii::<EmailAddress>::from_str("test@example.com").unwrap(),
                     labels: vec![],
                 },
             )),
@@ -483,7 +484,8 @@ mod update_integration_connection_config {
                         }
                     },
                     context: Some(GoogleMailContext {
-                        user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
+                        user_email_address: Pii::<EmailAddress>::from_str("test@example.com")
+                            .unwrap(),
                         labels: vec![],
                     }),
                 },
@@ -1355,7 +1357,7 @@ mod revoke_provider_grants {
         .await;
         let failure_guard = github_revocation_failure(&app.app.github_mock_server, &settings).await;
 
-        let email = app.user.email.as_ref().unwrap().to_string();
+        let email = app.user.email.as_ref().unwrap().expose().to_string();
         let response = delete_current_user_response(&app.client, &app.app, &email).await;
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -1395,7 +1397,7 @@ mod revoke_provider_grants {
         let github_guard = github_revocation(&app.app.github_mock_server, &settings).await;
         let google_guard = google_mail_revocation(&app.app.google_mail_mock_server).await;
 
-        let email = app.user.email.as_ref().unwrap().to_string();
+        let email = app.user.email.as_ref().unwrap().expose().to_string();
         let response = delete_current_user_response(&app.client, &app.app, &email).await;
         assert_eq!(response.status(), StatusCode::OK);
 

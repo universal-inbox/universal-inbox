@@ -2,6 +2,7 @@ use email_address::EmailAddress;
 use reqwest::Client;
 use secrecy::SecretBox;
 use serde_json::Value;
+use universal_inbox::pii::Pii;
 use webauthn_rs::prelude::{CreationChallengeResponse, RegisterPublicKeyCredential};
 
 use universal_inbox::{
@@ -57,7 +58,7 @@ pub fn finish_body_with_nonce<T: serde::Serialize>(credential: &T, nonce: &str) 
 pub async fn register_user_response(
     client: &Client,
     app: &TestedApp,
-    email: EmailAddress,
+    email: Pii<EmailAddress>,
     password: &str,
 ) -> reqwest::Response {
     client
@@ -73,7 +74,11 @@ pub async fn register_user_response(
         .unwrap()
 }
 
-pub async fn register_user(app: &TestedApp, email: EmailAddress, password: &str) -> (Client, User) {
+pub async fn register_user(
+    app: &TestedApp,
+    email: Pii<EmailAddress>,
+    password: &str,
+) -> (Client, User) {
     let client = reqwest::Client::builder()
         .cookie_store(true)
         .build()
@@ -109,7 +114,7 @@ pub async fn get_current_user(client: &Client, app: &TestedApp) -> User {
 pub async fn login_user_response(
     client: &Client,
     app: &TestedApp,
-    email: EmailAddress,
+    email: Pii<EmailAddress>,
     password: &str,
 ) -> reqwest::Response {
     client
@@ -258,7 +263,7 @@ pub async fn delete_current_user_response(
         .unwrap()
 }
 
-pub async fn create_user(app: &TestedApp, email: EmailAddress, password: &str) -> User {
+pub async fn create_user(app: &TestedApp, email: Pii<EmailAddress>, password: &str) -> User {
     let service = app.user_service.clone();
     let mut transaction = app.repository.begin().await.unwrap();
     let new_user = app
@@ -282,7 +287,7 @@ pub async fn create_user(app: &TestedApp, email: EmailAddress, password: &str) -
 
 pub async fn create_user_and_login(
     app: &TestedApp,
-    email: EmailAddress,
+    email: Pii<EmailAddress>,
     password: &str,
 ) -> (Client, User) {
     let user = create_user(app, email.clone(), password).await;

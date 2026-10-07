@@ -14,7 +14,7 @@ use anyhow::Context;
 use playwright_rs::{Page, ScreenshotOptions, ScreenshotType, expect};
 use tokio::sync::RwLock;
 use tracing::{info, warn};
-use universal_inbox::user::UserId;
+use universal_inbox::{pii::Pii, user::UserId};
 
 use crate::{
     commands::{generate, user},
@@ -98,7 +98,6 @@ pub async fn generate_doc_screenshots(
         )
         .await
         .context("Failed to generate test user")?;
-        info!("Test user generated: {email}");
 
         let user_id = lookup_user_id(&user_service, &email)
             .await
@@ -129,7 +128,7 @@ pub async fn generate_doc_screenshots(
                 warn!("Failed to delete test user {user_id}: {err:?}");
             }
         } else {
-            warn!("--keep-user set: leaving test user {email} in the database");
+            warn!("--keep-user set: leaving test user {user_id} in the database");
         }
 
         cleanup_outcome?;
@@ -151,9 +150,9 @@ async fn lookup_user_id(
     user_service: &Arc<UserService>,
     email: &str,
 ) -> Result<UserId, UniversalInboxError> {
-    let parsed: email_address::EmailAddress = email
+    let parsed: Pii<email_address::EmailAddress> = email
         .parse()
-        .with_context(|| format!("Invalid email returned by generate_testing_user: {email}"))?;
+        .context("Invalid email returned by generate_testing_user")?;
 
     let mut tx = user_service
         .begin()
@@ -164,7 +163,7 @@ async fn lookup_user_id(
         .await?
         .ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow::anyhow!(
-                "Could not find freshly-created test user by email {email}"
+                "Could not find freshly-created test user by email"
             ))
         })?;
     tx.rollback().await.ok();

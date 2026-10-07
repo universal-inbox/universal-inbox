@@ -8,6 +8,7 @@ use pretty_assertions::assert_eq;
 use rrule::Frequency;
 use rstest::*;
 use serde_json::json;
+use universal_inbox::pii::Pii;
 use wiremock::{
     Mock, ResponseTemplate,
     matchers::{method, path},
@@ -107,7 +108,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 ) {
     let app = authenticated_app.await;
     let user_email_address =
-        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap();
+        Pii::<EmailAddress>::from_str(&google_mail_user_profile.email_address).unwrap();
     let google_mail_threads_list = GoogleMailThreadList {
         threads: Some(vec![
             GoogleMailThreadMinimal {
@@ -347,7 +348,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     let google_mail_config = GoogleMailConfig::enabled();
     let synced_label_id = google_mail_config.synced_label.id.clone();
     let user_email_address =
-        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap();
+        Pii::<EmailAddress>::from_str(&google_mail_user_profile.email_address).unwrap();
 
     // First message is already known by Universal Inbox and marked as unsubscribed
     google_mail_thread_get_456.messages[0].label_ids = None; // Read & archived
@@ -370,7 +371,10 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     google_mail_thread_get_456.messages[1].payload.headers = vec![GoogleMailMessageHeader {
         name: "To".to_string(),
         value: if has_new_message_addressed_directly {
-            format!("other@example.com, You <{user_email_address}>, test@example.com")
+            format!(
+                "other@example.com, You <{}>, test@example.com",
+                user_email_address.expose()
+            )
         } else {
             "other@example.com".to_string()
         },
@@ -1052,7 +1056,7 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
     let google_mail_config = GoogleMailConfig::enabled();
     let synced_label_id = google_mail_config.synced_label.id.clone();
     let user_email_address =
-        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap();
+        Pii::<EmailAddress>::from_str(&google_mail_user_profile.email_address).unwrap();
 
     // Set thread as unread (required for testing the user-replied logic)
     google_mail_thread_get_456.messages[1].label_ids = Some(vec![
@@ -1074,7 +1078,7 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
         GoogleMailMessageHeader {
             name: "From".to_string(),
             value: if last_message_from_user {
-                format!("User Name <{user_email_address}>")
+                format!("User Name <{}>", user_email_address.expose())
             } else {
                 "External Sender <external@example.com>".to_string()
             },
@@ -1184,7 +1188,7 @@ async fn test_sync_notifications_should_refresh_user_email_address_of_pinned_acc
     #[case] expected_user_profile_calls: u64,
 ) {
     let app = authenticated_app.await;
-    let previous_email_address = EmailAddress::from_str("Previous@example.com").unwrap();
+    let previous_email_address = Pii::<EmailAddress>::from_str("Previous@example.com").unwrap();
     let google_mail_config = GoogleMailConfig::enabled();
     let google_mail_integration_connection = create_and_mock_integration_connection(
         &app.app,
@@ -1248,7 +1252,7 @@ async fn test_sync_notifications_should_refresh_user_email_address_of_pinned_acc
             .await
             .unwrap();
     let expected_email_address = if expected_user_profile_calls > 0 {
-        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap()
+        Pii::<EmailAddress>::from_str(&google_mail_user_profile.email_address).unwrap()
     } else {
         previous_email_address
     };
