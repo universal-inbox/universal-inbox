@@ -79,9 +79,23 @@ build-release-all: build-release
     just api build-release
 
 ## Dev recipes
-check-all: check
+check-all: check check-pii-logging
     just web check
     just api check
+
+# Fails when a `Pii` value is exposed inside a tracing macro or a
+# `#[tracing::instrument]` attribute: that sends personal data to telemetry.
+# Text-based, so a value exposed into a variable first and logged later slips
+# through (the exporter-side redaction stays the safety net).
+check-pii-logging:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    macro='\b(?:trace|debug|info|warn|error|event|span|(?:trace|debug|info|warn|error)_span)!\([^;]*?\.(?:expose|into_inner)\(\)'
+    attribute='#\[(?:tracing::)?instrument\([^\]]*?\.(?:expose|into_inner)\(\)'
+    if rg --multiline --line-number --glob '*.rs' "$macro|$attribute" src api web; then
+        echo "error: Pii::expose()/into_inner() inside tracing leaks personal data to telemetry" >&2
+        exit 1
+    fi
 
 format-all:
     cargo fmt --all

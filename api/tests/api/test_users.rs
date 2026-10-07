@@ -1308,22 +1308,22 @@ mod patch_user {
         .await;
 
         let patch = UserPatch {
-            first_name: Some("John".to_string()),
-            last_name: Some("Doe".to_string()),
+            first_name: Some(Pii::new("John".to_string())),
+            last_name: Some(Pii::new("Doe".to_string())),
             email: None,
         };
 
         let response = patch_user_response(&client, &app, &patch).await;
         assert_eq!(response.status(), http::StatusCode::OK);
         let patched_user: User = response.json().await.unwrap();
-        assert_eq!(patched_user.first_name, Some("John".to_string()));
-        assert_eq!(patched_user.last_name, Some("Doe".to_string()));
+        assert_eq!(patched_user.first_name, Some(Pii::new("John".to_string())));
+        assert_eq!(patched_user.last_name, Some(Pii::new("Doe".to_string())));
         assert_eq!(patched_user.email, user.email);
 
         // Verify via GET
         let fetched_user = get_current_user(&client, &app).await;
-        assert_eq!(fetched_user.first_name, Some("John".to_string()));
-        assert_eq!(fetched_user.last_name, Some("Doe".to_string()));
+        assert_eq!(fetched_user.first_name, Some(Pii::new("John".to_string())));
+        assert_eq!(fetched_user.last_name, Some(Pii::new("Doe".to_string())));
     }
 
     #[rstest]
@@ -1340,7 +1340,7 @@ mod patch_user {
         .await;
 
         let patch = UserPatch {
-            first_name: Some("a".repeat(USER_NAME_MAX_LENGTH as usize + 1)),
+            first_name: Some(Pii::new("a".repeat(USER_NAME_MAX_LENGTH as usize + 1))),
             last_name: None,
             email: None,
         };
@@ -1488,7 +1488,7 @@ mod patch_user {
             .unwrap();
 
         let patch = UserPatch {
-            first_name: Some("John".to_string()),
+            first_name: Some(Pii::new("John".to_string())),
             last_name: None,
             email: None,
         };

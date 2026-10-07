@@ -569,11 +569,9 @@ impl UserService {
             Some(current_email) if *current_email != oidc_email => {
                 return Err(UniversalInboxError::InvalidInputData {
                     source: None,
-                    user_error: format!(
-                        "The email from the OIDC account ({}) does not match your current email ({})",
-                        oidc_email.expose(),
-                        current_email.expose()
-                    ),
+                    // No addresses here: errors are recorded on spans
+                    user_error: "The email from the OIDC account does not match your current email"
+                        .to_string(),
                 });
             }
             None => {
@@ -1190,11 +1188,11 @@ impl UserService {
                 let first_name = user_infos
                     .given_name()
                     .and_then(|name| name.get(None))
-                    .map(|name| name.to_string());
+                    .map(|name| Pii::new(name.to_string()));
                 let last_name = user_infos
                     .family_name()
                     .and_then(|name| name.get(None))
-                    .map(|name| name.to_string());
+                    .map(|name| Pii::new(name.to_string()));
                 let email: Pii<EmailAddress> = user_infos
                     .email()
                     .context("No email found in user info")?

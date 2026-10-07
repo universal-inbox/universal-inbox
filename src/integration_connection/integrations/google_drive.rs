@@ -33,5 +33,5 @@ impl GoogleDriveConfig {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GoogleDriveContext {
     pub user_email_address: Pii<EmailAddress>,
-    pub user_display_name: String,
+    pub user_display_name: Pii<String>,
 }

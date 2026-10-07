@@ -346,7 +346,7 @@ async fn test_receive_reaction_added_event_as_notification(
     );
     match &message.sender {
         SlackMessageSenderDetails::User(user) => {
-            assert_eq!(user.id, Some("U05YYY".into()));
+            assert_eq!(user.expose().id, Some("U05YYY".into()));
         }
         _ => unreachable!("Expected a SlackMessageSenderDetails::User"),
     }

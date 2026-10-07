@@ -1,4 +1,5 @@
 use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
+use universal_inbox::pii::Pii;
 
 use anyhow::{Context, anyhow};
 
@@ -802,7 +803,7 @@ impl SlackService {
                         );
                         SlackUserProfile::new().with_id(slack_reaction_item_user_id.clone())
                     });
-                let sender = SlackMessageSenderDetails::User(Box::new(sender_profile));
+                let sender = SlackMessageSenderDetails::User(Box::new(Pii::new(sender_profile)));
                 let message = self
                     .fetch_message(channel, ts, user_id, &slack_api_token)
                     .await?;
@@ -992,7 +993,7 @@ impl SlackService {
                 } => {
                     sender_profiles.insert(
                         slack_user_id.to_string(),
-                        SlackMessageSenderDetails::User(Box::new(user_profile.clone())),
+                        SlackMessageSenderDetails::User(Box::new(Pii::new(user_profile.clone()))),
                     );
                 }
                 SlackMessageSender {
@@ -1014,7 +1015,7 @@ impl SlackService {
                     Ok(Some(user_profile)) => {
                         sender_profiles.insert(
                             slack_user_id.to_string(),
-                            SlackMessageSenderDetails::User(Box::new(user_profile)),
+                            SlackMessageSenderDetails::User(Box::new(Pii::new(user_profile))),
                         );
                     }
                     // A user Slack will never resolve for this token (deleted account, user from

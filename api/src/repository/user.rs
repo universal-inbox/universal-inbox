@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
@@ -562,8 +562,8 @@ impl UserRepository for Repository {
                   id
             "#,
                 user.id.0,
-                user.first_name,
-                user.last_name,
+                user.first_name.as_ref().map(|name| name.expose().as_str()),
+                user.last_name.as_ref().map(|name| name.expose().as_str()),
                 user.email.as_ref().map(|email| email.expose().to_string()),
                 user.is_testing,
                 user.created_at.naive_utc(),
@@ -1600,12 +1600,12 @@ impl UserRepository for Repository {
         if let Some(first_name) = &patch.first_name {
             separated
                 .push(" first_name = ")
-                .push_bind_unseparated(first_name.clone());
+                .push_bind_unseparated(first_name.expose().clone());
         }
         if let Some(last_name) = &patch.last_name {
             separated
                 .push(" last_name = ")
-                .push_bind_unseparated(last_name.clone());
+                .push_bind_unseparated(last_name.expose().clone());
         }
         if let Some(email) = &patch.email {
             separated
@@ -1640,13 +1640,13 @@ impl UserRepository for Repository {
         if let Some(first_name) = &patch.first_name {
             separated
                 .push(" (first_name is NULL OR first_name != ")
-                .push_bind_unseparated(first_name.clone())
+                .push_bind_unseparated(first_name.expose().clone())
                 .push_unseparated(")");
         }
         if let Some(last_name) = &patch.last_name {
             separated
                 .push(" (last_name is NULL OR last_name != ")
-                .push_bind_unseparated(last_name.clone())
+                .push_bind_unseparated(last_name.expose().clone())
                 .push_unseparated(")");
         }
         if let Some(email) = &patch.email {
@@ -1699,7 +1699,7 @@ impl UserRepository for Repository {
     }
 }
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(sqlx::FromRow)]
 pub struct UserRow {
     id: Uuid,
     first_name: Option<String>,
@@ -1727,14 +1727,23 @@ impl TryFrom<UserRow> for User {
     }
 }
 
+// Hand-written so names and email (raw columns here) never reach a `{:?}`.
+impl fmt::Debug for UserRow {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UserRow")
+            .field("id", &self.id)
+            .finish_non_exhaustive()
+    }
+}
+
 impl TryFrom<&UserRow> for User {
     type Error = UniversalInboxError;
 
     fn try_from(row: &UserRow) -> Result<Self, Self::Error> {
         Ok(User {
             id: row.id.into(),
-            first_name: row.first_name.clone(),
-            last_name: row.last_name.clone(),
+            first_name: row.first_name.clone().map(Pii::new),
+            last_name: row.last_name.clone().map(Pii::new),
             email: row
                 .email
                 .as_ref()
@@ -1845,8 +1854,8 @@ impl TryFrom<&UserAndUserAuthRow> for User {
     fn try_from(row: &UserAndUserAuthRow) -> Result<Self, Self::Error> {
         Ok(User {
             id: row.user_row.id.into(),
-            first_name: row.user_row.first_name.clone(),
-            last_name: row.user_row.last_name.clone(),
+            first_name: row.user_row.first_name.clone().map(Pii::new),
+            last_name: row.user_row.last_name.clone().map(Pii::new),
             email: row
                 .user_row
                 .email

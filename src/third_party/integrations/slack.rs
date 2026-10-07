@@ -16,6 +16,7 @@ use vec1::Vec1;
 use crate::{
     HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
+    pii::Pii,
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
     utils::{emoji::replace_emoji_code_in_string_with_emoji, truncate::truncate_with_ellipse},
@@ -351,9 +352,9 @@ impl SlackMessageRender for SlackHistoryMessage {
         sender_profiles: &HashMap<String, SlackMessageSenderDetails>,
     ) -> Option<SlackMessageSenderDetails> {
         if let Some(user_profile) = self.sender.user_profile.as_ref() {
-            return Some(SlackMessageSenderDetails::User(Box::new(
+            return Some(SlackMessageSenderDetails::User(Box::new(Pii::new(
                 user_profile.clone(),
-            )));
+            ))));
         }
         if let Some(bot_profile) = self.sender.bot_profile.as_ref() {
             return Some(SlackMessageSenderDetails::Bot(Box::new(
@@ -448,7 +449,7 @@ fn sanitize_slack_markdown(slack_markdown: &str) -> String {
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 #[serde(tag = "type", content = "content")]
 pub enum SlackMessageSenderDetails {
-    User(Box<SlackUserProfile>),
+    User(Box<Pii<SlackUserProfile>>),
     Bot(Box<SlackBotInfo>),
 }
 
@@ -457,7 +458,7 @@ pub struct SlackFileDetails {
     pub id: Option<SlackFileId>, // Option to ease the transition when the field is added
     pub title: Option<String>,
     pub channel: SlackChannelInfo,
-    pub sender: Option<SlackUserProfile>,
+    pub sender: Option<Pii<SlackUserProfile>>,
     pub team: SlackTeamInfo,
 }
 
@@ -486,7 +487,7 @@ impl SlackFileDetails {
 pub struct SlackFileCommentDetails {
     pub channel: SlackChannelInfo,
     pub comment_id: SlackFileCommentId,
-    pub sender: Option<SlackUserProfile>,
+    pub sender: Option<Pii<SlackUserProfile>>,
     pub team: SlackTeamInfo,
 }
 
@@ -737,7 +738,9 @@ mod test_message_details {
             load_json_fixture_file("slack_fetch_channel_response.json");
         let user_response: SlackApiUsersInfoResponse =
             load_json_fixture_file("slack_fetch_user_response.json");
-        let sender = SlackMessageSenderDetails::User(Box::new(user_response.user.profile.unwrap()));
+        let sender = SlackMessageSenderDetails::User(Box::new(Pii::new(
+            user_response.user.profile.unwrap(),
+        )));
         let team_response: SlackApiTeamInfoResponse =
             load_json_fixture_file("slack_fetch_team_response.json");
 
@@ -749,6 +752,27 @@ mod test_message_details {
             team: team_response.team,
             references: None,
         }
+    }
+
+    #[rstest]
+    fn test_sender_profile_is_redacted_in_debug_and_kept_on_the_wire(
+        slack_message: SlackMessageDetails,
+    ) {
+        let debug = format!("{:?}", slack_message.sender);
+        assert!(!debug.contains("John"));
+        assert!(!debug.contains("john.doe"));
+
+        let SlackMessageSenderDetails::User(profile) = &slack_message.sender else {
+            unreachable!("Expected a SlackMessageSenderDetails::User");
+        };
+        let serialized = serde_json::to_value(&slack_message.sender).unwrap();
+        // Transparent: the stored JSON is the one of the unwrapped profile
+        assert_eq!(
+            serialized["content"],
+            serde_json::to_value(profile.expose()).unwrap()
+        );
+        let round_tripped: SlackMessageSenderDetails = serde_json::from_value(serialized).unwrap();
+        assert_eq!(round_tripped, slack_message.sender);
     }
 
     // `attachment_mention` is sent by Slack when a message mentions a file or a third-party app

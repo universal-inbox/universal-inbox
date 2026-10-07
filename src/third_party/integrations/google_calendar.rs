@@ -1,3 +1,4 @@
+use crate::pii::Pii;
 use crate::typed_id::TypedId;
 use anyhow::anyhow;
 use chrono::{DateTime, NaiveDate, Timelike, Utc};
@@ -104,9 +105,9 @@ pub struct GoogleCalendarEvent {
 /// An attendee's answer to an invitation, as sent in a `METHOD:REPLY` email
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct EventReply {
-    pub attendee_email: String,
+    pub attendee_email: Pii<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub attendee_display_name: Option<String>,
+    pub attendee_display_name: Option<Pii<String>>,
     pub response_status: GoogleCalendarEventAttendeeResponseStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
@@ -193,9 +194,9 @@ pub struct EventCreator {
         rename = "displayName",
         skip_serializing_if = "Option::is_none"
     )]
-    pub display_name: Option<String>,
+    pub display_name: Option<Pii<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
+    pub email: Option<Pii<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(default, rename = "self")]
@@ -210,8 +211,8 @@ pub struct EventOrganizer {
         rename = "displayName",
         skip_serializing_if = "Option::is_none"
     )]
-    pub display_name: Option<String>,
-    pub email: String,
+    pub display_name: Option<Pii<String>>,
+    pub email: Pii<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(default, rename = "self")]
@@ -234,8 +235,8 @@ pub struct EventAttendee {
         rename = "displayName",
         skip_serializing_if = "Option::is_none"
     )]
-    pub display_name: Option<String>,
-    pub email: String,
+    pub display_name: Option<Pii<String>>,
+    pub email: Pii<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1054,6 +1055,66 @@ mod tests {
             // Check that the RRULE was parsed correctly
             let rrule = &rrule_set.get_rrule()[0];
             assert_eq!(rrule.get_freq(), rrule::Frequency::Weekly);
+        }
+
+        #[test]
+        fn test_personal_data_is_redacted_in_debug_and_kept_on_the_wire() {
+            let json = r#"{
+                "kind": "calendar#event",
+                "etag": "\"3471714048456000\"",
+                "id": "eventid1",
+                "status": "confirmed",
+                "htmlLink": "https://www.google.com/calendar/event?eid=test",
+                "created": "2024-12-30T22:32:57.000Z",
+                "updated": "2025-01-02T22:30:24.198Z",
+                "summary": "Weekly team meeting",
+                "creator": {
+                    "displayName": "Creator Person",
+                    "email": "creator@example.com"
+                },
+                "organizer": {
+                    "displayName": "Organizer Person",
+                    "email": "organizer@example.com"
+                },
+                "start": {
+                    "dateTime": "2025-01-03T15:00:00+01:00",
+                    "timeZone": "Europe/Paris"
+                },
+                "end": {
+                    "dateTime": "2025-01-03T15:30:00+01:00",
+                    "timeZone": "Europe/Paris"
+                },
+                "iCalUID": "event_icaluid1",
+                "sequence": 1,
+                "attendees": [
+                    {
+                        "displayName": "Attendee Person",
+                        "email": "attendee@example.com",
+                        "responseStatus": "needsAction"
+                    }
+                ],
+                "eventType": "default"
+            }"#;
+
+            let event: GoogleCalendarEvent = serde_json::from_str(json).unwrap();
+
+            let debug = format!("{event:?}");
+            assert!(!debug.contains('@'));
+            assert!(!debug.contains("Person"));
+
+            let serialized = serde_json::to_string(&event).unwrap();
+            for value in [
+                "\"creator@example.com\"",
+                "\"Organizer Person\"",
+                "\"attendee@example.com\"",
+            ] {
+                assert!(
+                    serialized.contains(value),
+                    "{value} missing from {serialized}"
+                );
+            }
+            let round_tripped: GoogleCalendarEvent = serde_json::from_str(&serialized).unwrap();
+            assert_eq!(round_tripped, event);
         }
 
         #[test]

@@ -132,7 +132,10 @@ pub fn Sidebar() -> Element {
                     .as_ref()
                     .map(|signature| signature.to_string())
             });
-            let user_full_name = CONNECTED_USER().as_ref().and_then(|user| user.full_name());
+            let user_full_name = CONNECTED_USER()
+                .as_ref()
+                .and_then(|user| user.full_name())
+                .map(Pii::into_inner);
             let user_id = CONNECTED_USER().as_ref().map(|user| user.id.to_string());
 
             configure_crisp(
@@ -412,11 +415,11 @@ pub fn Sidebar() -> Element {
                         img {
                             class: "w-7 h-7 rounded-full bg-ui-primary flex items-center justify-center text-[10px] font-semibold text-ui-on-brand shrink-0",
                             src: "{user_avatar()}",
-                            alt: "{CONNECTED_USER().as_ref().and_then(|u| u.full_name()).unwrap_or_default()}'s avatar",
+                            alt: "{CONNECTED_USER().as_ref().and_then(|u| u.full_name()).map(Pii::into_inner).unwrap_or_default()}'s avatar",
                         }
                         div { class: "flex flex-col min-w-0 md:[.sidebar.collapsed_&]:hidden",
                             if let Some(user) = CONNECTED_USER().as_ref() {
-                                if let Some(name) = user.full_name() {
+                                if let Some(name) = user.full_name().map(Pii::into_inner) {
                                     span { class: "text-xs font-medium text-sidebar-text-bright", "{name}" }
                                 }
                                 if let Some(email) = user.email.as_ref().map(Pii::expose) {

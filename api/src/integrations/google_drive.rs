@@ -120,9 +120,9 @@ pub struct RawGoogleDriveQuotedFileContent {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct RawGoogleDriveCommentAuthor {
     #[serde(rename = "displayName")]
-    pub display_name: String,
+    pub display_name: Pii<String>,
     #[serde(rename = "emailAddress")]
-    pub email_address: Option<String>,
+    pub email_address: Option<Pii<String>>,
     #[serde(rename = "photoLink")]
     pub photo_link: Option<String>,
 }
@@ -205,9 +205,9 @@ pub struct GoogleDriveAboutResponse {
 #[derive(Deserialize, Serialize)]
 pub struct GoogleDriveUserInfo {
     #[serde(rename = "emailAddress")]
-    pub email_address: String,
+    pub email_address: Pii<String>,
     #[serde(rename = "displayName")]
-    pub display_name: String,
+    pub display_name: Pii<String>,
 }
 
 impl GoogleDriveService {
@@ -470,7 +470,7 @@ impl ThirdPartyItemSourceService<GoogleDriveComment> for GoogleDriveService {
                     email_address,
                     display_name,
                 } = self.get_user_info(&access_token).await?;
-                let user_email_address = Pii::<EmailAddress>::from_str(&email_address)
+                let user_email_address = Pii::<EmailAddress>::from_str(email_address.expose())
                     .context("Invalid email address from Google Drive user info")?;
                 self.integration_connection_service
                     .upgrade()
@@ -514,7 +514,7 @@ impl ThirdPartyItemSourceService<GoogleDriveComment> for GoogleDriveService {
                     file.id.clone(),
                     file.mime_type.clone(),
                 );
-                comment.user_email_address = Some(user_email.expose().to_string());
+                comment.user_email_address = Some(Pii::new(user_email.expose().to_string()));
                 comment.user_display_name = Some(display_name.clone());
 
                 let existing_notification = self
@@ -564,7 +564,8 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
     ) -> Result<Box<Notification>, UniversalInboxError> {
         let title = format!(
             "Comment by {} on {}",
-            source.author.display_name, source.file_name
+            source.author.display_name.expose(),
+            source.file_name
         );
 
         // If the user sent the last reply, mark as Deleted (user already responded)
@@ -651,7 +652,7 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
 fn should_create_item(
     existing_notification: &Option<Notification>,
     comment: &GoogleDriveComment,
-    display_name: &str,
+    display_name: &Pii<String>,
     user_email: &Pii<EmailAddress>,
 ) -> bool {
     let last_existing_third_party_item_update = existing_notification
@@ -667,7 +668,7 @@ fn should_create_item(
     }
 
     comment.is_user_mentioned(
-        display_name,
+        display_name.expose(),
         user_email.expose().as_ref(),
         last_existing_third_party_item_update,
     )
@@ -730,8 +731,8 @@ mod tests {
                 value: "quoted text".to_string(),
             }),
             author: RawGoogleDriveCommentAuthor {
-                display_name: "John Doe".to_string(),
-                email_address: Some("john@example.com".to_string()),
+                display_name: Pii::new("John Doe".to_string()),
+                email_address: Some(Pii::new("john@example.com".to_string())),
                 photo_link: Some("https://example.com/photo.jpg".to_string()),
             },
             created_time: Utc.with_ymd_and_hms(2025, 9, 28, 9, 0, 0).unwrap(),
@@ -742,8 +743,8 @@ mod tests {
                 content: "Test reply".to_string(),
                 html_content: Some("<p>Test reply</p>".to_string()),
                 author: RawGoogleDriveCommentAuthor {
-                    display_name: "Jane Doe".to_string(),
-                    email_address: Some("jane@example.com".to_string()),
+                    display_name: Pii::new("Jane Doe".to_string()),
+                    email_address: Some(Pii::new("jane@example.com".to_string())),
                     photo_link: None,
                 },
                 created_time: Utc.with_ymd_and_hms(2025, 9, 28, 10, 0, 0).unwrap(),
@@ -762,7 +763,7 @@ mod tests {
         assert_eq!(comment.file_name, "Test Document.docx");
         assert_eq!(comment.file_id, "file_456");
         assert_eq!(comment.content, "Test comment");
-        assert_eq!(comment.author.display_name, "John Doe");
+        assert_eq!(comment.author.display_name.expose(), "John Doe");
         assert_eq!(comment.replies.len(), 1);
         assert_eq!(comment.replies[0].content, "Test reply");
     }
@@ -774,8 +775,8 @@ mod tests {
         #[fixture]
         fn comment_author() -> GoogleDriveCommentAuthor {
             GoogleDriveCommentAuthor {
-                display_name: "John Doe".to_string(),
-                email_address: Some("john.doe@example.com".to_string()),
+                display_name: Pii::new("John Doe".to_string()),
+                email_address: Some(Pii::new("john.doe@example.com".to_string())),
                 photo_link: Some("https://example.com/photo.jpg".to_string()),
             }
         }
@@ -787,7 +788,7 @@ mod tests {
                 content: "This is a reply".to_string(),
                 html_content: Some("<p>This is a reply</p>".to_string()),
                 author: GoogleDriveCommentAuthor {
-                    display_name: "Other user".to_string(),
+                    display_name: Pii::new("Other user".to_string()),
                     email_address: None,
                     photo_link: None,
                 },
@@ -828,7 +829,8 @@ mod tests {
                 id: NotificationId(Uuid::new_v4()),
                 title: format!(
                     "Comment by {} on {}",
-                    google_drive_comment.author.display_name, google_drive_comment.file_name
+                    google_drive_comment.author.display_name.expose(),
+                    google_drive_comment.file_name
                 ),
                 status: NotificationStatus::Unread,
                 created_at: Utc::now(),
@@ -846,7 +848,7 @@ mod tests {
         #[rstest]
         fn test_no_existing_notification_and_no_mention(google_drive_comment: GoogleDriveComment) {
             let existing_notification = None;
-            let display_name = "Jane Doe";
+            let display_name = &Pii::new("Jane Doe".to_string());
             let user_email = &Pii::<EmailAddress>::from_str("jane.doe@example.com").unwrap();
 
             assert!(!should_create_item(
@@ -864,9 +866,10 @@ mod tests {
         ) {
             let existing_notification = None;
             let display_name = &comment_author.display_name;
-            let user_email =
-                &Pii::<EmailAddress>::from_str(comment_author.email_address.as_ref().unwrap())
-                    .unwrap();
+            let user_email = &Pii::<EmailAddress>::from_str(
+                comment_author.email_address.as_ref().unwrap().expose(),
+            )
+            .unwrap();
 
             assert!(should_create_item(
                 &existing_notification,
@@ -884,9 +887,10 @@ mod tests {
         ) {
             let existing_notification = Some(google_drive_comment_notification);
             let display_name = &comment_author.display_name;
-            let user_email =
-                &Pii::<EmailAddress>::from_str(comment_author.email_address.as_ref().unwrap())
-                    .unwrap();
+            let user_email = &Pii::<EmailAddress>::from_str(
+                comment_author.email_address.as_ref().unwrap().expose(),
+            )
+            .unwrap();
 
             // Should not create a new item since the mention is in already known comments
             assert!(!should_create_item(
@@ -912,7 +916,7 @@ mod tests {
                 google_drive_comment_notification.source_item.updated_at
                     + chrono::Duration::minutes(10);
             let existing_notification = Some(google_drive_comment_notification);
-            let display_name = "Jane Doe";
+            let display_name = &Pii::new("Jane Doe".to_string());
             let user_email = &Pii::<EmailAddress>::from_str("jane.doe@example.com").unwrap();
 
             // Should create a new item since the comment is newer than the existing notification
@@ -944,9 +948,10 @@ mod tests {
                     + chrono::Duration::minutes(10);
             let existing_notification = Some(google_drive_comment_notification);
             let display_name = &comment_author.display_name;
-            let user_email =
-                &Pii::<EmailAddress>::from_str(comment_author.email_address.as_ref().unwrap())
-                    .unwrap();
+            let user_email = &Pii::<EmailAddress>::from_str(
+                comment_author.email_address.as_ref().unwrap().expose(),
+            )
+            .unwrap();
 
             // Should create a new item since the mention is newer than the existing notification
             // even if the existing notification is unsubscribed

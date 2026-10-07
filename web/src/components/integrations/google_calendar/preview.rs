@@ -2,6 +2,7 @@
 use dioxus::prelude::*;
 use gravatar_rs::Generator;
 use rrule::Frequency;
+use universal_inbox::pii::Pii;
 use url::Url;
 
 use universal_inbox::{
@@ -40,7 +41,10 @@ pub fn GoogleCalendarEventPreview(
     let date_block = use_memo(move || compute_date_block(&displayed_event()));
     let organizer_label = use_memo(move || {
         let organizer = google_calendar_event().organizer;
-        organizer.display_name.unwrap_or(organizer.email)
+        organizer
+            .display_name
+            .unwrap_or(organizer.email)
+            .into_inner()
     });
     // Dedupe creator vs organizer when they're the same person — render organizer only.
     let creator_label = use_memo(move || {
@@ -50,7 +54,11 @@ pub fn GoogleCalendarEventPreview(
         if creator_email == Some(organizer_email) {
             None
         } else {
-            event.creator.display_name.or(event.creator.email)
+            event
+                .creator
+                .display_name
+                .or(event.creator.email)
+                .map(Pii::into_inner)
         }
     });
     // Aggregate RSVP counts for the guest summary line.
@@ -116,8 +124,9 @@ pub fn GoogleCalendarEventPreview(
         let label = org
             .display_name
             .clone()
-            .unwrap_or_else(|| org.email.clone());
-        let avatar = Generator::default().generate(&org.email);
+            .unwrap_or_else(|| org.email.clone())
+            .into_inner();
+        let avatar = Generator::default().generate(org.email.expose());
         (avatar, label)
     });
 
@@ -363,8 +372,10 @@ fn AttendeeReplyCard(reply: ReadSignal<EventReply>) -> Element {
     let user_name = reply_value
         .attendee_display_name
         .clone()
-        .unwrap_or_else(|| reply_value.attendee_email.clone());
-    let avatar_url = Url::parse(&Generator::default().generate(&reply_value.attendee_email)).ok();
+        .unwrap_or_else(|| reply_value.attendee_email.clone())
+        .into_inner();
+    let avatar_url =
+        Url::parse(&Generator::default().generate(reply_value.attendee_email.expose())).ok();
     let (tag_variant, answer) = match reply_value.response_status {
         GoogleCalendarEventAttendeeResponseStatus::Accepted => (TagVariant::Success, "Accepted"),
         GoogleCalendarEventAttendeeResponseStatus::Declined => (TagVariant::Error, "Declined"),
@@ -436,8 +447,9 @@ fn AttendeeRow(
     let user_name = attendee_value
         .display_name
         .clone()
-        .unwrap_or_else(|| attendee_value.email.clone());
-    let avatar_url = Url::parse(&Generator::default().generate(&attendee_value.email)).ok();
+        .unwrap_or_else(|| attendee_value.email.clone())
+        .into_inner();
+    let avatar_url = Url::parse(&Generator::default().generate(attendee_value.email.expose())).ok();
 
     let (icon_class, row_variant) = match attendee_value.response_status {
         GoogleCalendarEventAttendeeResponseStatus::Accepted => (

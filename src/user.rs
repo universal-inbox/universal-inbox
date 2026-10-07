@@ -15,8 +15,8 @@ use crate::{integration_connection::provider::IntegrationProviderKind, pii::Pii}
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     pub id: UserId,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
+    pub first_name: Option<Pii<String>>,
+    pub last_name: Option<Pii<String>>,
     pub email: Option<Pii<EmailAddress>>,
     pub email_validated_at: Option<DateTime<Utc>>,
     pub email_validation_sent_at: Option<DateTime<Utc>>,
@@ -28,8 +28,8 @@ pub struct User {
 
 impl User {
     pub fn new(
-        first_name: Option<String>,
-        last_name: Option<String>,
+        first_name: Option<Pii<String>>,
+        last_name: Option<Pii<String>>,
         email: Pii<EmailAddress>,
     ) -> Self {
         Self {
@@ -67,13 +67,16 @@ impl User {
             || self.email_validated_at.is_some()
     }
 
-    pub fn full_name(&self) -> Option<String> {
-        match (&self.first_name, &self.last_name) {
-            (Some(first_name), Some(last_name)) => Some(format!("{} {}", first_name, last_name)),
-            (Some(first_name), None) => Some(first_name.clone()),
-            (None, Some(last_name)) => Some(last_name.clone()),
-            (None, None) => None,
-        }
+    pub fn full_name(&self) -> Option<Pii<String>> {
+        let name = match (&self.first_name, &self.last_name) {
+            (Some(first_name), Some(last_name)) => {
+                format!("{} {}", first_name.expose(), last_name.expose())
+            }
+            (Some(first_name), None) => first_name.expose().clone(),
+            (None, Some(last_name)) => last_name.expose().clone(),
+            (None, None) => return None,
+        };
+        Some(Pii::new(name))
     }
 }
 
@@ -149,9 +152,9 @@ pub const USER_NAME_MAX_LENGTH: u64 = 100;
 #[serde(deny_unknown_fields)]
 pub struct UserPatch {
     #[validate(length(max = USER_NAME_MAX_LENGTH))]
-    pub first_name: Option<String>,
+    pub first_name: Option<Pii<String>>,
     #[validate(length(max = USER_NAME_MAX_LENGTH))]
-    pub last_name: Option<String>,
+    pub last_name: Option<Pii<String>>,
     pub email: Option<Pii<EmailAddress>>,
 }
 
@@ -513,8 +516,8 @@ mod user_patch_validation_tests {
 
     fn patch(first_name: Option<String>, last_name: Option<String>) -> UserPatch {
         UserPatch {
-            first_name,
-            last_name,
+            first_name: first_name.map(Pii::new),
+            last_name: last_name.map(Pii::new),
             email: None,
         }
     }

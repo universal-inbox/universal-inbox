@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use universal_inbox::pii::Pii;
 
 use rstest::*;
 use serde_json::{Value, json};
@@ -389,7 +390,8 @@ pub fn slack_reacted_message() -> Box<SlackReactionItem> {
         load_json_fixture_file("slack_fetch_channel_response.json");
     let user_response: SlackApiUsersInfoResponse =
         load_json_fixture_file("slack_fetch_user_response.json");
-    let sender = SlackMessageSenderDetails::User(Box::new(user_response.user.profile.unwrap()));
+    let sender =
+        SlackMessageSenderDetails::User(Box::new(Pii::new(user_response.user.profile.unwrap())));
     let team_response: SlackApiTeamInfoResponse =
         load_json_fixture_file("slack_fetch_team_response.json");
 

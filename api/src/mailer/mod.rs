@@ -69,48 +69,48 @@ impl Mailer for DisabledMailer {
 #[serde(untagged)]
 pub enum EmailTemplate {
     EmailVerification {
-        first_name: Option<String>,
+        first_name: Option<Pii<String>>,
         email_verification_url: Url,
     },
     PasswordReset {
-        first_name: Option<String>,
+        first_name: Option<Pii<String>>,
         password_reset_url: Url,
     },
     RegistrationAttemptOnExistingAccount {
-        first_name: Option<String>,
+        first_name: Option<Pii<String>>,
         login_url: Url,
         password_reset_url: Url,
     },
     AccountLockout {
-        first_name: Option<String>,
+        first_name: Option<Pii<String>>,
         login_url: Url,
     },
     PasswordChanged {
-        first_name: Option<String>,
+        first_name: Option<Pii<String>>,
         password_reset_url: Url,
     },
     /// `method` is the display name of the login method ("a password",
     /// "a passkey", "Google").
     AuthMethodAdded {
-        first_name: Option<String>,
+        first_name: Option<Pii<String>>,
         method: String,
         password_reset_url: Url,
     },
     AuthMethodRemoved {
-        first_name: Option<String>,
+        first_name: Option<Pii<String>>,
         method: String,
         password_reset_url: Url,
     },
     /// Sent to the current address when a change to `new_email_masked` is
     /// requested, before the new address is verified.
     EmailChangeRequested {
-        first_name: Option<String>,
+        first_name: Option<Pii<String>>,
         new_email_masked: String,
         password_reset_url: Url,
     },
     /// Sent once per user, listing all their connections to be paused.
     IntegrationConnectionPauseWarning {
-        first_name: Option<String>,
+        first_name: Option<Pii<String>>,
         provider_names: Vec<String>,
         inactive_for_days: i64,
         pause_date: NaiveDate,
@@ -118,7 +118,7 @@ pub enum EmailTemplate {
     },
     /// Sent once per user and reason, listing all their paused connections.
     IntegrationConnectionPaused {
-        first_name: Option<String>,
+        first_name: Option<Pii<String>>,
         provider_names: Vec<String>,
         paused_reason: IntegrationConnectionPausedReason,
         reconnect_url: Url,
@@ -172,7 +172,7 @@ impl EmailTemplate {
             | EmailTemplate::EmailChangeRequested { first_name, .. }
             | EmailTemplate::IntegrationConnectionPauseWarning { first_name, .. }
             | EmailTemplate::IntegrationConnectionPaused { first_name, .. } => {
-                first_name.as_deref()
+                first_name.as_ref().map(|name| name.expose().as_str())
             }
         }
     }
@@ -455,8 +455,8 @@ impl Mailer for SmtpMailer {
 /// goes through lettre's `Mailbox`, which quotes and encodes it, so it is never
 /// parsed as part of the address.
 fn build_to_mailbox(
-    first_name: Option<String>,
-    last_name: Option<String>,
+    first_name: Option<Pii<String>>,
+    last_name: Option<Pii<String>>,
     email: &Pii<EmailAddress>,
 ) -> Result<Mailbox, UniversalInboxError> {
     let address: Address = email
@@ -467,7 +467,7 @@ fn build_to_mailbox(
     let name = [first_name, last_name]
         .into_iter()
         .flatten()
-        .map(|part| part.trim().to_string())
+        .map(|part| part.expose().trim().to_string())
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" ");
@@ -498,8 +498,8 @@ mod tests {
     ) {
         let email: Pii<EmailAddress> = "john@example.com".parse().unwrap();
         let mailbox = build_to_mailbox(
-            first_name.map(str::to_string),
-            last_name.map(str::to_string),
+            first_name.map(|name| Pii::new(name.to_string())),
+            last_name.map(|name| Pii::new(name.to_string())),
             &email,
         )
         .unwrap();
@@ -522,7 +522,7 @@ mod tests {
     #[rstest]
     #[case::method_added(
         EmailTemplate::AuthMethodAdded {
-            first_name: Some("John".to_string()),
+            first_name: Some(Pii::new("John".to_string())),
             method: "A passkey".to_string(),
             password_reset_url: "https://app.universal-inbox.com/password-reset".parse().unwrap(),
         },
@@ -531,7 +531,7 @@ mod tests {
     )]
     #[case::method_removed(
         EmailTemplate::AuthMethodRemoved {
-            first_name: Some("John".to_string()),
+            first_name: Some(Pii::new("John".to_string())),
             method: "Google".to_string(),
             password_reset_url: "https://app.universal-inbox.com/password-reset".parse().unwrap(),
         },
@@ -540,7 +540,7 @@ mod tests {
     )]
     #[case::email_change_requested(
         EmailTemplate::EmailChangeRequested {
-            first_name: Some("John".to_string()),
+            first_name: Some(Pii::new("John".to_string())),
             new_email_masked: "j***@example.com".to_string(),
             password_reset_url: "https://app.universal-inbox.com/password-reset".parse().unwrap(),
         },
@@ -567,7 +567,7 @@ mod tests {
     #[rstest]
     fn test_integration_connection_pause_warning_email() {
         let template = EmailTemplate::IntegrationConnectionPauseWarning {
-            first_name: Some("John".to_string()),
+            first_name: Some(Pii::new("John".to_string())),
             provider_names: vec!["Slack".to_string()],
             inactive_for_days: 83,
             pause_date: NaiveDate::from_ymd_opt(2026, 10, 10).unwrap(),

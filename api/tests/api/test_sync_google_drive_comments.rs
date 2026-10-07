@@ -147,8 +147,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 
     let google_drive_about_response = GoogleDriveAboutResponse {
         user: GoogleDriveUserInfo {
-            email_address: user_email_address.expose().to_string(),
-            display_name: "Jane Doe".to_string(),
+            email_address: Pii::new(user_email_address.expose().to_string()),
+            display_name: Pii::new("Jane Doe".to_string()),
         },
     };
     let _google_drive_get_user_info_mock = mock_google_drive_get_user_info_service(
@@ -289,8 +289,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     assert_eq!(
         updated_notification.source_item.data,
         ThirdPartyItemData::GoogleDriveComment(Box::new(GoogleDriveComment {
-            user_email_address: Some(user_email_address.expose().to_string()),
-            user_display_name: Some("Jane Doe".to_string()),
+            user_email_address: Some(Pii::new(user_email_address.expose().to_string())),
+            user_display_name: Some(Pii::new("Jane Doe".to_string())),
             ..google_drive_comment_456
         }))
     );
@@ -314,7 +314,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             provider: IntegrationProvider::GoogleDrive {
                 context: Some(GoogleDriveContext {
                     user_email_address,
-                    user_display_name: "Jane Doe".to_string()
+                    user_display_name: Pii::new("Jane Doe".to_string())
                 }),
                 config: GoogleDriveConfig::enabled()
             },
@@ -374,8 +374,8 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
 
     let google_drive_about_response = GoogleDriveAboutResponse {
         user: GoogleDriveUserInfo {
-            email_address: user_email_address.expose().to_string(),
-            display_name: "Jane Doe".to_string(),
+            email_address: Pii::new(user_email_address.expose().to_string()),
+            display_name: Pii::new("Jane Doe".to_string()),
         },
     };
     let _google_drive_get_user_info_mock = mock_google_drive_get_user_info_service(
@@ -495,8 +495,8 @@ async fn test_sync_notifications_skips_files_returning_404_on_comments(
 
     let google_drive_about_response = GoogleDriveAboutResponse {
         user: GoogleDriveUserInfo {
-            email_address: user_email_address.expose().to_string(),
-            display_name: "Jane Doe".to_string(),
+            email_address: Pii::new(user_email_address.expose().to_string()),
+            display_name: Pii::new("Jane Doe".to_string()),
         },
     };
     let _google_drive_get_user_info_mock = mock_google_drive_get_user_info_service(
@@ -595,7 +595,7 @@ async fn test_sync_notifications_should_refresh_user_info_of_pinned_account(
     let app = authenticated_app.await;
     let previous_context = GoogleDriveContext {
         user_email_address: Pii::<EmailAddress>::from_str("Previous@example.com").unwrap(),
-        user_display_name: "Previous User".to_string(),
+        user_display_name: Pii::new("Previous User".to_string()),
     };
     let google_drive_integration_connection = create_and_mock_integration_connection(
         &app.app,
@@ -619,8 +619,8 @@ async fn test_sync_notifications_should_refresh_user_info_of_pinned_account(
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GoogleDriveAboutResponse {
                 user: GoogleDriveUserInfo {
-                    email_address: "John.Roe@example.com".to_string(),
-                    display_name: "John Roe".to_string(),
+                    email_address: Pii::new("John.Roe@example.com".to_string()),
+                    display_name: Pii::new("John Roe".to_string()),
                 },
             }),
         )
@@ -661,7 +661,7 @@ async fn test_sync_notifications_should_refresh_user_info_of_pinned_account(
     let expected_context = if expected_user_info_calls > 0 {
         GoogleDriveContext {
             user_email_address: Pii::<EmailAddress>::from_str("John.Roe@example.com").unwrap(),
-            user_display_name: "John Roe".to_string(),
+            user_display_name: Pii::new("John Roe".to_string()),
         }
     } else {
         previous_context

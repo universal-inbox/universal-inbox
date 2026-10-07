@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use pretty_assertions::assert_eq;
 use rstest::*;
+use universal_inbox::pii::Pii;
 use url::Url;
 use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -210,8 +211,8 @@ pub fn assert_sync_notifications(
                 assert_eq!(
                     notification.source_item.data,
                     ThirdPartyItemData::GoogleDriveComment(Box::new(GoogleDriveComment {
-                        user_email_address: Some(user_email_address.to_string()),
-                        user_display_name: Some(user_display_name.to_string()),
+                        user_email_address: Some(Pii::new(user_email_address.to_string())),
+                        user_display_name: Some(Pii::new(user_display_name.to_string())),
                         ..google_drive_comment_123.clone()
                     }))
                 );
@@ -236,8 +237,8 @@ pub fn assert_sync_notifications(
                 assert_eq!(
                     notification.source_item.data,
                     ThirdPartyItemData::GoogleDriveComment(Box::new(GoogleDriveComment {
-                        user_email_address: Some(user_email_address.to_string()),
-                        user_display_name: Some(user_display_name.to_string()),
+                        user_email_address: Some(Pii::new(user_email_address.to_string())),
+                        user_display_name: Some(Pii::new(user_display_name.to_string())),
                         ..google_drive_comment_456.clone()
                     }))
                 );

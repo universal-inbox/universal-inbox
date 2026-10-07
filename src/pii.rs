@@ -1,6 +1,7 @@
 use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
+use validator::ValidateLength;
 
 /// Personal data (an email address, a name, ...) that must not reach logs or
 /// telemetry by accident.
@@ -15,6 +16,10 @@ use serde::{Deserialize, Serialize};
 ///
 /// The exporter-side regex redaction (`api/src/observability/redaction.rs`)
 /// stays as a safety net for what this type cannot cover.
+///
+/// `just check-pii-logging` rejects `expose()` / `into_inner()` written inside
+/// a tracing macro or `#[tracing::instrument]` attribute. It cannot see a value
+/// exposed into a variable first and logged later: don't do that either.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Pii<T>(T);
@@ -47,6 +52,13 @@ impl<T> From<T> for Pii<T> {
     }
 }
 
+/// Lets `#[validate(length(...))]` check a wrapped string, e.g. a user name.
+impl ValidateLength<u64> for Pii<String> {
+    fn length(&self) -> Option<u64> {
+        self.0.length()
+    }
+}
+
 impl<T: FromStr> FromStr for Pii<T> {
     type Err = T::Err;
 
@@ -73,11 +85,23 @@ mod tests {
     }
 
     #[test]
-    fn test_user_debug_does_not_leak_email() {
-        let user = User::new(None, None, email());
+    fn test_user_debug_does_not_leak_email_or_names() {
+        let user = User::new(
+            Some(Pii::new("Johnathan".to_string())),
+            Some(Pii::new("Doeson".to_string())),
+            email(),
+        );
 
-        assert!(!format!("{user:?}").contains('@'));
-        assert!(!format!("{user:#?}").contains('@'));
+        for debug in [format!("{user:?}"), format!("{user:#?}")] {
+            assert!(!debug.contains('@'));
+            assert!(!debug.contains("Johnathan"));
+            assert!(!debug.contains("Doeson"));
+        }
+    }
+
+    #[test]
+    fn test_length_validation_sees_wrapped_string() {
+        assert_eq!(Pii::new("été".to_string()).length(), Some(3));
     }
 
     #[test]

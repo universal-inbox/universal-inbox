@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use ical::{parser::ical::component::IcalEvent, property::Property};
+use universal_inbox::pii::Pii;
 
 use universal_inbox::third_party::integrations::google_calendar::{
     EventDateTime, EventReply, GoogleCalendarEventAttendeeResponseStatus, RecurrenceId,
@@ -55,8 +56,8 @@ pub fn parse_event_reply(vcal_event: &IcalEvent) -> Option<EventReply> {
         .and_then(parse_date_time_property);
 
     Some(EventReply {
-        attendee_email,
-        attendee_display_name: find_param(attendee, "CN"),
+        attendee_email: Pii::new(attendee_email),
+        attendee_display_name: find_param(attendee, "CN").map(Pii::new),
         response_status,
         comment,
         occurrence_start,
@@ -156,8 +157,8 @@ mod tests {
         assert_eq!(
             parse_event_reply(&event),
             Some(EventReply {
-                attendee_email: "user2@example.com".to_string(),
-                attendee_display_name: Some("Jane Doe".to_string()),
+                attendee_email: Pii::new("user2@example.com".to_string()),
+                attendee_display_name: Some(Pii::new("Jane Doe".to_string())),
                 response_status: GoogleCalendarEventAttendeeResponseStatus::Accepted,
                 comment: None,
                 occurrence_start: Some(EventDateTime {
@@ -184,7 +185,10 @@ mod tests {
             reply.response_status,
             GoogleCalendarEventAttendeeResponseStatus::Declined
         );
-        assert_eq!(reply.attendee_display_name, Some("Doe, Jane".to_string()));
+        assert_eq!(
+            reply.attendee_display_name,
+            Some(Pii::new("Doe, Jane".to_string()))
+        );
         assert_eq!(reply.comment, Some("On holidays".to_string()));
         assert_eq!(
             reply.occurrence_start,
