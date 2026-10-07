@@ -150,7 +150,7 @@ async fn test_a_name_change_does_not_need_a_recent_authentication(
 
     // The profile form sends the unchanged email along with the name
     let patch = UserPatch {
-        first_name: Some("John".to_string()),
+        first_name: Some(Pii::new("John".to_string())),
         email: Some(email),
         ..Default::default()
     };

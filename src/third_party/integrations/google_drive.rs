@@ -1,4 +1,4 @@
-use crate::typed_id::TypedId;
+use crate::{pii::Pii, typed_id::TypedId};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -31,16 +31,16 @@ pub struct GoogleDriveComment {
     pub replies: Vec<GoogleDriveCommentReply>,
     /// The email address of the current user (from IntegrationConnection context)
     #[serde(default)]
-    pub user_email_address: Option<String>,
+    pub user_email_address: Option<Pii<String>>,
     /// The display name of the current user (from IntegrationConnection context)
     #[serde(default)]
-    pub user_display_name: Option<String>,
+    pub user_display_name: Option<Pii<String>>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct GoogleDriveCommentAuthor {
-    pub display_name: String,
-    pub email_address: Option<String>,
+    pub display_name: Pii<String>,
+    pub email_address: Option<Pii<String>>,
     pub photo_link: Option<String>,
 }
 
@@ -92,11 +92,11 @@ impl GoogleDriveComment {
         if !self.replies.is_empty() {
             let latest_reply = self.replies[self.replies.len() - 1].clone();
             if let Some(ref latest_reply_author_email) = latest_reply.author.email_address
-                && latest_reply_author_email == user_email
+                && latest_reply_author_email.expose() == user_email
             {
                 return false;
             }
-            if latest_reply.author.display_name == user_display_name {
+            if latest_reply.author.display_name.expose() == user_display_name {
                 return false;
             }
         }
@@ -104,13 +104,13 @@ impl GoogleDriveComment {
         let is_new = after_time.is_none_or(|t| self.modified_time > t);
         if let Some(ref author_email) = self.author.email_address
             && is_new
-            && author_email == user_email
+            && author_email.expose() == user_email
         {
             return !self.replies.is_empty();
         }
         // Relying on weak display name match as email is not always available
         // https://issuetracker.google.com/issues/219879781
-        if is_new && self.author.display_name == user_display_name {
+        if is_new && self.author.display_name.expose() == user_display_name {
             return !self.replies.is_empty();
         }
 
@@ -122,14 +122,14 @@ impl GoogleDriveComment {
             let is_new = after_time.is_none_or(|t| reply.modified_time > t);
             if let Some(ref reply_author_email) = reply.author.email_address
                 && is_new
-                && reply_author_email == user_email
+                && reply_author_email.expose() == user_email
             {
                 return true;
             }
 
             // Relying on weak display name match as email is not always available
             // https://issuetracker.google.com/issues/219879781
-            if is_new && reply.author.display_name == user_display_name {
+            if is_new && reply.author.display_name.expose() == user_display_name {
                 return true;
             }
 
@@ -204,8 +204,8 @@ mod tests {
     #[fixture]
     fn comment_author() -> GoogleDriveCommentAuthor {
         GoogleDriveCommentAuthor {
-            display_name: "John Doe".to_string(),
-            email_address: Some("john.doe@example.com".to_string()),
+            display_name: Pii::new("John Doe".to_string()),
+            email_address: Some(Pii::new("john.doe@example.com".to_string())),
             photo_link: Some("https://example.com/photo.jpg".to_string()),
         }
     }
@@ -244,6 +244,30 @@ mod tests {
             user_email_address: None,
             user_display_name: None,
         }
+    }
+
+    #[rstest]
+    fn test_personal_data_is_redacted_in_debug_and_kept_on_the_wire(
+        mut google_drive_comment: GoogleDriveComment,
+    ) {
+        google_drive_comment.user_email_address = Some(Pii::new("jane@example.com".to_string()));
+        google_drive_comment.user_display_name = Some(Pii::new("Jane Roe".to_string()));
+
+        let debug = format!("{google_drive_comment:?}");
+        assert!(!debug.contains('@'));
+        assert!(!debug.contains("John Doe"));
+        assert!(!debug.contains("Jane Roe"));
+
+        let serialized = serde_json::to_value(&google_drive_comment).unwrap();
+        assert_eq!(serialized["author"]["display_name"], "John Doe");
+        assert_eq!(
+            serialized["author"]["email_address"],
+            "john.doe@example.com"
+        );
+        assert_eq!(serialized["user_email_address"], "jane@example.com");
+        assert_eq!(serialized["user_display_name"], "Jane Roe");
+        let round_tripped: GoogleDriveComment = serde_json::from_value(serialized).unwrap();
+        assert_eq!(round_tripped, google_drive_comment);
     }
 
     #[rstest]
@@ -331,9 +355,9 @@ mod tests {
             html_content: None,
             quoted_file_content: None,
             author: GoogleDriveCommentAuthor {
-                display_name: "Test User".to_string(),
+                display_name: Pii::new("Test User".to_string()),
                 email_address: if has_email {
-                    Some("test@example.com".to_string())
+                    Some(Pii::new("test@example.com".to_string()))
                 } else {
                     None
                 },
@@ -347,7 +371,7 @@ mod tests {
                 content: "This is a reply".to_string(),
                 html_content: None,
                 author: GoogleDriveCommentAuthor {
-                    display_name: "Other User".to_string(),
+                    display_name: Pii::new("Other User".to_string()),
                     email_address: None,
                     photo_link: None,
                 },
@@ -386,7 +410,7 @@ mod tests {
             html_content: None,
             quoted_file_content: None,
             author: GoogleDriveCommentAuthor {
-                display_name: "Test User".to_string(),
+                display_name: Pii::new("Test User".to_string()),
                 email_address: None,
                 photo_link: None,
             },
@@ -414,9 +438,9 @@ mod tests {
             html_content: None,
             quoted_file_content: None,
             author: GoogleDriveCommentAuthor {
-                display_name: "Test User".to_string(),
+                display_name: Pii::new("Test User".to_string()),
                 email_address: if has_email {
-                    Some("test@example.com".to_string())
+                    Some(Pii::new("test@example.com".to_string()))
                 } else {
                     None
                 },
@@ -431,7 +455,7 @@ mod tests {
                     content: "This is a reply".to_string(),
                     html_content: None,
                     author: GoogleDriveCommentAuthor {
-                        display_name: "Other User".to_string(),
+                        display_name: Pii::new("Other User".to_string()),
                         email_address: None,
                         photo_link: None,
                     },
@@ -444,9 +468,9 @@ mod tests {
                     content: "This is a reply".to_string(),
                     html_content: None,
                     author: GoogleDriveCommentAuthor {
-                        display_name: "Test User".to_string(),
+                        display_name: Pii::new("Test User".to_string()),
                         email_address: if has_email {
-                            Some("test@example.com".to_string())
+                            Some(Pii::new("test@example.com".to_string()))
                         } else {
                             None
                         },
@@ -475,8 +499,8 @@ mod tests {
             html_content: None,
             quoted_file_content: None,
             author: GoogleDriveCommentAuthor {
-                display_name: "Other User".to_string(),
-                email_address: Some("other@example.com".to_string()),
+                display_name: Pii::new("Other User".to_string()),
+                email_address: Some(Pii::new("other@example.com".to_string())),
                 photo_link: None,
             },
             created_time: Utc::now(),
@@ -513,9 +537,9 @@ mod tests {
             html_content: None,
             quoted_file_content: None,
             author: GoogleDriveCommentAuthor {
-                display_name: "Other User".to_string(),
+                display_name: Pii::new("Other User".to_string()),
                 email_address: if has_email {
-                    Some("other@example.com".to_string())
+                    Some(Pii::new("other@example.com".to_string()))
                 } else {
                     None
                 },
@@ -530,9 +554,9 @@ mod tests {
                     content: "This is a reply".to_string(),
                     html_content: None,
                     author: GoogleDriveCommentAuthor {
-                        display_name: "Test User".to_string(),
+                        display_name: Pii::new("Test User".to_string()),
                         email_address: if has_email {
-                            Some("test@example.com".to_string())
+                            Some(Pii::new("test@example.com".to_string()))
                         } else {
                             None
                         },
@@ -547,7 +571,7 @@ mod tests {
                     content: "This is another reply".to_string(),
                     html_content: None,
                     author: GoogleDriveCommentAuthor {
-                        display_name: "Other User".to_string(),
+                        display_name: Pii::new("Other User".to_string()),
                         email_address: None,
                         photo_link: None,
                     },
@@ -584,8 +608,8 @@ mod tests {
             html_content: None,
             quoted_file_content: None,
             author: GoogleDriveCommentAuthor {
-                display_name: "Other User".to_string(),
-                email_address: Some("other@example.com".to_string()),
+                display_name: Pii::new("Other User".to_string()),
+                email_address: Some(Pii::new("other@example.com".to_string())),
                 photo_link: None,
             },
             created_time: Utc::now(),
@@ -596,8 +620,8 @@ mod tests {
                 content: "Hey @test@example.com, please review this".to_string(),
                 html_content: None,
                 author: GoogleDriveCommentAuthor {
-                    display_name: "Other User".to_string(),
-                    email_address: Some("other@example.com".to_string()),
+                    display_name: Pii::new("Other User".to_string()),
+                    email_address: Some(Pii::new("other@example.com".to_string())),
                     photo_link: None,
                 },
                 created_time: Utc::now(),
@@ -632,8 +656,8 @@ mod tests {
             html_content: None,
             quoted_file_content: None,
             author: GoogleDriveCommentAuthor {
-                display_name: "Other User".to_string(),
-                email_address: Some("other@example.com".to_string()),
+                display_name: Pii::new("Other User".to_string()),
+                email_address: Some(Pii::new("other@example.com".to_string())),
                 photo_link: None,
             },
             created_time: Utc::now(),
@@ -644,8 +668,8 @@ mod tests {
                 content: "This is a reply from user".to_string(),
                 html_content: None,
                 author: GoogleDriveCommentAuthor {
-                    display_name: "Test User".to_string(),
-                    email_address: Some("test@example.com".to_string()),
+                    display_name: Pii::new("Test User".to_string()),
+                    email_address: Some(Pii::new("test@example.com".to_string())),
                     photo_link: None,
                 },
                 created_time: Utc::now(),
@@ -673,8 +697,8 @@ mod tests {
             html_content: None,
             quoted_file_content: None,
             author: GoogleDriveCommentAuthor {
-                display_name: "Other User".to_string(),
-                email_address: Some("other@example.com".to_string()),
+                display_name: Pii::new("Other User".to_string()),
+                email_address: Some(Pii::new("other@example.com".to_string())),
                 photo_link: None,
             },
             created_time: Utc::now(),
@@ -685,9 +709,9 @@ mod tests {
                 content: "This is a reply from user".to_string(),
                 html_content: None,
                 author: GoogleDriveCommentAuthor {
-                    display_name: "Test User".to_string(),
+                    display_name: Pii::new("Test User".to_string()),
                     email_address: if has_email {
-                        Some("test@example.com".to_string())
+                        Some(Pii::new("test@example.com".to_string()))
                     } else {
                         None
                     },
@@ -697,8 +721,8 @@ mod tests {
                 modified_time: Utc::now(),
                 action: None,
             }],
-            user_email_address: Some("test@example.com".to_string()),
-            user_display_name: Some("Test User".to_string()),
+            user_email_address: Some(Pii::new("test@example.com".to_string())),
+            user_display_name: Some(Pii::new("Test User".to_string())),
         };
 
         assert!(comment.is_last_reply_from_user());
@@ -715,8 +739,8 @@ mod tests {
             html_content: None,
             quoted_file_content: None,
             author: GoogleDriveCommentAuthor {
-                display_name: "Other User".to_string(),
-                email_address: Some("other@example.com".to_string()),
+                display_name: Pii::new("Other User".to_string()),
+                email_address: Some(Pii::new("other@example.com".to_string())),
                 photo_link: None,
             },
             created_time: Utc::now(),
@@ -728,8 +752,8 @@ mod tests {
                     content: "User reply".to_string(),
                     html_content: None,
                     author: GoogleDriveCommentAuthor {
-                        display_name: "Test User".to_string(),
-                        email_address: Some("test@example.com".to_string()),
+                        display_name: Pii::new("Test User".to_string()),
+                        email_address: Some(Pii::new("test@example.com".to_string())),
                         photo_link: None,
                     },
                     created_time: Utc::now(),
@@ -741,8 +765,8 @@ mod tests {
                     content: "Other reply".to_string(),
                     html_content: None,
                     author: GoogleDriveCommentAuthor {
-                        display_name: "Other User".to_string(),
-                        email_address: Some("other@example.com".to_string()),
+                        display_name: Pii::new("Other User".to_string()),
+                        email_address: Some(Pii::new("other@example.com".to_string())),
                         photo_link: None,
                     },
                     created_time: Utc::now(),
@@ -750,8 +774,8 @@ mod tests {
                     action: None,
                 },
             ],
-            user_email_address: Some("test@example.com".to_string()),
-            user_display_name: Some("Test User".to_string()),
+            user_email_address: Some(Pii::new("test@example.com".to_string())),
+            user_display_name: Some(Pii::new("Test User".to_string())),
         };
 
         assert!(!comment.is_last_reply_from_user());
@@ -768,16 +792,16 @@ mod tests {
             html_content: None,
             quoted_file_content: None,
             author: GoogleDriveCommentAuthor {
-                display_name: "Test User".to_string(),
-                email_address: Some("test@example.com".to_string()),
+                display_name: Pii::new("Test User".to_string()),
+                email_address: Some(Pii::new("test@example.com".to_string())),
                 photo_link: None,
             },
             created_time: Utc::now(),
             modified_time: Utc::now(),
             resolved: Some(false),
             replies: vec![],
-            user_email_address: Some("test@example.com".to_string()),
-            user_display_name: Some("Test User".to_string()),
+            user_email_address: Some(Pii::new("test@example.com".to_string())),
+            user_display_name: Some(Pii::new("Test User".to_string())),
         };
 
         assert!(!comment.is_last_reply_from_user());

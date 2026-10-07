@@ -5,6 +5,7 @@ use rstest::*;
 
 use universal_inbox::{
     auth::{AuthorizeSessionResponse, CloseSessionResponse, SessionAuthValidationParameters},
+    pii::Pii,
     user::{User, UserAuthKind},
 };
 
@@ -62,8 +63,8 @@ mod authenticate_session {
             .await
             .unwrap();
 
-        assert_eq!(user.first_name, Some("John".to_string()));
-        assert_eq!(user.last_name, Some("Doe".to_string()));
+        assert_eq!(user.first_name, Some(Pii::new("John".to_string())));
+        assert_eq!(user.last_name, Some(Pii::new("Doe".to_string())));
         let user_auth = get_user_auth(&app, user.id, UserAuthKind::OIDCAuthorizationCodePKCE).await;
         let UserAuth::OIDCAuthorizationCodePKCE(user_auth) = &user_auth else {
             panic!("User auth is not OIDCAuthorizationCodePKCE");
