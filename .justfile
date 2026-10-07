@@ -93,7 +93,7 @@ lint-dockerfile:
     hadolint Dockerfile
 
 check-deny:
-    cargo deny check advisories sources bans
+    cargo deny --workspace check advisories sources bans licenses
 
 @check-commit:
     env SKIP= prek run -a
