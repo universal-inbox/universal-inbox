@@ -33,6 +33,7 @@
 - Collapse the already read part of a Slack thread in its preview and open it scrolled to the latest read reply
 - Configure the OTLP trace and log export levels independently (`otel_trace_directive`, `otel_log_directive`), stop tracing `/ping`, and flush pending telemetry on shutdown
 - Serve the web application precompressed (brotli / gzip), with long-lived caching of content-hashed assets
+- Make the Redis per-command response timeout configurable (`redis.response_timeout_in_milliseconds`)
 
 ### Security
 

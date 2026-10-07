@@ -234,7 +234,7 @@ pub async fn run_server(
     };
 
     let storage_data = web::Data::new(redis_storage.clone());
-    let cache = Cache::new(settings.redis.connection_string())
+    let cache = Cache::new(&settings.redis)
         .await
         .expect("Failed to create cache");
     let mcp_session_store: Arc<dyn rmcp::transport::streamable_http_server::session::SessionStore> =
@@ -857,7 +857,7 @@ pub async fn build_services(
     // Redis connection. Session checks fail closed, so the API refuses to start
     // without Redis rather than run with revocation disabled. See
     // utils::session_revocation.
-    let cache = Cache::new(settings.redis.connection_string())
+    let cache = Cache::new(&settings.redis)
         .await
         .expect("Failed to connect to Redis for session revocation");
     let session_revocation = SessionRevocation::new(

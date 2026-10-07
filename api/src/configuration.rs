@@ -693,6 +693,12 @@ pub struct RedisSettings {
     pub user: Option<String>,
     pub password: Option<String>,
     pub use_tls: bool,
+    /// Per-command response timeout for the shared Redis connection manager.
+    /// `None` keeps the redis-rs default (500ms). Tests raise it: hundreds of
+    /// test processes share one local Redis and a single command can stall
+    /// past 500ms under full-suite load.
+    #[serde(default)]
+    pub response_timeout_in_milliseconds: Option<u64>,
 }
 
 #[derive(Deserialize, Clone, Debug)]

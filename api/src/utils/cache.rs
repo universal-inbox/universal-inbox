@@ -3,13 +3,16 @@ use std::{future::Future, sync::Arc, time::Duration};
 use anyhow::Context;
 use cached::{AsyncRedisCache, ConcurrentCacheBase, ConcurrentCachedAsync, RedisCacheError};
 use once_cell::sync::Lazy;
-use redis::{Client, Script, aio::ConnectionManager};
+use redis::{
+    Client, Script,
+    aio::{ConnectionManager, ConnectionManagerConfig},
+};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 use crate::{
-    configuration::Settings,
+    configuration::{RedisSettings, Settings},
     observability::{instrument_client_call, redis_client_span, spans::OTHER_ERROR_TYPE},
     universal_inbox::UniversalInboxError,
 };
@@ -44,11 +47,19 @@ pub struct Cache {
 }
 
 impl Cache {
-    pub async fn new(redis_address: String) -> Result<Self, UniversalInboxError> {
-        let client = Client::open(redis_address)
-            .context("Failed to open setup Redis client for {redis_address}")?;
+    pub async fn new(redis_settings: &RedisSettings) -> Result<Self, UniversalInboxError> {
+        let client = Client::open(redis_settings.connection_string()).with_context(|| {
+            format!(
+                "Failed to open setup Redis client for {}",
+                redis_settings.safe_connection_string()
+            )
+        })?;
+        let mut config = ConnectionManagerConfig::new();
+        if let Some(timeout) = redis_settings.response_timeout_in_milliseconds {
+            config = config.set_response_timeout(Some(Duration::from_millis(timeout)));
+        }
         let connection_manager = client
-            .get_connection_manager()
+            .get_connection_manager_with_config(config)
             .await
             .context("Failed to get connection manager for Redis client")?;
         Ok(Cache { connection_manager })

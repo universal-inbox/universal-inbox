@@ -418,7 +418,7 @@ impl Cli {
                 .expect("Failed to bind port");
 
                 let cron_settings = settings.application.cron.clone();
-                let redis_connection_string = settings.redis.connection_string();
+                let redis_settings = settings.redis.clone();
                 let server = run_server(
                     listener,
                     redis_storage.clone(),
@@ -437,7 +437,7 @@ impl Cli {
                 .expect("Failed to start HTTP server");
 
                 if async_workers_count.is_some() || *embed_async_workers {
-                    let cache = Cache::new(redis_connection_string)
+                    let cache = Cache::new(&redis_settings)
                         .await
                         .expect("Failed to create cache");
                     let worker = run_worker(
@@ -492,7 +492,7 @@ impl Cli {
                 ))
                 .expect("Failed to bind worker health-check port");
 
-                let cache = Cache::new(settings.redis.connection_string())
+                let cache = Cache::new(&settings.redis)
                     .await
                     .expect("Failed to create cache");
                 let ping_server = run_ping_server(
@@ -527,7 +527,7 @@ impl Cli {
 
             Commands::Cache { command } => match command {
                 CacheCommands::Clear { prefix } => {
-                    let cache = Cache::new(settings.redis.connection_string())
+                    let cache = Cache::new(&settings.redis)
                         .await
                         .expect("Failed to create cache");
                     cache.clear(prefix).await.expect("Failed to clear cache");
