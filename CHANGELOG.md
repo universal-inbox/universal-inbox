@@ -66,6 +66,7 @@
 - New passwords must be 12 to 128 characters and must not be a common password, checked server-side; password forms show a strength meter
 - Email users when a password reset completes, when a login method (password, passkey, Google) is added or removed, and when an email change is requested
 - Changing the email address, adding or removing a login method, linking a Google account and creating an API token require a login less than 15 minutes old (`security.reauthentication_window_in_seconds`); the web app asks the user to confirm their identity with their password, passkey or Google account
+- Allow only permissive dependency licenses (MPL-2.0 per crate) with cargo-deny, which now checks the whole workspace, API and web dependencies included
 
 ### Fixed
 

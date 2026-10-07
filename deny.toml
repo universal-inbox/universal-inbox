@@ -1,5 +1,7 @@
 # cargo-deny configuration, run on every PR (`just check-deny`).
 # Keep advisory ignores in sync with `.cargo/audit.toml` (daily cargo-audit cron).
+# Always run with `--workspace`: the root manifest is also a package, so without it
+# cargo-deny only checks the domain crate and skips the api/ and web/ dependencies.
 
 [graph]
 all-features = false
@@ -23,3 +25,33 @@ wildcards = "allow"
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+# Permissive licenses only. No GPL, LGPL, AGPL, SSPL or BUSL: a crate offering one of
+# these alongside a permissive option (e.g. r-efi) is accepted through that option.
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-1-Clause",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  # Boost license (ryu, xxhash-rust)
+  "BSL-1.0",
+  # Public domain dedication (base16, dunce)
+  "CC0-1.0",
+  # Mozilla CA certificate data (webpki-roots, webpki-root-certs)
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  # File-level copyleft, fine for unmodified use (webauthn-rs, cssparser, selectors)
+  "MPL-2.0",
+  # Unicode data tables (icu_*, unicode-ident, finl_unicode)
+  "Unicode-3.0",
+  "Unicode-DFS-2016",
+  "Unlicense",
+  "Zlib",
+]
