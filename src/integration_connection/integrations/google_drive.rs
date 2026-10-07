@@ -1,6 +1,8 @@
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
 
+use crate::pii::Pii;
+
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GoogleDriveConfig {
     pub sync_notifications_enabled: bool,
@@ -30,6 +32,6 @@ impl GoogleDriveConfig {
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GoogleDriveContext {
-    pub user_email_address: EmailAddress,
+    pub user_email_address: Pii<EmailAddress>,
     pub user_display_name: String,
 }

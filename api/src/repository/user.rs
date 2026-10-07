@@ -6,6 +6,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use email_address::EmailAddress;
 use secrecy::{ExposeSecret, SecretBox};
 use sqlx::{Postgres, QueryBuilder, Transaction, types::Json};
+use universal_inbox::pii::Pii;
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
 
@@ -62,7 +63,7 @@ pub trait UserRepository {
     async fn get_user_by_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        email: &EmailAddress,
+        email: &Pii<EmailAddress>,
     ) -> Result<Option<User>, UniversalInboxError>;
 
     async fn create_user(
@@ -122,7 +123,7 @@ pub trait UserRepository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-        new_email: &EmailAddress,
+        new_email: &Pii<EmailAddress>,
         validation_token: &EmailValidationToken,
     ) -> Result<(), UniversalInboxError>;
 
@@ -144,13 +145,13 @@ pub trait UserRepository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-        new_email: &EmailAddress,
+        new_email: &Pii<EmailAddress>,
     ) -> Result<bool, UniversalInboxError>;
 
     async fn update_password_reset_parameters(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        email_address: EmailAddress,
+        email_address: Pii<EmailAddress>,
         password_reset_sent_at: Option<DateTime<Utc>>,
         password_reset_token: Option<PasswordResetToken>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
@@ -174,7 +175,7 @@ pub trait UserRepository {
     async fn get_user_auth_by_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        user_email: &EmailAddress,
+        user_email: &Pii<EmailAddress>,
     ) -> Result<Option<(UserAuth, UserId)>, UniversalInboxError>;
 
     async fn get_user_auth(
@@ -499,7 +500,7 @@ impl UserRepository for Repository {
     async fn get_user_by_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        email: &EmailAddress,
+        email: &Pii<EmailAddress>,
     ) -> Result<Option<User>, UniversalInboxError> {
         let row = sqlx::query_as!(
             UserRow,
@@ -517,7 +518,7 @@ impl UserRepository for Repository {
                 FROM "user"
                 WHERE "user".email = $1
             "#,
-            email.to_string()
+            email.expose().to_string()
         )
         .fetch_optional(&mut **executor)
         .await
@@ -563,7 +564,7 @@ impl UserRepository for Repository {
                 user.id.0,
                 user.first_name,
                 user.last_name,
-                user.email.as_ref().map(|email| email.to_string()),
+                user.email.as_ref().map(|email| email.expose().to_string()),
                 user.is_testing,
                 user.created_at.naive_utc(),
                 user.updated_at.naive_utc()
@@ -982,7 +983,7 @@ impl UserRepository for Repository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-        new_email: &EmailAddress,
+        new_email: &Pii<EmailAddress>,
         validation_token: &EmailValidationToken,
     ) -> Result<(), UniversalInboxError> {
         sqlx::query!(
@@ -995,7 +996,7 @@ impl UserRepository for Repository {
                   requested_at = EXCLUDED.requested_at
             "#,
             user_id.0,
-            new_email.as_str(),
+            new_email.expose().as_str(),
             validation_token.0
         )
         .execute(&mut **executor)
@@ -1074,7 +1075,7 @@ impl UserRepository for Repository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-        new_email: &EmailAddress,
+        new_email: &Pii<EmailAddress>,
     ) -> Result<bool, UniversalInboxError> {
         let result = sqlx::query!(
             r#"
@@ -1087,7 +1088,7 @@ impl UserRepository for Repository {
                 WHERE id = $1
             "#,
             user_id.0,
-            new_email.as_str(),
+            new_email.expose().as_str(),
             Utc::now().naive_utc()
         )
         .execute(&mut **executor)
@@ -1126,7 +1127,7 @@ impl UserRepository for Repository {
     async fn update_password_reset_parameters(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        email_address: EmailAddress,
+        email_address: Pii<EmailAddress>,
         password_reset_sent_at: Option<DateTime<Utc>>,
         password_reset_token: Option<PasswordResetToken>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError> {
@@ -1154,7 +1155,7 @@ impl UserRepository for Repository {
         separated
             .push(r#"user_auth.user_id = "user".id"#)
             .push(r#""user".email = "#)
-            .push_bind_unseparated(email_address.as_str())
+            .push_bind_unseparated(email_address.expose().as_str())
             .push("user_auth.kind = 'Local'::user_auth_kind");
 
         query_builder.push(
@@ -1325,7 +1326,7 @@ impl UserRepository for Repository {
     async fn get_user_auth_by_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        user_email: &EmailAddress,
+        user_email: &Pii<EmailAddress>,
     ) -> Result<Option<(UserAuth, UserId)>, UniversalInboxError> {
         let row: Option<UserAuthRow> = sqlx::query_as!(
             UserAuthRow,
@@ -1345,7 +1346,7 @@ impl UserRepository for Repository {
                 WHERE "user".email = $1
                   AND user_auth.kind = 'Local'::user_auth_kind
             "#,
-            user_email.to_string()
+            user_email.expose().to_string()
         )
         .fetch_optional(&mut **executor)
         .await
@@ -1609,7 +1610,7 @@ impl UserRepository for Repository {
         if let Some(email) = &patch.email {
             separated
                 .push(" email = ")
-                .push_bind_unseparated(email.to_string());
+                .push_bind_unseparated(email.expose().to_string());
             separated.push(" email_validated_at = NULL ");
             separated.push(" email_validation_sent_at = NULL ");
         }
@@ -1651,7 +1652,7 @@ impl UserRepository for Repository {
         if let Some(email) = &patch.email {
             separated
                 .push(" (email is NULL OR email != ")
-                .push_bind_unseparated(email.to_string())
+                .push_bind_unseparated(email.expose().to_string())
                 .push_unseparated(")");
         }
         query_builder

@@ -22,6 +22,7 @@ use secrecy::{ExposeSecret, SecretBox};
 use sqlx::{Acquire, Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
+use universal_inbox::pii::Pii;
 use url::Url;
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
@@ -206,7 +207,7 @@ impl UserService {
             && let Some(chat_support_settings) = &self.application_settings.chat_support
         {
             let chat_support_email_signature =
-                Some(chat_support_settings.sign_email(email.as_str()));
+                Some(chat_support_settings.sign_email(email.expose().as_str()));
             return Ok(Some(User {
                 chat_support_email_signature,
                 ..user.clone()
@@ -268,7 +269,7 @@ impl UserService {
     pub async fn get_user_by_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        email: &EmailAddress,
+        email: &Pii<EmailAddress>,
     ) -> Result<Option<User>, UniversalInboxError> {
         self.repository.get_user_by_email(executor, email).await
     }
@@ -464,7 +465,7 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         user_auth: UserAuth,
-        oidc_email: EmailAddress,
+        oidc_email: Pii<EmailAddress>,
     ) -> Result<UserAuthMethod, UniversalInboxError> {
         let kind = user_auth.kind();
 
@@ -504,14 +505,16 @@ impl UserService {
                 return Err(UniversalInboxError::InvalidInputData {
                     source: None,
                     user_error: format!(
-                        "The email from the OIDC account ({oidc_email}) does not match your current email ({current_email})"
+                        "The email from the OIDC account ({}) does not match your current email ({})",
+                        oidc_email.expose(),
+                        current_email.expose()
                     ),
                 });
             }
             None => {
                 // User has no email yet, set it from the OIDC provider
                 // Check if the email domain is blacklisted
-                let domain = oidc_email.domain().to_lowercase();
+                let domain = oidc_email.expose().domain().to_lowercase();
                 if let Some(rejection_message) = self
                     .application_settings
                     .security
@@ -723,7 +726,7 @@ impl UserService {
 
         // Check email domain blacklist if email is being changed
         if let Some(email) = &patch.email {
-            let domain = email.domain().to_lowercase();
+            let domain = email.expose().domain().to_lowercase();
             if let Some(rejection_message) = self
                 .application_settings
                 .security
@@ -794,7 +797,7 @@ impl UserService {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user: &User,
-        new_email: &EmailAddress,
+        new_email: &Pii<EmailAddress>,
     ) -> Result<(), UniversalInboxError> {
         let validation_token: EmailValidationToken = Uuid::new_v4().into();
         self.repository
@@ -1021,14 +1024,14 @@ impl UserService {
                     .family_name()
                     .and_then(|name| name.get(None))
                     .map(|name| name.to_string());
-                let email: EmailAddress = user_infos
+                let email: Pii<EmailAddress> = user_infos
                     .email()
                     .context("No email found in user info")?
                     .parse()
                     .context("Invalid email address")?;
 
                 // Check if the email domain is blacklisted
-                let domain = email.domain().to_lowercase();
+                let domain = email.expose().domain().to_lowercase();
                 if let Some(rejection_message) = self
                     .application_settings
                     .security
@@ -1052,7 +1055,7 @@ impl UserService {
         oidc_provider: &OpenidConnectProvider,
         access_token: AccessToken,
         auth_user_id: &AuthUserId,
-    ) -> Result<EmailAddress, UniversalInboxError> {
+    ) -> Result<Pii<EmailAddress>, UniversalInboxError> {
         let user_infos: CoreUserInfoClaims = oidc_provider
             .client
             .user_info(
@@ -1064,7 +1067,7 @@ impl UserService {
             .await
             .context("UserInfo request error")?;
 
-        let email: EmailAddress = user_infos
+        let email: Pii<EmailAddress> = user_infos
             .email()
             .context("No email found in OIDC user info")?
             .parse()
@@ -1275,7 +1278,7 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         credentials: Credentials,
     ) -> Result<(), UniversalInboxError> {
-        let email_domain = credentials.email.domain().to_lowercase();
+        let email_domain = credentials.email.expose().domain().to_lowercase();
         if let Some(rejection_message) = self
             .application_settings
             .security
@@ -1399,7 +1402,7 @@ impl UserService {
     async fn account_rate_limited_for(
         &self,
         scope: AccountRateLimitScope,
-        email: &EmailAddress,
+        email: &Pii<EmailAddress>,
     ) -> Option<u64> {
         let throttle = self.login_throttle.as_ref()?;
         match throttle.consume_request(scope, email).await {
@@ -1417,7 +1420,7 @@ impl UserService {
     async fn record_failed_login(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        email: &EmailAddress,
+        email: &Pii<EmailAddress>,
     ) {
         let Some(throttle) = &self.login_throttle else {
             return;
@@ -1710,7 +1713,7 @@ impl UserService {
     pub async fn send_password_reset_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        email_address: EmailAddress,
+        email_address: Pii<EmailAddress>,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
         // Checked before the lookup: the budget is consumed and the throttled
@@ -1792,7 +1795,7 @@ impl UserService {
     pub async fn send_account_lockout_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        email: &EmailAddress,
+        email: &Pii<EmailAddress>,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
         let user = self.repository.get_user_by_email(executor, email).await?;
@@ -1829,7 +1832,7 @@ impl UserService {
     pub async fn send_registration_attempt_email(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        email: &EmailAddress,
+        email: &Pii<EmailAddress>,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
         let user = self.repository.get_user_by_email(executor, email).await?;

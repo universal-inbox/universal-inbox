@@ -185,6 +185,7 @@ mod close_session {
             cookie::{CookieStore, Jar},
             header::{COOKIE, HeaderValue},
         };
+        use universal_inbox::pii::Pii;
         use uuid::Uuid;
 
         use crate::helpers::{
@@ -198,7 +199,7 @@ mod close_session {
 
         /// The login throttle is Redis-backed and Redis is shared across test
         /// apps: use a unique address per test.
-        fn unique_email() -> EmailAddress {
+        fn unique_email() -> Pii<EmailAddress> {
             format!("logout-{}@example.com", Uuid::new_v4())
                 .parse()
                 .unwrap()
@@ -206,7 +207,7 @@ mod close_session {
 
         /// Log in with a fresh client and return it along with a copy of its
         /// session cookie, as an attacker who copied it would hold it.
-        async fn login(app: &TestedApp, email: EmailAddress) -> (Client, HeaderValue) {
+        async fn login(app: &TestedApp, email: Pii<EmailAddress>) -> (Client, HeaderValue) {
             let jar = Arc::new(Jar::default());
             let client = Client::builder()
                 .cookie_provider(jar.clone())

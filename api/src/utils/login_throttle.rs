@@ -36,6 +36,7 @@ use anyhow::Context;
 use email_address::EmailAddress;
 use redis::{AsyncCommands, Script, aio::ConnectionManager};
 use ring::digest;
+use universal_inbox::pii::Pii;
 
 use crate::observability::attr;
 use crate::{configuration::LocalAuthenticationSettings, universal_inbox::UniversalInboxError};
@@ -119,16 +120,16 @@ impl LoginThrottle {
 
     /// Hex SHA-256 of the lowercased address. Emails are treated
     /// case-insensitively for throttling, and never stored in the clear.
-    fn email_hash(email: &EmailAddress) -> String {
-        let normalized = email.to_string().to_lowercase();
+    fn email_hash(email: &Pii<EmailAddress>) -> String {
+        let normalized = email.expose().to_string().to_lowercase();
         hex::encode(digest::digest(&digest::SHA256, normalized.as_bytes()).as_ref())
     }
 
-    fn key(email: &EmailAddress) -> String {
+    fn key(email: &Pii<EmailAddress>) -> String {
         format!("{NAMESPACE}{}", Self::email_hash(email))
     }
 
-    fn rate_limit_key(scope: AccountRateLimitScope, email: &EmailAddress) -> String {
+    fn rate_limit_key(scope: AccountRateLimitScope, email: &Pii<EmailAddress>) -> String {
         format!(
             "{RATE_LIMIT_NAMESPACE}{}:{}",
             scope.as_str(),
@@ -148,7 +149,7 @@ impl LoginThrottle {
     #[tracing::instrument(level = "debug", skip_all)]
     pub async fn locked_for(
         &self,
-        email: &EmailAddress,
+        email: &Pii<EmailAddress>,
     ) -> Result<Option<u64>, UniversalInboxError> {
         let mut conn = self.conn.clone();
         let key = Self::key(email);
@@ -167,7 +168,7 @@ impl LoginThrottle {
     #[tracing::instrument(level = "debug", skip_all)]
     pub async fn record_failure(
         &self,
-        email: &EmailAddress,
+        email: &Pii<EmailAddress>,
     ) -> Result<FailureOutcome, UniversalInboxError> {
         let mut conn = self.conn.clone();
         let key = Self::key(email);
@@ -198,7 +199,7 @@ impl LoginThrottle {
     pub async fn consume_request(
         &self,
         scope: AccountRateLimitScope,
-        email: &EmailAddress,
+        email: &Pii<EmailAddress>,
     ) -> Result<Option<u64>, UniversalInboxError> {
         let mut conn = self.conn.clone();
         let key = Self::rate_limit_key(scope, email);
@@ -219,7 +220,7 @@ impl LoginThrottle {
 
     /// Clear the counter after a successful login.
     #[tracing::instrument(level = "debug", skip_all)]
-    pub async fn reset(&self, email: &EmailAddress) -> Result<(), UniversalInboxError> {
+    pub async fn reset(&self, email: &Pii<EmailAddress>) -> Result<(), UniversalInboxError> {
         let mut conn = self.conn.clone();
         let key = Self::key(email);
         let _: () = conn
@@ -280,8 +281,8 @@ mod tests {
 
     #[test]
     fn key_is_stable_and_case_insensitive() {
-        let lower: EmailAddress = "user@example.com".parse().unwrap();
-        let mixed: EmailAddress = "User@Example.com".parse().unwrap();
+        let lower: Pii<EmailAddress> = "user@example.com".parse().unwrap();
+        let mixed: Pii<EmailAddress> = "User@Example.com".parse().unwrap();
         assert_eq!(LoginThrottle::key(&lower), LoginThrottle::key(&mixed));
         assert!(LoginThrottle::key(&lower).starts_with(NAMESPACE));
         // SHA-256 hex is 64 chars; the raw email never appears in the key.
@@ -291,8 +292,8 @@ mod tests {
 
     #[test]
     fn rate_limit_keys_are_scoped_and_hashed() {
-        let lower: EmailAddress = "user@example.com".parse().unwrap();
-        let mixed: EmailAddress = "User@Example.com".parse().unwrap();
+        let lower: Pii<EmailAddress> = "user@example.com".parse().unwrap();
+        let mixed: Pii<EmailAddress> = "User@Example.com".parse().unwrap();
         let login = LoginThrottle::rate_limit_key(AccountRateLimitScope::LoginRequest, &lower);
         let email = LoginThrottle::rate_limit_key(AccountRateLimitScope::AccountEmail, &lower);
         assert_eq!(

@@ -14,6 +14,7 @@ use mailgen::{Action, Branding, Email, EmailBuilder, Greeting, Mailgen, themes::
 use secrecy::{ExposeSecret, SecretBox};
 use serde::Serialize;
 use tracing::info;
+use universal_inbox::pii::Pii;
 use url::Url;
 
 use universal_inbox::{integration_connection::IntegrationConnectionPausedReason, user::User};
@@ -374,9 +375,10 @@ impl Mailer for SmtpMailer {
 fn build_to_mailbox(
     first_name: Option<String>,
     last_name: Option<String>,
-    email: &EmailAddress,
+    email: &Pii<EmailAddress>,
 ) -> Result<Mailbox, UniversalInboxError> {
     let address: Address = email
+        .expose()
         .as_str()
         .parse()
         .context("Failed to parse user email address")?;
@@ -412,7 +414,7 @@ mod tests {
         #[case] last_name: Option<&str>,
         #[case] expected: &str,
     ) {
-        let email: EmailAddress = "john@example.com".parse().unwrap();
+        let email: Pii<EmailAddress> = "john@example.com".parse().unwrap();
         let mailbox = build_to_mailbox(
             first_name.map(str::to_string),
             last_name.map(str::to_string),

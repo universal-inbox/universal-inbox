@@ -369,6 +369,7 @@ mod google_provider_user_id {
 
     use email_address::EmailAddress;
     use pretty_assertions::assert_eq;
+    use universal_inbox::pii::Pii;
 
     use universal_inbox::{
         integration_connection::{
@@ -631,7 +632,8 @@ mod google_provider_user_id {
             IntegrationConnectionStatus::Created,
             Some(IntegrationConnectionContext::GoogleMail(
                 GoogleMailContext {
-                    user_email_address: EmailAddress::from_str("jane.doe@example.com").unwrap(),
+                    user_email_address: Pii::<EmailAddress>::from_str("jane.doe@example.com")
+                        .unwrap(),
                     labels: vec![],
                 },
             )),
@@ -704,7 +706,7 @@ mod google_provider_user_id {
         };
         assert_eq!(
             user_email_address,
-            EmailAddress::from_str("John.Roe@example.com").unwrap()
+            Pii::<EmailAddress>::from_str("John.Roe@example.com").unwrap()
         );
     }
 

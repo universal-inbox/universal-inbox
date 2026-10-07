@@ -33,7 +33,7 @@ pub fn EmailValidationRequiredPage() -> Element {
     let email = user
         .email
         .as_ref()
-        .map(|email| email.to_string())
+        .map(|email| email.expose().to_string())
         .unwrap_or_default();
 
     rsx! {

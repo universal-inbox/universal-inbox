@@ -7,6 +7,7 @@ use futures::future;
 use std::{net::TcpListener, sync::Arc};
 use tokio::sync::RwLock;
 use tracing::info;
+use universal_inbox::pii::Pii;
 
 use universal_inbox::{
     integration_connection::provider::IntegrationProviderKind,
@@ -286,23 +287,23 @@ pub enum UserCommands {
     },
     /// Send welcome and verification email to user
     SendVerificationEmail {
-        user_email: EmailAddress,
+        user_email: Pii<EmailAddress>,
         #[arg(short, long)]
         dry_run: bool,
     },
 
     /// Send the password reset email to user
     SendPasswordResetEmail {
-        user_email: EmailAddress,
+        user_email: Pii<EmailAddress>,
         #[arg(short, long)]
         dry_run: bool,
     },
 
     /// Reset or set user password directly from CLI
-    ResetPassword { user_email: EmailAddress },
+    ResetPassword { user_email: Pii<EmailAddress> },
 
     /// Generate a new JWT token for given user
-    GenerateJWTToken { user_email: EmailAddress },
+    GenerateJWTToken { user_email: Pii<EmailAddress> },
 }
 
 impl Cli {

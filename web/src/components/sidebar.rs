@@ -3,6 +3,7 @@
 use dioxus::prelude::*;
 use dioxus_router::hooks::use_route;
 use gravatar_rs::Generator;
+use universal_inbox::pii::Pii;
 
 use crate::{
     components::{
@@ -84,7 +85,7 @@ pub fn Sidebar() -> Element {
         CONNECTED_USER()
             .as_ref()
             .map(|user| {
-                if let Some(ref email) = user.email {
+                if let Some(email) = user.email.as_ref().map(Pii::expose) {
                     Generator::default()
                         .set_image_size(150)
                         .set_rating("g")
@@ -125,7 +126,7 @@ pub fn Sidebar() -> Element {
         {
             let user_email = CONNECTED_USER()
                 .as_ref()
-                .and_then(|user| user.email.as_ref().map(|email| email.to_string()));
+                .and_then(|user| user.email.as_ref().map(|email| email.expose().to_string()));
             let user_email_signature = CONNECTED_USER().as_ref().and_then(|user| {
                 user.chat_support_email_signature
                     .as_ref()
@@ -418,7 +419,7 @@ pub fn Sidebar() -> Element {
                                 if let Some(name) = user.full_name() {
                                     span { class: "text-xs font-medium text-sidebar-text-bright", "{name}" }
                                 }
-                                if let Some(ref email) = user.email {
+                                if let Some(email) = user.email.as_ref().map(Pii::expose) {
                                     span { class: "text-[10px] text-sidebar-text-muted overflow-hidden text-ellipsis whitespace-nowrap", "{email}" }
                                 }
                             }

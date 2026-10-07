@@ -5,6 +5,7 @@ use rstest::*;
 use sqlx::PgPool;
 use tokio::sync::{OnceCell, RwLock};
 use tracing::info;
+use universal_inbox::pii::Pii;
 use wiremock::MockServer;
 
 use playwright_rs::{Browser, BrowserContext, LaunchOptions, Locator, Page, Playwright, expect};
@@ -445,7 +446,7 @@ pub async fn register(page: &Page, app_url: &str, email: &str) {
 /// app simulate the user clicking the verification link by reading the stored
 /// token and applying it directly through the user service.
 pub async fn verify_user_email(app: &BrowserTestedApp, email: &str) {
-    let email: EmailAddress = email.parse().expect("Test email should be valid");
+    let email: Pii<EmailAddress> = email.parse().expect("Test email should be valid");
     let mut transaction = app
         .repository
         .begin()

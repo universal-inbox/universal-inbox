@@ -23,6 +23,7 @@ use email_address::EmailAddress;
 use playwright_rs::{GotoOptions, expect};
 use rstest::*;
 use serde_json::json;
+use universal_inbox::pii::Pii;
 
 use universal_inbox::user::UserId;
 
@@ -35,7 +36,7 @@ use crate::helpers::{
 /// Look up the freshly-registered user's id so the simulated webhook can carry
 /// it as `metadata.user_id` (how the real handler links a checkout to a user).
 async fn user_id_for(app: &BrowserTestedApp, email: &str) -> UserId {
-    let email: EmailAddress = email.parse().expect("valid test email");
+    let email: Pii<EmailAddress> = email.parse().expect("valid test email");
     let mut transaction = app.repository.begin().await.expect("begin transaction");
     let user = app
         .user_service

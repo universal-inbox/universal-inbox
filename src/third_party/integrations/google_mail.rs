@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
+    pii::Pii,
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
     utils::base64::decode_base64,
@@ -25,7 +26,7 @@ pub const DEFAULT_GOOGLE_MAIL_HTML_URL: &str = "https://mail.google.com";
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct GoogleMailThread {
     pub id: String,
-    pub user_email_address: EmailAddress,
+    pub user_email_address: Pii<EmailAddress>,
     #[serde(rename = "historyId")]
     pub history_id: String,
     pub messages: Vec<GoogleMailMessage>,
@@ -171,7 +172,7 @@ impl GoogleMailThread {
         self.messages
             .last()
             .and_then(|message| message.get_header("From"))
-            .map(|from_header| from_header.contains(&self.user_email_address.to_string()))
+            .map(|from_header| from_header.contains(&self.user_email_address.expose().to_string()))
             .unwrap_or(false)
     }
 }
@@ -203,7 +204,8 @@ impl HasHtmlUrl for GoogleMailThread {
     fn get_html_url(&self) -> Url {
         format!(
             "https://mail.google.com/mail/u/0/?authuser={}#all/{}",
-            self.user_email_address, self.id
+            self.user_email_address.expose(),
+            self.id
         )
         .parse::<Url>()
         .unwrap_or_else(|_| DEFAULT_GOOGLE_MAIL_HTML_URL.parse::<Url>().unwrap())
@@ -369,8 +371,6 @@ mod tests {
     use rstest::*;
 
     mod de_serialization {
-        use std::str::FromStr;
-
         use super::*;
         use pretty_assertions::assert_eq;
         use serde_json::json;
@@ -409,7 +409,7 @@ mod tests {
                 serde_json::to_string(&GoogleMailThread {
                     id: "18a909f8178".to_string(),
                     history_id: "1234".to_string(),
-                    user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
+                    user_email_address: "test@example.com".parse().unwrap(),
                     messages: vec![GoogleMailMessage {
                         id: "18a909f8178".to_string(),
                         thread_id: "18a909f8178".to_string(),
@@ -468,7 +468,7 @@ mod tests {
                 GoogleMailThread {
                     id: "18a909f8178".to_string(),
                     history_id: "1234".to_string(),
-                    user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
+                    user_email_address: "test@example.com".parse().unwrap(),
                     messages: vec![GoogleMailMessage {
                         id: "18a909f8178".to_string(),
                         thread_id: "18a909f8178".to_string(),

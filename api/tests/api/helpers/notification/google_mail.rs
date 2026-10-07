@@ -4,6 +4,7 @@ use chrono::{TimeZone, Utc};
 use email_address::EmailAddress;
 use rstest::*;
 use serde_json::json;
+use universal_inbox::pii::Pii;
 use url::Url;
 use wiremock::matchers::{body_string, header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -231,7 +232,7 @@ pub fn google_mail_thread_get_123(
     google_mail_user_profile: GoogleMailUserProfile,
 ) -> GoogleMailThread {
     let user_email_address =
-        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap();
+        Pii::<EmailAddress>::from_str(&google_mail_user_profile.email_address).unwrap();
     raw_google_mail_thread_get_123.into_google_mail_thread(user_email_address)
 }
 
@@ -246,7 +247,7 @@ pub fn google_mail_thread_get_456(
     google_mail_user_profile: GoogleMailUserProfile,
 ) -> GoogleMailThread {
     let user_email_address =
-        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap();
+        Pii::<EmailAddress>::from_str(&google_mail_user_profile.email_address).unwrap();
     raw_google_mail_thread_get_456.into_google_mail_thread(user_email_address)
 }
 
@@ -261,7 +262,7 @@ pub fn google_mail_thread_with_invitation(
     google_mail_user_profile: GoogleMailUserProfile,
 ) -> GoogleMailThread {
     let user_email_address =
-        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap();
+        Pii::<EmailAddress>::from_str(&google_mail_user_profile.email_address).unwrap();
     raw_google_mail_thread_with_invitation.into_google_mail_thread(user_email_address)
 }
 
@@ -276,7 +277,7 @@ pub fn google_mail_thread_with_invitation_reply(
     google_mail_user_profile: GoogleMailUserProfile,
 ) -> GoogleMailThread {
     let user_email_address =
-        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap();
+        Pii::<EmailAddress>::from_str(&google_mail_user_profile.email_address).unwrap();
     raw_google_mail_thread_with_invitation_reply.into_google_mail_thread(user_email_address)
 }
 

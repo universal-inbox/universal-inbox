@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use email_address::EmailAddress;
 use secrecy::SecretBox;
 use serde::{Deserialize, Serialize};
+use universal_inbox::pii::Pii;
 use universal_inbox::{
     auth::{AuthIdToken, auth_token::TruncatedAuthenticationToken, oauth2::AuthorizedOAuth2Client},
     billing::UserSubscription,
@@ -115,7 +116,7 @@ impl From<AuthUserId> for String {
 /// `UserService::patch_user`).
 #[derive(Debug, Clone)]
 pub struct PendingEmailChange {
-    pub new_email: EmailAddress,
+    pub new_email: Pii<EmailAddress>,
     pub validation_token: EmailValidationToken,
     pub requested_at: DateTime<Utc>,
 }

@@ -1,7 +1,10 @@
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
 
-use crate::third_party::integrations::google_mail::{GOOGLE_MAIL_STARRED_LABEL, GoogleMailLabel};
+use crate::{
+    pii::Pii,
+    third_party::integrations::google_mail::{GOOGLE_MAIL_STARRED_LABEL, GoogleMailLabel},
+};
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GoogleMailConfig {
@@ -39,6 +42,6 @@ impl GoogleMailConfig {
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GoogleMailContext {
-    pub user_email_address: EmailAddress,
+    pub user_email_address: Pii<EmailAddress>,
     pub labels: Vec<GoogleMailLabel>,
 }

@@ -7,6 +7,7 @@ use email_address::EmailAddress;
 use reqwest::{Client, StatusCode};
 use rstest::*;
 use secrecy::SecretBox;
+use universal_inbox::pii::Pii;
 use uuid::Uuid;
 
 use universal_inbox::user::{Password, PasswordChange};
@@ -29,7 +30,7 @@ const MAX_ATTEMPTS: usize = 5;
 
 /// The login throttle shared by the current password check is Redis-backed
 /// and Redis is shared across test apps: use a unique address per test.
-fn unique_email(prefix: &str) -> EmailAddress {
+fn unique_email(prefix: &str) -> Pii<EmailAddress> {
     format!("{prefix}-{}@example.com", Uuid::new_v4())
         .parse()
         .unwrap()
@@ -69,7 +70,7 @@ async fn wait_for_next_second() {
     tokio::time::sleep(std::time::Duration::from_millis(1_001 - millis_into_second)).await;
 }
 
-async fn password_changed_emails_sent_to(app: &TestedApp, email: &EmailAddress) -> usize {
+async fn password_changed_emails_sent_to(app: &TestedApp, email: &Pii<EmailAddress>) -> usize {
     app.mailer_stub
         .read()
         .await
