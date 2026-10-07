@@ -67,6 +67,7 @@
 - Email users when a password reset completes, when a login method (password, passkey, Google) is added or removed, and when an email change is requested
 - Changing the email address, adding or removing a login method, linking a Google account and creating an API token require a login less than 15 minutes old (`security.reauthentication_window_in_seconds`); the web app asks the user to confirm their identity with their password, passkey or Google account
 - Allow only permissive dependency licenses (MPL-2.0 per crate) with cargo-deny, which now checks the whole workspace, API and web dependencies included
+- Scan the API container image with Trivy weekly and whenever the image definition changes, failing on fixable HIGH and CRITICAL vulnerabilities
 
 ### Fixed
 
