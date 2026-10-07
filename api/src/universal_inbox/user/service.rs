@@ -754,9 +754,14 @@ impl UserService {
             .email
             .as_ref()
             .filter(|email| current_user.email.as_ref() != Some(*email));
-        if let Some(new_email) = requested_email {
-            self.request_email_change(executor, &current_user, new_email)
-                .await?;
+        let mut current_user = current_user;
+        if let Some(new_email) = requested_email
+            && self
+                .request_email_change(executor, &current_user, new_email)
+                .await?
+            && let Some(updated_user) = self.repository.get_user(executor, user_id).await?
+        {
+            current_user = updated_user;
         }
 
         if patch.first_name.is_none() && patch.last_name.is_none() {
@@ -793,12 +798,31 @@ impl UserService {
 
     /// Record `new_email` as the user's pending email address and send the
     /// verification link to it. Replaces any previous pending change.
+    ///
+    /// When email is disabled, no link can be sent: the change is applied
+    /// immediately instead, and `Ok(true)` is returned. A taken address is
+    /// then rejected, which reveals it is registered: an accepted trade-off
+    /// for instances without email.
     async fn request_email_change(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user: &User,
         new_email: &Pii<EmailAddress>,
-    ) -> Result<(), UniversalInboxError> {
+    ) -> Result<bool, UniversalInboxError> {
+        if !self.is_email_enabled().await {
+            if !self
+                .repository
+                .apply_verified_email_change(executor, user.id, new_email)
+                .await?
+            {
+                return Err(UniversalInboxError::InvalidInputData {
+                    source: None,
+                    user_error: "This email address cannot be used for this account".to_string(),
+                });
+            }
+            return Ok(true);
+        }
+
         let validation_token: EmailValidationToken = Uuid::new_v4().into();
         self.repository
             .upsert_pending_email_change(executor, user.id, new_email, &validation_token)
@@ -809,7 +833,7 @@ impl UserService {
                 "Skipping email change verification email for test account {}",
                 user.id
             );
-            return Ok(());
+            return Ok(false);
         }
 
         let email_verification_url = format!(
@@ -830,7 +854,13 @@ impl UserService {
             .read()
             .await
             .send_email(recipient, template, false)
-            .await
+            .await?;
+        Ok(false)
+    }
+
+    /// False when no email (SMTP) settings are configured.
+    pub async fn is_email_enabled(&self) -> bool {
+        self.mailer.read().await.is_enabled()
     }
 
     /// In an OpenID Connect Authorization code flow, the API has fetched the access token and
@@ -1256,10 +1286,19 @@ impl UserService {
             });
         }
 
-        let new_user = self
+        let mut new_user = self
             .repository
             .create_user(executor, user, user_auth)
             .await?;
+        if !self.is_email_enabled().await {
+            // No verification email can be sent: trust the registrant.
+            let validated_at = Utc::now();
+            self.repository
+                .mark_email_as_validated(executor, new_user.id, validated_at)
+                .await?;
+            new_user.email_validated_at = Some(validated_at);
+            return Ok(new_user);
+        }
         // The budget was consumed above: do not count this email twice.
         self.send_verification_email_to(executor, &new_user, false)
             .await?;
@@ -1553,6 +1592,9 @@ impl UserService {
         user_id: UserId,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
+        if !self.is_email_enabled().await {
+            return Err(UniversalInboxError::EmailDisabled);
+        }
         let Some(user) = self.repository.get_user(executor, user_id).await? else {
             return Ok(());
         };
@@ -1716,6 +1758,9 @@ impl UserService {
         email_address: Pii<EmailAddress>,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
+        if !self.is_email_enabled().await {
+            return Err(UniversalInboxError::EmailDisabled);
+        }
         // Checked before the lookup: the budget is consumed and the throttled
         // response identical whether or not the address has an account.
         if let Some(retry_after_seconds) = self

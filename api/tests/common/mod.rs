@@ -328,7 +328,9 @@ pub async fn build_and_spawn(
     mock_servers: &MockServers,
     redis_storage: JobStorage,
 ) -> (TestServices, Arc<RwLock<MailerStub>>, JobStorage) {
-    let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
+    let mailer_stub = Arc::new(RwLock::new(MailerStub::new(
+        settings.application.email.is_some(),
+    )));
     let (services, auth_token_service) =
         build_test_services(pool, &settings, mock_servers, mailer_stub.clone()).await;
 
@@ -571,7 +573,9 @@ pub async fn build_and_spawn_with_billing(
     redis_storage: JobStorage,
     billing_service: Option<Arc<BillingService>>,
 ) -> (TestServices, Arc<RwLock<MailerStub>>, JobStorage) {
-    let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
+    let mailer_stub = Arc::new(RwLock::new(MailerStub::new(
+        settings.application.email.is_some(),
+    )));
     let (services, auth_token_service) =
         build_test_services(pool, &settings, mock_servers, mailer_stub.clone()).await;
 

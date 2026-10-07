@@ -22,3 +22,11 @@ dependencies_log_level = "debug"
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
 jwt_secret_key = "MFECAQEwBQYDK2VwBCIEIEjXs1FUT0f7vB/A0R4Sq8iK/PUv3qlVtbgTkOrCyzL7gSEASdnznKQYGbMZytQAlOQ0WEYvk8AWsb0KzEbYQp99nhA="
 jwt_public_key = "SdnznKQYGbMZytQAlOQ0WEYvk8AWsb0KzEbYQp99nhA="
+
+[application.email]
+smtp_server = "smtp.example.com"
+smtp_port = 465
+smtp_username = "user"
+smtp_password = "password"
+from_header = "nobody <nobody@example.com>"
+reply_to_header = "support <support@example.com>"

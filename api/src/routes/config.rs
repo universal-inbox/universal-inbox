@@ -94,6 +94,7 @@ pub async fn front_config(
             .as_ref()
             .map(|chat_support| chat_support.website_id.clone()),
         version: settings.application.version.clone(),
+        email_enabled: settings.application.email.is_some(),
     };
 
     Ok(HttpResponse::Ok()

@@ -13,6 +13,7 @@ use crate::{
         loading::Loading,
         ui::{Badge, BadgeTone, BadgeVariant, Button, ButtonVariant},
     },
+    config::APP_CONFIG,
     form::FormValues,
     model::DEFAULT_USER_AVATAR,
     services::user_service::{AUTH_METHODS, CONNECTED_USER, UserCommand},
@@ -31,6 +32,10 @@ pub fn UserProfileCard() -> Element {
         };
     };
 
+    let email_enabled = APP_CONFIG
+        .read()
+        .as_ref()
+        .is_some_and(|config| config.email_enabled);
     let mut is_editing = use_signal(|| false);
     let mut first_name = use_signal(String::new);
     let mut last_name = use_signal(String::new);
@@ -189,7 +194,7 @@ pub fn UserProfileCard() -> Element {
                                 }
                             }
                         }
-                        if !user.is_email_validated() {
+                        if !user.is_email_validated() && email_enabled {
                             div {
                                 class: "mt-1.5",
                                 Button {

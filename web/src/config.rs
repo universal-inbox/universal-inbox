@@ -24,6 +24,7 @@ pub struct AppConfig {
     pub show_changelog: bool,
     pub chat_support_website_id: Option<String>,
     pub version: Option<String>,
+    pub email_enabled: bool,
 }
 
 pub static APP_CONFIG: GlobalSignal<Option<AppConfig>> = Signal::global(|| None);
@@ -58,6 +59,7 @@ pub async fn get_app_config() -> Result<AppConfig> {
         show_changelog: front_config.show_changelog,
         chat_support_website_id: front_config.chat_support_website_id,
         version: front_config.version,
+        email_enabled: front_config.email_enabled,
     };
     Ok(app_config)
 }

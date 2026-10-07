@@ -209,6 +209,24 @@ pub async fn tested_app_with_local_auth(
     .await
 }
 
+/// Like `tested_app_with_local_auth`, without any email (SMTP) settings.
+#[fixture]
+pub async fn tested_app_with_local_auth_without_email(
+    mut settings: Settings,
+    #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
+    #[future] db_connection: TestDb,
+    #[future] redis_storage: JobStorage,
+) -> TestedApp {
+    settings.application.email = None;
+    setup_tested_app_with_local_auth(
+        settings,
+        local_auth_settings(),
+        db_connection.await,
+        redis_storage.await,
+    )
+    .await
+}
+
 #[fixture]
 pub async fn tested_app_with_account_rate_limits(
     settings: Settings,

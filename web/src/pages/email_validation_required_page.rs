@@ -5,6 +5,7 @@ use dioxus::prelude::*;
 
 use crate::{
     components::{auth_widgets::PrimaryBtn, ui::PageHeader},
+    config::APP_CONFIG,
     route::Route,
     services::user_service::{CONNECTED_USER, UserCommand},
 };
@@ -35,6 +36,24 @@ pub fn EmailValidationRequiredPage() -> Element {
         .as_ref()
         .map(|email| email.expose().to_string())
         .unwrap_or_default();
+    let email_enabled = APP_CONFIG
+        .read()
+        .as_ref()
+        .is_some_and(|config| config.email_enabled);
+
+    if !email_enabled {
+        return rsx! {
+            PageHeader {
+                title: "Verify your email".to_string(),
+                subtitle: Some("One last step before you can use Universal Inbox.".to_string()),
+            }
+            p { class: "text-sm text-ui-base-muted leading-normal mb-7",
+                "Your email address "
+                span { class: "font-semibold text-ui-base-content", "{email}" }
+                " is not verified yet and this instance cannot send emails. Please contact its administrator."
+            }
+        };
+    }
 
     rsx! {
         PageHeader {

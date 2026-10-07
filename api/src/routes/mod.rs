@@ -73,6 +73,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::SessionStoreUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             UniversalInboxError::OAuth2InvalidGrant(_) => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::PaymentRequired { .. } => StatusCode::PAYMENT_REQUIRED,
+            UniversalInboxError::EmailDisabled => StatusCode::NOT_IMPLEMENTED,
         }
     }
 
@@ -162,6 +163,8 @@ impl ResponseError for UniversalInboxError {
             | UniversalInboxError::SessionStoreUnavailable(_) => {
                 json!({ "message": SERVICE_UNAVAILABLE_MESSAGE })
             }
+            // A deployment choice, not an internal failure: say so.
+            UniversalInboxError::EmailDisabled => json!({ "message": format!("{self}") }),
             _ if self.status_code().is_server_error() => {
                 json!({ "message": INTERNAL_ERROR_MESSAGE })
             }
@@ -268,6 +271,7 @@ mod tests {
                 message: String::new(),
                 details: json!({}),
             },
+            UniversalInboxError::EmailDisabled,
             UniversalInboxError::Unexpected(anyhow::anyhow!("")),
         ]
         .into_iter()
