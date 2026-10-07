@@ -1,7 +1,9 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use sqlx::{FromRow, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow};
+use sqlx::{
+    FromRow, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow, query_builder::Separated,
+};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -908,7 +910,7 @@ impl NotificationRepository for Repository {
     async fn create_or_update_notification(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        notification: Box<Notification>,
+        mut notification: Box<Notification>,
         kind: NotificationSourceKind,
         update_snoozed_until: bool,
     ) -> Result<UpsertStatus<Box<Notification>>, UniversalInboxError> {
@@ -973,6 +975,15 @@ impl NotificationRepository for Repository {
             })?
             .map(TryInto::try_into)
             .transpose()?;
+
+        // The source's read marker (ie. Github's `last_read_at`) ignores what the user did in
+        // Universal Inbox: keep the latest of both so a re-synced notification does not show
+        // already read content as new.
+        if let Some(ref existing_notification) = existing_notification {
+            notification.last_read_at = notification
+                .last_read_at
+                .max(existing_notification.last_read_at);
+        }
 
         let last_read_at_naive_utc = notification
             .last_read_at
@@ -1157,6 +1168,7 @@ impl NotificationRepository for Repository {
                 .push(" task_id = ")
                 .push_bind_unseparated(task_id.0);
         }
+        push_last_read_at_on_dismiss(&mut separated, patch.status);
 
         query_builder
             .push(
@@ -1300,6 +1312,7 @@ impl NotificationRepository for Repository {
                 .push(" snoozed_until = ")
                 .push_bind_unseparated(snoozed_until.naive_utc());
         }
+        push_last_read_at_on_dismiss(&mut separated, patch.status);
 
         query_builder.push(
             r#"
@@ -1467,10 +1480,12 @@ impl NotificationRepository for Repository {
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new("UPDATE notification SET");
-        query_builder
+        let mut separated = query_builder.separated(", ");
+        separated
             .push(" status = ")
-            .push_bind(NotificationStatus::Deleted.to_string())
-            .push("::notification_status");
+            .push_bind_unseparated(NotificationStatus::Deleted.to_string())
+            .push_unseparated("::notification_status");
+        push_last_read_at_on_dismiss(&mut separated, Some(NotificationStatus::Deleted));
         query_builder.push(
             r#"
                 FROM
@@ -1633,6 +1648,30 @@ async fn update_set_aside_at(
     Ok(updated_notifications_count)
 }
 
+/// Push `last_read_at = now` when the patch dismisses the notification (read, deleted or
+/// unsubscribed): the user has seen its content by then, while the source's own read marker
+/// (ie. Github's `last_read_at`) may not reflect it. A re-synced notification then only shows
+/// content posted after this as new. Rows already in that status keep their marker, so a
+/// no-op patch stays a no-op.
+fn push_last_read_at_on_dismiss<Sep: std::fmt::Display>(
+    separated: &mut Separated<'_, Postgres, Sep>,
+    status: Option<NotificationStatus>,
+) {
+    if let Some(
+        status @ (NotificationStatus::Read
+        | NotificationStatus::Deleted
+        | NotificationStatus::Unsubscribed),
+    ) = status
+    {
+        separated
+            .push(" last_read_at = CASE WHEN notification.status::TEXT != ")
+            .push_bind_unseparated(status.to_string())
+            .push_unseparated(" THEN ")
+            .push_bind_unseparated(Utc::now().naive_utc())
+            .push_unseparated(" ELSE notification.last_read_at END");
+    }
+}
+
 /// How a multi-row notification `UPDATE` chooses the rows it writes. Both ways
 /// produce the same statement — the same `FROM … INNER JOIN third_party_item`
 /// block and the same `RETURNING notification__*` projection — and differ only
@@ -1672,6 +1711,7 @@ impl Repository {
                 .push(" snoozed_until = ")
                 .push_bind_unseparated(new_snoozed_until);
         }
+        push_last_read_at_on_dismiss(&mut set_clauses, patch.status);
 
         query_builder.push(
             r#"

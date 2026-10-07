@@ -79,7 +79,7 @@ mod patch_notification {
         )
         .await;
 
-        let patched_notification = patch_resource(
+        let patched_notification: Box<Notification> = patch_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -95,8 +95,12 @@ mod patch_notification {
             patched_notification,
             Box::new(Notification {
                 status: NotificationStatus::Deleted,
+                last_read_at: patched_notification.last_read_at,
                 ..existing_todoist_notification.clone()
             })
+        );
+        assert!(
+            Utc::now() - patched_notification.last_read_at.unwrap() < chrono::Duration::minutes(1)
         );
 
         let deleted_task: Box<Task> = get_resource(
@@ -153,7 +157,7 @@ mod patch_notification {
         let existing_todoist_notification = creation.notification.as_ref().unwrap().clone();
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
 
-        let patched_notification = patch_resource(
+        let patched_notification: Box<Notification> = patch_resource(
             &app.client,
             &app.app.api_address,
             "notifications",

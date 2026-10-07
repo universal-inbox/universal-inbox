@@ -78,6 +78,7 @@
 - Slack webhook events now reach Slack connections created before their workspace id was recorded (backfilled by the `slack backfill-team-id` command and on the next Slack sync)
 - Convert every Google Calendar email into its invitation, including occurrences of recurring events and cancelled events
 - Keep the text of an email readable in dark mode when its light background comes from a nested table
+- A deleted GitHub discussion notification brought back by new activity only shows the replies posted after its deletion as new
 
 ## 2026-03-17
 

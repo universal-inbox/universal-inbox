@@ -233,6 +233,33 @@ impl GithubService {
         Ok(notifications)
     }
 
+    /// Marking a thread as done does not move Github's `last_read_at`: mark it as read first so
+    /// that, when new activity brings the thread back, only that activity is unread.
+    pub async fn mark_thread_as_read(
+        &self,
+        thread_id: &str,
+        access_token: &AccessToken,
+    ) -> Result<(), UniversalInboxError> {
+        match self
+            .build_github_rest_client(access_token)?
+            .patch_no_response(
+                format!("{}/notifications/threads/{thread_id}", self.github_base_url),
+                None::<&String>,
+            )
+            .await
+        {
+            Ok(()) => Ok(()),
+            Err(ApiClientError::NetworkError(err))
+                if err.status() == Some(reqwest_middleware::reqwest::StatusCode::NOT_FOUND) =>
+            {
+                Ok(())
+            }
+            Err(err) => Err(UniversalInboxError::Unexpected(anyhow!(
+                "Failed to mark Github notification `{thread_id}` as read: {err}"
+            ))),
+        }
+    }
+
     pub async fn mark_thread_as_done(
         &self,
         thread_id: &str,
@@ -639,6 +666,8 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
             .await?
             .ok_or_else(|| anyhow!("Cannot delete Github notification without an access token"))?;
 
+        self.mark_thread_as_read(&source_item.source_id, &access_token)
+            .await?;
         self.mark_thread_as_done(&source_item.source_id, &access_token)
             .await
     }
@@ -665,6 +694,8 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
                 anyhow!("Cannot unsubscribe from Github notifications without an access token")
             })?;
 
+        self.mark_thread_as_read(&source_item.source_id, &access_token)
+            .await?;
         self.mark_thread_as_done(&source_item.source_id, &access_token)
             .await?;
         self.unsubscribe_from_thread(&source_item.source_id, &access_token)

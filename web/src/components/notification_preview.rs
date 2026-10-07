@@ -355,7 +355,10 @@ fn NotificationDetailsPreview(
                     GithubDiscussionPreview {
                         github_discussion,
                         title: notification().title,
-                        last_read_at: github_notification.last_read_at,
+                        // Github's own marker ignores what was read in Universal Inbox
+                        last_read_at: github_notification
+                            .last_read_at
+                            .max(notification().last_read_at),
                         expand_details
                     }
                 },
