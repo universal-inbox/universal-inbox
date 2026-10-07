@@ -28,9 +28,9 @@ This action lets you view the full context of the notification directly in GitHu
 
 - **Keyboard Shortcut**: `d`
 - **Effect in Universal Inbox**: Removes the notification from your inbox until the next update
-- **Effect in GitHub**: The notification is marked as read
+- **Effect in GitHub**: The notification is marked as read and done
 
-Use this action when you want to clear a notification from your Universal Inbox and GitHub. The notification will reappear if updated in GitHub.
+Use this action when you want to clear a notification from your Universal Inbox and GitHub. The notification will reappear if updated in GitHub: only the comments and replies posted after the deletion are then shown as new.
 
 #### Unsubscribe
 

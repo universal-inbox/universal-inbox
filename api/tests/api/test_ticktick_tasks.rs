@@ -410,11 +410,14 @@ mod patch_task {
             .as_ref()
             .unwrap()
             .id;
+        let created_last_read_at = notification_with_task.as_ref().unwrap().last_read_at;
+        assert!(Utc::now() - created_last_read_at.unwrap() < chrono::Duration::minutes(1));
         assert_eq!(
             notification_with_task,
             Some(NotificationWithTask::build(
                 &Notification {
                     status: NotificationStatus::Deleted,
+                    last_read_at: created_last_read_at,
                     ..*notification
                 },
                 Some(Task {

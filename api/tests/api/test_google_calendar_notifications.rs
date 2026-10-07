@@ -99,7 +99,7 @@ mod patch_resource {
         )
         .await;
 
-        let patched_notification = patch_resource(
+        let patched_notification: Box<Notification> = patch_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -115,8 +115,12 @@ mod patch_resource {
             patched_notification,
             Box::new(Notification {
                 status: NotificationStatus::Deleted,
+                last_read_at: patched_notification.last_read_at,
                 ..*expected_notification
             })
+        );
+        assert!(
+            Utc::now() - patched_notification.last_read_at.unwrap() < chrono::Duration::minutes(1)
         );
     }
 
@@ -188,7 +192,7 @@ mod patch_resource {
         )
         .await;
 
-        let patched_notification = patch_resource(
+        let patched_notification: Box<Notification> = patch_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -204,8 +208,12 @@ mod patch_resource {
             patched_notification,
             Box::new(Notification {
                 status: NotificationStatus::Unsubscribed,
+                last_read_at: patched_notification.last_read_at,
                 ..*expected_notification
             })
+        );
+        assert!(
+            Utc::now() - patched_notification.last_read_at.unwrap() < chrono::Duration::minutes(1)
         );
     }
 
@@ -254,7 +262,7 @@ mod patch_resource {
         .await;
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
 
-        let patched_notification = patch_resource(
+        let patched_notification: Box<Notification> = patch_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
@@ -393,8 +401,12 @@ mod update_invitation {
             patched_notification,
             Box::new(Notification {
                 status: NotificationStatus::Deleted,
+                last_read_at: patched_notification.last_read_at,
                 ..*expected_notification
             })
+        );
+        assert!(
+            Utc::now() - patched_notification.last_read_at.unwrap() < chrono::Duration::minutes(1)
         );
 
         let ThirdPartyItemData::GoogleCalendarEvent(event) = patched_notification.source_item.data
