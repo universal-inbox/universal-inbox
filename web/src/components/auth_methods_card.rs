@@ -103,7 +103,7 @@ pub fn AuthMethodsCard() -> Element {
                     } else {
                         if show_add_password() {
                             form {
-                                class: "flex flex-col gap-4",
+                                class: "flex flex-col gap-4 w-full",
                                 onsubmit: move |evt| {
                                     evt.prevent_default();
                                     let result: Result<SecretBox<Password>, _> =
@@ -207,7 +207,7 @@ pub fn AuthMethodsCard() -> Element {
                     if !has_passkey {
                         if show_add_passkey() {
                             form {
-                                class: "flex flex-col gap-4",
+                                class: "flex flex-col gap-4 w-full",
                                 onsubmit: move |evt| {
                                     evt.prevent_default();
                                     let result: Result<Username, _> =
