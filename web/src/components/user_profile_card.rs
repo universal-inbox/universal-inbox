@@ -3,6 +3,7 @@
 use dioxus::prelude::*;
 use gravatar_rs::Generator;
 
+use universal_inbox::pii::Pii;
 use universal_inbox::user::{USER_NAME_MAX_LENGTH, UserPatch};
 
 use universal_inbox::user::UserAuthKind;
@@ -49,7 +50,7 @@ pub fn UserProfileCard() -> Element {
         })
         .unwrap_or(false);
 
-    let user_avatar = if let Some(ref email) = user.email {
+    let user_avatar = if let Some(email) = user.email.as_ref().map(Pii::expose) {
         Generator::default()
             .set_image_size(150)
             .set_rating("g")
@@ -160,7 +161,7 @@ pub fn UserProfileCard() -> Element {
                                 move |_| {
                                     first_name.set(user.first_name.clone().unwrap_or_default());
                                     last_name.set(user.last_name.clone().unwrap_or_default());
-                                    email.set(user.email.as_ref().map(|e| e.to_string()).unwrap_or_default());
+                                    email.set(user.email.as_ref().map(|e| e.expose().to_string()).unwrap_or_default());
                                     is_editing.set(true);
                                 }
                             },
@@ -168,7 +169,7 @@ pub fn UserProfileCard() -> Element {
                         }
                     }
 
-                    if let Some(ref email) = user.email {
+                    if let Some(email) = user.email.as_ref().map(Pii::expose) {
                         div {
                             class: "text-sm text-ui-base-muted mt-0.5 gap-2 flex",
                             "{email}"

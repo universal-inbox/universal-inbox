@@ -252,7 +252,8 @@ pub async fn user_service(
                         }
                         ui_model.write().confirmation_message = Some(match pending_email {
                             Some(email) => format!(
-                                "Profile updated. Follow the link sent to {email} to confirm your new email address."
+                                "Profile updated. Follow the link sent to {} to confirm your new email address.",
+                                email.expose()
                             ),
                             None => "Profile updated successfully".to_string(),
                         });

@@ -19,6 +19,7 @@ use email_address::EmailAddress;
 use reqwest::{Client, StatusCode};
 use rstest::*;
 use secrecy::SecretBox;
+use universal_inbox::pii::Pii;
 use uuid::Uuid;
 
 use universal_inbox::user::{Credentials, Password, RegisterUserParameters, User};
@@ -41,7 +42,7 @@ fn client() -> Client {
 /// (unlike the in-memory per-IP governor), so a fixed email would inherit
 /// failed-attempt state from earlier runs within the counter's TTL. Each test
 /// uses a unique address to stay isolated and deterministic.
-fn unique_email(prefix: &str) -> EmailAddress {
+fn unique_email(prefix: &str) -> Pii<EmailAddress> {
     format!("{prefix}-{}@example.com", Uuid::new_v4())
         .parse()
         .unwrap()
@@ -171,7 +172,7 @@ fn ip(n: u32) -> String {
 async fn send_password_reset_from(
     client: &Client,
     app: &TestedApp,
-    email: &EmailAddress,
+    email: &Pii<EmailAddress>,
     ip: String,
 ) -> reqwest::Response {
     client
@@ -186,7 +187,7 @@ async fn send_password_reset_from(
 async fn register_from(
     client: &Client,
     app: &TestedApp,
-    email: &EmailAddress,
+    email: &Pii<EmailAddress>,
     ip: String,
 ) -> reqwest::Response {
     client
@@ -203,7 +204,7 @@ async fn register_from(
         .unwrap()
 }
 
-async fn login_from(app: &TestedApp, email: &EmailAddress, ip: String) -> reqwest::Response {
+async fn login_from(app: &TestedApp, email: &Pii<EmailAddress>, ip: String) -> reqwest::Response {
     client()
         .post(format!("{}users/me", app.api_address))
         .header("X-Forwarded-For", ip)
@@ -228,7 +229,7 @@ async fn observable(response: reqwest::Response) -> (StatusCode, bool, String) {
     )
 }
 
-async fn emails_sent_to(app: &TestedApp, email: &EmailAddress) -> usize {
+async fn emails_sent_to(app: &TestedApp, email: &Pii<EmailAddress>) -> usize {
     app.mailer_stub
         .read()
         .await

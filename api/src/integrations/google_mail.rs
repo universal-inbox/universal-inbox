@@ -12,6 +12,7 @@ use email_address::EmailAddress;
 use http::{HeaderMap, HeaderValue};
 use ical::IcalParser;
 use itertools::Itertools;
+use universal_inbox::pii::Pii;
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -117,7 +118,10 @@ pub struct RawGoogleMailThread {
 }
 
 impl RawGoogleMailThread {
-    pub fn into_google_mail_thread(self, user_email_address: EmailAddress) -> GoogleMailThread {
+    pub fn into_google_mail_thread(
+        self,
+        user_email_address: Pii<EmailAddress>,
+    ) -> GoogleMailThread {
         GoogleMailThread {
             id: self.id,
             history_id: self.history_id,
@@ -675,7 +679,9 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
                     }),
                 ..
             } if integration_connection.provider_user_id.as_ref().is_none_or(
-                |provider_user_id| *provider_user_id == user_email_address.as_str().to_lowercase(),
+                |provider_user_id| {
+                    *provider_user_id == user_email_address.expose().as_str().to_lowercase()
+                },
             ) =>
             {
                 user_email_address.clone()
@@ -683,7 +689,7 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
             _ => {
                 let GoogleMailUserProfile { email_address, .. } =
                     self.get_user_profile(&access_token).await?;
-                EmailAddress::from_str(&email_address).context("Invalid email address")?
+                Pii::<EmailAddress>::from_str(&email_address).context("Invalid email address")?
             }
         };
 
@@ -765,7 +771,7 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
                             msg.payload.headers.iter().any(|header| {
                                 header.name == *"To"
                                     && header.value.contains(
-                                        &google_mail_thread.user_email_address.to_string(),
+                                        &google_mail_thread.user_email_address.expose().to_string(),
                                     )
                             })
                         });
@@ -1015,8 +1021,6 @@ mod tests {
     }
 
     mod notification_conversion {
-        use std::str::FromStr;
-
         use super::*;
         use chrono::TimeZone;
         use pretty_assertions::assert_eq;
@@ -1053,7 +1057,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
+                user_email_address: "test@example.com".parse().unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),
@@ -1137,7 +1141,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
+                user_email_address: "test@example.com".parse().unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),
@@ -1208,7 +1212,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
+                user_email_address: "test@example.com".parse().unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),
@@ -1269,7 +1273,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
+                user_email_address: "test@example.com".parse().unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),
@@ -1333,7 +1337,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
+                user_email_address: "test@example.com".parse().unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),
@@ -1400,7 +1404,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
+                user_email_address: "test@example.com".parse().unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),

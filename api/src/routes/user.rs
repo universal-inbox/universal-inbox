@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use subtle::ConstantTimeEq;
 use tokio::sync::RwLock;
+use universal_inbox::pii::Pii;
 use uuid::Uuid;
 use validator::Validate;
 use webauthn_rs::prelude::*;
@@ -932,7 +933,7 @@ pub async fn send_password_reset_email(
     req: HttpRequest,
     user_service: web::Data<Arc<UserService>>,
     rate_limiter: web::Data<Arc<AuthRateLimiter>>,
-    email_address: web::Json<EmailAddress>,
+    email_address: web::Json<Pii<EmailAddress>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(*response);

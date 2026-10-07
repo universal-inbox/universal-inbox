@@ -18,6 +18,7 @@ use slack_morphism::{
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::info;
+use universal_inbox::pii::Pii;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -237,7 +238,7 @@ pub async fn generate_testing_user(
         let email = user
             .email
             .as_ref()
-            .map(|email| email.to_string())
+            .map(|email| email.expose().to_string())
             .unwrap_or_else(|| user.id.to_string());
 
         generate_all_notifications(
@@ -285,7 +286,7 @@ pub async fn generate_empty_user(
         let email = user
             .email
             .as_ref()
-            .map(|email| email.to_string())
+            .map(|email| email.expose().to_string())
             .unwrap_or_else(|| user.id.to_string());
 
         transaction
@@ -377,7 +378,7 @@ pub async fn generate_notifications_for_user(
         let email = user
             .email
             .as_ref()
-            .map(|email| email.to_string())
+            .map(|email| email.expose().to_string())
             .unwrap_or_else(|| user.id.to_string());
 
         generate_all_notifications(
@@ -398,12 +399,8 @@ pub async fn generate_notifications_for_user(
         )?;
 
         info!(
-            "Sample notifications successfully generated for user {} ({})",
-            user.id,
-            user.email
-                .as_ref()
-                .map(|e| e.to_string())
-                .unwrap_or_default()
+            "Sample notifications successfully generated for user {}",
+            user.id
         );
 
         Ok(())
@@ -1213,7 +1210,7 @@ fn google_mail_thread(user_email: &str) -> Result<GoogleMailThread, UniversalInb
         load_seed_fixture("generate_google_mail_thread.json", user_email)?;
     let google_mail_user_profile: GoogleMailUserProfile =
         load_seed_fixture("google_mail_user_profile.json", user_email)?;
-    let user_email_address = EmailAddress::from_str(&google_mail_user_profile.email_address)
+    let user_email_address = Pii::<EmailAddress>::from_str(&google_mail_user_profile.email_address)
         .context("Unable to parse email address from google mail user profile")?;
 
     Ok(raw_google_mail_thread.into_google_mail_thread(user_email_address))

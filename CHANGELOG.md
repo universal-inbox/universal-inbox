@@ -60,6 +60,7 @@
 - Server errors on the REST API and the MCP tools return a generic message with a correlation id instead of the error details, which are logged with the same id
 - Redact one-time tokens, email addresses and JWTs from stdout logs, stop logging the OIDC state, nonce and authorization URL, and drop the OIDC callback code from browser storage once used
 - Send the password-reset token in the request body (`POST /users/{user_id}/password-reset`) instead of the URL path
+- Wrap email addresses in a `Pii<T>` type whose `Debug` output hides the value, so they cannot reach logs by accident
 
 ### Fixed
 

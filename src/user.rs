@@ -9,7 +9,7 @@ use serde_with::serde_as;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::integration_connection::provider::IntegrationProviderKind;
+use crate::{integration_connection::provider::IntegrationProviderKind, pii::Pii};
 
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -17,7 +17,7 @@ pub struct User {
     pub id: UserId,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
-    pub email: Option<EmailAddress>,
+    pub email: Option<Pii<EmailAddress>>,
     pub email_validated_at: Option<DateTime<Utc>>,
     pub email_validation_sent_at: Option<DateTime<Utc>>,
     pub chat_support_email_signature: Option<String>,
@@ -27,7 +27,11 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(first_name: Option<String>, last_name: Option<String>, email: EmailAddress) -> Self {
+    pub fn new(
+        first_name: Option<String>,
+        last_name: Option<String>,
+        email: Pii<EmailAddress>,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().into(),
             first_name,
@@ -116,7 +120,7 @@ impl User {
     pub fn account_deletion_confirmation(&self) -> String {
         self.email
             .as_ref()
-            .map(|email| email.to_string())
+            .map(|email| email.expose().to_string())
             .unwrap_or_else(|| ACCOUNT_DELETION_CONFIRMATION_KEYWORD.to_string())
     }
 
@@ -141,12 +145,12 @@ pub struct UserPatch {
     pub first_name: Option<String>,
     #[validate(length(max = USER_NAME_MAX_LENGTH))]
     pub last_name: Option<String>,
-    pub email: Option<EmailAddress>,
+    pub email: Option<Pii<EmailAddress>>,
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct Credentials {
-    pub email: EmailAddress,
+    pub email: Pii<EmailAddress>,
     pub password: SecretBox<Password>,
 }
 

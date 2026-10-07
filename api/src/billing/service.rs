@@ -1159,7 +1159,7 @@ impl BillingService {
 
         let customer_id = StripeCustomerId(
             self.stripe
-                .create_customer(user.id, user.email.as_ref().map(|e| e.as_ref()))
+                .create_customer(user.id, user.email.as_ref().map(|e| e.expose().as_ref()))
                 .await?,
         );
 
