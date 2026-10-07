@@ -310,7 +310,7 @@ pub async fn setup_test_env(settings: &Settings) -> (TcpListener, u16, Cache, Mo
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
 
-    let cache = Cache::new(settings.redis.connection_string())
+    let cache = Cache::new(&settings.redis)
         .await
         .expect("Failed to create cache");
     Cache::set_namespace(Uuid::new_v4().to_string()).await;
@@ -333,7 +333,7 @@ pub async fn build_and_spawn(
         build_test_services(pool, &settings, mock_servers, mailer_stub.clone()).await;
 
     let cron_settings = settings.application.cron.clone();
-    let cache = Cache::new(settings.redis.connection_string())
+    let cache = Cache::new(&settings.redis)
         .await
         .expect("Failed to create cache");
     spawn_test_server(
@@ -576,7 +576,7 @@ pub async fn build_and_spawn_with_billing(
         build_test_services(pool, &settings, mock_servers, mailer_stub.clone()).await;
 
     let cron_settings = settings.application.cron.clone();
-    let cache = Cache::new(settings.redis.connection_string())
+    let cache = Cache::new(&settings.redis)
         .await
         .expect("Failed to create cache");
 

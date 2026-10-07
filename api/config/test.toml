@@ -4,6 +4,11 @@
 [database]
 max_connections = 5
 
+# One local Redis serves every test process: under full-suite load a single command
+# can stall past the redis-rs 500ms default response timeout.
+[redis]
+response_timeout_in_milliseconds = 10000
+
 [application]
 environment = "test"
 static_path = ""
