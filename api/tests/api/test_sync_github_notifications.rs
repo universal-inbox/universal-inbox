@@ -246,6 +246,103 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     assert!(integration_connection.failure_message.is_none(),);
 }
 
+/// Github does not move its `last_read_at` when a thread is marked as done: a deleted
+/// notification brought back by new activity must keep the delete time as its read marker,
+/// unless Github reports a later read.
+#[rstest]
+#[case::github_marker_is_older(false)]
+#[case::github_marker_is_newer(true)]
+#[tokio::test]
+async fn test_sync_notifications_should_keep_latest_last_read_at_of_deleted_notification(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
+    mut sync_github_notifications: Vec<GithubNotification>,
+    github_pull_request_123_response: Response<pull_request_query::ResponseData>,
+    github_oauth_credential: OAuthCredentialFixture,
+    #[case] github_marker_is_newer: bool,
+) {
+    let app = authenticated_app.await;
+    let github_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings,
+        github_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    let existing_notification = create_notification_from_github_notification(
+        &app.app,
+        &sync_github_notifications[1],
+        app.user.id,
+        github_integration_connection.id,
+    )
+    .await;
+    let deleted_notification = update_notification(
+        &app,
+        existing_notification.id,
+        &NotificationPatch {
+            status: Some(NotificationStatus::Deleted),
+            ..NotificationPatch::default()
+        },
+        app.user.id,
+    )
+    .await;
+    let deleted_at = deleted_notification
+        .last_read_at
+        .expect("deleting a notification must set its last_read_at");
+    assert!(deleted_at > existing_notification.last_read_at.unwrap());
+
+    // New activity brings the thread back as unread
+    let newer_github_last_read_at = deleted_at + TimeDelta::hours(1);
+    sync_github_notifications[1].unread = true;
+    sync_github_notifications[1].updated_at = deleted_at + TimeDelta::hours(2);
+    if github_marker_is_newer {
+        sync_github_notifications[1].last_read_at = Some(newer_github_last_read_at);
+    }
+
+    mock_github_notifications_service(&app.app.github_mock_server, "1", &sync_github_notifications)
+        .await;
+    let empty_result = Vec::<GithubNotification>::new();
+    mock_github_notifications_service(&app.app.github_mock_server, "2", &empty_result).await;
+    mock_github_pull_request_query(
+        &app.app.github_mock_server,
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
+        &github_pull_request_123_response,
+    )
+    .await;
+
+    sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::Github),
+        false,
+    )
+    .await;
+
+    let synced_notification: Box<NotificationWithTask> = get_resource(
+        &app.client,
+        &app.app.api_address,
+        "notifications",
+        existing_notification.id.into(),
+    )
+    .await;
+    assert_eq!(synced_notification.status, NotificationStatus::Unread);
+    assert_eq!(
+        synced_notification.last_read_at,
+        Some(if github_marker_is_newer {
+            newer_github_last_read_at
+        } else {
+            deleted_at
+        })
+    );
+}
+
 #[rstest]
 #[tokio::test]
 async fn test_sync_notifications_should_handle_pull_request_without_commits(

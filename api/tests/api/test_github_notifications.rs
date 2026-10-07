@@ -44,6 +44,19 @@ use crate::helpers::{
     },
 };
 
+/// Dismissing a notification records when the user saw it, Github's own `last_read_at`
+/// (2014 in the fixture) being left behind.
+fn assert_read_marker_moved_forward(patched: &Notification, original: &Notification) {
+    let original_last_read_at = original
+        .last_read_at
+        .expect("fixture notification has a last_read_at");
+    let patched_last_read_at = patched
+        .last_read_at
+        .expect("dismissed notification must have a last_read_at");
+    assert!(patched_last_read_at > original_last_read_at);
+    assert!(Utc::now() - patched_last_read_at < chrono::Duration::minutes(1));
+}
+
 mod patch_resource {
     use super::*;
 
@@ -71,9 +84,16 @@ mod patch_resource {
         )
         .await;
 
+        Mock::given(method("PATCH"))
+            .and(path("/notifications/threads/1"))
+            .respond_with(ResponseTemplate::new(github_status_code))
+            .expect(1)
+            .mount(&app.app.github_mock_server)
+            .await;
         Mock::given(method("DELETE"))
             .and(path("/notifications/threads/1"))
             .respond_with(ResponseTemplate::new(github_status_code))
+            .expect(1)
             .mount(&app.app.github_mock_server)
             .await;
         let _integration_connection = create_and_mock_integration_connection(
@@ -136,10 +156,12 @@ mod patch_resource {
         )
         .await;
 
+        assert_read_marker_moved_forward(&patched_notification, &expected_notification);
         assert_eq!(
             patched_notification,
             Box::new(Notification {
                 status: NotificationStatus::Deleted,
+                last_read_at: patched_notification.last_read_at,
                 ..*expected_notification
             })
         );
@@ -175,9 +197,16 @@ mod patch_resource {
         )
         .await;
 
+        Mock::given(method("PATCH"))
+            .and(path("/notifications/threads/1"))
+            .respond_with(ResponseTemplate::new(205))
+            .expect(1)
+            .mount(&app.app.github_mock_server)
+            .await;
         Mock::given(method("DELETE"))
             .and(path("/notifications/threads/1"))
             .respond_with(ResponseTemplate::new(200))
+            .expect(1)
             .mount(&app.app.github_mock_server)
             .await;
         Mock::given(method("PUT"))
@@ -206,10 +235,12 @@ mod patch_resource {
         )
         .await;
 
+        assert_read_marker_moved_forward(&patched_notification, &expected_notification);
         assert_eq!(
             patched_notification,
             Box::new(Notification {
                 status: NotificationStatus::Unsubscribed,
+                last_read_at: patched_notification.last_read_at,
                 ..*expected_notification
             })
         );
