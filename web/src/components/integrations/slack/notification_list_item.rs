@@ -171,7 +171,7 @@ pub fn SlackFileListItemDetails(slack_file: ReadSignal<SlackFileDetails>) -> Ele
     rsx! {
         SlackTeamDisplay { team: slack_file().team }
         if let Some(user) = slack_file().sender {
-            SlackUserDisplay { user }
+            SlackUserDisplay { user: user.into_inner() }
         }
     }
 }

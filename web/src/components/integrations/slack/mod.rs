@@ -105,7 +105,7 @@ fn get_bot_name_and_avatar(bot: &SlackBotInfo) -> (String, Option<Url>) {
 
 fn get_sender_name_and_avatar(sender: &SlackMessageSenderDetails) -> (String, Option<Url>) {
     match sender {
-        SlackMessageSenderDetails::User(user) => get_user_name_and_avatar(user),
+        SlackMessageSenderDetails::User(user) => get_user_name_and_avatar(user.expose()),
         SlackMessageSenderDetails::Bot(bot) => get_bot_name_and_avatar(bot),
     }
 }

@@ -51,7 +51,7 @@ pub fn GoogleDriveCommentPreview(
         n => Some(format!("{n} unread replies")),
     };
 
-    let author_display = comment.author.display_name.clone();
+    let author_display = comment.author.display_name.expose().clone();
     let comment_age = format_elapsed_time(comment.modified_time);
     let file_name = comment.file_name.clone();
     let is_resolved = comment.resolved.unwrap_or(false);
@@ -101,7 +101,7 @@ pub fn GoogleDriveCommentPreview(
                         // Parent comment.
                         ThreadItem {
                             DriveCommentRow {
-                                author_name: comment.author.display_name.clone(),
+                                author_name: comment.author.display_name.expose().clone(),
                                 avatar_link: comment.author.photo_link.clone(),
                                 modified_time: comment.modified_time,
                                 html_content: comment.html_content.clone(),
@@ -170,7 +170,7 @@ fn GoogleDriveCommentReplyDisplay(
         ThreadItem {
             if let Some((icon_class, label)) = action_label {
                 ThreadedMessage {
-                    author_name: r.author.display_name.clone(),
+                    author_name: r.author.display_name.expose().clone(),
                     author_avatar_url: avatar_url,
                     sent_at: Some(r.modified_time),
                     dimmed,
@@ -185,7 +185,7 @@ fn GoogleDriveCommentReplyDisplay(
                 }
             } else {
                 DriveCommentRow {
-                    author_name: r.author.display_name.clone(),
+                    author_name: r.author.display_name.expose().clone(),
                     avatar_link: r.author.photo_link.clone(),
                     modified_time: r.modified_time,
                     html_content: r.html_content,

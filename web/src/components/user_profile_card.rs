@@ -66,8 +66,14 @@ pub fn UserProfileCard() -> Element {
     };
     let user_name = format!(
         "{} {}",
-        user.first_name.as_ref().unwrap_or(&String::default()),
-        user.last_name.as_ref().unwrap_or(&String::default())
+        user.first_name
+            .as_ref()
+            .map(Pii::expose)
+            .unwrap_or(&String::default()),
+        user.last_name
+            .as_ref()
+            .map(Pii::expose)
+            .unwrap_or(&String::default())
     );
 
     rsx! {
@@ -164,8 +170,8 @@ pub fn UserProfileCard() -> Element {
                             onclick: {
                                 let user = user.clone();
                                 move |_| {
-                                    first_name.set(user.first_name.clone().unwrap_or_default());
-                                    last_name.set(user.last_name.clone().unwrap_or_default());
+                                    first_name.set(user.first_name.clone().map(Pii::into_inner).unwrap_or_default());
+                                    last_name.set(user.last_name.clone().map(Pii::into_inner).unwrap_or_default());
                                     email.set(user.email.as_ref().map(|e| e.expose().to_string()).unwrap_or_default());
                                     is_editing.set(true);
                                 }

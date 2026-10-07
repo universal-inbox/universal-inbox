@@ -999,7 +999,7 @@ fn slack_seed_sender_profiles() -> HashMap<String, SlackMessageSenderDetails> {
             };
             (
                 id.to_string(),
-                SlackMessageSenderDetails::User(Box::new(profile)),
+                SlackMessageSenderDetails::User(Box::new(Pii::new(profile))),
             )
         })
         .collect()
@@ -1066,7 +1066,8 @@ pub fn slack_reaction_added(user_email: &str) -> Result<Box<SlackReaction>, Univ
         load_seed_fixture("slack_fetch_channel_response.json", user_email)?;
     let user_response: SlackApiUsersInfoResponse =
         load_seed_fixture("slack_fetch_user_response.json", user_email)?;
-    let sender = SlackMessageSenderDetails::User(Box::new(user_response.user.profile.unwrap()));
+    let sender =
+        SlackMessageSenderDetails::User(Box::new(Pii::new(user_response.user.profile.unwrap())));
     let team_response: SlackApiTeamInfoResponse =
         load_seed_fixture("slack_fetch_team_response.json", user_email)?;
 
@@ -1613,8 +1614,8 @@ async fn generate_user(
     let short_id: String = id.to_string().chars().take(8).collect();
     let user = User {
         id: id.into(),
-        first_name: Some("Alex".to_string()),
-        last_name: Some("Morgan".to_string()),
+        first_name: Some(Pii::new("Alex".to_string())),
+        last_name: Some(Pii::new("Morgan".to_string())),
         email: Some(
             format!("alex.morgan+{short_id}@universal-inbox.com")
                 .parse()

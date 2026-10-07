@@ -3,6 +3,7 @@ use dioxus::prelude::FormValue;
 use email_address::EmailAddress;
 use secrecy::SecretBox;
 
+use universal_inbox::pii::Pii;
 use universal_inbox::user::{
     Credentials, NewPassword, Password, PasswordChange, RegisterUserParameters, UserPatch, Username,
 };
@@ -150,12 +151,12 @@ impl TryFrom<FormValues> for UserPatch {
         let first_name = form_values
             .get_text("first_name")
             .filter(|s| !s.is_empty())
-            .map(|s| s.to_owned());
+            .map(|s| Pii::new(s.to_owned()));
 
         let last_name = form_values
             .get_text("last_name")
             .filter(|s| !s.is_empty())
-            .map(|s| s.to_owned());
+            .map(|s| Pii::new(s.to_owned()));
 
         let email = form_values
             .get_text("email")
