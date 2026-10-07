@@ -96,6 +96,10 @@ pub enum UniversalInboxError {
     /// registration / password-reset emails per address) is exhausted.
     #[error("Too many requests. Please try again later.")]
     TooManyRequests { retry_after_seconds: u64 },
+    /// Mapped to HTTP 501. The action needs to send an email but no email
+    /// (SMTP) settings are configured on this instance.
+    #[error("Email is not configured on this instance")]
+    EmailDisabled,
     #[error("Recoverable error: {0}")]
     Recoverable(#[source] anyhow::Error),
     #[error("OAuth2 refresh token is no longer valid (invalid_grant): {0}")]
@@ -147,6 +151,7 @@ impl UniversalInboxError {
             Self::Forbidden(_) => "Forbidden",
             Self::TooManyLoginAttempts { .. } => "TooManyLoginAttempts",
             Self::TooManyRequests { .. } => "TooManyRequests",
+            Self::EmailDisabled => "EmailDisabled",
             Self::Recoverable(_) => "Recoverable",
             Self::OAuth2InvalidGrant(_) => "OAuth2InvalidGrant",
             Self::PaymentRequired { .. } => "PaymentRequired",
@@ -198,6 +203,7 @@ impl UniversalInboxError {
             | UniversalInboxError::SessionStoreUnavailable(_)
             | UniversalInboxError::Recoverable(_)
             | UniversalInboxError::OAuth2InvalidGrant(_)
+            | UniversalInboxError::EmailDisabled
             | UniversalInboxError::Unexpected(_) => false,
         }
     }

@@ -2549,3 +2549,180 @@ mod delete_user {
         assert_eq!(response.status(), 401);
     }
 }
+
+mod without_email {
+    use super::*;
+    use crate::helpers::tested_app_with_local_auth_without_email;
+    use pretty_assertions::assert_eq;
+    use universal_inbox::FrontConfig;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_front_config_reports_email_disabled(
+        #[future] tested_app_with_local_auth_without_email: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth_without_email.await;
+
+        let front_config: FrontConfig = reqwest::get(format!("{}front_config", app.api_address))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        assert!(!front_config.email_enabled);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_front_config_reports_email_enabled(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        let front_config: FrontConfig = reqwest::get(format!("{}front_config", app.api_address))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        assert!(front_config.email_enabled);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_register_user_validates_email(
+        #[future] tested_app_with_local_auth_without_email: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth_without_email.await;
+
+        let (_client, user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        assert!(user.email_validated_at.is_some());
+        assert!(user.is_email_validated());
+        assert!(
+            get_user_email_validation_token(&app, user.id)
+                .await
+                .is_none()
+        );
+        let emails_sent = (*app.mailer_stub.read().await.emails_sent.read().await).clone();
+        assert!(emails_sent.is_empty());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_resend_verification_email_is_not_implemented(
+        #[future] tested_app_with_local_auth_without_email: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth_without_email.await;
+        let (client, _user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        let response = client
+            .post(format!("{}users/me/email-verification", app.api_address))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), http::StatusCode::NOT_IMPLEMENTED);
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["message"], "Email is not configured on this instance");
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_password_reset_is_not_implemented(
+        #[future] tested_app_with_local_auth_without_email: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth_without_email.await;
+        let email: Pii<EmailAddress> = "john@doe.name".parse().unwrap();
+        let (_client, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
+
+        let response = reqwest::Client::new()
+            .post(format!("{}users/password-reset", app.api_address))
+            .json(&email)
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), http::StatusCode::NOT_IMPLEMENTED);
+        assert!(get_password_reset_token(&app, user.id).await.is_none());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_user_email_is_applied_immediately(
+        #[future] tested_app_with_local_auth_without_email: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth_without_email.await;
+        let (client, user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+        let new_email: Pii<EmailAddress> = "jane@doe.name".parse().unwrap();
+
+        let patch = UserPatch {
+            first_name: None,
+            last_name: None,
+            email: Some(new_email.clone()),
+        };
+        let response = patch_user_response(&client, &app, &patch).await;
+
+        assert_eq!(response.status(), http::StatusCode::OK);
+        let patched_user: User = response.json().await.unwrap();
+        assert_eq!(patched_user.email, Some(new_email.clone()));
+        assert!(patched_user.is_email_validated());
+        assert!(
+            get_pending_email_change_token(&app, user.id)
+                .await
+                .is_none()
+        );
+        let fetched_user = get_current_user(&client, &app).await;
+        assert_eq!(fetched_user.email, Some(new_email));
+        let emails_sent = (*app.mailer_stub.read().await.emails_sent.read().await).clone();
+        assert!(emails_sent.is_empty());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_user_email_rejects_taken_address(
+        #[future] tested_app_with_local_auth_without_email: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth_without_email.await;
+        register_user(
+            &app,
+            "jane@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+        let (client, user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        let patch = UserPatch {
+            first_name: None,
+            last_name: None,
+            email: Some("jane@doe.name".parse().unwrap()),
+        };
+        let response = patch_user_response(&client, &app, &patch).await;
+
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+        let fetched_user = get_current_user(&client, &app).await;
+        assert_eq!(fetched_user.email, user.email);
+    }
+}

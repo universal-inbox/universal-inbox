@@ -13,12 +13,15 @@ use universal_inbox_api::{
 #[derive(Debug)]
 pub struct MailerStub {
     pub emails_sent: Arc<RwLock<Vec<(User, EmailTemplate)>>>,
+    /// Mirrors whether the tested settings configure email.
+    pub is_enabled: bool,
 }
 
 impl MailerStub {
-    pub fn new() -> Self {
+    pub fn new(is_enabled: bool) -> Self {
         Self {
             emails_sent: Arc::new(RwLock::new(vec![])),
+            is_enabled,
         }
     }
 }
@@ -33,5 +36,9 @@ impl Mailer for MailerStub {
     ) -> Result<(), UniversalInboxError> {
         self.emails_sent.write().await.push((user, template));
         Ok(())
+    }
+
+    fn is_enabled(&self) -> bool {
+        self.is_enabled
     }
 }

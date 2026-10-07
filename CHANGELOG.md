@@ -34,6 +34,7 @@
 - Configure the OTLP trace and log export levels independently (`otel_trace_directive`, `otel_log_directive`), stop tracing `/ping`, and flush pending telemetry on shutdown
 - Serve the web application precompressed (brotli / gzip), with long-lived caching of content-hashed assets
 - Make the Redis per-command response timeout configurable (`redis.response_timeout_in_milliseconds`)
+- Make email (SMTP) settings optional: without an `application.email` section the server starts with emails disabled (notification emails are skipped, password reset is unavailable, local sign-ups and email changes skip verification); `smtp_port` defaults to 465
 
 ### Security
 
