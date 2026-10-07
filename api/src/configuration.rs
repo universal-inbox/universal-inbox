@@ -55,7 +55,11 @@ pub struct ApplicationSettings {
     pub observability: ObservabilitySettings,
     pub security: SecuritySettings,
     pub support_href: Option<String>,
-    pub email: EmailSettings,
+    /// Optional SMTP configuration. When absent, emails are disabled: the
+    /// notification emails are skipped and the flows that cannot work without
+    /// email degrade (see `mailer::DisabledMailer`).
+    #[serde(default)]
+    pub email: Option<EmailSettings>,
     pub show_changelog: bool,
     pub version: Option<String>,
     pub dry_run: bool,
@@ -833,6 +837,7 @@ impl<'de> serde::Deserialize<'de> for SmtpPassword {
 #[derive(Deserialize, Clone, Debug)]
 pub struct EmailSettings {
     pub smtp_server: String,
+    #[serde(default = "default_smtp_port")]
     pub smtp_port: u16,
     pub smtp_username: String,
     pub smtp_password: SecretBox<SmtpPassword>,
@@ -975,6 +980,10 @@ impl ChatSupportSettings {
         let signature = hmac::sign(&key, email.as_bytes());
         hex::encode(signature.as_ref())
     }
+}
+
+fn default_smtp_port() -> u16 {
+    465
 }
 
 impl EmailSettings {
@@ -1144,14 +1153,17 @@ impl Settings {
             environment,
             "Set UNIVERSAL_INBOX__DATABASE__PASSWORD to the database user's password.",
         )?;
-        refuse_committed_value(
-            "application.email.smtp_password",
-            &self.application.email.smtp_password.expose_secret().0,
-            DEFAULT_PASSWORDS,
-            environment,
-            "Set UNIVERSAL_INBOX__APPLICATION__EMAIL__SMTP_PASSWORD to the SMTP server's \
-             password.",
-        )
+        if let Some(email) = &self.application.email {
+            refuse_committed_value(
+                "application.email.smtp_password",
+                &email.smtp_password.expose_secret().0,
+                DEFAULT_PASSWORDS,
+                environment,
+                "Set UNIVERSAL_INBOX__APPLICATION__EMAIL__SMTP_PASSWORD to the SMTP server's \
+                 password.",
+            )?;
+        }
+        Ok(())
     }
 
     pub fn required_oauth_scopes(&self) -> HashMap<IntegrationProviderKind, Vec<String>> {
@@ -1710,13 +1722,21 @@ mod committed_secret_tests {
         }
     }
 
+    fn smtp_password(password: &str) -> SecretBox<SmtpPassword> {
+        SecretBox::new(Box::new(SmtpPassword(password.to_string())))
+    }
+
     #[test]
     fn test_check_committed_secrets() {
         let mut settings = Settings::new_from_file(Some("config/test".to_string()))
             .expect("Cannot load test configuration");
         settings.database.password = "password".to_string();
-        settings.application.email.smtp_password =
-            SecretBox::new(Box::new(SmtpPassword("password".to_string())));
+        settings
+            .application
+            .email
+            .as_mut()
+            .expect("test configuration has email settings")
+            .smtp_password = smtp_password("password");
         assert!(settings.check_committed_secrets().is_ok());
 
         settings.application.environment = "prod".to_string();
@@ -1732,8 +1752,81 @@ mod committed_secret_tests {
         let error = settings.check_committed_secrets().unwrap_err();
         assert!(error.contains("application.email.smtp_password"));
 
-        settings.application.email.smtp_password =
-            SecretBox::new(Box::new(SmtpPassword("s3cr3t".to_string())));
+        settings.application.email.as_mut().unwrap().smtp_password = smtp_password("s3cr3t");
         assert!(settings.check_committed_secrets().is_ok());
+
+        settings.application.email = None;
+        assert!(settings.check_committed_secrets().is_ok());
+    }
+
+    /// Deployments (prod config + env vars) must not inherit placeholder email
+    /// settings: without `UNIVERSAL_INBOX__APPLICATION__EMAIL__*`, emails are
+    /// disabled.
+    #[rstest]
+    #[case::default("config/default")]
+    #[case::prod("config/prod")]
+    fn test_deployed_configuration_has_no_email_settings(#[case] file: &str) {
+        let application = Config::builder()
+            .add_source(File::with_name(file))
+            .build()
+            .expect("Cannot load configuration")
+            .get_table("application")
+            .expect("Cannot read application settings");
+
+        assert!(!application.contains_key("email"));
+    }
+
+    #[derive(Deserialize)]
+    struct EmailHolder {
+        #[serde(default)]
+        email: Option<EmailSettings>,
+    }
+
+    fn deserialize_email(toml: &str) -> Result<EmailHolder, ConfigError> {
+        Config::builder()
+            .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+            .build()?
+            .try_deserialize()
+    }
+
+    #[test]
+    fn test_email_settings_absent() {
+        let holder = deserialize_email("").expect("Cannot deserialize empty configuration");
+
+        assert!(holder.email.is_none());
+    }
+
+    #[test]
+    fn test_email_settings_default_smtp_port() {
+        let holder = deserialize_email(
+            r#"
+            [email]
+            smtp_server = "smtp.example.org"
+            smtp_username = "user"
+            smtp_password = "s3cr3t"
+            from_header = "me <me@example.org>"
+            reply_to_header = "me <me@example.org>"
+            "#,
+        )
+        .expect("Cannot deserialize email settings");
+
+        assert_eq!(holder.email.expect("email settings").smtp_port, 465);
+    }
+
+    #[test]
+    fn test_email_settings_require_smtp_password() {
+        let error = deserialize_email(
+            r#"
+            [email]
+            smtp_server = "smtp.example.org"
+            smtp_username = "user"
+            from_header = "me <me@example.org>"
+            reply_to_header = "me <me@example.org>"
+            "#,
+        )
+        .err()
+        .expect("smtp_password must be required");
+
+        assert!(error.to_string().contains("smtp_password"));
     }
 }

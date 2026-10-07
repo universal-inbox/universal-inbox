@@ -39,6 +39,7 @@ pub fn LoginPage() -> Element {
     let Some(app_config) = app_config.as_ref() else {
         return rsx! { Loading { label: "Loading Universal Inbox settings..." } };
     };
+    let email_enabled = app_config.email_enabled;
     let is_local_auth_enabled = app_config
         .authentication_configs
         .iter()
@@ -106,14 +107,14 @@ pub fn LoginPage() -> Element {
                     r#type: "password".to_string(),
                     field_icon_class: "icon-[lucide--lock]".to_string(),
                     placeholder: "Enter your password".to_string(),
-                    aside: rsx! {
+                    aside: email_enabled.then(|| rsx! {
                         Link {
                             class: "text-xs font-semibold text-ui-primary normal-case tracking-normal hover:text-ui-primary-hover hover:underline",
                             to: Route::PasswordResetPage {},
                             tabindex: "-1",
                             "Forgot?"
                         }
-                    },
+                    }),
                 }
 
                 div {

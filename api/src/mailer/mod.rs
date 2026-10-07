@@ -13,7 +13,7 @@ use lettre::{
 use mailgen::{Action, Branding, Email, EmailBuilder, Greeting, Mailgen, themes::DefaultTheme};
 use secrecy::{ExposeSecret, SecretBox};
 use serde::Serialize;
-use tracing::info;
+use tracing::{info, warn};
 use universal_inbox::pii::Pii;
 use url::Url;
 
@@ -31,6 +31,37 @@ pub trait Mailer {
         template: EmailTemplate,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError>;
+
+    /// False when no email can be sent (no email settings configured): the
+    /// flows that cannot work without email degrade instead of calling
+    /// `send_email`.
+    fn is_enabled(&self) -> bool {
+        true
+    }
+}
+
+/// Mailer used when no email (SMTP) settings are configured: every email is
+/// dropped with a warning.
+pub struct DisabledMailer;
+
+#[async_trait]
+impl Mailer for DisabledMailer {
+    async fn send_email(
+        &self,
+        user: User,
+        template: EmailTemplate,
+        _dry_run: bool,
+    ) -> Result<(), UniversalInboxError> {
+        warn!(
+            "Email is disabled, not sending {template} email to user {}",
+            user.id
+        );
+        Ok(())
+    }
+
+    fn is_enabled(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Serialize, Debug, PartialEq, Clone, EnumDisplay)]
@@ -527,5 +558,18 @@ mod tests {
             text.contains("https://app.universal-inbox.com/settings"),
             "{text}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_disabled_mailer_drops_emails() {
+        let mailer = DisabledMailer;
+        let user = User::new(None, None, Pii::new("john@example.com".parse().unwrap()));
+        let template = EmailTemplate::PasswordReset {
+            first_name: None,
+            password_reset_url: "https://app.universal-inbox.com/reset".parse().unwrap(),
+        };
+
+        assert!(!mailer.is_enabled());
+        assert!(mailer.send_email(user, template, false).await.is_ok());
     }
 }

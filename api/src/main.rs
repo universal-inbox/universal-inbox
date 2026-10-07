@@ -14,7 +14,7 @@ use universal_inbox_api::{
         google_drive::GoogleDriveService, google_mail::GoogleMailService, linear::LinearService,
         slack::SlackService, ticktick::TickTickService, todoist::TodoistService,
     },
-    mailer::SmtpMailer,
+    mailer::{DisabledMailer, Mailer, SmtpMailer},
     observability::{
         get_subscriber, get_subscriber_with_telemetry, init_subscriber, install_panic_hook,
         shutdown_telemetry,
@@ -71,31 +71,35 @@ async fn main() -> std::io::Result<()> {
             .expect("Failed to connect to Postgresql"),
     );
 
-    info!(
-        "Connecting to SMTP server on {}",
-        &settings.application.email.safe_connection_string()
-    );
-    let mailer = Arc::new(RwLock::new(
-        SmtpMailer::build(
-            settings.application.email.smtp_server.clone(),
-            settings.application.email.smtp_port,
-            settings.application.email.smtp_username.clone(),
-            settings.application.email.smtp_password.clone(),
-            settings
-                .application
-                .email
-                .from_header
-                .parse()
-                .expect("Failed to parse email settings `from_header`"),
-            settings
-                .application
-                .email
-                .reply_to_header
-                .parse()
-                .expect("Failed to parse email settings `reply_to`"),
-        )
-        .expect("Failed to build an SmtpMailer"),
-    ));
+    let mailer: Arc<RwLock<dyn Mailer + Send + Sync>> = match &settings.application.email {
+        Some(email) => {
+            info!(
+                "Connecting to SMTP server on {}",
+                email.safe_connection_string()
+            );
+            Arc::new(RwLock::new(
+                SmtpMailer::build(
+                    email.smtp_server.clone(),
+                    email.smtp_port,
+                    email.smtp_username.clone(),
+                    email.smtp_password.clone(),
+                    email
+                        .from_header
+                        .parse()
+                        .expect("Failed to parse email settings `from_header`"),
+                    email
+                        .reply_to_header
+                        .parse()
+                        .expect("Failed to parse email settings `reply_to`"),
+                )
+                .expect("Failed to build an SmtpMailer"),
+            ))
+        }
+        None => {
+            info!("No email settings configured, emails are disabled");
+            Arc::new(RwLock::new(DisabledMailer))
+        }
+    };
     info!("Starting server on {}", settings.application.front_base_url);
     let webauthn = Arc::new(
         build_webauthn(&settings.application.front_base_url)

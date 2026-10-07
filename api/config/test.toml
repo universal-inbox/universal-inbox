@@ -52,3 +52,10 @@ oauth_client_secret = "ticktick_test_client_secret"
 [integrations.slack]
 signing_secret = "test-signing-secret-do-not-use-in-prod"
 
+[application.email]
+smtp_server = "smtp.example.com"
+smtp_port = 465
+smtp_username = "user"
+smtp_password = "password"
+from_header = "nobody <nobody@example.com>"
+reply_to_header = "support <support@example.com>"

@@ -35,6 +35,9 @@ pub struct FrontConfig {
     pub show_changelog: bool,
     pub chat_support_website_id: Option<String>,
     pub version: Option<String>,
+    /// False when no email (SMTP) settings are configured: the flows that
+    /// need to send an email (password reset, verification resend) are hidden.
+    pub email_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
