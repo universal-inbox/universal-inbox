@@ -304,7 +304,9 @@ pub fn google_calendar_oauth_credential() -> OAuthCredentialFixture {
             "google_calendar_test_refresh_token".to_string(),
         )),
         provider_user_id: None,
-        registered_oauth_scopes: vec!["https://www.googleapis.com/auth/calendar".to_string()],
+        registered_oauth_scopes: vec![
+            "https://www.googleapis.com/auth/calendar.events".to_string(),
+        ],
     }
 }
 
@@ -324,10 +326,7 @@ pub fn google_drive_oauth_credential() -> OAuthCredentialFixture {
         access_token: AccessToken("google_drive_test_access_token".to_string()),
         refresh_token: Some(RefreshToken("google_drive_test_refresh_token".to_string())),
         provider_user_id: None,
-        registered_oauth_scopes: vec![
-            "https://www.googleapis.com/auth/drive.readonly".to_string(),
-            "https://www.googleapis.com/auth/drive.metadata.readonly".to_string(),
-        ],
+        registered_oauth_scopes: vec!["https://www.googleapis.com/auth/drive.readonly".to_string()],
     }
 }
 
