@@ -126,7 +126,7 @@ pub fn AiAgentsCard() -> Element {
             icon_class: "icon-[lucide--book-open]".to_string(),
             href: MCP_DOCUMENTATION_URL.to_string(),
             aria_label: "AI agents documentation".to_string(),
-            "Documentation"
+            span { class: "hidden sm:inline", "Documentation" }
         }
     };
 
@@ -144,7 +144,7 @@ pub fn AiAgentsCard() -> Element {
                             select-none transition-colors duration-[var(--ui-dur-fast)] \
                             hover:bg-ui-surface-hover focus-visible:outline-2 \
                             focus-visible:outline-ui-primary focus-visible:-outline-offset-2 \
-                            focus-visible:rounded-ui-lg max-md:flex-wrap",
+                            focus-visible:rounded-ui-lg",
                     role: "button",
                     tabindex: 0,
                     aria_expanded: "{is_expanded}",
@@ -169,7 +169,6 @@ pub fn AiAgentsCard() -> Element {
                     }
 
                     CardRight {
-                        class: "max-md:basis-full max-md:mt-1".to_string(),
                         // Wrapper stops the toggle from firing when the link is
                         // clicked; the link still opens (default action).
                         div {
@@ -210,7 +209,6 @@ pub fn AiAgentsCard() -> Element {
             } else {
                 CardHeader {
                     interactive: false,
-                    class: "max-md:flex-wrap".to_string(),
 
                     div {
                         class: "flex items-center justify-center shrink-0 size-[26px] bg-transparent border border-ui-border rounded-ui-sm",
@@ -224,7 +222,6 @@ pub fn AiAgentsCard() -> Element {
                     }
 
                     CardRight {
-                        class: "max-md:basis-full max-md:mt-1".to_string(),
                         {documentation_button}
                         StatusLeaf { variant: status_variant, label: status_label.to_string() }
                     }
