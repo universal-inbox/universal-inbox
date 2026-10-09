@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use chrono::{DateTime, TimeDelta, Utc};
+use chrono::{DateTime, SubsecRound, TimeDelta, Utc};
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
 use tracing::{debug, info, warn};
@@ -763,7 +763,9 @@ impl BillingService {
             return Ok(sub.over_limit_grace_deadline);
         }
 
-        let deadline = Utc::now()
+        // Truncated to Postgres' microsecond precision, so the deadline returned
+        // here equals the one later read back (Linux clocks carry nanoseconds).
+        let deadline = Utc::now().trunc_subsecs(6)
             + TimeDelta::try_days(self.limits.rollout_grace_days as i64).ok_or_else(|| {
                 UniversalInboxError::Unexpected(anyhow!(
                     "rollout_grace_days produces overflowing TimeDelta"
