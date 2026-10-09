@@ -326,19 +326,23 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
                 UI_MODEL.write().selected_preview_pane = PreviewPane::Notification;
             }
             ("d", false, false, false, false) => {
-                if let Some(notification) = selected_notification {
-                    if CURRENT_NOTIFICATION_SECTION() == NotificationSection::Deleted {
-                        // Undelete replaces Delete in the Deleted section; task-built
-                        // notifications cannot be restored (backend restriction).
-                        if !notification.is_built_from_task() {
-                            notification_service
-                                .send(NotificationCommand::Undelete(notification.id))
-                        }
-                    } else {
-                        notification_service.send(NotificationCommand::DeleteFromNotification(
-                            notification.clone(),
-                        ))
-                    }
+                // Deleting is a no-op in the Deleted section: restoring has its own key
+                // ("r") so a user pressing "d" to delete never restores by mistake.
+                if let Some(notification) = selected_notification
+                    && CURRENT_NOTIFICATION_SECTION() != NotificationSection::Deleted
+                {
+                    notification_service.send(NotificationCommand::DeleteFromNotification(
+                        notification.clone(),
+                    ))
+                }
+            }
+            ("r", false, false, false, false) => {
+                // Task-built notifications cannot be restored (backend restriction).
+                if let Some(notification) = selected_notification
+                    && CURRENT_NOTIFICATION_SECTION() == NotificationSection::Deleted
+                    && !notification.is_built_from_task()
+                {
+                    notification_service.send(NotificationCommand::Undelete(notification.id))
                 }
             }
             ("c", false, false, false, false) => {

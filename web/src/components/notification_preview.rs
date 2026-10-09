@@ -5,7 +5,9 @@ use dioxus::prelude::*;
 
 use universal_inbox::{
     HasHtmlUrl,
-    notification::{NotificationId, NotificationSourceKind, NotificationWithTask},
+    notification::{
+        NotificationId, NotificationSourceKind, NotificationStatus, NotificationWithTask,
+    },
     third_party::{
         integrations::{github::GithubNotificationItem, slack::SlackReactionItem},
         item::ThirdPartyItemData,
@@ -258,6 +260,13 @@ pub fn NotificationPreview(
             div {
                 class: "flex-1 overflow-hidden py-3 px-5 min-h-0 flex flex-col animate-[detail-fade_0.2s_var(--ui-ease-out)]",
 
+                if notification().status == NotificationStatus::Deleted {
+                    DeletedNotificationBanner {
+                        notification,
+                        show_shortcut: shortcut_visibility_style == "visible",
+                    }
+                }
+
                 if let Some(label) = snoozed_until_label.clone() {
                     div {
                         class: "flex items-center gap-1.5 mb-2 text-[12px] text-ui-base-muted",
@@ -455,9 +464,45 @@ fn notification_sub_type(data: &ThirdPartyItemData) -> Option<&'static str> {
     }
 }
 
-/// The first action button of every notification: Delete in most sections, Undelete in
-/// the Deleted section. Undelete is disabled for task-built notifications (the backend
-/// only allows delete/snooze status changes for those).
+/// Banner shown at the top of a deleted notification's preview so the deleted state is
+/// obvious, even when landing on it from a reloaded URL or on mobile (where the list
+/// header naming the Deleted section is hidden). Offers a restore action, except for
+/// task-built notifications which cannot be restored.
+#[component]
+fn DeletedNotificationBanner(
+    notification: ReadSignal<NotificationWithTask>,
+    show_shortcut: bool,
+) -> Element {
+    let notification_service = use_coroutine_handle::<NotificationCommand>();
+
+    rsx! {
+        div {
+            id: "deleted-notification-banner",
+            role: "status",
+            class: "flex items-center gap-2 mb-2 px-3 py-2 rounded-ui-md bg-ui-error-subtle text-ui-error-text text-[13px] font-medium",
+            span { class: "icon-[lucide--trash-2] size-4 shrink-0" }
+            span { class: "flex-1 min-w-0", "This notification is deleted" }
+            if notification().is_built_from_task() {
+                span {
+                    class: "text-[12px] font-normal",
+                    "Task-linked notifications cannot be restored"
+                }
+            } else {
+                button {
+                    class: "inline-flex items-center gap-1.5 underline bg-transparent border-0 cursor-pointer",
+                    onclick: move |_| {
+                        notification_service.send(NotificationCommand::Undelete(notification().id));
+                    },
+                    "Restore"
+                    if show_shortcut {
+                        span { class: DETAIL_KBD, "r" }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// The first action button of every notification: Delete in most sections, Undelete in
 /// the Deleted section. Undelete is disabled for task-built notifications (the backend
 /// only allows delete/snooze status changes for those).
@@ -472,7 +517,7 @@ fn delete_or_undelete_button(
             rsx! {
                 ActionButton {
                     title: "Restore notification",
-                    shortcut: "d",
+                    shortcut: "r",
                     disabled_label: Some("Cannot restore task-linked notifications".to_string()),
                     show_shortcut,
                     icon_class: "icon-[lucide--archive-restore]",
@@ -482,7 +527,7 @@ fn delete_or_undelete_button(
             rsx! {
                 ActionButton {
                     title: "Restore notification",
-                    shortcut: "d",
+                    shortcut: "r",
                     show_shortcut,
                     onclick: move |_| {
                         context().notification_service.send(NotificationCommand::Undelete(notification().id));
@@ -642,7 +687,7 @@ pub fn get_notification_action_buttons(
             rsx! {
                 ActionButton {
                     title: "Restore notification",
-                    shortcut: "d",
+                    shortcut: "r",
                     disabled_label: Some("Cannot restore task-linked notifications".to_string()),
                     show_shortcut,
                     icon_class: "icon-[lucide--archive-restore]"
