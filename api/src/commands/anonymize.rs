@@ -4,7 +4,10 @@ use anyhow::Context;
 use secrecy::{ExposeSecret, SecretBox};
 use tracing::info;
 
-use universal_inbox::user::Password;
+use email_address::EmailAddress;
+use uuid::Uuid;
+
+use universal_inbox::{pii::Pii, user::Password};
 
 use crate::observability::RecordSpanError;
 use crate::observability::attr;
@@ -27,22 +30,31 @@ pub async fn anonymize_database(user_service: Arc<UserService>) -> Result<(), Un
         let password_hash_str = password_hash.expose_secret().0.to_string();
 
         info!("Anonymizing user profiles");
-        let result = sqlx::query(
+        let user_ids: Vec<Uuid> = sqlx::query_scalar(
             r#"
         UPDATE "user" SET
-            email = 'test+' || id::text || '@test.com',
             first_name = 'Test',
             last_name = 'User',
-            auth_user_id = 'test+' || id::text || '@test.com',
-            email_validated_at = NOW(),
             updated_at = NOW()
+        RETURNING id
         "#,
         )
-        .execute(&mut *transaction)
+        .fetch_all(&mut *transaction)
         .await
         .context("Failed to anonymize user profiles")?;
+        // Emails are encrypted and indexed by the application, not in SQL
+        for user_id in &user_ids {
+            let email: Pii<EmailAddress> = Pii::new(
+                format!("test+{user_id}@test.com")
+                    .parse()
+                    .context("Invalid anonymized email address")?,
+            );
+            user_service
+                .set_verified_email(&mut transaction, (*user_id).into(), &email)
+                .await?;
+        }
 
-        let user_count = result.rows_affected();
+        let user_count = user_ids.len();
 
         info!("Removing existing authentication records");
         sqlx::query("DELETE FROM user_auth")

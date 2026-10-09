@@ -19,6 +19,7 @@ use crate::observability::attr;
 use crate::{
     repository::Repository,
     universal_inbox::{UniversalInboxError, UpdateStatus},
+    utils::crypto::{aad, data_keyring},
 };
 
 #[derive(Debug)]
@@ -488,7 +489,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
-                  integration_connection.context as "context: Json<IntegrationConnectionContext>",
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>",
@@ -546,7 +547,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as config,
-                  integration_connection.context,
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
@@ -642,7 +643,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
-                  integration_connection.context as "context: Json<IntegrationConnectionContext>",
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>",
@@ -710,7 +711,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
-                  integration_connection.context as "context: Json<IntegrationConnectionContext>",
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>",
@@ -780,7 +781,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
-                  integration_connection.context as "context: Json<IntegrationConnectionContext>",
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>",
@@ -790,7 +791,7 @@ impl IntegrationConnectionRepository for Repository {
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
                 WHERE
-                    integration_connection.context->'content'->>'team_id' = $1
+                    integration_connection.slack_team_id = $1
                     AND integration_connection.provider_kind::TEXT = 'Slack'
                     AND integration_connection.status::TEXT = 'Validated'
                     AND integration_connection.registered_oauth_scopes::jsonb @> $2::jsonb
@@ -844,7 +845,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
-                  integration_connection.context as "context: Json<IntegrationConnectionContext>",
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>",
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as "auto_paused_config_snapshot: Json<IntegrationConnectionConfig>",
@@ -854,7 +855,7 @@ impl IntegrationConnectionRepository for Repository {
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
                 WHERE
-                    integration_connection.context->'content'->>'team_id' = $1
+                    integration_connection.slack_team_id = $1
                     AND integration_connection.provider_kind::TEXT = 'Slack'
                     AND ($2::TEXT[] IS NULL OR integration_connection.provider_user_id = ANY($2))
             "#,
@@ -897,6 +898,7 @@ impl IntegrationConnectionRepository for Repository {
                   ) AS has_credential
                 FROM integration_connection
                 WHERE integration_connection.provider_kind::TEXT = 'Slack'
+                  AND integration_connection.context_enc IS NULL
                   AND integration_connection.context IS NULL
             "#,
         );
@@ -1023,7 +1025,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as config,
-                  integration_connection.context,
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
@@ -1226,7 +1228,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as config,
-                  integration_connection.context,
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
@@ -1276,9 +1278,24 @@ impl IntegrationConnectionRepository for Repository {
         integration_connection_id: IntegrationConnectionId,
         context: Option<IntegrationConnectionContext>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        let mut query_builder = QueryBuilder::new("UPDATE integration_connection SET context = ");
+        let slack_team_id = match &context {
+            Some(IntegrationConnectionContext::Slack(slack_context)) => {
+                Some(slack_context.team_id.to_string())
+            }
+            _ => None,
+        };
+        let context_enc = context
+            .as_ref()
+            .map(|context| {
+                encrypt_integration_connection_context(context, integration_connection_id)
+            })
+            .transpose()?;
+        let mut query_builder =
+            QueryBuilder::new("UPDATE integration_connection SET context = NULL, context_enc = ");
         query_builder
-            .push_bind(context.map(Json))
+            .push_bind(context_enc)
+            .push(", slack_team_id = ")
+            .push_bind(slack_team_id)
             .push(" FROM integration_connection_config ")
             .push(" WHERE ")
             .separated(" AND ")
@@ -1311,7 +1328,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as config,
-                  integration_connection.context,
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
@@ -1391,7 +1408,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config,
-                  integration_connection.context,
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
@@ -1757,7 +1774,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as config,
-                  integration_connection.context,
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
@@ -1882,7 +1899,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.first_notifications_sync_failed_at,
                   integration_connection.first_tasks_sync_failed_at,
                   integration_connection_config.config as config,
-                  integration_connection.context,
+                  integration_connection.context_enc,
                   integration_connection.registered_oauth_scopes,
                   integration_connection.auto_paused_by_plan_at,
                   integration_connection.auto_paused_config_snapshot as auto_paused_config_snapshot,
@@ -2214,12 +2231,31 @@ pub struct IntegrationConnectionRow {
     first_notifications_sync_failed_at: Option<NaiveDateTime>,
     first_tasks_sync_failed_at: Option<NaiveDateTime>,
     config: Json<IntegrationConnectionConfig>,
-    context: Option<Json<IntegrationConnectionContext>>,
+    /// Encrypted `IntegrationConnectionContext`
+    context_enc: Option<Vec<u8>>,
     registered_oauth_scopes: Json<Vec<String>>,
     auto_paused_by_plan_at: Option<NaiveDateTime>,
     auto_paused_config_snapshot: Option<Json<IntegrationConnectionConfig>>,
     paused_at: Option<NaiveDateTime>,
     paused_reason: Option<String>,
+}
+
+const CONTEXT_AAD: &str = "integration_connection.context";
+
+fn encrypt_integration_connection_context(
+    context: &IntegrationConnectionContext,
+    integration_connection_id: IntegrationConnectionId,
+) -> Result<Vec<u8>, UniversalInboxError> {
+    data_keyring()?.encrypt_json(context, &aad(CONTEXT_AAD, integration_connection_id.0))
+}
+
+/// Decrypt `integration_connection.context_enc`. Also used for the copy kept by a pending
+/// grant revocation.
+pub fn decrypt_integration_connection_context(
+    context_enc: &[u8],
+    integration_connection_id: Uuid,
+) -> Result<IntegrationConnectionContext, UniversalInboxError> {
+    data_keyring()?.decrypt_json(context_enc, &aad(CONTEXT_AAD, integration_connection_id))
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -2302,7 +2338,10 @@ impl TryFrom<&IntegrationConnectionRow> for IntegrationConnection {
                 .map(|t| DateTime::from_naive_utc_and_offset(t, Utc)),
             provider: IntegrationProvider::new(
                 row.config.0.clone(),
-                row.context.as_ref().map(|context| context.0.clone()),
+                row.context_enc
+                    .as_deref()
+                    .map(|context_enc| decrypt_integration_connection_context(context_enc, row.id))
+                    .transpose()?,
             )?,
             registered_oauth_scopes: row.registered_oauth_scopes.0.clone(),
             auto_paused_by_plan_at: row

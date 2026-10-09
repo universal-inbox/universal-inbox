@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::universal_inbox::UniversalInboxError;
 
 pub mod auth_token;
+pub mod data_encryption;
 pub mod integration_connection;
 pub mod notification;
 pub mod oauth2;

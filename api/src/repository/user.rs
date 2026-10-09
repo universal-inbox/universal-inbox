@@ -28,6 +28,7 @@ use crate::{
             UserAuth,
         },
     },
+    utils::crypto::{aad, data_keyring},
 };
 
 #[async_trait]
@@ -103,11 +104,12 @@ pub trait UserRepository {
         email_validation_token: Option<EmailValidationToken>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
 
-    async fn get_user_email_validation_token(
+    /// SHA-256 of the pending email validation token, see [`hash_one_time_token`]
+    async fn get_user_email_validation_token_hash(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-    ) -> Result<Option<EmailValidationToken>, UniversalInboxError>;
+    ) -> Result<Option<String>, UniversalInboxError>;
 
     /// Mark the user's email as validated now and consume the validation
     /// token, so a verification link can only be used once.
@@ -166,11 +168,12 @@ pub trait UserRepository {
         password_reset: Option<(PasswordResetToken, DateTime<Utc>)>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
 
-    async fn get_password_reset_token(
+    /// SHA-256 of the pending password reset token, see [`hash_one_time_token`]
+    async fn get_password_reset_token_hash(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-    ) -> Result<Option<PasswordResetToken>, UniversalInboxError>;
+    ) -> Result<Option<String>, UniversalInboxError>;
 
     async fn get_user_auth_by_email(
         &self,
@@ -254,7 +257,7 @@ impl UserRepository for Repository {
                   "user".id,
                   "user".first_name,
                   "user".last_name,
-                  "user".email,
+                  "user".email_enc,
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".is_testing,
@@ -349,7 +352,7 @@ impl UserRepository for Repository {
                   "user".id,
                   "user".first_name,
                   "user".last_name,
-                  "user".email,
+                  "user".email_enc,
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".is_testing,
@@ -382,7 +385,7 @@ impl UserRepository for Repository {
                   "user".id,
                   "user".first_name,
                   "user".last_name,
-                  "user".email,
+                  "user".email_enc,
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".is_testing,
@@ -393,7 +396,8 @@ impl UserRepository for Repository {
                   user_auth.password_reset_at,
                   user_auth.password_reset_sent_at,
                   user_auth.auth_user_id,
-                  user_auth.auth_id_token,
+                  user_auth.id as user_auth_id,
+                  user_auth.auth_id_token_enc,
                   user_auth.username,
                   user_auth.passkey,
                   user_auth.user_id
@@ -469,7 +473,7 @@ impl UserRepository for Repository {
                   "user".id,
                   "user".first_name,
                   "user".last_name,
-                  "user".email,
+                  "user".email_enc,
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".is_testing,
@@ -509,16 +513,16 @@ impl UserRepository for Repository {
                   "user".id,
                   "user".first_name,
                   "user".last_name,
-                  "user".email,
+                  "user".email_enc,
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".is_testing,
                   "user".created_at,
                   "user".updated_at
                 FROM "user"
-                WHERE "user".email = $1
+                WHERE "user".email_hash = $1
             "#,
-            email.expose().to_string()
+            user_email_hash(email)?
         )
         .fetch_optional(&mut **executor)
         .await
@@ -552,19 +556,24 @@ impl UserRepository for Repository {
                     id,
                     first_name,
                     last_name,
-                    email,
+                    email_enc,
+                    email_hash,
                     is_testing,
                     created_at,
                     updated_at
                   )
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING
                   id
             "#,
                 user.id.0,
                 user.first_name.as_ref().map(|name| name.expose().as_str()),
                 user.last_name.as_ref().map(|name| name.expose().as_str()),
-                user.email.as_ref().map(|email| email.expose().to_string()),
+                user.email
+                    .as_ref()
+                    .map(|email| encrypt_user_email(email, user.id.0))
+                    .transpose()?,
+                user.email.as_ref().map(user_email_hash).transpose()?,
                 user.is_testing,
                 user.created_at.naive_utc(),
                 user.updated_at.naive_utc()
@@ -638,7 +647,7 @@ impl UserRepository for Repository {
                     user_id,
                     kind,
                     auth_user_id,
-                    auth_id_token,
+                    auth_id_token_enc,
                     password_hash,
                     username,
                     passkey
@@ -659,7 +668,9 @@ impl UserRepository for Repository {
             user_id.0,
             user_auth.to_string() as _,
             auth_user_id.map(|id| id.to_string()),
-            auth_id_token.map(|token| token.expose_secret().to_string()),
+            auth_id_token
+                .map(|token| encrypt_auth_id_token(&token, new_id))
+                .transpose()?,
             password_hash.map(|hash| hash.expose_secret().0.to_string()),
             username.map(|username| username.to_string()),
             passkey.map(|passkey| Json(passkey.clone())) as Option<Json<Passkey>>,
@@ -748,17 +759,48 @@ impl UserRepository for Repository {
         auth_user_id: &AuthUserId,
         auth_id_token: &AuthIdToken,
     ) -> Result<UpdateStatus<User>, UniversalInboxError> {
+        // The encrypted ID token cannot be compared in SQL to tell whether it changed
+        let current = sqlx::query!(
+            "SELECT id, auth_id_token_enc FROM user_auth WHERE auth_user_id = $1 FOR UPDATE",
+            auth_user_id.to_string()
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to fetch user auth with auth ID {auth_user_id} from storage: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+        let Some(current) = current else {
+            return Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            });
+        };
+        let is_updated =
+            match decrypt_auth_id_token(current.id, current.auth_id_token_enc.as_deref()) {
+                Ok(current_auth_id_token) => {
+                    current_auth_id_token.expose_secret() != auth_id_token.expose_secret()
+                }
+                Err(_) => true,
+            };
+
         let mut query_builder = QueryBuilder::new("UPDATE user_auth SET");
         query_builder
-            .push(" auth_id_token = ")
-            .push_bind(auth_id_token.expose_secret().to_string())
+            .push(" auth_id_token_enc = ")
+            .push_bind(encrypt_auth_id_token(auth_id_token, current.id)?)
+            .push(", auth_id_token = NULL")
             .push(r#" FROM "user" "#)
             .push(" WHERE ");
         let mut separated = query_builder.separated(" AND ");
         separated.push(r#" user_auth.user_id = "user".id "#);
         separated
-            .push(" user_auth.auth_user_id = ")
-            .push_bind_unseparated(auth_user_id.to_string());
+            .push(" user_auth.id = ")
+            .push_bind_unseparated(current.id);
 
         query_builder
             .push(
@@ -767,19 +809,16 @@ impl UserRepository for Repository {
                   "user".id,
                   "user".first_name,
                   "user".last_name,
-                  "user".email,
+                  "user".email_enc,
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".is_testing,
                   "user".created_at,
                   "user".updated_at,
-                  (SELECT"#,
+                  "#,
             )
-            .push(" auth_id_token != ")
-            .push_bind(auth_id_token.expose_secret().to_string())
-            .push(" FROM user_auth WHERE auth_user_id = ")
-            .push_bind(auth_user_id.to_string())
-            .push(r#") as "is_updated""#);
+            .push_bind(is_updated)
+            .push(r#" as "is_updated""#);
 
         let record: Option<UpdatedUserRow> = query_builder
             .build_query_as::<UpdatedUserRow>()
@@ -849,8 +888,8 @@ impl UserRepository for Repository {
         }
         if let Some(email_validation_token) = &email_validation_token {
             separated
-                .push(" email_validation_token = ")
-                .push_bind_unseparated(email_validation_token.0);
+                .push(" email_validation_token_hash = ")
+                .push_bind_unseparated(hash_one_time_token(&email_validation_token.0));
         }
         query_builder
             .push(" WHERE ")
@@ -863,7 +902,7 @@ impl UserRepository for Repository {
                   "user".id,
                   "user".first_name,
                   "user".last_name,
-                  "user".email,
+                  "user".email_enc,
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".is_testing,
@@ -886,8 +925,8 @@ impl UserRepository for Repository {
         }
         if let Some(email_validation_token) = &email_validation_token {
             separated
-                .push(" (email_validation_token is NULL OR email_validation_token != ")
-                .push_bind_unseparated(email_validation_token.0)
+                .push(" (email_validation_token_hash is NULL OR email_validation_token_hash != ")
+                .push_bind_unseparated(hash_one_time_token(&email_validation_token.0))
                 .push_unseparated(")");
         }
         query_builder
@@ -933,7 +972,7 @@ impl UserRepository for Repository {
         let res = sqlx::query(
             r#"
                 UPDATE "user"
-                SET email_validated_at = $2, email_validation_token = NULL
+                SET email_validated_at = $2, email_validation_token_hash = NULL
                 WHERE id = $1
             "#,
         )
@@ -957,13 +996,13 @@ impl UserRepository for Repository {
         skip_all,
         fields({ attr::USER_ID } = user_id.to_string())
     )]
-    async fn get_user_email_validation_token(
+    async fn get_user_email_validation_token_hash(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-    ) -> Result<Option<EmailValidationToken>, UniversalInboxError> {
-        let row: Option<Option<Uuid>> = sqlx::query_scalar!(
-            r#"SELECT email_validation_token FROM "user" WHERE id = $1"#,
+    ) -> Result<Option<String>, UniversalInboxError> {
+        let row: Option<Option<String>> = sqlx::query_scalar!(
+            r#"SELECT email_validation_token_hash FROM "user" WHERE id = $1"#,
             user_id.0
         )
         .fetch_optional(&mut **executor)
@@ -975,7 +1014,7 @@ impl UserRepository for Repository {
             UniversalInboxError::DatabaseError { source: err, message }
         })?;
 
-        Ok(row.and_then(|row| row.map(|token| token.into())))
+        Ok(row.flatten())
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields({ attr::USER_ID } = user_id.to_string()))]
@@ -988,16 +1027,20 @@ impl UserRepository for Repository {
     ) -> Result<(), UniversalInboxError> {
         sqlx::query!(
             r#"
-                INSERT INTO user_email_change (user_id, new_email, validation_token, requested_at)
+                INSERT INTO user_email_change (user_id, new_email_enc, validation_token_hash, requested_at)
                 VALUES ($1, $2, $3, now())
                 ON CONFLICT (user_id) DO UPDATE
-                SET new_email = EXCLUDED.new_email,
-                  validation_token = EXCLUDED.validation_token,
+                SET new_email_enc = EXCLUDED.new_email_enc,
+                  new_email = NULL,
+                  validation_token_hash = EXCLUDED.validation_token_hash,
                   requested_at = EXCLUDED.requested_at
             "#,
             user_id.0,
-            new_email.expose().as_str(),
-            validation_token.0
+            data_keyring()?.encrypt(
+                new_email.expose().as_str().as_bytes(),
+                &aad(USER_EMAIL_CHANGE_NEW_EMAIL_AAD, user_id.0)
+            )?,
+            hash_one_time_token(&validation_token.0)
         )
         .execute(&mut **executor)
         .await
@@ -1019,7 +1062,7 @@ impl UserRepository for Repository {
     ) -> Result<Option<PendingEmailChange>, UniversalInboxError> {
         let row = sqlx::query!(
             r#"
-                SELECT new_email, validation_token, requested_at
+                SELECT new_email_enc, validation_token_hash, requested_at
                 FROM user_email_change
                 WHERE user_id = $1
             "#,
@@ -1036,12 +1079,18 @@ impl UserRepository for Repository {
         })?;
 
         row.map(|row| {
+            let new_email_enc = row
+                .new_email_enc
+                .context("Pending email change not encrypted yet")?;
             Ok(PendingEmailChange {
-                new_email: row
-                    .new_email
+                new_email: data_keyring()?
+                    .decrypt_string(
+                        &new_email_enc,
+                        &aad(USER_EMAIL_CHANGE_NEW_EMAIL_AAD, user_id.0),
+                    )?
                     .parse()
                     .context("Invalid email address stored in pending email change")?,
-                validation_token: row.validation_token.into(),
+                validation_token_hash: row.validation_token_hash,
                 requested_at: row.requested_at,
             })
         })
@@ -1080,16 +1129,19 @@ impl UserRepository for Repository {
         let result = sqlx::query!(
             r#"
                 UPDATE "user"
-                SET email = $2,
+                SET email_enc = $2,
+                  email_hash = $4,
+                  email = NULL,
                   email_validated_at = $3,
                   email_validation_sent_at = NULL,
-                  email_validation_token = NULL,
+                  email_validation_token_hash = NULL,
                   updated_at = $3
                 WHERE id = $1
             "#,
             user_id.0,
-            new_email.expose().as_str(),
-            Utc::now().naive_utc()
+            encrypt_user_email(new_email, user_id.0)?,
+            Utc::now().naive_utc(),
+            user_email_hash(new_email)?
         )
         .execute(&mut **executor)
         .await;
@@ -1147,15 +1199,15 @@ impl UserRepository for Repository {
         }
         if let Some(password_reset_token) = &password_reset_token {
             separated
-                .push(" password_reset_token = ")
-                .push_bind_unseparated(password_reset_token.0);
+                .push(" password_reset_token_hash = ")
+                .push_bind_unseparated(hash_one_time_token(&password_reset_token.0));
         }
         query_builder.push(r#" FROM "user" WHERE "#);
         let mut separated = query_builder.separated(" AND ");
         separated
             .push(r#"user_auth.user_id = "user".id"#)
-            .push(r#""user".email = "#)
-            .push_bind_unseparated(email_address.expose().as_str())
+            .push(r#""user".email_hash = "#)
+            .push_bind_unseparated(user_email_hash(&email_address)?)
             .push("user_auth.kind = 'Local'::user_auth_kind");
 
         query_builder.push(
@@ -1164,7 +1216,7 @@ impl UserRepository for Repository {
                   "user".id,
                   "user".first_name,
                   "user".last_name,
-                  "user".email,
+                  "user".email_enc,
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".is_testing,
@@ -1219,7 +1271,7 @@ impl UserRepository for Repository {
             .push_bind_unseparated(password_hash.expose_secret().0.as_str())
             .push(" password_reset_at = ")
             .push_bind_unseparated(Utc::now().naive_utc())
-            .push(" password_reset_token = NULL ");
+            .push(" password_reset_token_hash = NULL ");
         query_builder.push(r#" FROM "user" WHERE "#);
         let mut separated = query_builder.separated(" AND ");
         separated
@@ -1234,8 +1286,8 @@ impl UserRepository for Repository {
         // that was never used must not stay valid for the lifetime of the account.
         if let Some((password_reset_token, not_sent_before)) = &password_reset {
             separated
-                .push("user_auth.password_reset_token = ")
-                .push_bind_unseparated(password_reset_token.0)
+                .push("user_auth.password_reset_token_hash = ")
+                .push_bind_unseparated(hash_one_time_token(&password_reset_token.0))
                 .push("user_auth.password_reset_sent_at >= ")
                 .push_bind_unseparated(not_sent_before.naive_utc());
         }
@@ -1246,7 +1298,7 @@ impl UserRepository for Repository {
                   "user".id,
                   "user".first_name,
                   "user".last_name,
-                  "user".email,
+                  "user".email_enc,
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".is_testing,
@@ -1256,7 +1308,7 @@ impl UserRepository for Repository {
         );
         let mut separated = query_builder.separated(" OR ");
         separated
-            .push("password_reset_token is not NULL")
+            .push("password_reset_token_hash is not NULL")
             .push("password_hash != ")
             .push_bind_unseparated(password_hash.expose_secret().0.as_str());
         query_builder
@@ -1298,13 +1350,13 @@ impl UserRepository for Repository {
         skip_all,
         fields({ attr::USER_ID } = user_id.to_string())
     )]
-    async fn get_password_reset_token(
+    async fn get_password_reset_token_hash(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-    ) -> Result<Option<PasswordResetToken>, UniversalInboxError> {
-        let row: Option<Option<Uuid>> = sqlx::query_scalar!(
-            "SELECT password_reset_token FROM user_auth WHERE user_id = $1 AND kind = 'Local'::user_auth_kind",
+    ) -> Result<Option<String>, UniversalInboxError> {
+        let row: Option<Option<String>> = sqlx::query_scalar!(
+            "SELECT password_reset_token_hash FROM user_auth WHERE user_id = $1 AND kind = 'Local'::user_auth_kind",
             user_id.0
         )
         .fetch_optional(&mut **executor)
@@ -1319,7 +1371,7 @@ impl UserRepository for Repository {
             }
         })?;
 
-        Ok(row.and_then(|row| row.map(|token| token.into())))
+        Ok(row.flatten())
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
@@ -1337,16 +1389,17 @@ impl UserRepository for Repository {
                     password_reset_at,
                     password_reset_sent_at,
                     auth_user_id,
-                    auth_id_token,
+                    user_auth.id as user_auth_id,
+                    auth_id_token_enc,
                     username,
                     passkey as "passkey: Json<Passkey>",
                     user_id
                 FROM user_auth
                 JOIN "user" ON user_auth.user_id = "user".id
-                WHERE "user".email = $1
+                WHERE "user".email_hash = $1
                   AND user_auth.kind = 'Local'::user_auth_kind
             "#,
-            user_email.expose().to_string()
+            user_email_hash(user_email)?
         )
         .fetch_optional(&mut **executor)
         .await
@@ -1385,7 +1438,8 @@ impl UserRepository for Repository {
                     password_reset_at,
                     password_reset_sent_at,
                     auth_user_id,
-                    auth_id_token,
+                    user_auth.id as user_auth_id,
+                    auth_id_token_enc,
                     username,
                     passkey as "passkey: Json<Passkey>",
                     user_id
@@ -1430,7 +1484,8 @@ impl UserRepository for Repository {
                     password_reset_at,
                     password_reset_sent_at,
                     auth_user_id,
-                    auth_id_token,
+                    user_auth.id as user_auth_id,
+                    auth_id_token_enc,
                     username,
                     passkey,
                     user_id
@@ -1475,7 +1530,8 @@ impl UserRepository for Repository {
                     password_reset_at,
                     password_reset_sent_at,
                     auth_user_id,
-                    auth_id_token,
+                    user_auth.id as user_auth_id,
+                    auth_id_token_enc,
                     username,
                     passkey as "passkey: Json<Passkey>",
                     user_id
@@ -1534,7 +1590,7 @@ impl UserRepository for Repository {
                   "user".id,
                   "user".first_name,
                   "user".last_name,
-                  "user".email,
+                  "user".email_enc,
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".is_testing,
@@ -1609,8 +1665,12 @@ impl UserRepository for Repository {
         }
         if let Some(email) = &patch.email {
             separated
-                .push(" email = ")
-                .push_bind_unseparated(email.expose().to_string());
+                .push(" email_enc = ")
+                .push_bind_unseparated(encrypt_user_email(email, user_id.0)?);
+            separated
+                .push(" email_hash = ")
+                .push_bind_unseparated(user_email_hash(email)?);
+            separated.push(" email = NULL ");
             separated.push(" email_validated_at = NULL ");
             separated.push(" email_validation_sent_at = NULL ");
         }
@@ -1628,7 +1688,7 @@ impl UserRepository for Repository {
                   "user".id,
                   "user".first_name,
                   "user".last_name,
-                  "user".email,
+                  "user".email_enc,
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".is_testing,
@@ -1651,8 +1711,8 @@ impl UserRepository for Repository {
         }
         if let Some(email) = &patch.email {
             separated
-                .push(" (email is NULL OR email != ")
-                .push_bind_unseparated(email.expose().to_string())
+                .push(" (email_hash is NULL OR email_hash != ")
+                .push_bind_unseparated(user_email_hash(email)?)
                 .push_unseparated(")");
         }
         query_builder
@@ -1704,7 +1764,7 @@ pub struct UserRow {
     id: Uuid,
     first_name: Option<String>,
     last_name: Option<String>,
-    email: Option<String>,
+    email_enc: Option<Vec<u8>>,
     email_validated_at: Option<NaiveDateTime>,
     email_validation_sent_at: Option<NaiveDateTime>,
     is_testing: bool,
@@ -1745,11 +1805,10 @@ impl TryFrom<&UserRow> for User {
             first_name: row.first_name.clone().map(Pii::new),
             last_name: row.last_name.clone().map(Pii::new),
             email: row
-                .email
-                .as_ref()
-                .map(|email| email.parse())
-                .transpose()
-                .context("Unable to parse stored email address")?,
+                .email_enc
+                .as_deref()
+                .map(|email_enc| decrypt_user_email(email_enc, row.id))
+                .transpose()?,
             email_validated_at: row
                 .email_validated_at
                 .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
@@ -1773,15 +1832,79 @@ enum PgUserAuthKind {
     Passkey,
 }
 
+/// SHA-256 digest (hex) of a one-time token sent by email, as stored in the
+/// `*_token_hash` columns. The tokens are random UUIDs v4, an unkeyed digest is enough
+/// (the same choice as `authentication_token.jwt_token_hash`).
+pub fn hash_one_time_token(token: &Uuid) -> String {
+    hex::encode(ring::digest::digest(
+        &ring::digest::SHA256,
+        token.to_string().as_bytes(),
+    ))
+}
+
+const USER_EMAIL_AAD: &str = "user.email";
+const USER_EMAIL_CHANGE_NEW_EMAIL_AAD: &str = "user_email_change.new_email";
+
+fn encrypt_user_email(
+    email: &Pii<EmailAddress>,
+    user_id: Uuid,
+) -> Result<Vec<u8>, UniversalInboxError> {
+    data_keyring()?.encrypt(
+        email.expose().as_str().as_bytes(),
+        &aad(USER_EMAIL_AAD, user_id),
+    )
+}
+
+fn decrypt_user_email(
+    email_enc: &[u8],
+    user_id: Uuid,
+) -> Result<Pii<EmailAddress>, UniversalInboxError> {
+    let email = data_keyring()?.decrypt_string(email_enc, &aad(USER_EMAIL_AAD, user_id))?;
+    Ok(email
+        .parse()
+        .context("Unable to parse stored email address")?)
+}
+
+/// Blind index of an email address, stored in `"user".email_hash` to look users up by
+/// email and keep emails unique (case-insensitive)
+pub fn user_email_hash(email: &Pii<EmailAddress>) -> Result<String, UniversalInboxError> {
+    data_keyring()?.email_blind_index(email.expose().as_str())
+}
+
+const AUTH_ID_TOKEN_AAD: &str = "user_auth.auth_id_token";
+
+fn encrypt_auth_id_token(
+    auth_id_token: &AuthIdToken,
+    user_auth_id: Uuid,
+) -> Result<Vec<u8>, UniversalInboxError> {
+    data_keyring()?.encrypt(
+        auth_id_token.expose_secret().as_bytes(),
+        &aad(AUTH_ID_TOKEN_AAD, user_auth_id),
+    )
+}
+
+/// Decrypt `user_auth.auth_id_token_enc`, failing when it is missing
+fn decrypt_auth_id_token(
+    user_auth_id: Uuid,
+    auth_id_token_enc: Option<&[u8]>,
+) -> anyhow::Result<AuthIdToken> {
+    let auth_id_token_enc = auth_id_token_enc.context("Missing OIDC ID token")?;
+    Ok(AuthIdToken::from(data_keyring()?.decrypt_string(
+        auth_id_token_enc,
+        &aad(AUTH_ID_TOKEN_AAD, user_auth_id),
+    )?))
+}
+
 #[derive(Debug, sqlx::FromRow)]
 pub struct UserAuthRow {
+    user_auth_id: Uuid,
     user_id: Uuid,
     kind: PgUserAuthKind,
     password_hash: Option<String>,
     password_reset_at: Option<NaiveDateTime>,
     password_reset_sent_at: Option<NaiveDateTime>,
     auth_user_id: Option<String>,
-    auth_id_token: Option<String>,
+    auth_id_token_enc: Option<Vec<u8>>,
     username: Option<String>,
     passkey: Option<Json<Passkey>>,
 }
@@ -1814,17 +1937,17 @@ impl TryFrom<&UserAuthRow> for UserAuth {
                 auth_user_id: AuthUserId(row.auth_user_id.clone().context(
                     "Expected to find OIDC user ID in storage with OIDCAuthorizationCodePKCE authentication",
                 )?),
-                auth_id_token: AuthIdToken::from(row.auth_id_token.clone().context(
+                auth_id_token: decrypt_auth_id_token(row.user_auth_id, row.auth_id_token_enc.as_deref()).context(
                     "Expected to find OIDC ID token in storage with OIDCAuthorizationCodePKCE authentication",
-                )?),
+                )?,
             })),
             PgUserAuthKind::OIDCGoogleAuthorizationCode => UserAuth::OIDCGoogleAuthorizationCode(Box::new(OpenIdConnectUserAuth {
                 auth_user_id: AuthUserId(row.auth_user_id.clone().context(
                     "Expected to find OIDC user ID in storage with OIDCGoogleAuthorizationCode authentication",
                 )?),
-                auth_id_token: AuthIdToken::from(row.auth_id_token.clone().context(
+                auth_id_token: decrypt_auth_id_token(row.user_auth_id, row.auth_id_token_enc.as_deref()).context(
                     "Expected to find OIDC ID token in storage with OIDCGoogleAuthorizationCode authentication",
-                )?),
+                )?,
             })),
             PgUserAuthKind::Passkey => UserAuth::Passkey(Box::new(PasskeyUserAuth  {
                 username: Username (row.username.clone().context(
@@ -1858,11 +1981,10 @@ impl TryFrom<&UserAndUserAuthRow> for User {
             last_name: row.user_row.last_name.clone().map(Pii::new),
             email: row
                 .user_row
-                .email
-                .as_ref()
-                .map(|email| email.parse())
-                .transpose()
-                .context("Unable to parse stored email address")?,
+                .email_enc
+                .as_deref()
+                .map(|email_enc| decrypt_user_email(email_enc, row.user_row.id))
+                .transpose()?,
             email_validated_at: row
                 .user_row
                 .email_validated_at
@@ -1899,17 +2021,17 @@ impl TryFrom<&UserAndUserAuthRow> for UserAuth {
                 auth_user_id: AuthUserId(row.user_auth_row.auth_user_id.clone().context(
                     "Expected to find OIDC user ID in storage with OIDCAuthorizationCodePKCE authentication",
                 )?),
-                auth_id_token: AuthIdToken::from(row.user_auth_row.auth_id_token.clone().context(
+                auth_id_token: decrypt_auth_id_token(row.user_auth_row.user_auth_id, row.user_auth_row.auth_id_token_enc.as_deref()).context(
                     "Expected to find OIDC ID token in storage with OIDCAuthorizationCodePKCE authentication",
-                )?),
+                )?,
             })),
             PgUserAuthKind::OIDCGoogleAuthorizationCode => UserAuth::OIDCGoogleAuthorizationCode(Box::new(OpenIdConnectUserAuth {
                 auth_user_id: AuthUserId(row.user_auth_row.auth_user_id.clone().context(
                     "Expected to find OIDC user ID in storage with OIDCGoogleAuthorizationCode authentication",
                 )?),
-                auth_id_token: AuthIdToken::from(row.user_auth_row.auth_id_token.clone().context(
+                auth_id_token: decrypt_auth_id_token(row.user_auth_row.user_auth_id, row.user_auth_row.auth_id_token_enc.as_deref()).context(
                     "Expected to find OIDC ID token in storage with OIDCGoogleAuthorizationCode authentication",
-                )?),
+                )?,
             })),
             PgUserAuthKind::Passkey => UserAuth::Passkey(Box::new(PasskeyUserAuth  {
                 username: Username (row.user_auth_row.username.clone().context(

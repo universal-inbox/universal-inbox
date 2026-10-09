@@ -371,6 +371,8 @@ async fn test_oauth_callback_missing_state_returns_invalid_state(#[future] teste
 mod google_provider_user_id {
     use std::str::FromStr;
 
+    use crate::helpers::integration_connection::google_account_id;
+
     use email_address::EmailAddress;
     use pretty_assertions::assert_eq;
     use universal_inbox::pii::Pii;
@@ -562,7 +564,7 @@ mod google_provider_user_id {
         );
         assert_eq!(
             integration_connection.provider_user_id,
-            Some("jane.doe@example.com".to_string())
+            Some(google_account_id("jane.doe@example.com"))
         );
     }
 
@@ -581,7 +583,7 @@ mod google_provider_user_id {
         let (integration_connection_id, state) = start_oauth_flow_for(
             &app,
             google_config(provider_kind),
-            Some("jane.doe@example.com".to_string()),
+            Some(google_account_id("jane.doe@example.com")),
         )
         .await;
 
@@ -600,7 +602,7 @@ mod google_provider_user_id {
         );
         assert_eq!(
             integration_connection.provider_user_id,
-            Some("jane.doe@example.com".to_string())
+            Some(google_account_id("jane.doe@example.com"))
         );
     }
 
@@ -645,7 +647,7 @@ mod google_provider_user_id {
                     labels: vec![],
                 },
             )),
-            Some("jane.doe@example.com".to_string()),
+            Some(google_account_id("jane.doe@example.com")),
             None,
             None,
             None,
@@ -670,7 +672,7 @@ mod google_provider_user_id {
         );
         assert_eq!(
             reconnected_integration_connection.provider_user_id,
-            Some("john.roe@example.com".to_string())
+            Some(google_account_id("john.roe@example.com"))
         );
 
         mock_google_mail_labels_list_service(mock_server, &google_mail_labels_list).await;

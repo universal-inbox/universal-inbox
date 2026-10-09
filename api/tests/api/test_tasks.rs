@@ -661,11 +661,10 @@ mod search_tasks {
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].id, task2.id);
 
-        // Search by task description
+        // Task descriptions are encrypted at rest and not indexed for search
         let tasks = search_tasks(&app.client, &app.app.api_address, "form", None).await;
 
-        assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].id, task2.id);
+        assert_eq!(tasks.len(), 0);
 
         // Search by task tags
         let tasks = search_tasks(&app.client, &app.app.api_address, "Food", None).await;

@@ -5,6 +5,7 @@ use uuid::Uuid;
 use validator::ValidationErrors;
 
 pub mod auth_token;
+pub mod data_encryption;
 pub mod integration_connection;
 pub mod notification;
 pub mod oauth2;

@@ -8,7 +8,39 @@ use universal_inbox::{
     integration_connection::provider::IntegrationProviderKind, user::UserId,
 };
 
-use crate::{observability::attr, repository::Repository, universal_inbox::UniversalInboxError};
+use crate::{
+    observability::attr,
+    repository::Repository,
+    universal_inbox::UniversalInboxError,
+    utils::crypto::{aad, data_keyring},
+};
+
+const RAW_TOKEN_RESPONSE_AAD: &str = "oauth_credential.raw_token_response";
+
+fn encrypt_raw_token_response(
+    raw_token_response: &serde_json::Value,
+    integration_connection_id: IntegrationConnectionId,
+) -> Result<Vec<u8>, UniversalInboxError> {
+    data_keyring()?.encrypt_json(
+        raw_token_response,
+        &aad(RAW_TOKEN_RESPONSE_AAD, integration_connection_id.into()),
+    )
+}
+
+/// Decrypt `oauth_credential.raw_token_response_enc`. A credential stored before encryption
+/// and not encrypted yet by `data-encryption encrypt-plaintext` reads as an empty response.
+fn decrypt_raw_token_response(
+    raw_token_response_enc: Option<&[u8]>,
+    integration_connection_id: Uuid,
+) -> Result<serde_json::Value, UniversalInboxError> {
+    match raw_token_response_enc {
+        Some(raw_token_response_enc) => data_keyring()?.decrypt_json(
+            raw_token_response_enc,
+            &aad(RAW_TOKEN_RESPONSE_AAD, integration_connection_id),
+        ),
+        None => Ok(serde_json::json!({})),
+    }
+}
 
 /// A stored OAuth credential with encrypted tokens.
 /// The tokens are stored as encrypted byte arrays and must be decrypted
@@ -98,21 +130,22 @@ impl OAuthCredentialRepository for Repository {
             r#"
                 INSERT INTO oauth_credential
                   (integration_connection_id, encrypted_access_token, encrypted_refresh_token,
-                   access_token_expires_at, raw_token_response, created_at, updated_at)
+                   access_token_expires_at, raw_token_response_enc, created_at, updated_at)
                 VALUES
                   ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (integration_connection_id) DO UPDATE SET
                   encrypted_access_token = EXCLUDED.encrypted_access_token,
                   encrypted_refresh_token = COALESCE(EXCLUDED.encrypted_refresh_token, oauth_credential.encrypted_refresh_token),
                   access_token_expires_at = EXCLUDED.access_token_expires_at,
-                  raw_token_response = EXCLUDED.raw_token_response,
+                  raw_token_response_enc = EXCLUDED.raw_token_response_enc,
+                  raw_token_response = NULL,
                   updated_at = EXCLUDED.updated_at
                 RETURNING
                   integration_connection_id,
                   encrypted_access_token,
                   encrypted_refresh_token,
                   access_token_expires_at,
-                  raw_token_response,
+                  raw_token_response_enc,
                   created_at,
                   updated_at
             "#,
@@ -120,7 +153,7 @@ impl OAuthCredentialRepository for Repository {
             &encrypted_access_token,
             encrypted_refresh_token.as_deref(),
             access_token_expires_at,
-            &raw_token_response,
+            encrypt_raw_token_response(&raw_token_response, integration_connection_id)?,
             now,
             now,
         )
@@ -141,7 +174,10 @@ impl OAuthCredentialRepository for Repository {
             encrypted_access_token: row.encrypted_access_token,
             encrypted_refresh_token: row.encrypted_refresh_token,
             access_token_expires_at: row.access_token_expires_at,
-            raw_token_response: row.raw_token_response,
+            raw_token_response: decrypt_raw_token_response(
+                row.raw_token_response_enc.as_deref(),
+                row.integration_connection_id,
+            )?,
             created_at: row.created_at,
             updated_at: row.updated_at,
         })
@@ -159,7 +195,7 @@ impl OAuthCredentialRepository for Repository {
                   encrypted_access_token,
                   encrypted_refresh_token,
                   access_token_expires_at,
-                  raw_token_response,
+                  raw_token_response_enc,
                   created_at,
                   updated_at
                 FROM oauth_credential
@@ -179,15 +215,21 @@ impl OAuthCredentialRepository for Repository {
             }
         })?;
 
-        Ok(row.map(|row| StoredOAuthCredential {
-            integration_connection_id: IntegrationConnectionId(row.integration_connection_id),
-            encrypted_access_token: row.encrypted_access_token,
-            encrypted_refresh_token: row.encrypted_refresh_token,
-            access_token_expires_at: row.access_token_expires_at,
-            raw_token_response: row.raw_token_response,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-        }))
+        row.map(|row| {
+            Ok(StoredOAuthCredential {
+                integration_connection_id: IntegrationConnectionId(row.integration_connection_id),
+                raw_token_response: decrypt_raw_token_response(
+                    row.raw_token_response_enc.as_deref(),
+                    row.integration_connection_id,
+                )?,
+                encrypted_access_token: row.encrypted_access_token,
+                encrypted_refresh_token: row.encrypted_refresh_token,
+                access_token_expires_at: row.access_token_expires_at,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
+        })
+        .transpose()
     }
 
     #[tracing::instrument(
@@ -207,7 +249,7 @@ impl OAuthCredentialRepository for Repository {
                   encrypted_access_token,
                   encrypted_refresh_token,
                   access_token_expires_at,
-                  raw_token_response,
+                  raw_token_response_enc,
                   created_at,
                   updated_at
                 FROM oauth_credential
@@ -228,15 +270,21 @@ impl OAuthCredentialRepository for Repository {
             }
         })?;
 
-        Ok(row.map(|row| StoredOAuthCredential {
-            integration_connection_id: IntegrationConnectionId(row.integration_connection_id),
-            encrypted_access_token: row.encrypted_access_token,
-            encrypted_refresh_token: row.encrypted_refresh_token,
-            access_token_expires_at: row.access_token_expires_at,
-            raw_token_response: row.raw_token_response,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-        }))
+        row.map(|row| {
+            Ok(StoredOAuthCredential {
+                integration_connection_id: IntegrationConnectionId(row.integration_connection_id),
+                raw_token_response: decrypt_raw_token_response(
+                    row.raw_token_response_enc.as_deref(),
+                    row.integration_connection_id,
+                )?,
+                encrypted_access_token: row.encrypted_access_token,
+                encrypted_refresh_token: row.encrypted_refresh_token,
+                access_token_expires_at: row.access_token_expires_at,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
+        })
+        .transpose()
     }
 
     #[tracing::instrument(
