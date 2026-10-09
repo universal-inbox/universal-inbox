@@ -1,7 +1,10 @@
 //! Tests of the data encryption maintenance commands (`data-encryption status`,
 //! `encrypt-plaintext`, `reencrypt`).
 
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, Mutex},
+};
 
 use email_address::EmailAddress;
 use reqwest::Client;
@@ -36,7 +39,10 @@ use universal_inbox_api::{
     },
     universal_inbox::{
         UniversalInboxError,
-        data_encryption::{DataEncryptionService, LEGACY_TOKEN_KEY_LABEL},
+        data_encryption::{
+            DataEncryptionProgress, DataEncryptionService, DataEncryptionStatus,
+            LEGACY_TOKEN_KEY_LABEL,
+        },
         user::model::{LocalUserAuth, UserAuth},
     },
     utils::crypto::{DataKeyring, decrypt_token},
@@ -121,6 +127,59 @@ fn values_on_key(
         .unwrap_or_default()
 }
 
+/// Progress reported by the data encryption service
+#[derive(Default)]
+struct RecordedProgress {
+    processed: Mutex<BTreeMap<String, u64>>,
+    done: Mutex<BTreeSet<String>>,
+}
+
+impl DataEncryptionProgress for RecordedProgress {
+    fn batch_done(&self, column: &str, processed: u64) {
+        *self
+            .processed
+            .lock()
+            .unwrap()
+            .entry(column.to_string())
+            .or_default() += processed;
+    }
+
+    fn column_done(&self, column: &str) {
+        self.done.lock().unwrap().insert(column.to_string());
+    }
+}
+
+impl RecordedProgress {
+    /// Values processed per column, columns without any processed value omitted
+    fn processed(&self) -> BTreeMap<String, u64> {
+        self.processed
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, count)| **count > 0)
+            .map(|(column, count)| (column.clone(), *count))
+            .collect()
+    }
+}
+
+/// Values per column not encrypted with `active_key`, columns without such values omitted
+fn values_not_on_key(status: &DataEncryptionStatus, active_key: &str) -> BTreeMap<String, u64> {
+    status
+        .columns
+        .iter()
+        .map(|column| {
+            let count: i64 = column
+                .values_per_key
+                .iter()
+                .filter(|(key, _)| *key != active_key)
+                .map(|(_, count)| count)
+                .sum();
+            (column.column.clone(), count as u64)
+        })
+        .filter(|(_, count)| *count > 0)
+        .collect()
+}
+
 #[rstest]
 #[tokio::test]
 async fn test_reencrypt_oauth_tokens_with_rotated_key(
@@ -167,12 +226,25 @@ async fn test_reencrypt_oauth_tokens_with_rotated_key(
         1
     );
     assert!(status.unreadable_values(&current_keyring).is_empty());
+    let status_before = status;
 
     let rotated_keyring = rotated_keyring(&settings);
+    let progress = RecordedProgress::default();
     let status = data_encryption_service(&app.app, rotated_keyring.clone())
-        .reencrypt(1)
+        .reencrypt_with_progress(1, &progress)
         .await
         .unwrap();
+
+    // Every value not on the new key was reported as re-encrypted, every column as done
+    assert_eq!(progress.processed(), values_not_on_key(&status_before, "2"));
+    assert!(progress.processed()["oauth_credential.encrypted_access_token"] >= 1);
+    assert!(
+        status
+            .columns
+            .iter()
+            .filter(|column| !column.column.contains("Google email blind index"))
+            .all(|column| progress.done.lock().unwrap().contains(&column.column))
+    );
 
     assert_eq!(
         values_on_key(&status, "oauth_credential.encrypted_access_token", "2"),
@@ -279,8 +351,31 @@ async fn test_encrypt_plaintext_third_party_item_data(
     let service = data_encryption_service(&app.app, keyring);
     let status = service.status().await.unwrap();
     assert_eq!(plaintext_values(&status, "third_party_item.data_enc"), 1);
+    let plaintext_counts = service.plaintext_counts().await.unwrap();
+    assert!(plaintext_counts.contains(&("third_party_item.data_enc".to_string(), 1)));
 
-    let status = service.encrypt_plaintext(1).await.unwrap();
+    let progress = RecordedProgress::default();
+    let status = service
+        .encrypt_plaintext_with_progress(1, &progress)
+        .await
+        .unwrap();
+
+    // Progress totals are the plaintext counts
+    assert_eq!(
+        progress.processed(),
+        plaintext_counts
+            .iter()
+            .filter(|(_, count)| *count > 0)
+            .map(|(column, count)| (column.clone(), *count as u64))
+            .collect()
+    );
+    assert_eq!(
+        *progress.done.lock().unwrap(),
+        plaintext_counts
+            .iter()
+            .map(|(column, _)| column.clone())
+            .collect()
+    );
 
     assert_eq!(status.plaintext_values(), 0);
     assert_eq!(values_on_key(&status, "third_party_item.data_enc", "1"), 1);

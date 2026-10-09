@@ -154,6 +154,10 @@ pub enum Commands {
 
     /// Maintain the data encrypted at rest (see doc/src/config/data_encryption.md)
     DataEncryption {
+        /// Print plain lines instead of the live progress view and tables, even in a terminal
+        /// (always the case when the output is not a terminal)
+        #[arg(long)]
+        plain: bool,
         #[clap(subcommand)]
         command: DataEncryptionCommands,
     },
@@ -340,6 +344,11 @@ impl Cli {
     }
 
     pub fn log_level(&self, settings: &Settings) -> (String, log::LevelFilter) {
+        if let Commands::DataEncryption { plain, .. } = &self.command
+            && self.quiets_info_logs(data_encryption::OutputMode::detect(*plain))
+        {
+            return (log::LevelFilter::Warn.to_string(), log::LevelFilter::Warn);
+        }
         match self.verbose {
             1 => (log::LevelFilter::Info.to_string(), log::LevelFilter::Info),
             2 => (log::LevelFilter::Debug.to_string(), log::LevelFilter::Debug),
@@ -366,6 +375,14 @@ impl Cli {
                 ),
             },
         }
+    }
+
+    /// Info logs are written to stdout and would tear the live view of the data encryption
+    /// commands: keep them for `-v` and the plain output only
+    fn quiets_info_logs(&self, data_encryption_mode: data_encryption::OutputMode) -> bool {
+        matches!(self.command, Commands::DataEncryption { .. })
+            && self.verbose == 0
+            && data_encryption_mode == data_encryption::OutputMode::Interactive
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -713,11 +730,39 @@ impl Cli {
                 .map(|_| ()),
             },
 
-            Commands::DataEncryption { command } => data_encryption::run(&settings, command).await,
+            Commands::DataEncryption { plain, command } => {
+                data_encryption::run(
+                    &settings,
+                    command,
+                    data_encryption::OutputMode::detect(*plain),
+                )
+                .await
+            }
 
             Commands::Billing { action } => {
                 crate::billing::commands::run(action, billing_service).await
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::{Cli, data_encryption::OutputMode};
+
+    #[test]
+    fn test_data_encryption_quiets_info_logs_only_in_interactive_mode() {
+        let cli = Cli::try_parse_from(["universal-inbox", "data-encryption", "reencrypt"]).unwrap();
+        assert!(cli.quiets_info_logs(OutputMode::Interactive));
+        assert!(!cli.quiets_info_logs(OutputMode::Plain));
+
+        let verbose =
+            Cli::try_parse_from(["universal-inbox", "-v", "data-encryption", "reencrypt"]).unwrap();
+        assert!(!verbose.quiets_info_logs(OutputMode::Interactive));
+
+        let other = Cli::try_parse_from(["universal-inbox", "user", "list"]).unwrap();
+        assert!(!other.quiets_info_logs(OutputMode::Interactive));
     }
 }

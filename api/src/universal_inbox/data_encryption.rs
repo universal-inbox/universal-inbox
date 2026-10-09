@@ -23,6 +23,25 @@ use crate::{
 /// Label of the pre-envelope OAuth token format in [`ColumnStatus::values_per_key`]
 pub const LEGACY_TOKEN_KEY_LABEL: &str = "legacy";
 
+/// Name of the [`ColumnStatus`] of the Google `provider_user_id` of `table`
+pub fn google_provider_user_id_label(table: &str) -> String {
+    format!("{table}.provider_user_id (Google email blind index)")
+}
+
+/// Observer of the progress of `encrypt-plaintext` and `reencrypt`, called with the
+/// [`ColumnStatus::column`] name of the column being processed
+pub trait DataEncryptionProgress: Send + Sync {
+    /// `processed` values of `column` were committed
+    fn batch_done(&self, _column: &str, _processed: u64) {}
+    /// Every value of `column` was processed
+    fn column_done(&self, _column: &str) {}
+}
+
+/// [`DataEncryptionProgress`] ignoring the progress
+pub struct NoProgress;
+
+impl DataEncryptionProgress for NoProgress {}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ColumnStatus {
     pub column: String,
@@ -226,7 +245,7 @@ impl DataEncryptionService {
         }
         for table in GOOGLE_PROVIDER_USER_ID_TABLES {
             status.columns.push(ColumnStatus {
-                column: format!("{table}.provider_user_id (Google email blind index)"),
+                column: google_provider_user_id_label(table),
                 plaintext_values: self
                     .repository
                     .count_plaintext_google_provider_user_ids(&mut transaction, table)
@@ -238,17 +257,55 @@ impl DataEncryptionService {
         Ok(status)
     }
 
+    /// Number of values `encrypt-plaintext` has to process per [`ColumnStatus::column`] name,
+    /// without the per key counts of [`Self::status`] (which decrypts the token columns)
+    pub async fn plaintext_counts(&self) -> Result<Vec<(String, i64)>, UniversalInboxError> {
+        let mut transaction = self.repository.begin().await?;
+        let mut counts = vec![];
+        for column in ENCRYPTED_COLUMNS
+            .iter()
+            .filter(|column| column.plaintext_column.is_some())
+        {
+            counts.push((
+                column.name(),
+                self.repository
+                    .count_plaintext_values(&mut transaction, column)
+                    .await?,
+            ));
+        }
+        for table in GOOGLE_PROVIDER_USER_ID_TABLES {
+            counts.push((
+                google_provider_user_id_label(table),
+                self.repository
+                    .count_plaintext_google_provider_user_ids(&mut transaction, table)
+                    .await?,
+            ));
+        }
+        transaction.rollback().await.ok();
+        Ok(counts)
+    }
+
     /// Encrypt the values written before their column was encrypted, then check every value
     /// can be read with the configured keys. Run before serving (container entrypoint).
     pub async fn encrypt_plaintext(
         &self,
         batch_size: i64,
     ) -> Result<DataEncryptionStatus, UniversalInboxError> {
+        self.encrypt_plaintext_with_progress(batch_size, &NoProgress)
+            .await
+    }
+
+    /// [`Self::encrypt_plaintext`] reporting its progress to `progress`
+    pub async fn encrypt_plaintext_with_progress(
+        &self,
+        batch_size: i64,
+        progress: &dyn DataEncryptionProgress,
+    ) -> Result<DataEncryptionStatus, UniversalInboxError> {
         let mut lock_connection = self.repository.connect().await?;
         self.repository
             .acquire_data_encryption_lock(&mut lock_connection)
             .await?;
-        let result = self.encrypt_plaintext_locked(batch_size).await;
+        let result = self.encrypt_plaintext_locked(batch_size, progress).await;
         self.repository
             .release_data_encryption_lock(&mut lock_connection)
             .await?;
@@ -268,6 +325,7 @@ impl DataEncryptionService {
     async fn encrypt_plaintext_locked(
         &self,
         batch_size: i64,
+        progress: &dyn DataEncryptionProgress,
     ) -> Result<DataEncryptionStatus, UniversalInboxError> {
         for column in ENCRYPTED_COLUMNS
             .iter()
@@ -311,7 +369,9 @@ impl DataEncryptionService {
                     "{}: {encrypted_count} plaintext values encrypted",
                     column.name()
                 );
+                progress.batch_done(&column.name(), values.len() as u64);
             }
+            progress.column_done(&column.name());
         }
 
         for table in GOOGLE_PROVIDER_USER_ID_TABLES {
@@ -341,7 +401,9 @@ impl DataEncryptionService {
                     "{table}: {} Google provider user ids replaced by their blind index",
                     values.len()
                 );
+                progress.batch_done(&google_provider_user_id_label(table), values.len() as u64);
             }
+            progress.column_done(&google_provider_user_id_label(table));
         }
         self.status().await
     }
@@ -352,11 +414,20 @@ impl DataEncryptionService {
         &self,
         batch_size: i64,
     ) -> Result<DataEncryptionStatus, UniversalInboxError> {
+        self.reencrypt_with_progress(batch_size, &NoProgress).await
+    }
+
+    /// [`Self::reencrypt`] reporting its progress to `progress`
+    pub async fn reencrypt_with_progress(
+        &self,
+        batch_size: i64,
+        progress: &dyn DataEncryptionProgress,
+    ) -> Result<DataEncryptionStatus, UniversalInboxError> {
         let mut lock_connection = self.repository.connect().await?;
         self.repository
             .acquire_data_encryption_lock(&mut lock_connection)
             .await?;
-        let result = self.reencrypt_locked(batch_size).await;
+        let result = self.reencrypt_locked(batch_size, progress).await;
         self.repository
             .release_data_encryption_lock(&mut lock_connection)
             .await?;
@@ -366,6 +437,7 @@ impl DataEncryptionService {
     async fn reencrypt_locked(
         &self,
         batch_size: i64,
+        progress: &dyn DataEncryptionProgress,
     ) -> Result<DataEncryptionStatus, UniversalInboxError> {
         let active_key_id = self.keyring.active_key_id();
         for column in ENCRYPTED_COLUMNS {
@@ -387,6 +459,7 @@ impl DataEncryptionService {
                     break;
                 };
                 after = Some(*last_id);
+                let mut batch_count = 0;
                 for (id, value) in &values {
                     if column.format == EncryptedColumnFormat::Token
                         && token_key(value, id.as_bytes(), &self.keyring)
@@ -399,7 +472,7 @@ impl DataEncryptionService {
                     self.repository
                         .store_encrypted_value(&mut transaction, column, *id, &encrypted, None)
                         .await?;
-                    reencrypted_count += 1;
+                    batch_count += 1;
                 }
                 transaction
                     .commit()
@@ -408,11 +481,14 @@ impl DataEncryptionService {
                         source: err,
                         message: format!("Failed to commit re-encrypted {}", column.name()),
                     })?;
+                reencrypted_count += batch_count;
+                progress.batch_done(&column.name(), batch_count);
             }
             info!(
                 "{}: {reencrypted_count} values re-encrypted with key {active_key_id}",
                 column.name()
             );
+            progress.column_done(&column.name());
         }
         self.status().await
     }
