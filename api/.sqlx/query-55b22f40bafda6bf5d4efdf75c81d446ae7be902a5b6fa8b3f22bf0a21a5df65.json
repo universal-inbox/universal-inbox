@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE \"user\"\n                SET email_enc = $2,\n                  email_hash = $4,\n                  email_validated_at = $3,\n                  email_validation_sent_at = NULL,\n                  email_validation_token_hash = NULL,\n                  updated_at = $3\n                WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Timestamp",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "55b22f40bafda6bf5d4efdf75c81d446ae7be902a5b6fa8b3f22bf0a21a5df65"
+}

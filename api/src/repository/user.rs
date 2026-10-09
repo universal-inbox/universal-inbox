@@ -793,7 +793,6 @@ impl UserRepository for Repository {
         query_builder
             .push(" auth_id_token_enc = ")
             .push_bind(encrypt_auth_id_token(auth_id_token, current.id)?)
-            .push(", auth_id_token = NULL")
             .push(r#" FROM "user" "#)
             .push(" WHERE ");
         let mut separated = query_builder.separated(" AND ");
@@ -1031,7 +1030,6 @@ impl UserRepository for Repository {
                 VALUES ($1, $2, $3, now())
                 ON CONFLICT (user_id) DO UPDATE
                 SET new_email_enc = EXCLUDED.new_email_enc,
-                  new_email = NULL,
                   validation_token_hash = EXCLUDED.validation_token_hash,
                   requested_at = EXCLUDED.requested_at
             "#,
@@ -1079,13 +1077,10 @@ impl UserRepository for Repository {
         })?;
 
         row.map(|row| {
-            let new_email_enc = row
-                .new_email_enc
-                .context("Pending email change not encrypted yet")?;
             Ok(PendingEmailChange {
                 new_email: data_keyring()?
                     .decrypt_string(
-                        &new_email_enc,
+                        &row.new_email_enc,
                         &aad(USER_EMAIL_CHANGE_NEW_EMAIL_AAD, user_id.0),
                     )?
                     .parse()
@@ -1131,7 +1126,6 @@ impl UserRepository for Repository {
                 UPDATE "user"
                 SET email_enc = $2,
                   email_hash = $4,
-                  email = NULL,
                   email_validated_at = $3,
                   email_validation_sent_at = NULL,
                   email_validation_token_hash = NULL,
@@ -1670,7 +1664,6 @@ impl UserRepository for Repository {
             separated
                 .push(" email_hash = ")
                 .push_bind_unseparated(user_email_hash(email)?);
-            separated.push(" email = NULL ");
             separated.push(" email_validated_at = NULL ");
             separated.push(" email_validation_sent_at = NULL ");
         }

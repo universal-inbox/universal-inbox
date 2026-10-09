@@ -66,8 +66,8 @@ fi
 
 case "${1:-}" in
 serve | start-workers)
-    # Encrypt the values stored before their column was encrypted and check every
-    # encrypted value can be read with the configured keys, before serving anything.
+    # Replace the Google account emails stored before encryption by their blind index and
+    # check every encrypted value can be read with the configured keys, before serving anything.
     # Concurrent containers wait for each other (advisory lock).
     # See doc/src/config/data_encryption.md
     echo "Encrypting data at rest"
