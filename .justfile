@@ -28,6 +28,13 @@ init-db:
   #!/usr/bin/env bash
   set -euo pipefail
 
+  # initdb refuses to run as root. Root only happens on CI agents (Buildkite hosted
+  # agents), which run Postgres in a container instead of this local cluster.
+  if [ "$(id -u)" = "0" ]; then
+    echo "Skipping init-db: initdb cannot run as root"
+    exit 0
+  fi
+
   data_dir=.devbox/virtenv/postgresql_17/data
 
   [ -f "$data_dir/postgresql.conf" ] \
