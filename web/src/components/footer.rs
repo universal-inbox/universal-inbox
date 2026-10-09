@@ -21,10 +21,19 @@ use crate::{
     },
     config::APP_CONFIG,
     route::Route,
-    services::integration_connection_service::INTEGRATION_CONNECTIONS,
+    services::{
+        integration_connection_service::INTEGRATION_CONNECTIONS,
+        notification_service::{CURRENT_NOTIFICATION_SECTION, NotificationSection},
+    },
 };
 
 pub fn Footer() -> Element {
+    // In the Deleted section `d` does nothing and `r` restores: advertise the latter.
+    let is_viewing_deleted_notifications = matches!(
+        use_route::<Route>(),
+        Route::DeletedNotificationsPage {} | Route::NotificationPage { .. }
+    ) && CURRENT_NOTIFICATION_SECTION()
+        == NotificationSection::Deleted;
     let (message, message_class) = use_memo(move || {
         let Some(integration_connections) = INTEGRATION_CONNECTIONS() else {
             return (None, "");
@@ -119,7 +128,11 @@ pub fn Footer() -> Element {
 
             div { class: "flex items-center gap-2.5 max-md:hidden",
                 KeyboardHint { keys: vec!["↑↓".to_string()], label: "navigate".to_string() }
-                KeyboardHint { keys: vec!["d".to_string()], label: "delete".to_string() }
+                if is_viewing_deleted_notifications {
+                    KeyboardHint { keys: vec!["r".to_string()], label: "restore".to_string() }
+                } else {
+                    KeyboardHint { keys: vec!["d".to_string()], label: "delete".to_string() }
+                }
                 KeyboardHint { keys: vec!["s".to_string()], label: "snooze".to_string() }
                 KeyboardHint { keys: vec!["t".to_string()], label: "task".to_string() }
                 KeyboardHint { keys: vec!["?".to_string()], label: "help".to_string() }
