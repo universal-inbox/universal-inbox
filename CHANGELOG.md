@@ -35,6 +35,7 @@
 - Serve the web application precompressed (brotli / gzip), with long-lived caching of content-hashed assets
 - Make the Redis per-command response timeout configurable (`redis.response_timeout_in_milliseconds`)
 - Make email (SMTP) settings optional: without an `application.email` section the server starts with emails disabled (notification emails are skipped, password reset is unavailable, local sign-ups and email changes skip verification); `smtp_port` defaults to 465
+- Request narrower Google OAuth scopes: Google Calendar uses `calendar.events` instead of `calendar`, and Google Drive drops the redundant `drive.metadata.readonly`. Existing Google Calendar connections must be reconnected
 
 ### Security
 

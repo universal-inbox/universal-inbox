@@ -303,7 +303,7 @@ api_max_retry_duration_worker_seconds = 600
 [integrations.google_calendar]
 name = "Google Calendar"
 kind = "GoogleCalendar"
-required_oauth_scopes = ["https://www.googleapis.com/auth/calendar"]
+required_oauth_scopes = ["https://www.googleapis.com/auth/calendar.events"]
 # OAuth client credentials from https://console.cloud.google.com/apis/credentials
 oauth_client_id = ""
 oauth_client_secret = ""
@@ -315,7 +315,7 @@ api_max_retry_duration_worker_seconds = 600
 name = "Google Drive"
 kind = "GoogleDrive"
 page_size = 100
-required_oauth_scopes = ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/drive.metadata.readonly"]
+required_oauth_scopes = ["https://www.googleapis.com/auth/drive.readonly"]
 # OAuth client credentials from https://console.cloud.google.com/apis/credentials
 oauth_client_id = ""
 oauth_client_secret = ""
