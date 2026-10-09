@@ -28,7 +28,10 @@ use universal_inbox::{
 use universal_inbox_api::{
     configuration::Settings,
     integrations::{
-        github::graphql::{discussion_query, pull_request_query},
+        github::graphql::{
+            discussion_query, pull_request_comments_query, pull_request_query,
+            pull_request_review_thread_comments_query, pull_request_review_threads_query,
+        },
         todoist::TodoistSyncResponse,
     },
     repository::integration_connection::TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE,
@@ -49,10 +52,16 @@ use crate::helpers::{
             assert_sync_notifications, create_notification_from_github_notification,
             github_discussion_123_comments_response, github_discussion_123_response,
             github_discussion_comment_1_replies_page_2_response, github_notification,
+            github_pull_request_123_comments_page_2_response,
             github_pull_request_123_no_commits_response, github_pull_request_123_response,
+            github_pull_request_123_review_threads_page_2_response,
+            github_pull_request_123_with_comments_response,
+            github_pull_request_review_thread_1_comments_page_2_response,
             mock_github_discussion_comment_replies_query, mock_github_discussion_comments_query,
             mock_github_discussion_query, mock_github_notifications_service,
-            mock_github_pull_request_query, sync_github_notifications,
+            mock_github_pull_request_comments_query, mock_github_pull_request_query,
+            mock_github_pull_request_review_thread_comments_query,
+            mock_github_pull_request_review_threads_query, sync_github_notifications,
         },
         list_notifications, sync_notifications, sync_notifications_response, update_notification,
     },
@@ -987,6 +996,154 @@ async fn test_sync_all_notifications_asynchronously_in_error(
         integration_connection.failure_message,
         Some(TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE.to_string())
     );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_pull_request_notification_with_comments_and_review_threads(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    mut github_notification: Box<GithubNotification>,
+    github_pull_request_123_with_comments_response: Response<pull_request_query::ResponseData>,
+    github_pull_request_123_comments_page_2_response: Response<
+        pull_request_comments_query::ResponseData,
+    >,
+    github_pull_request_123_review_threads_page_2_response: Response<
+        pull_request_review_threads_query::ResponseData,
+    >,
+    github_pull_request_review_thread_1_comments_page_2_response: Response<
+        pull_request_review_thread_comments_query::ResponseData,
+    >,
+    github_oauth_credential: OAuthCredentialFixture,
+) {
+    github_notification.subject.url = Some(
+        "https://api.github.com/repos/octokit/octokit.rb/pulls/123"
+            .parse()
+            .unwrap(),
+    );
+    github_notification.subject.r#type = "PullRequest".to_string();
+
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings,
+        github_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    let github_notifications_response = vec![*github_notification];
+    let _github_notifications_mock = mock_github_notifications_service(
+        &app.app.github_mock_server,
+        "1",
+        &github_notifications_response,
+    )
+    .await;
+    mock_github_pull_request_query(
+        &app.app.github_mock_server,
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
+        &github_pull_request_123_with_comments_response,
+    )
+    .await;
+    mock_github_pull_request_comments_query(
+        &app.app.github_mock_server,
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
+        Some("comments-cursor-1".to_string()),
+        &github_pull_request_123_comments_page_2_response,
+    )
+    .await;
+    mock_github_pull_request_review_threads_query(
+        &app.app.github_mock_server,
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
+        Some("threads-cursor-1".to_string()),
+        &github_pull_request_123_review_threads_page_2_response,
+    )
+    .await;
+    mock_github_pull_request_review_thread_comments_query(
+        &app.app.github_mock_server,
+        "PRRT_1".to_string(),
+        Some("thread-comments-cursor-1".to_string()),
+        &github_pull_request_review_thread_1_comments_page_2_response,
+    )
+    .await;
+
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::Github),
+        false,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+    let ThirdPartyItemData::GithubNotification(github_notification) =
+        &notifications[0].source_item.data
+    else {
+        unreachable!("Expected a Github notification");
+    };
+    let Some(GithubNotificationItem::GithubPullRequest(pull_request)) = &github_notification.item
+    else {
+        unreachable!("Expected a GithubPullRequest notification");
+    };
+
+    // All comment pages are fetched, minimized comments dropped
+    let comments: Vec<(Option<&str>, &str)> = pull_request
+        .comments
+        .iter()
+        .map(|comment| (comment.id.as_deref(), comment.body.as_str()))
+        .collect();
+    assert_eq!(
+        comments,
+        vec![
+            (Some("IC_1"), "<p>first comment</p>"),
+            (Some("IC_3"), "<p>a late comment</p>")
+        ]
+    );
+
+    assert_eq!(pull_request.reviews.len(), 1);
+    assert_eq!(pull_request.reviews[0].id.as_deref(), Some("PRR_1"));
+    assert_eq!(pull_request.reviews[0].body, "<p>Looks good overall</p>");
+    assert_eq!(
+        pull_request.reviews[0].submitted_at,
+        Some(Utc.with_ymd_and_hms(2014, 11, 7, 22, 3, 0).unwrap())
+    );
+
+    // All review thread pages and thread comment pages are fetched
+    let threads: Vec<(&str, Vec<&str>)> = pull_request
+        .review_threads
+        .iter()
+        .map(|thread| {
+            (
+                thread.id.as_str(),
+                thread.comments.iter().map(|c| c.id.as_str()).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        threads,
+        vec![("PRRT_1", vec!["RC_1", "RC_2"]), ("PRRT_2", vec!["RC_3"])]
+    );
+    let first_thread = &pull_request.review_threads[0];
+    assert_eq!(first_thread.path, "lib/octokit/authenticator.rb");
+    assert_eq!(
+        (first_thread.start_line, first_thread.line),
+        (Some(13), Some(15))
+    );
+    assert!(first_thread.diff_hunk.starts_with("@@ -10,6 +10,8 @@"));
+    assert!(!first_thread.is_resolved);
+    // An outdated thread falls back to its original lines
+    let second_thread = &pull_request.review_threads[1];
+    assert!(second_thread.is_resolved && second_thread.is_outdated);
+    assert_eq!(second_thread.line, Some(20));
 }
 
 #[rstest]

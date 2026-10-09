@@ -14,6 +14,8 @@ use crate::components::{
 
 pub mod discussion;
 pub mod pull_request;
+mod pull_request_comments;
+mod read_state;
 
 #[component]
 pub fn GithubNotificationDefaultPreview(

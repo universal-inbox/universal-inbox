@@ -20,7 +20,11 @@
           ]
         },
         "comments": {
-          "totalCount": 1
+          "totalCount": 1,
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          }
         },
         "commits": {
           "nodes": [
@@ -95,7 +99,14 @@
         "mergedBy": null,
         "deletions": 12,
         "additions": 87,
-        "changedFiles": 4
+        "changedFiles": 4,
+        "reviewThreads": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": []
+        }
       }
     }
   }

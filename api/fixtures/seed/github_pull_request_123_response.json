@@ -20,7 +20,52 @@
           ]
         },
         "comments": {
-          "totalCount": 3
+          "totalCount": 3,
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": [
+            {
+              "id": "IC_seed_1",
+              "bodyHTML": "<p>Nice! Does this handle the empty state when every section is collapsed?</p>",
+              "createdAt": "{{ago_7h}}",
+              "url": "https://github.com/universal-inbox/universal-inbox/pull/287#issuecomment-1",
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/14256",
+                "login": "danielwong",
+                "name": "Daniel Wong"
+              }
+            },
+            {
+              "id": "IC_seed_2",
+              "bodyHTML": "<p>Yes, the inbox-zero illustration still shows. I added a test for it.</p>",
+              "createdAt": "{{ago_6h}}",
+              "url": "https://github.com/universal-inbox/universal-inbox/pull/287#issuecomment-2",
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/9821",
+                "login": "sara-park",
+                "name": "Sara Park"
+              }
+            },
+            {
+              "id": "IC_seed_3",
+              "bodyHTML": "<p>Will fix the focus handling and push in a few minutes.</p>",
+              "createdAt": "{{ago_30m}}",
+              "url": "https://github.com/universal-inbox/universal-inbox/pull/287#issuecomment-3",
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/9821",
+                "login": "sara-park",
+                "name": "Sara Park"
+              }
+            }
+          ]
         },
         "commits": {
           "nodes": [
@@ -70,7 +115,21 @@
         },
         "reviewDecision": "REVIEW_REQUIRED",
         "reviews": {
-          "nodes": []
+          "nodes": [
+            {
+              "id": "PRR_seed_1",
+              "url": "https://github.com/universal-inbox/universal-inbox/pull/287#pullrequestreview-1",
+              "submittedAt": "{{ago_1h}}",
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/14256",
+                "login": "danielwong",
+                "name": "Daniel Wong"
+              },
+              "bodyHTML": "<p>A couple of things before merging: the focus is lost when a section collapses, and the observer should be cleaned up when the group unmounts.</p>",
+              "state": "CHANGES_REQUESTED"
+            }
+          ]
         },
         "reviewRequests": {
           "nodes": [
@@ -95,7 +154,139 @@
         "mergedBy": null,
         "deletions": 47,
         "additions": 312,
-        "changedFiles": 8
+        "changedFiles": 8,
+        "reviewThreads": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": [
+            {
+              "id": "PRRT_seed_1",
+              "path": "web/src/components/notification_group.rs",
+              "line": 42,
+              "originalLine": 42,
+              "startLine": 40,
+              "originalStartLine": 40,
+              "isResolved": false,
+              "isOutdated": false,
+              "comments": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": [
+                  {
+                    "id": "RC_seed_1",
+                    "bodyHTML": "<p>Could we debounce the observer callback? It fires on every scroll frame.</p>",
+                    "createdAt": "{{ago_5h}}",
+                    "url": "https://github.com/universal-inbox/universal-inbox/pull/287#discussion_r1",
+                    "diffHunk": "@@ -30,12 +30,24 @@ pub fn NotificationGroup(\n     let mut collapsed = use_signal(|| load_collapsed_state(&source));\n     let header_ref = use_signal(|| None::<web_sys::Element>);\n \n-    use_effect(move || {\n-        observe_header(header_ref());\n-    });\n+    use_effect(move || {\n+        let Some(header) = header_ref() else {\n+            return;\n+        };\n+        let observer = IntersectionObserver::new(move |entries| {\n+            fade_divider(&entries);\n+        });\n+        observer.observe(&header);\n+    });",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/14256",
+                      "login": "danielwong",
+                      "name": "Daniel Wong"
+                    }
+                  },
+                  {
+                    "id": "RC_seed_2",
+                    "bodyHTML": "<p>Good call, done in <code>a1b2c3d</code>.</p>",
+                    "createdAt": "{{ago_4h}}",
+                    "url": "https://github.com/universal-inbox/universal-inbox/pull/287#discussion_r2",
+                    "diffHunk": "@@ -30,12 +30,24 @@ pub fn NotificationGroup(\n     let mut collapsed = use_signal(|| load_collapsed_state(&source));\n     let header_ref = use_signal(|| None::<web_sys::Element>);\n \n-    use_effect(move || {\n-        observe_header(header_ref());\n-    });\n+    use_effect(move || {\n+        let Some(header) = header_ref() else {\n+            return;\n+        };\n+        let observer = IntersectionObserver::new(move |entries| {\n+            fade_divider(&entries);\n+        });\n+        observer.observe(&header);\n+    });",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/9821",
+                      "login": "sara-park",
+                      "name": "Sara Park"
+                    }
+                  },
+                  {
+                    "id": "RC_seed_3",
+                    "bodyHTML": "<p>Thanks, looks good now. We should also disconnect it on unmount.</p>",
+                    "createdAt": "{{ago_2h}}",
+                    "url": "https://github.com/universal-inbox/universal-inbox/pull/287#discussion_r3",
+                    "diffHunk": "@@ -30,12 +30,24 @@ pub fn NotificationGroup(\n     let mut collapsed = use_signal(|| load_collapsed_state(&source));\n     let header_ref = use_signal(|| None::<web_sys::Element>);\n \n-    use_effect(move || {\n-        observe_header(header_ref());\n-    });\n+    use_effect(move || {\n+        let Some(header) = header_ref() else {\n+            return;\n+        };\n+        let observer = IntersectionObserver::new(move |entries| {\n+            fade_divider(&entries);\n+        });\n+        observer.observe(&header);\n+    });",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/14256",
+                      "login": "danielwong",
+                      "name": "Daniel Wong"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_seed_2",
+              "path": "web/css/universal-inbox.css",
+              "line": null,
+              "originalLine": 118,
+              "startLine": null,
+              "originalStartLine": null,
+              "isResolved": true,
+              "isOutdated": true,
+              "comments": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": [
+                  {
+                    "id": "RC_seed_4",
+                    "bodyHTML": "<p>Please use the <code>bg-ui-surface</code> token instead of a hardcoded color.</p>",
+                    "createdAt": "{{ago_7h}}",
+                    "url": "https://github.com/universal-inbox/universal-inbox/pull/287#discussion_r4",
+                    "diffHunk": "@@ -112,6 +112,10 @@\n .notification-group-header {\n   position: sticky;\n   top: 0;\n+  z-index: 10;\n+  background: white;\n+  border-bottom: 1px solid #e5e7eb;\n+  transition: opacity 120ms;",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/14256",
+                      "login": "danielwong",
+                      "name": "Daniel Wong"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_seed_3",
+              "path": "web/src/components/notification_group.rs",
+              "line": 92,
+              "originalLine": 92,
+              "startLine": null,
+              "originalStartLine": null,
+              "isResolved": false,
+              "isOutdated": false,
+              "comments": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": [
+                  {
+                    "id": "RC_seed_5",
+                    "bodyHTML": "<p>Focus is lost here when the section collapses: keyboard users end up at the top of the page.</p>",
+                    "createdAt": "{{ago_1h}}",
+                    "url": "https://github.com/universal-inbox/universal-inbox/pull/287#discussion_r5",
+                    "diffHunk": "@@ -80,9 +88,14 @@ pub fn NotificationGroup(\n             button {\n                 class: \"notification-group-toggle\",\n-                onclick: move |_| collapsed.toggle(),\n+                onclick: move |_| {\n+                    collapsed.toggle();\n+                    save_collapsed_state(&source, collapsed());\n+                },",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/14256",
+                      "login": "danielwong",
+                      "name": "Daniel Wong"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
       }
     }
   }

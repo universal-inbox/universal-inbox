@@ -22,7 +22,8 @@ use universal_inbox::{
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     third_party::{
         integrations::github::{
-            GithubDiscussion, GithubNotification, GithubNotificationItem, GithubUrl,
+            GithubDiscussion, GithubNotification, GithubNotificationItem, GithubPullRequest,
+            GithubUrl,
         },
         item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
     },
@@ -34,10 +35,16 @@ use crate::{
     integrations::{
         github::graphql::{
             DiscussionCommentRepliesQuery, DiscussionCommentsQuery, DiscussionQuery,
-            PullRequestQuery,
+            PullRequestCommentsQuery, PullRequestQuery, PullRequestReviewThreadCommentsQuery,
+            PullRequestReviewThreadsQuery,
             discussion::{DiscussionCommentsPage, DiscussionRepliesPage},
             discussion_comment_replies_query, discussion_comments_query, discussion_query,
-            pull_request_query,
+            pull_request::{
+                PullRequestCommentsPage, PullRequestFirstPage, PullRequestReviewThreadCommentsPage,
+                PullRequestReviewThreadsPage, ReviewThreadWithCursor,
+            },
+            pull_request_comments_query, pull_request_query,
+            pull_request_review_thread_comments_query, pull_request_review_threads_query,
         },
         notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
@@ -71,6 +78,9 @@ static GITHUB_GRAPHQL_API_NAME: &str = "Github";
 /// Upper bound on GraphQL requests to fetch one discussion's comments and
 /// replies (100 items per page), so a misbehaving API cannot loop forever.
 const MAX_DISCUSSION_COMMENT_PAGES: usize = 100;
+/// Upper bound on the extra GraphQL requests to fetch one pull request's
+/// comments and review threads beyond the first page.
+const MAX_PULL_REQUEST_COMMENT_PAGES: usize = 100;
 
 impl GithubService {
     pub fn new(
@@ -339,6 +349,201 @@ impl GithubService {
             .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
     }
 
+    /// Fetch a pull request with all its comments and review threads,
+    /// following pagination. A pull request whose comments fit in the first
+    /// page needs a single request.
+    pub async fn fetch_pull_request(
+        &self,
+        owner: String,
+        repository: String,
+        pr_number: i64,
+        access_token: &AccessToken,
+    ) -> Result<GithubPullRequest, UniversalInboxError> {
+        let PullRequestFirstPage {
+            mut pull_request,
+            comments_cursor,
+            review_threads_cursor,
+            review_thread_comments_cursors,
+        } = self
+            .query_pull_request(owner.clone(), repository.clone(), pr_number, access_token)
+            .await?
+            .try_into()?;
+        let mut pages_left = MAX_PULL_REQUEST_COMMENT_PAGES;
+        let mut truncated = false;
+
+        let mut cursor = comments_cursor;
+        while let Some(after) = cursor.take() {
+            if pages_left == 0 {
+                truncated = true;
+                break;
+            }
+            pages_left -= 1;
+            let page: PullRequestCommentsPage = self
+                .query_pull_request_comments(
+                    owner.clone(),
+                    repository.clone(),
+                    pr_number,
+                    after.clone(),
+                    access_token,
+                )
+                .await?
+                .try_into()?;
+            pull_request.comments.extend(page.comments);
+            // A cursor that does not advance would loop forever
+            cursor = page.next_cursor.filter(|next_cursor| *next_cursor != after);
+        }
+
+        let mut threads: Vec<ReviewThreadWithCursor> =
+            std::mem::take(&mut pull_request.review_threads)
+                .into_iter()
+                .zip(review_thread_comments_cursors)
+                .map(|(thread, comments_cursor)| ReviewThreadWithCursor {
+                    thread,
+                    comments_cursor,
+                })
+                .collect();
+        let mut cursor = review_threads_cursor;
+        while let Some(after) = cursor.take() {
+            if pages_left == 0 {
+                truncated = true;
+                break;
+            }
+            pages_left -= 1;
+            let page: PullRequestReviewThreadsPage = self
+                .query_pull_request_review_threads(
+                    owner.clone(),
+                    repository.clone(),
+                    pr_number,
+                    after.clone(),
+                    access_token,
+                )
+                .await?
+                .try_into()?;
+            threads.extend(page.threads);
+            cursor = page.next_cursor.filter(|next_cursor| *next_cursor != after);
+        }
+
+        for ReviewThreadWithCursor {
+            mut thread,
+            comments_cursor,
+        } in threads
+        {
+            let mut cursor = comments_cursor;
+            while let Some(after) = cursor.take() {
+                if pages_left == 0 {
+                    truncated = true;
+                    break;
+                }
+                pages_left -= 1;
+                let page: PullRequestReviewThreadCommentsPage = self
+                    .query_pull_request_review_thread_comments(
+                        thread.id.clone(),
+                        after.clone(),
+                        access_token,
+                    )
+                    .await?
+                    .try_into()?;
+                thread.comments.extend(page.comments);
+                cursor = page.next_cursor.filter(|next_cursor| *next_cursor != after);
+            }
+            pull_request.review_threads.push(thread);
+        }
+
+        if truncated {
+            tracing::warn!(
+                "Stopped fetching comments of Github pull request {owner}/{repository}#{pr_number} after {MAX_PULL_REQUEST_COMMENT_PAGES} pages"
+            );
+        }
+        Ok(pull_request)
+    }
+
+    async fn query_pull_request_comments(
+        &self,
+        owner: String,
+        repository: String,
+        pr_number: i64,
+        after: String,
+        access_token: &AccessToken,
+    ) -> Result<pull_request_comments_query::ResponseData, UniversalInboxError> {
+        let request_body =
+            PullRequestCommentsQuery::build_query(pull_request_comments_query::Variables {
+                owner,
+                repository,
+                pr_number,
+                after: Some(after),
+            });
+
+        let response: graphql_client::Response<pull_request_comments_query::ResponseData> = self
+            .build_github_graphql_client(access_token)?
+            .post(&self.github_graphql_url, Some(&request_body))
+            .await
+            .context("Cannot fetch pull request comments from Github graphql API")?;
+
+        assert_no_error_in_graphql_response(&response, GITHUB_GRAPHQL_API_NAME)?;
+
+        Ok(response
+            .data
+            .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
+    }
+
+    async fn query_pull_request_review_threads(
+        &self,
+        owner: String,
+        repository: String,
+        pr_number: i64,
+        after: String,
+        access_token: &AccessToken,
+    ) -> Result<pull_request_review_threads_query::ResponseData, UniversalInboxError> {
+        let request_body = PullRequestReviewThreadsQuery::build_query(
+            pull_request_review_threads_query::Variables {
+                owner,
+                repository,
+                pr_number,
+                after: Some(after),
+            },
+        );
+
+        let response: graphql_client::Response<pull_request_review_threads_query::ResponseData> =
+            self.build_github_graphql_client(access_token)?
+                .post(&self.github_graphql_url, Some(&request_body))
+                .await
+                .context("Cannot fetch pull request review threads from Github graphql API")?;
+
+        assert_no_error_in_graphql_response(&response, GITHUB_GRAPHQL_API_NAME)?;
+
+        Ok(response
+            .data
+            .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
+    }
+
+    async fn query_pull_request_review_thread_comments(
+        &self,
+        thread_id: String,
+        after: String,
+        access_token: &AccessToken,
+    ) -> Result<pull_request_review_thread_comments_query::ResponseData, UniversalInboxError> {
+        let request_body = PullRequestReviewThreadCommentsQuery::build_query(
+            pull_request_review_thread_comments_query::Variables {
+                thread_id,
+                after: Some(after),
+            },
+        );
+
+        let response: graphql_client::Response<
+            pull_request_review_thread_comments_query::ResponseData,
+        > = self
+            .build_github_graphql_client(access_token)?
+            .post(&self.github_graphql_url, Some(&request_body))
+            .await
+            .context("Cannot fetch pull request review thread comments from Github graphql API")?;
+
+        assert_no_error_in_graphql_response(&response, GITHUB_GRAPHQL_API_NAME)?;
+
+        Ok(response
+            .data
+            .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
+    }
+
     pub async fn query_discussion(
         &self,
         owner: String,
@@ -520,9 +725,8 @@ impl GithubService {
                         repository,
                         number,
                     }) => Some(GithubNotificationItem::GithubPullRequest(
-                        self.query_pull_request(owner, repository, number, &access_token)
-                            .await?
-                            .try_into()?,
+                        self.fetch_pull_request(owner, repository, number, &access_token)
+                            .await?,
                     )),
                     Ok(GithubUrl::Discussion {
                         owner,
