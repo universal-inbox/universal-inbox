@@ -99,6 +99,7 @@ steps:
     <<: *devbox-step
     env:
       CI_SERVICES: "1"
+      CI_BROWSER_DEPS: "1"
       CI_JUNIT: "target/nextest/ci/junit.xml"
       RUST_BACKTRACE: "full"
       # Nix's ldd can't see system libs installed by `install-deps`, causing
@@ -117,6 +118,7 @@ steps:
     <<: *devbox-step
     env:
       CI_SERVICES: "1"
+      CI_BROWSER_DEPS: "1"
       CI_JUNIT: "target/nextest/ci-browser/junit.xml"
       RUST_BACKTRACE: "full"
       # See "Test API with coverage".

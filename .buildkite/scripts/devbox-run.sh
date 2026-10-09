@@ -7,6 +7,7 @@
 #
 # Environment:
 #   CI_SERVICES=1      start Postgres and Redis containers first (API/browser tests)
+#   CI_BROWSER_DEPS=1  install the system libraries Playwright's Chromium needs
 #   CI_JUNIT=<path>    on exit, copy this nextest JUnit report to
 #                      junit-<step key>.xml so each step uploads a distinct artifact
 set -euo pipefail
@@ -47,6 +48,13 @@ fi
 
 echo "--- :devbox: Installing devbox packages"
 devbox install
+
+if [ "${CI_BROWSER_DEPS:-}" = "1" ]; then
+  echo "--- :chromium: Installing Chromium system libraries"
+  # GitHub runners ship these; the hosted agent image does not (libnspr4, libnss3, ...).
+  # Same Playwright version as `just api install-tools`.
+  devbox run -- npx --yes playwright@1.63.0 install-deps chromium
+fi
 
 echo "+++ :rust: $*"
 devbox run -- "$@"
