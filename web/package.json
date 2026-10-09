@@ -1,11 +1,11 @@
 {
   "devDependencies": {
-    "@iconify-json/logos": "^1.2.14",
+    "@iconify-json/logos": "^1.2.15",
     "@iconify-json/mdi": "^1.2.3",
-    "@iconify-json/tabler": "^1.2.40",
+    "@iconify-json/tabler": "^1.2.41",
     "@iconify/tailwind4": "^1.2.3",
-    "@rspack/cli": "^2.2.7",
-    "@rspack/core": "^2.2.7",
+    "@rspack/cli": "^2.2.8",
+    "@rspack/core": "^2.2.8",
     "@tailwindcss/typography": "^0.5.20",
     "flatpickr": "^4.6.13",
     "flyonui": "^2.4.1",
@@ -14,7 +14,7 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
-    "@iconify-json/lucide": "^1.2.136",
+    "@iconify-json/lucide": "^1.2.140",
     "crisp-sdk-web": "^1.2.1"
   }
 }
