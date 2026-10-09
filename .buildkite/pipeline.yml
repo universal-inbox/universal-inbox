@@ -6,6 +6,10 @@
 env:
   RUST_MIN_STACK: "104857600"
   CARGO_TERM_COLOR: "always"
+  # playwright-rs downloads its driver into OUT_DIR, inside target/ by default. A target
+  # dir restored from the cache volume can lack it (build script output kept, driver not),
+  # so browser tests fail with ServerNotFound. Keep the driver in the cached ~/.cache instead.
+  PLAYWRIGHT_DRIVER_CACHE_DIR: "/root/.cache/playwright-driver"
 
 # Shared by every step: hosted Linux agent plus a cache volume holding the Nix store,
 # the Rust toolchain, cargo registry and build artifacts (replaces devbox's
