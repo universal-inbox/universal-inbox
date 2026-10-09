@@ -15,7 +15,10 @@ use universal_inbox::{
 use crate::{
     components::{
         TagList, UserWithAvatar,
-        integrations::github::{GithubActorDisplay, get_github_actor_name_and_url},
+        integrations::github::{
+            GithubActorDisplay, get_github_actor_name_and_url,
+            preview::read_state::{Segment, is_read, read_prefix_len, segments},
+        },
         preview_card_header::PreviewCardHeader,
         thread::{
             ExpandDivider, LATEST_READ_ANCHOR_ID, NewMessagesDivider, Thread, ThreadChildren,
@@ -31,13 +34,7 @@ use crate::{
 
 const EXPAND_ICON: &str = "icon-[lucide--unfold-vertical]";
 
-/// Comments as displayed: runs of 2+ fully read comments collapse behind a
-/// single "Show N read comments" control.
-#[derive(Clone, PartialEq, Debug)]
-enum CommentSegment {
-    Comment(Box<GithubDiscussionThreadComment>),
-    ReadComments(Vec<GithubDiscussionThreadComment>),
-}
+type CommentSegment = Segment<GithubDiscussionThreadComment>;
 
 #[component]
 pub fn GithubDiscussionPreview(
@@ -463,20 +460,12 @@ fn comment_author_name(comment: &GithubDiscussionComment) -> String {
         .unwrap_or_else(|| "Unknown".to_string())
 }
 
-fn is_read(created_at: DateTime<Utc>, last_read_at: Option<DateTime<Utc>>) -> bool {
-    last_read_at.is_some_and(|last_read_at| created_at <= last_read_at)
-}
-
 /// Number of leading read replies (replies are oldest first).
 fn read_reply_count(
     thread: &GithubDiscussionThreadComment,
     last_read_at: Option<DateTime<Utc>>,
 ) -> usize {
-    thread
-        .replies
-        .iter()
-        .position(|reply| !is_read(reply.created_at, last_read_at))
-        .unwrap_or(thread.replies.len())
+    read_prefix_len(&thread.replies, |reply| reply.created_at, last_read_at)
 }
 
 fn has_unread(thread: &GithubDiscussionThreadComment, last_read_at: Option<DateTime<Utc>>) -> bool {
@@ -488,26 +477,9 @@ fn comment_segments(
     discussion: &GithubDiscussion,
     last_read_at: Option<DateTime<Utc>>,
 ) -> Vec<CommentSegment> {
-    let mut segments = Vec::new();
-    let mut read_run: Vec<GithubDiscussionThreadComment> = Vec::new();
-    let flush = |run: &mut Vec<GithubDiscussionThreadComment>,
-                 segments: &mut Vec<CommentSegment>| {
-        match run.len() {
-            0 => {}
-            1 => segments.push(CommentSegment::Comment(Box::new(run.remove(0)))),
-            _ => segments.push(CommentSegment::ReadComments(std::mem::take(run))),
-        }
-    };
-    for thread in &discussion.comments {
-        if has_unread(thread, last_read_at) {
-            flush(&mut read_run, &mut segments);
-            segments.push(CommentSegment::Comment(Box::new(thread.clone())));
-        } else {
-            read_run.push(thread.clone());
-        }
-    }
-    flush(&mut read_run, &mut segments);
-    segments
+    segments(&discussion.comments, |thread| {
+        has_unread(thread, last_read_at)
+    })
 }
 
 /// The comment the preview scrolls to when opened: the first one with unread

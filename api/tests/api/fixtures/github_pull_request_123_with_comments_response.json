@@ -1,0 +1,179 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "id": "PR_abcdef",
+        "number": 123,
+        "url": "https://github.com/octokit/octokit.rb/pull/123",
+        "titleHTML": "test change",
+        "bodyHTML": "<p dir=\"auto\">This is a test change</p>",
+        "labels": {
+          "nodes": []
+        },
+        "comments": {
+          "totalCount": 3,
+          "pageInfo": {
+            "hasNextPage": true,
+            "endCursor": "comments-cursor-1"
+          },
+          "nodes": [
+            {
+              "id": "IC_1",
+              "bodyHTML": "<p>first comment</p>",
+              "createdAt": "2014-11-07T22:01:45Z",
+              "url": "https://github.com/octokit/octokit.rb/pull/123#issuecomment-1",
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/91335?v=4",
+                "login": "octocat",
+                "name": "Octocat"
+              }
+            },
+            {
+              "id": "IC_2",
+              "bodyHTML": "<p>spam</p>",
+              "createdAt": "2014-11-07T22:02:00Z",
+              "url": "https://github.com/octokit/octokit.rb/pull/123#issuecomment-2",
+              "isMinimized": true,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/91335?v=4",
+                "login": "octocat",
+                "name": "Octocat"
+              }
+            }
+          ]
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "oid": "1234567890",
+                "checkSuites": {
+                  "nodes": [
+                    {
+                      "conclusion": null,
+                      "status": "QUEUED",
+                      "checkRuns": {
+                        "nodes": []
+                      },
+                      "workflowRun": null,
+                      "app": {
+                        "name": "Cloudflare Pages",
+                        "url": "https://pages.cloudflare.com",
+                        "logoUrl": "https://avatars.githubusercontent.com/in/85455?u=b286429105730c609e6561bb49f94a912de38b5b&v=4"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "totalCount": 1
+        },
+        "baseRefName": "main",
+        "baseRepository": {
+          "nameWithOwner": "octokit/octokit.rb",
+          "url": "https://github.com/octokit/octokit.rb"
+        },
+        "headRefName": "test-branch",
+        "headRepository": {
+          "nameWithOwner": "octokit/octokit.rb",
+          "url": "https://github.com/octokit/octokit.rb"
+        },
+        "author": {
+          "__typename": "User",
+          "avatarUrl": "https://avatars.githubusercontent.com/u/12345",
+          "login": "test",
+          "name": "Test user"
+        },
+        "assignees": {
+          "nodes": []
+        },
+        "reviewDecision": null,
+        "reviews": {
+          "nodes": [
+            {
+              "id": "PRR_1",
+              "url": "https://github.com/octokit/octokit.rb/pull/123#pullrequestreview-1",
+              "submittedAt": "2014-11-07T22:03:00Z",
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/34727?v=4",
+                "login": "reviewer",
+                "name": "Reviewer"
+              },
+              "bodyHTML": "<p>Looks good overall</p>",
+              "state": "COMMENTED"
+            }
+          ]
+        },
+        "reviewRequests": {
+          "nodes": [
+            {
+              "requestedReviewer": {
+                "__typename": "User",
+                "userAvatarUrl": "https://avatars.githubusercontent.com/u/67890",
+                "userLogin": "other-test",
+                "userName": null
+              }
+            }
+          ]
+        },
+        "state": "OPEN",
+        "isDraft": false,
+        "closedAt": null,
+        "createdAt": "2023-10-21T20:36:42Z",
+        "updatedAt": "2023-10-21T20:36:42Z",
+        "mergeable": "MERGEABLE",
+        "mergedAt": null,
+        "mergeStateStatus": "CLEAN",
+        "mergedBy": null,
+        "deletions": 1,
+        "additions": 1,
+        "changedFiles": 1,
+        "reviewThreads": {
+          "pageInfo": {
+            "hasNextPage": true,
+            "endCursor": "threads-cursor-1"
+          },
+          "nodes": [
+            {
+              "id": "PRRT_1",
+              "path": "lib/octokit/authenticator.rb",
+              "line": 15,
+              "originalLine": 15,
+              "startLine": 13,
+              "originalStartLine": 13,
+              "isResolved": false,
+              "isOutdated": false,
+              "comments": {
+                "pageInfo": {
+                  "hasNextPage": true,
+                  "endCursor": "thread-comments-cursor-1"
+                },
+                "nodes": [
+                  {
+                    "id": "RC_1",
+                    "bodyHTML": "<p>Why a passkey here?</p>",
+                    "createdAt": "2014-11-07T22:03:00Z",
+                    "url": "https://github.com/octokit/octokit.rb/pull/123#discussion_r1",
+                    "diffHunk": "@@ -10,6 +10,8 @@ impl Authenticator {\n     fn new() -> Self {\n         Self {}\n     }\n-    fn login(&self) {}\n+    fn login(&self, passkey: Passkey) {\n+        self.verify(passkey);\n+    }",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/34727?v=4",
+                      "login": "reviewer",
+                      "name": "Reviewer"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

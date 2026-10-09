@@ -1,0 +1,29 @@
+{
+  "data": {
+    "node": {
+      "__typename": "PullRequestReviewThread",
+      "comments": {
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": null
+        },
+        "nodes": [
+          {
+            "id": "RC_2",
+            "bodyHTML": "<p>Because WebAuthn</p>",
+            "createdAt": "2014-11-07T22:06:00Z",
+            "url": "https://github.com/octokit/octokit.rb/pull/123#discussion_r2",
+            "diffHunk": "@@ -10,6 +10,8 @@ impl Authenticator {\n     fn new() -> Self {\n         Self {}\n     }\n-    fn login(&self) {}\n+    fn login(&self, passkey: Passkey) {\n+        self.verify(passkey);\n+    }",
+            "isMinimized": false,
+            "author": {
+              "__typename": "User",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/91335?v=4",
+              "login": "octocat",
+              "name": "Octocat"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

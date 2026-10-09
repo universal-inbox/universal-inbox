@@ -18,9 +18,11 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::integrations::github::graphql::{
-    DiscussionCommentRepliesQuery, DiscussionCommentsQuery, DiscussionQuery, PullRequestQuery,
-    discussion_comment_replies_query, discussion_comments_query, discussion_query,
-    pull_request_query,
+    DiscussionCommentRepliesQuery, DiscussionCommentsQuery, DiscussionQuery,
+    PullRequestCommentsQuery, PullRequestQuery, PullRequestReviewThreadCommentsQuery,
+    PullRequestReviewThreadsQuery, discussion_comment_replies_query, discussion_comments_query,
+    discussion_query, pull_request_comments_query, pull_request_query,
+    pull_request_review_thread_comments_query, pull_request_review_threads_query,
 };
 
 use crate::helpers::{
@@ -155,6 +157,54 @@ pub async fn mock_github_discussion_comment_replies_query(
     mock_github_graphql_query(github_mock_server, &expected_request_body, result).await;
 }
 
+pub async fn mock_github_pull_request_comments_query(
+    github_mock_server: &MockServer,
+    owner: String,
+    repository: String,
+    pr_number: i64,
+    after: Option<String>,
+    result: &Response<pull_request_comments_query::ResponseData>,
+) {
+    let expected_request_body =
+        PullRequestCommentsQuery::build_query(pull_request_comments_query::Variables {
+            owner,
+            repository,
+            pr_number,
+            after,
+        });
+    mock_github_graphql_query(github_mock_server, &expected_request_body, result).await;
+}
+
+pub async fn mock_github_pull_request_review_threads_query(
+    github_mock_server: &MockServer,
+    owner: String,
+    repository: String,
+    pr_number: i64,
+    after: Option<String>,
+    result: &Response<pull_request_review_threads_query::ResponseData>,
+) {
+    let expected_request_body =
+        PullRequestReviewThreadsQuery::build_query(pull_request_review_threads_query::Variables {
+            owner,
+            repository,
+            pr_number,
+            after,
+        });
+    mock_github_graphql_query(github_mock_server, &expected_request_body, result).await;
+}
+
+pub async fn mock_github_pull_request_review_thread_comments_query(
+    github_mock_server: &MockServer,
+    thread_id: String,
+    after: Option<String>,
+    result: &Response<pull_request_review_thread_comments_query::ResponseData>,
+) {
+    let expected_request_body = PullRequestReviewThreadCommentsQuery::build_query(
+        pull_request_review_thread_comments_query::Variables { thread_id, after },
+    );
+    mock_github_graphql_query(github_mock_server, &expected_request_body, result).await;
+}
+
 async fn mock_github_graphql_query<B: serde::Serialize, R: serde::Serialize>(
     github_mock_server: &MockServer,
     expected_request_body: &B,
@@ -190,6 +240,30 @@ pub fn github_pull_request_123_response() -> Response<pull_request_query::Respon
 #[fixture]
 pub fn github_pull_request_123_no_commits_response() -> Response<pull_request_query::ResponseData> {
     load_json_fixture_file("github_pull_request_123_no_commits_response.json")
+}
+
+#[fixture]
+pub fn github_pull_request_123_with_comments_response() -> Response<pull_request_query::ResponseData>
+{
+    load_json_fixture_file("github_pull_request_123_with_comments_response.json")
+}
+
+#[fixture]
+pub fn github_pull_request_123_comments_page_2_response()
+-> Response<pull_request_comments_query::ResponseData> {
+    load_json_fixture_file("github_pull_request_123_comments_page_2_response.json")
+}
+
+#[fixture]
+pub fn github_pull_request_123_review_threads_page_2_response()
+-> Response<pull_request_review_threads_query::ResponseData> {
+    load_json_fixture_file("github_pull_request_123_review_threads_page_2_response.json")
+}
+
+#[fixture]
+pub fn github_pull_request_review_thread_1_comments_page_2_response()
+-> Response<pull_request_review_thread_comments_query::ResponseData> {
+    load_json_fixture_file("github_pull_request_review_thread_1_comments_page_2_response.json")
 }
 
 #[fixture]

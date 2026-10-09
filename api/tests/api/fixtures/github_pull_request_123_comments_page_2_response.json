@@ -1,0 +1,29 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "comments": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": [
+            {
+              "id": "IC_3",
+              "bodyHTML": "<p>a late comment</p>",
+              "createdAt": "2014-11-08T10:00:00Z",
+              "url": "https://github.com/octokit/octokit.rb/pull/123#issuecomment-3",
+              "isMinimized": false,
+              "author": {
+                "__typename": "User",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/98629?v=4",
+                "login": "octodog",
+                "name": "Octodog"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

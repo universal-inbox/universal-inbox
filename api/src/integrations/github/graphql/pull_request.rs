@@ -6,12 +6,17 @@ use universal_inbox::third_party::integrations::github::{
     GithubCheckStatusState, GithubCheckSuite, GithubCheckSuiteApp, GithubCommitChecks,
     GithubIssueComment, GithubLabel, GithubMannequinSummary, GithubMergeStateStatus,
     GithubMergeableState, GithubPullRequest, GithubPullRequestReview,
-    GithubPullRequestReviewDecision, GithubPullRequestReviewState, GithubPullRequestState,
-    GithubRepositorySummary, GithubReviewer, GithubTeamSummary, GithubUserSummary, GithubWorkflow,
+    GithubPullRequestReviewComment, GithubPullRequestReviewDecision, GithubPullRequestReviewState,
+    GithubPullRequestReviewThread, GithubPullRequestState, GithubRepositorySummary, GithubReviewer,
+    GithubTeamSummary, GithubUserSummary, GithubWorkflow,
 };
 
 use crate::{
-    integrations::github::graphql::pull_request_query, universal_inbox::UniversalInboxError,
+    integrations::github::graphql::{
+        pull_request_comments_query, pull_request_query, pull_request_review_thread_comments_query,
+        pull_request_review_threads_query,
+    },
+    universal_inbox::UniversalInboxError,
 };
 
 impl From<pull_request_query::PullRequestState> for GithubPullRequestState {
@@ -450,6 +455,11 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestReviews>
                                 author: node.author.map(|author| author.try_into()).transpose()?,
                                 body: node.body_html,
                                 state: node.state.into(),
+                                id: Some(node.id),
+                                url: Some(node.url.parse().with_context(|| {
+                                    format!("Unable to parse Github review URL: {:?}", node.url)
+                                })?),
+                                submitted_at: node.submitted_at,
                             })
                         })
                     })
@@ -562,55 +572,273 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestReviewRequ
     }
 }
 
-impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNodes>
-    for GithubIssueComment
+/// Each query gets its own generated types for the shared comment and review
+/// thread fragments; these macros implement their conversion once.
+macro_rules! impl_issue_comment_try_from {
+    ($module:ident) => {
+        impl_github_actor_try_from!(
+            $module,
+            IssueCommentFieldsAuthor,
+            IssueCommentFieldsAuthorOn
+        );
+
+        impl TryFrom<$module::IssueCommentFields> for GithubIssueComment {
+            type Error = UniversalInboxError;
+
+            fn try_from(value: $module::IssueCommentFields) -> Result<Self, Self::Error> {
+                Ok(GithubIssueComment {
+                    id: Some(value.id),
+                    url: value.url.parse().with_context(|| {
+                        format!("Unable to parse Github issue comment URL: {:?}", value.url)
+                    })?,
+                    body: value.body_html,
+                    created_at: value.created_at,
+                    author: value.author.map(|author| author.try_into()).transpose()?,
+                })
+            }
+        }
+
+        impl Commentable for $module::IssueCommentFields {
+            fn is_minimized(&self) -> bool {
+                self.is_minimized
+            }
+        }
+    };
+}
+
+macro_rules! impl_review_comment_try_from {
+    ($module:ident) => {
+        impl_github_actor_try_from!(
+            $module,
+            ReviewCommentFieldsAuthor,
+            ReviewCommentFieldsAuthorOn
+        );
+
+        impl TryFrom<$module::ReviewCommentFields> for GithubPullRequestReviewComment {
+            type Error = UniversalInboxError;
+
+            fn try_from(value: $module::ReviewCommentFields) -> Result<Self, Self::Error> {
+                Ok(GithubPullRequestReviewComment {
+                    id: value.id,
+                    url: value.url.parse().with_context(|| {
+                        format!("Unable to parse Github review comment URL: {:?}", value.url)
+                    })?,
+                    body: value.body_html,
+                    created_at: value.created_at,
+                    author: value.author.map(|author| author.try_into()).transpose()?,
+                })
+            }
+        }
+
+        impl Commentable for $module::ReviewCommentFields {
+            fn is_minimized(&self) -> bool {
+                self.is_minimized
+            }
+        }
+    };
+}
+
+macro_rules! impl_review_thread_try_from {
+    ($module:ident) => {
+        impl TryFrom<$module::ReviewThreadFields> for ReviewThreadWithCursor {
+            type Error = UniversalInboxError;
+
+            fn try_from(value: $module::ReviewThreadFields) -> Result<Self, Self::Error> {
+                let comments = value.comments;
+                // The hunk is the same for every comment of the thread
+                let diff_hunk = comments
+                    .nodes
+                    .iter()
+                    .flatten()
+                    .flatten()
+                    .next()
+                    .map(|comment| comment.diff_hunk.clone())
+                    .unwrap_or_default();
+                Ok(ReviewThreadWithCursor {
+                    thread: GithubPullRequestReviewThread {
+                        id: value.id,
+                        path: value.path,
+                        diff_hunk,
+                        line: value.line.or(value.original_line),
+                        start_line: value.start_line.or(value.original_start_line),
+                        is_resolved: value.is_resolved,
+                        is_outdated: value.is_outdated,
+                        comments: convert_comments(comments.nodes, "review comment"),
+                    },
+                    comments_cursor: next_cursor(
+                        comments.page_info.has_next_page,
+                        comments.page_info.end_cursor,
+                    ),
+                })
+            }
+        }
+    };
+}
+
+impl_issue_comment_try_from!(pull_request_query);
+impl_issue_comment_try_from!(pull_request_comments_query);
+impl_review_comment_try_from!(pull_request_query);
+impl_review_comment_try_from!(pull_request_review_threads_query);
+impl_review_comment_try_from!(pull_request_review_thread_comments_query);
+impl_review_thread_try_from!(pull_request_query);
+impl_review_thread_try_from!(pull_request_review_threads_query);
+
+trait Commentable {
+    fn is_minimized(&self) -> bool;
+}
+
+/// Convert comment nodes, skipping minimized ones (hidden as spam, off-topic,
+/// ...) and logging the ones that fail to convert rather than failing the
+/// whole pull request.
+fn convert_comments<T, U>(nodes: Option<Vec<Option<T>>>, kind: &str) -> Vec<U>
+where
+    T: Commentable + TryInto<U, Error = UniversalInboxError>,
 {
+    nodes
+        .unwrap_or_default()
+        .into_iter()
+        .flatten()
+        .filter(|node| !node.is_minimized())
+        .filter_map(|node| {
+            node.try_into()
+                .inspect_err(|err| tracing::warn!("Skipping invalid Github {kind}: {err:?}"))
+                .ok()
+        })
+        .collect()
+}
+
+fn next_cursor(has_next_page: bool, end_cursor: Option<String>) -> Option<String> {
+    if has_next_page { end_cursor } else { None }
+}
+
+/// A review thread with the cursor of its next comments page, if it has more
+/// comments than the first page.
+pub struct ReviewThreadWithCursor {
+    pub thread: GithubPullRequestReviewThread,
+    pub comments_cursor: Option<String>,
+}
+
+/// A pull request with the first page of its comments and review threads,
+/// and the cursors to fetch the next ones.
+pub struct PullRequestFirstPage {
+    pub pull_request: GithubPullRequest,
+    pub comments_cursor: Option<String>,
+    pub review_threads_cursor: Option<String>,
+    /// Cursor of the next comments page of each review thread, in the same
+    /// order as `pull_request.review_threads`.
+    pub review_thread_comments_cursors: Vec<Option<String>>,
+}
+
+/// One page of issue comments of a pull request.
+pub struct PullRequestCommentsPage {
+    pub comments: Vec<GithubIssueComment>,
+    pub next_cursor: Option<String>,
+}
+
+/// One page of review threads of a pull request.
+pub struct PullRequestReviewThreadsPage {
+    pub threads: Vec<ReviewThreadWithCursor>,
+    pub next_cursor: Option<String>,
+}
+
+/// One page of comments of a review thread.
+pub struct PullRequestReviewThreadCommentsPage {
+    pub comments: Vec<GithubPullRequestReviewComment>,
+    pub next_cursor: Option<String>,
+}
+
+fn convert_review_threads<T>(
+    nodes: Option<Vec<Option<T>>>,
+) -> Result<Vec<ReviewThreadWithCursor>, UniversalInboxError>
+where
+    T: TryInto<ReviewThreadWithCursor, Error = UniversalInboxError>,
+{
+    nodes
+        .unwrap_or_default()
+        .into_iter()
+        .flatten()
+        .map(|node| node.try_into())
+        .collect()
+}
+
+impl TryFrom<pull_request_comments_query::ResponseData> for PullRequestCommentsPage {
     type Error = UniversalInboxError;
 
-    fn try_from(
-        value: pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNodes,
-    ) -> Result<Self, Self::Error> {
-        Ok(GithubIssueComment {
-            url: value.url.parse().with_context(|| {
-                format!("Unable to parse Github issue comment URL: {:?}", value.url)
-            })?,
-            body: value.body_html,
-            created_at: value.created_at,
-            author: value.author.map(|author| author.try_into()).transpose()?,
+    fn try_from(value: pull_request_comments_query::ResponseData) -> Result<Self, Self::Error> {
+        let comments = value
+            .repository
+            .context("Github repository not found")?
+            .pull_request
+            .context("Github pull request not found")?
+            .comments;
+
+        Ok(PullRequestCommentsPage {
+            comments: convert_comments(comments.nodes, "issue comment"),
+            next_cursor: next_cursor(
+                comments.page_info.has_next_page,
+                comments.page_info.end_cursor,
+            ),
         })
     }
 }
 
-impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNodesAuthor>
-    for GithubActor
+impl TryFrom<pull_request_review_threads_query::ResponseData> for PullRequestReviewThreadsPage {
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: pull_request_review_threads_query::ResponseData,
+    ) -> Result<Self, Self::Error> {
+        let review_threads = value
+            .repository
+            .context("Github repository not found")?
+            .pull_request
+            .context("Github pull request not found")?
+            .review_threads;
+
+        Ok(PullRequestReviewThreadsPage {
+            threads: convert_review_threads(review_threads.nodes)?,
+            next_cursor: next_cursor(
+                review_threads.page_info.has_next_page,
+                review_threads.page_info.end_cursor,
+            ),
+        })
+    }
+}
+
+impl TryFrom<pull_request_review_thread_comments_query::ResponseData>
+    for PullRequestReviewThreadCommentsPage
 {
     type Error = UniversalInboxError;
 
     fn try_from(
-        value: pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNodesAuthor,
+        value: pull_request_review_thread_comments_query::ResponseData,
     ) -> Result<Self, Self::Error> {
-        Ok(match value.on {
-            pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNodesAuthorOn::User(
-                user,
-            ) => GithubActor::User(GithubUserSummary {
-                login: value.login,
-                name: user.name,
-                avatar_url: value
-                    .avatar_url
-                    .parse::<Url>()
-                    .with_context(|| format!("Github actor should have a valid avatar URL: {:?}", value.avatar_url))?,
-            }),
-            _ => GithubActor::Bot(GithubBotSummary {
-                login: value.login,
-                avatar_url: value
-                    .avatar_url
-                    .parse::<Url>()
-                    .with_context(|| format!("Github actor should have a valid avatar URL: {:?}", value.avatar_url))?,
-            })
+        let comments = match value.node.context("Github review thread not found")? {
+            pull_request_review_thread_comments_query::PullRequestReviewThreadCommentsQueryNode::PullRequestReviewThread(
+                thread,
+            ) => thread.comments,
+            _ => return Err(anyhow::anyhow!("Github node is not a review thread").into()),
+        };
+
+        Ok(PullRequestReviewThreadCommentsPage {
+            comments: convert_comments(comments.nodes, "review comment"),
+            next_cursor: next_cursor(
+                comments.page_info.has_next_page,
+                comments.page_info.end_cursor,
+            ),
         })
     }
 }
+
 impl TryFrom<pull_request_query::ResponseData> for GithubPullRequest {
+    type Error = UniversalInboxError;
+
+    fn try_from(value: pull_request_query::ResponseData) -> Result<Self, Self::Error> {
+        Ok(PullRequestFirstPage::try_from(value)?.pull_request)
+    }
+}
+
+impl TryFrom<pull_request_query::ResponseData> for PullRequestFirstPage {
     type Error = UniversalInboxError;
 
     fn try_from(value: pull_request_query::ResponseData) -> Result<Self, Self::Error> {
@@ -624,7 +852,21 @@ impl TryFrom<pull_request_query::ResponseData> for GithubPullRequest {
             .parse()
             .with_context(|| format!("Unable to parse Github pull request URL: {:?}", pr.url))?;
 
-        Ok(GithubPullRequest {
+        let comments_cursor = next_cursor(
+            pr.comments.page_info.has_next_page,
+            pr.comments.page_info.end_cursor.clone(),
+        );
+        let review_threads_cursor = next_cursor(
+            pr.review_threads.page_info.has_next_page,
+            pr.review_threads.page_info.end_cursor.clone(),
+        );
+        let (review_threads, review_thread_comments_cursors) =
+            convert_review_threads(pr.review_threads.nodes)?
+                .into_iter()
+                .map(|thread| (thread.thread, thread.comments_cursor))
+                .unzip();
+
+        let pull_request = GithubPullRequest {
             id: pr.id,
             number: pr.number,
             url: pr_url.clone(),
@@ -647,16 +889,7 @@ impl TryFrom<pull_request_query::ResponseData> for GithubPullRequest {
             changed_files: pr.changed_files,
             labels: pr.labels.map(|labels| labels.into()).unwrap_or_default(),
             comments_count: pr.comments.total_count,
-            comments: pr
-                .comments
-                .nodes
-                .map(|nodes| {
-                    nodes
-                        .into_iter()
-                        .filter_map(|node| node.and_then(|node| node.try_into().ok()))
-                        .collect::<Vec<GithubIssueComment>>()
-                })
-                .unwrap_or_default(),
+            comments: convert_comments(pr.comments.nodes, "issue comment"),
             latest_commit: TryInto::<Option<GithubCommitChecks>>::try_into(pr.commits)?,
             base_ref_name: pr.base_ref_name,
             base_repository: pr
@@ -701,6 +934,14 @@ impl TryFrom<pull_request_query::ResponseData> for GithubPullRequest {
                 .map(|review_requests| review_requests.try_into())
                 .transpose()?
                 .unwrap_or_default(),
+            review_threads,
+        };
+
+        Ok(PullRequestFirstPage {
+            pull_request,
+            comments_cursor,
+            review_threads_cursor,
+            review_thread_comments_cursors,
         })
     }
 }

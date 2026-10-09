@@ -34,36 +34,6 @@ impl From<discussion_query::DiscussionQueryRepositoryDiscussionLabels> for Vec<G
     }
 }
 
-/// Each actor selection in the query gets its own generated type; they all share
-/// the same shape (`login`, `avatar_url` and a `User`-only `name`).
-macro_rules! impl_github_actor_try_from {
-    ($module:ident, $actor:ident, $actor_on:ident) => {
-        impl TryFrom<$module::$actor> for GithubActor {
-            type Error = UniversalInboxError;
-
-            fn try_from(value: $module::$actor) -> Result<Self, Self::Error> {
-                let avatar_url = value.avatar_url.parse::<Url>().with_context(|| {
-                    format!(
-                        "Github actor should have a valid avatar URL: {:?}",
-                        value.avatar_url
-                    )
-                })?;
-                Ok(match value.on {
-                    $module::$actor_on::User(user) => GithubActor::User(GithubUserSummary {
-                        login: value.login,
-                        name: user.name,
-                        avatar_url,
-                    }),
-                    _ => GithubActor::Bot(GithubBotSummary {
-                        login: value.login,
-                        avatar_url,
-                    }),
-                })
-            }
-        }
-    };
-}
-
 impl_github_actor_try_from!(
     discussion_query,
     DiscussionQueryRepositoryDiscussionAuthor,
