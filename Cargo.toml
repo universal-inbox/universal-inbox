@@ -108,7 +108,7 @@ pretty_assertions = { version = "1.3.0" }
 regex = { version = "1.10.0" }
 reqwest = { version = "0.13", features = ["json", "cookies"] }
 rrule = { version = "0.14.0", features = ["serde"] }
-rstest = { version = "0.26.0" }
+rstest = { version = "0.27.0" }
 schemars = { version = "1.0", features = ["chrono04", "uuid1", "url2"] }
 secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
