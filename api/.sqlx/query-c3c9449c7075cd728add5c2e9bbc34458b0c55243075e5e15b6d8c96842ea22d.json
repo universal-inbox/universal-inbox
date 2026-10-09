@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                INSERT INTO oauth_credential\n                  (integration_connection_id, encrypted_access_token, encrypted_refresh_token,\n                   access_token_expires_at, raw_token_response_enc, created_at, updated_at)\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7)\n                ON CONFLICT (integration_connection_id) DO UPDATE SET\n                  encrypted_access_token = EXCLUDED.encrypted_access_token,\n                  encrypted_refresh_token = COALESCE(EXCLUDED.encrypted_refresh_token, oauth_credential.encrypted_refresh_token),\n                  access_token_expires_at = EXCLUDED.access_token_expires_at,\n                  raw_token_response_enc = EXCLUDED.raw_token_response_enc,\n                  raw_token_response = NULL,\n                  updated_at = EXCLUDED.updated_at\n                RETURNING\n                  integration_connection_id,\n                  encrypted_access_token,\n                  encrypted_refresh_token,\n                  access_token_expires_at,\n                  raw_token_response_enc,\n                  created_at,\n                  updated_at\n            ",
+  "query": "\n                INSERT INTO oauth_credential\n                  (integration_connection_id, encrypted_access_token, encrypted_refresh_token,\n                   access_token_expires_at, raw_token_response_enc, created_at, updated_at)\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7)\n                ON CONFLICT (integration_connection_id) DO UPDATE SET\n                  encrypted_access_token = EXCLUDED.encrypted_access_token,\n                  encrypted_refresh_token = COALESCE(EXCLUDED.encrypted_refresh_token, oauth_credential.encrypted_refresh_token),\n                  access_token_expires_at = EXCLUDED.access_token_expires_at,\n                  raw_token_response_enc = EXCLUDED.raw_token_response_enc,\n                  updated_at = EXCLUDED.updated_at\n                RETURNING\n                  integration_connection_id,\n                  encrypted_access_token,\n                  encrypted_refresh_token,\n                  access_token_expires_at,\n                  raw_token_response_enc,\n                  created_at,\n                  updated_at\n            ",
   "describe": {
     "columns": [
       {
@@ -102,5 +102,5 @@
       false
     ]
   },
-  "hash": "532e08ee747f902f895fb038c6dfe55ffaae86dc4cf0c8102838dcac10c5ff02"
+  "hash": "c3c9449c7075cd728add5c2e9bbc34458b0c55243075e5e15b6d8c96842ea22d"
 }

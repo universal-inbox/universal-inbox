@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO user_email_change (user_id, new_email_enc, validation_token_hash, requested_at)\n                VALUES ($1, $2, $3, now())\n                ON CONFLICT (user_id) DO UPDATE\n                SET new_email_enc = EXCLUDED.new_email_enc,\n                  validation_token_hash = EXCLUDED.validation_token_hash,\n                  requested_at = EXCLUDED.requested_at\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9596f6da1050cc04bfab5fe51b2f2c90bf032eb2b7101dd0b8664af9ff97cb54"
+}

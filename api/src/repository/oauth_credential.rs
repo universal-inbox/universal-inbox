@@ -27,8 +27,8 @@ fn encrypt_raw_token_response(
     )
 }
 
-/// Decrypt `oauth_credential.raw_token_response_enc`. A credential stored before encryption
-/// and not encrypted yet by `data-encryption encrypt-plaintext` reads as an empty response.
+/// Decrypt `oauth_credential.raw_token_response_enc`. A credential without a stored response
+/// reads as an empty response.
 fn decrypt_raw_token_response(
     raw_token_response_enc: Option<&[u8]>,
     integration_connection_id: Uuid,
@@ -138,7 +138,6 @@ impl OAuthCredentialRepository for Repository {
                   encrypted_refresh_token = COALESCE(EXCLUDED.encrypted_refresh_token, oauth_credential.encrypted_refresh_token),
                   access_token_expires_at = EXCLUDED.access_token_expires_at,
                   raw_token_response_enc = EXCLUDED.raw_token_response_enc,
-                  raw_token_response = NULL,
                   updated_at = EXCLUDED.updated_at
                 RETURNING
                   integration_connection_id,

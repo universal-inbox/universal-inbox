@@ -907,7 +907,6 @@ impl IntegrationConnectionRepository for Repository {
                 FROM integration_connection
                 WHERE integration_connection.provider_kind::TEXT = 'Slack'
                   AND integration_connection.context_enc IS NULL
-                  AND integration_connection.context IS NULL
             "#,
         );
         if let Some(for_user_id) = for_user_id {
@@ -1296,7 +1295,7 @@ impl IntegrationConnectionRepository for Repository {
             })
             .transpose()?;
         let mut query_builder =
-            QueryBuilder::new("UPDATE integration_connection SET context = NULL, context_enc = ");
+            QueryBuilder::new("UPDATE integration_connection SET context_enc = ");
         query_builder
             .push_bind(context_enc)
             .push(", provider_workspace_id = ")

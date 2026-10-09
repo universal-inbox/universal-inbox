@@ -295,7 +295,7 @@ fn contains(haystack: &[u8], needle: &str) -> bool {
 
 #[rstest]
 #[tokio::test]
-async fn test_encrypt_plaintext_third_party_item_data(
+async fn test_third_party_item_data_is_encrypted(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     todoist_item: Box<TodoistItem>,
@@ -329,64 +329,16 @@ async fn test_encrypt_plaintext_third_party_item_data(
         .await
         .third_party_item;
 
-    // Stored encrypted only
-    let row =
-        sqlx::query("SELECT data::TEXT AS data, data_enc FROM third_party_item WHERE id = $1")
+    let data_enc: Vec<u8> =
+        sqlx::query_scalar("SELECT data_enc FROM third_party_item WHERE id = $1")
             .bind(item.id.0)
             .fetch_one(&*app.app.repository.pool)
             .await
             .unwrap();
-    assert_eq!(row.get::<Option<String>, _>("data"), None);
-    let data_enc: Vec<u8> = row.get("data_enc");
     assert!(!contains(&data_enc, SECRET_MARKER));
-
-    // Row stored before encryption existed
-    sqlx::query("UPDATE third_party_item SET data = $1::TEXT::JSON, data_enc = NULL WHERE id = $2")
-        .bind(serde_json::to_string(&data).unwrap())
-        .bind(item.id.0)
-        .execute(&*app.app.repository.pool)
-        .await
-        .unwrap();
-    let keyring = Arc::new(settings.data_keyring().unwrap());
-    let service = data_encryption_service(&app.app, keyring);
+    let service = data_encryption_service(&app.app, Arc::new(settings.data_keyring().unwrap()));
     let status = service.status().await.unwrap();
-    assert_eq!(plaintext_values(&status, "third_party_item.data_enc"), 1);
-    let plaintext_counts = service.plaintext_counts().await.unwrap();
-    assert!(plaintext_counts.contains(&("third_party_item.data_enc".to_string(), 1)));
-
-    let progress = RecordedProgress::default();
-    let status = service
-        .encrypt_plaintext_with_progress(1, &progress)
-        .await
-        .unwrap();
-
-    // Progress totals are the plaintext counts
-    assert_eq!(
-        progress.processed(),
-        plaintext_counts
-            .iter()
-            .filter(|(_, count)| *count > 0)
-            .map(|(column, count)| (column.clone(), *count as u64))
-            .collect()
-    );
-    assert_eq!(
-        *progress.done.lock().unwrap(),
-        plaintext_counts
-            .iter()
-            .map(|(column, _)| column.clone())
-            .collect()
-    );
-
-    assert_eq!(status.plaintext_values(), 0);
     assert_eq!(values_on_key(&status, "third_party_item.data_enc", "1"), 1);
-    let row =
-        sqlx::query("SELECT data::TEXT AS data, data_enc FROM third_party_item WHERE id = $1")
-            .bind(item.id.0)
-            .fetch_one(&*app.app.repository.pool)
-            .await
-            .unwrap();
-    assert_eq!(row.get::<Option<String>, _>("data"), None);
-    assert!(!contains(&row.get::<Vec<u8>, _>("data_enc"), SECRET_MARKER));
     let mut transaction = app.app.repository.begin().await.unwrap();
     let items = app
         .app
@@ -401,14 +353,11 @@ async fn test_encrypt_plaintext_third_party_item_data(
         .unwrap();
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].data, data);
-
-    // Idempotent
-    assert_eq!(service.encrypt_plaintext(1).await.unwrap(), status);
 }
 
 #[rstest]
 #[tokio::test]
-async fn test_encrypt_plaintext_task_body(
+async fn test_task_body_is_encrypted(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     todoist_item: Box<TodoistItem>,
@@ -448,41 +397,15 @@ async fn test_encrypt_plaintext_task_body(
     .unwrap();
     assert_eq!(task.body, body);
 
-    // Stored encrypted only, and not in the search vector
-    let row = sqlx::query(
-        "SELECT body, body_enc, title_project_tags_tsv::TEXT AS tsv FROM task WHERE id = $1",
-    )
-    .bind(task.id.0)
-    .fetch_one(&*app.app.repository.pool)
-    .await
-    .unwrap();
-    assert_eq!(row.get::<Option<String>, _>("body"), None);
+    // Stored encrypted, and not in the search vector
+    let row =
+        sqlx::query("SELECT body_enc, title_project_tags_tsv::TEXT AS tsv FROM task WHERE id = $1")
+            .bind(task.id.0)
+            .fetch_one(&*app.app.repository.pool)
+            .await
+            .unwrap();
     assert!(!contains(&row.get::<Vec<u8>, _>("body_enc"), SECRET_MARKER));
     assert!(!row.get::<String, _>("tsv").contains("marker"));
-
-    // Row stored before encryption existed
-    sqlx::query("UPDATE task SET body = $1, body_enc = NULL WHERE id = $2")
-        .bind(&body)
-        .bind(task.id.0)
-        .execute(&*app.app.repository.pool)
-        .await
-        .unwrap();
-    let service = data_encryption_service(&app.app, Arc::new(settings.data_keyring().unwrap()));
-    assert_eq!(
-        plaintext_values(&service.status().await.unwrap(), "task.body_enc"),
-        1
-    );
-
-    let status = service.encrypt_plaintext(10).await.unwrap();
-
-    assert_eq!(status.plaintext_values(), 0);
-    let row = sqlx::query("SELECT body, body_enc FROM task WHERE id = $1")
-        .bind(task.id.0)
-        .fetch_one(&*app.app.repository.pool)
-        .await
-        .unwrap();
-    assert_eq!(row.get::<Option<String>, _>("body"), None);
-    assert!(!contains(&row.get::<Vec<u8>, _>("body_enc"), SECRET_MARKER));
     let mut transaction = app.app.repository.begin().await.unwrap();
     let stored_task = app
         .app
@@ -531,21 +454,14 @@ async fn test_raw_token_response_is_encrypted(
     transaction.commit().await.unwrap();
 
     assert_eq!(stored.raw_token_response, raw_token_response);
-    let row = sqlx::query(
-        "SELECT raw_token_response, raw_token_response_enc FROM oauth_credential WHERE integration_connection_id = $1",
+    let raw_token_response_enc: Vec<u8> = sqlx::query_scalar(
+        "SELECT raw_token_response_enc FROM oauth_credential WHERE integration_connection_id = $1",
     )
     .bind(integration_connection.id.0)
     .fetch_one(&*app.app.repository.pool)
     .await
     .unwrap();
-    assert_eq!(
-        row.get::<Option<serde_json::Value>, _>("raw_token_response"),
-        None
-    );
-    assert!(!contains(
-        &row.get::<Vec<u8>, _>("raw_token_response_enc"),
-        SECRET_MARKER
-    ));
+    assert!(!contains(&raw_token_response_enc, SECRET_MARKER));
     let mut transaction = app.app.repository.begin().await.unwrap();
     let fetched = app
         .app
@@ -560,7 +476,6 @@ async fn test_raw_token_response_is_encrypted(
 #[rstest]
 #[tokio::test]
 async fn test_user_email_is_encrypted_and_looked_up_case_insensitively(
-    settings: Settings,
     #[future] tested_app_with_local_auth: TestedApp,
 ) {
     let app = tested_app_with_local_auth.await;
@@ -568,12 +483,11 @@ async fn test_user_email_is_encrypted_and_looked_up_case_insensitively(
     let (_client, user) = create_user_and_login(&app, email.clone(), "password-12345678").await;
 
     // Stored encrypted, with its blind index
-    let row = sqlx::query(r#"SELECT email, email_enc, email_hash FROM "user" WHERE id = $1"#)
+    let row = sqlx::query(r#"SELECT email_enc, email_hash FROM "user" WHERE id = $1"#)
         .bind(user.id.0)
         .fetch_one(&*app.repository.pool)
         .await
         .unwrap();
-    assert_eq!(row.get::<Option<String>, _>("email"), None);
     assert!(!contains(&row.get::<Vec<u8>, _>("email_enc"), "Secret"));
     assert_eq!(
         row.get::<String, _>("email_hash"),
@@ -613,23 +527,6 @@ async fn test_user_email_is_encrypted_and_looked_up_case_insensitively(
     ));
     transaction.rollback().await.unwrap();
 
-    // Row stored before encryption existed
-    sqlx::query(
-        r#"UPDATE "user" SET email = 'Jane.Secret@Example.com', email_enc = NULL, email_hash = NULL WHERE id = $1"#,
-    )
-    .bind(user.id.0)
-    .execute(&*app.repository.pool)
-    .await
-    .unwrap();
-    let service = data_encryption_service(&app, Arc::new(settings.data_keyring().unwrap()));
-    assert_eq!(
-        plaintext_values(&service.status().await.unwrap(), "user.email_enc"),
-        1
-    );
-
-    let status = service.encrypt_plaintext(10).await.unwrap();
-
-    assert_eq!(status.plaintext_values(), 0);
     let mut transaction = app.repository.begin().await.unwrap();
     let stored_user = app
         .repository
@@ -672,9 +569,34 @@ async fn test_encrypt_plaintext_google_account_email(
         ),
         1
     );
+    let plaintext_counts = service.plaintext_counts().await.unwrap();
+    assert!(plaintext_counts.contains(&(
+        "integration_connection.provider_user_id (Google email blind index)".to_string(),
+        1
+    )));
 
-    let status = service.encrypt_plaintext(10).await.unwrap();
+    let progress = RecordedProgress::default();
+    let status = service
+        .encrypt_plaintext_with_progress(10, &progress)
+        .await
+        .unwrap();
 
+    // Progress totals are the plaintext counts
+    assert_eq!(
+        progress.processed(),
+        plaintext_counts
+            .iter()
+            .filter(|(_, count)| *count > 0)
+            .map(|(column, count)| (column.clone(), *count as u64))
+            .collect()
+    );
+    assert_eq!(
+        *progress.done.lock().unwrap(),
+        plaintext_counts
+            .iter()
+            .map(|(column, _)| column.clone())
+            .collect()
+    );
     assert_eq!(status.plaintext_values(), 0);
     let provider_user_id: Option<String> =
         sqlx::query_scalar("SELECT provider_user_id FROM integration_connection WHERE id = $1")

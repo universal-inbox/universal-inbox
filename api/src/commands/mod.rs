@@ -178,11 +178,12 @@ pub enum Commands {
 
 #[derive(Subcommand)]
 pub enum DataEncryptionCommands {
-    /// Count the encrypted values per key id and the values not encrypted yet
+    /// Count the encrypted values per key id and the Google account emails not replaced by
+    /// their blind index yet
     Status,
-    /// Encrypt the values stored before their column was encrypted, then check every
-    /// encrypted value can be read with the configured keys. Run before starting the
-    /// API and the workers (done by the container entrypoint).
+    /// Replace the Google account emails stored before encryption by their blind index, then
+    /// check every encrypted value can be read with the configured keys. Run before starting
+    /// the API and the workers (done by the container entrypoint).
     EncryptPlaintext {
         #[arg(short, long, default_value = "500")]
         batch_size: i64,

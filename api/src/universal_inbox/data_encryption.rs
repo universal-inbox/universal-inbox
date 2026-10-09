@@ -1,5 +1,6 @@
-//! Maintenance of the data encrypted at rest: encrypting values written before encryption,
-//! re-encrypting with the active key after a key rotation, and reporting which keys are used.
+//! Maintenance of the data encrypted at rest: replacing Google account emails by their blind
+//! index, re-encrypting with the active key after a key rotation, and reporting which keys
+//! are used.
 //! See `doc/src/config/data_encryption.md`.
 
 use std::{collections::BTreeMap, fmt, sync::Arc};
@@ -192,10 +193,6 @@ impl DataEncryptionService {
         for column in ENCRYPTED_COLUMNS {
             let mut column_status = ColumnStatus {
                 column: column.name(),
-                plaintext_values: self
-                    .repository
-                    .count_plaintext_values(&mut transaction, column)
-                    .await?,
                 ..Default::default()
             };
             match column.format {
@@ -262,17 +259,6 @@ impl DataEncryptionService {
     pub async fn plaintext_counts(&self) -> Result<Vec<(String, i64)>, UniversalInboxError> {
         let mut transaction = self.repository.begin().await?;
         let mut counts = vec![];
-        for column in ENCRYPTED_COLUMNS
-            .iter()
-            .filter(|column| column.plaintext_column.is_some())
-        {
-            counts.push((
-                column.name(),
-                self.repository
-                    .count_plaintext_values(&mut transaction, column)
-                    .await?,
-            ));
-        }
         for table in GOOGLE_PROVIDER_USER_ID_TABLES {
             counts.push((
                 google_provider_user_id_label(table),
@@ -285,8 +271,9 @@ impl DataEncryptionService {
         Ok(counts)
     }
 
-    /// Encrypt the values written before their column was encrypted, then check every value
-    /// can be read with the configured keys. Run before serving (container entrypoint).
+    /// Replace the Google account emails stored before encryption by their blind index, then
+    /// check every value can be read with the configured keys. Run before serving (container
+    /// entrypoint).
     pub async fn encrypt_plaintext(
         &self,
         batch_size: i64,
@@ -327,53 +314,6 @@ impl DataEncryptionService {
         batch_size: i64,
         progress: &dyn DataEncryptionProgress,
     ) -> Result<DataEncryptionStatus, UniversalInboxError> {
-        for column in ENCRYPTED_COLUMNS
-            .iter()
-            .filter(|column| column.plaintext_column.is_some())
-        {
-            let mut encrypted_count = 0;
-            loop {
-                let mut transaction = self.repository.begin().await?;
-                let values = self
-                    .repository
-                    .fetch_plaintext_values(&mut transaction, column, batch_size)
-                    .await?;
-                if values.is_empty() {
-                    break;
-                }
-                for (id, plaintext) in &values {
-                    let encrypted = self.encrypt(column, *id, plaintext.as_bytes())?;
-                    let blind_index = column
-                        .blind_index_column
-                        .map(|_| self.keyring.email_blind_index(plaintext))
-                        .transpose()?;
-                    self.repository
-                        .store_encrypted_value(
-                            &mut transaction,
-                            column,
-                            *id,
-                            &encrypted,
-                            blind_index.as_deref(),
-                        )
-                        .await?;
-                }
-                transaction
-                    .commit()
-                    .await
-                    .map_err(|err| UniversalInboxError::DatabaseError {
-                        source: err,
-                        message: format!("Failed to commit encrypted {}", column.name()),
-                    })?;
-                encrypted_count += values.len();
-                info!(
-                    "{}: {encrypted_count} plaintext values encrypted",
-                    column.name()
-                );
-                progress.batch_done(&column.name(), values.len() as u64);
-            }
-            progress.column_done(&column.name());
-        }
-
         for table in GOOGLE_PROVIDER_USER_ID_TABLES {
             loop {
                 let mut transaction = self.repository.begin().await?;
@@ -470,7 +410,7 @@ impl DataEncryptionService {
                     let plaintext = self.decrypt(column, *id, value)?;
                     let encrypted = self.encrypt(column, *id, &plaintext)?;
                     self.repository
-                        .store_encrypted_value(&mut transaction, column, *id, &encrypted, None)
+                        .store_encrypted_value(&mut transaction, column, *id, &encrypted)
                         .await?;
                     batch_count += 1;
                 }

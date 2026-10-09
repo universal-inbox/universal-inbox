@@ -73,6 +73,7 @@
 - Extend `Pii<T>` to user names and third-party personal data (Google Calendar attendees, Google Drive authors, Slack profiles), reject `.expose()` inside tracing macros (`just check-pii-logging`), and drop email addresses from the OIDC email-mismatch error
 - Encrypt sensitive data at rest (AES-256-GCM, rotatable keys): synced third-party content, task descriptions, OAuth tokens and token responses, OIDC ID tokens, user email addresses and the email addresses of connected Google accounts; email lookups use a keyed blind index and become case-insensitive; email verification, password reset and email change tokens and OAuth authorization codes are stored hashed. New required setting `UNIVERSAL_INBOX__DATA_ENCRYPTION__BLIND_INDEX_KEY`; the container entrypoint encrypts existing data before starting (`data-encryption encrypt-plaintext`), see `doc/src/config/data_encryption.md` for setup and key rotation
 - Task search no longer matches task descriptions, which are encrypted
+- Drop the plaintext columns emptied by `data-encryption encrypt-plaintext`. The migration refuses to run while a plaintext value remains: upgrade from a release older than data encryption through the release introducing it first
 
 ### Fixed
 

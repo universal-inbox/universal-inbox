@@ -1045,8 +1045,7 @@ impl TaskRepository for Repository {
                         source: err,
                         message,
                     }
-                })?
-                .flatten();
+                })?;
                 Some(match current_body_enc {
                     Some(body_enc) => decrypt_task_body(&body_enc, task_id.0)? != *body,
                     None => true,

@@ -1,5 +1,5 @@
 //! Generic access to the encrypted columns, for the data encryption maintenance commands
-//! (encrypting plaintext rows, key rotation, status). Queries are built dynamically
+//! (Google account email blind indexes, key rotation, status). Queries are built dynamically
 //! (`AssertSqlSafe`) from the table and column names of [`ENCRYPTED_COLUMNS`] only, never
 //! from user input; values are always bound.
 
@@ -26,12 +26,6 @@ pub struct EncryptedColumn {
     pub table: &'static str,
     pub id_column: &'static str,
     pub column: &'static str,
-    /// Column still holding values written before encryption, if any. They are moved into
-    /// `column` by `data-encryption encrypt-plaintext`.
-    pub plaintext_column: Option<&'static str>,
-    /// Column holding the email blind index of the value (case-insensitive lookups and
-    /// uniqueness), filled along with `column` by `data-encryption encrypt-plaintext`
-    pub blind_index_column: Option<&'static str>,
     pub format: EncryptedColumnFormat,
 }
 
@@ -55,8 +49,6 @@ pub const ENCRYPTED_COLUMNS: &[EncryptedColumn] = &[
         table: "\"user\"",
         id_column: "id",
         column: "email_enc",
-        plaintext_column: Some("email"),
-        blind_index_column: Some("email_hash"),
         format: EncryptedColumnFormat::Envelope {
             aad_name: "user.email",
             compressed: false,
@@ -66,8 +58,6 @@ pub const ENCRYPTED_COLUMNS: &[EncryptedColumn] = &[
         table: "user_email_change",
         id_column: "user_id",
         column: "new_email_enc",
-        plaintext_column: Some("new_email"),
-        blind_index_column: None,
         format: EncryptedColumnFormat::Envelope {
             aad_name: "user_email_change.new_email",
             compressed: false,
@@ -77,8 +67,6 @@ pub const ENCRYPTED_COLUMNS: &[EncryptedColumn] = &[
         table: "integration_connection",
         id_column: "id",
         column: "context_enc",
-        plaintext_column: Some("context"),
-        blind_index_column: None,
         format: EncryptedColumnFormat::Envelope {
             aad_name: "integration_connection.context",
             compressed: false,
@@ -88,8 +76,6 @@ pub const ENCRYPTED_COLUMNS: &[EncryptedColumn] = &[
         table: "oauth_grant_revocation",
         id_column: "id",
         column: "provider_context_enc",
-        plaintext_column: Some("provider_context"),
-        blind_index_column: None,
         format: EncryptedColumnFormat::Envelope {
             aad_name: "oauth_grant_revocation.provider_context",
             compressed: false,
@@ -99,8 +85,6 @@ pub const ENCRYPTED_COLUMNS: &[EncryptedColumn] = &[
         table: "third_party_item",
         id_column: "id",
         column: "data_enc",
-        plaintext_column: Some("data"),
-        blind_index_column: None,
         format: EncryptedColumnFormat::Envelope {
             aad_name: "third_party_item.data",
             compressed: true,
@@ -110,8 +94,6 @@ pub const ENCRYPTED_COLUMNS: &[EncryptedColumn] = &[
         table: "task",
         id_column: "id",
         column: "body_enc",
-        plaintext_column: Some("body"),
-        blind_index_column: None,
         format: EncryptedColumnFormat::Envelope {
             aad_name: "task.body",
             compressed: false,
@@ -121,8 +103,6 @@ pub const ENCRYPTED_COLUMNS: &[EncryptedColumn] = &[
         table: "user_auth",
         id_column: "id",
         column: "auth_id_token_enc",
-        plaintext_column: Some("auth_id_token"),
-        blind_index_column: None,
         format: EncryptedColumnFormat::Envelope {
             aad_name: "user_auth.auth_id_token",
             compressed: false,
@@ -132,8 +112,6 @@ pub const ENCRYPTED_COLUMNS: &[EncryptedColumn] = &[
         table: "oauth_credential",
         id_column: "integration_connection_id",
         column: "raw_token_response_enc",
-        plaintext_column: Some("raw_token_response"),
-        blind_index_column: None,
         format: EncryptedColumnFormat::Envelope {
             aad_name: "oauth_credential.raw_token_response",
             compressed: true,
@@ -143,32 +121,24 @@ pub const ENCRYPTED_COLUMNS: &[EncryptedColumn] = &[
         table: "oauth_credential",
         id_column: "integration_connection_id",
         column: "encrypted_access_token",
-        plaintext_column: None,
-        blind_index_column: None,
         format: EncryptedColumnFormat::Token,
     },
     EncryptedColumn {
         table: "oauth_credential",
         id_column: "integration_connection_id",
         column: "encrypted_refresh_token",
-        plaintext_column: None,
-        blind_index_column: None,
         format: EncryptedColumnFormat::Token,
     },
     EncryptedColumn {
         table: "oauth_grant_revocation",
         id_column: "id",
         column: "encrypted_access_token",
-        plaintext_column: None,
-        blind_index_column: None,
         format: EncryptedColumnFormat::Token,
     },
     EncryptedColumn {
         table: "oauth_grant_revocation",
         id_column: "id",
         column: "encrypted_refresh_token",
-        plaintext_column: None,
-        blind_index_column: None,
         format: EncryptedColumnFormat::Token,
     },
 ];
@@ -210,36 +180,6 @@ impl Repository {
             .await
             .map_err(|err| database_error(err, "Failed to release data encryption lock".into()))?;
         Ok(())
-    }
-
-    /// Lock and return up to `limit` rows still holding a plaintext value.
-    pub async fn fetch_plaintext_values(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        column: &EncryptedColumn,
-        limit: i64,
-    ) -> Result<Vec<(Uuid, String)>, UniversalInboxError> {
-        let Some(plaintext_column) = column.plaintext_column else {
-            return Ok(vec![]);
-        };
-        let query = format!(
-            "SELECT {id} AS id, {plaintext}::TEXT AS plaintext FROM {table} \
-             WHERE {plaintext} IS NOT NULL ORDER BY {id} LIMIT $1 FOR UPDATE SKIP LOCKED",
-            id = column.id_column,
-            plaintext = plaintext_column,
-            table = column.table,
-        );
-        let rows = sqlx::query(AssertSqlSafe(query))
-            .bind(limit)
-            .fetch_all(&mut **executor)
-            .await
-            .map_err(|err| {
-                database_error(err, format!("Failed to fetch plaintext {}", column.name()))
-            })?;
-        rows.iter()
-            .map(|row| Ok((row.try_get("id")?, row.try_get("plaintext")?)))
-            .collect::<Result<_, sqlx::Error>>()
-            .map_err(|err| database_error(err, format!("Failed to decode {}", column.name())))
     }
 
     /// Return up to `limit` encrypted values with an id greater than `after`, in id order,
@@ -284,57 +224,29 @@ impl Repository {
             .map_err(|err| database_error(err, format!("Failed to decode {}", column.name())))
     }
 
-    /// Store `value` in `column` and clear its plaintext column, if any.
+    /// Store `value` in `column`.
     pub async fn store_encrypted_value(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         column: &EncryptedColumn,
         id: Uuid,
         value: &[u8],
-        blind_index: Option<&str>,
     ) -> Result<(), UniversalInboxError> {
-        let clear_plaintext = column
-            .plaintext_column
-            .map(|plaintext| format!(", {plaintext} = NULL"))
-            .unwrap_or_default();
-        let set_blind_index = match (column.blind_index_column, blind_index) {
-            (Some(blind_index_column), Some(_)) => format!(", {blind_index_column} = $3"),
-            _ => String::new(),
-        };
         let query = format!(
-            "UPDATE {table} SET {column} = $1{clear_plaintext}{set_blind_index} WHERE {id} = $2",
+            "UPDATE {table} SET {column} = $1 WHERE {id} = $2",
             table = column.table,
             column = column.column,
             id = column.id_column,
         );
-        let mut query = sqlx::query(AssertSqlSafe(query)).bind(value).bind(id);
-        if !set_blind_index.is_empty() {
-            query = query.bind(blind_index);
-        }
-        query.execute(&mut **executor).await.map_err(|err| {
-            database_error(err, format!("Failed to store encrypted {}", column.name()))
-        })?;
-        Ok(())
-    }
-
-    pub async fn count_plaintext_values(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        column: &EncryptedColumn,
-    ) -> Result<i64, UniversalInboxError> {
-        let Some(plaintext_column) = column.plaintext_column else {
-            return Ok(0);
-        };
-        let query = format!(
-            "SELECT count(*) FROM {table} WHERE {plaintext_column} IS NOT NULL",
-            table = column.table,
-        );
-        sqlx::query_scalar(AssertSqlSafe(query))
-            .fetch_one(&mut **executor)
+        sqlx::query(AssertSqlSafe(query))
+            .bind(value)
+            .bind(id)
+            .execute(&mut **executor)
             .await
             .map_err(|err| {
-                database_error(err, format!("Failed to count plaintext {}", column.name()))
-            })
+                database_error(err, format!("Failed to store encrypted {}", column.name()))
+            })?;
+        Ok(())
     }
 
     /// Count the envelope values of `column` per key id (envelope columns only).

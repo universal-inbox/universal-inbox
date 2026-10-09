@@ -67,15 +67,17 @@ Instances configured before data encryption existed only have `UNIVERSAL_INBOX__
 
 ## Encrypting existing data
 
-Data stored before its column was encrypted is encrypted by:
+Before each start, the container entrypoint (`docker/universal-inbox-entrypoint`) runs:
 
 ```sh
 universal-inbox data-encryption encrypt-plaintext
 ```
 
-The container entrypoint (`docker/universal-inbox-entrypoint`) runs it after the database migrations and before starting the API server (`serve`) or the workers (`start-workers`), so nothing is served before the data is encrypted. On the first start after an upgrade, its duration depends on the amount of stored data. Several containers starting at once wait for each other.
+It runs after the database migrations and before starting the API server (`serve`) or the workers (`start-workers`). Several containers starting at once wait for each other.
 
-The command then checks that every encrypted value can be read with the configured keys and stops the container otherwise: removing a key still in use cannot go unnoticed.
+The release introducing data encryption kept the plaintext columns, and this command moved their values to the encrypted columns. The next release drops the plaintext columns: its migration refuses to run while any plaintext value remains. To upgrade an instance from a release older than data encryption, first deploy the release introducing it and let its containers start once, then deploy the newer one.
+
+The command now replaces the email addresses of Google accounts connected before encryption by their blind index. It then checks that every encrypted value can be read with the configured keys and stops the container otherwise: removing a key still in use cannot go unnoticed.
 
 To see how many values each key encrypted:
 

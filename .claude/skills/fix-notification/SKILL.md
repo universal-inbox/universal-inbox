@@ -114,7 +114,8 @@ export UNIVERSAL_INBOX__DATA_ENCRYPTION__BLIND_INDEX_KEY=<prod blind index key> 
 ```bash
 direnv exec . just restore-db-backup <backup_path>
 direnv exec . just api ensure-db
-# encrypts the rows of a backup taken before encryption, checks the keys read every value
+# checks the keys read every value (a backup taken before data encryption cannot be
+# migrated: its plaintext columns are dropped by a migration refusing to lose values)
 direnv exec . cargo run -p universal-inbox-api -- data-encryption encrypt-plaintext
 ```
 
