@@ -103,7 +103,7 @@ opentelemetry_sdk = { version = "0.32", features = [
 # experimental_use_tracing_span_context feature: trace/span context activation
 # is now provided by tracing-opentelemetry itself.
 opentelemetry-appender-tracing = { version = "0.32" }
-opentelemetry-http = { version = "0.32", features = ["reqwest"] }
+opentelemetry-http = { version = "0.33", features = ["reqwest"] }
 opentelemetry-otlp = { version = "0.32", features = [
   "http-proto",
   "grpc-tonic",
