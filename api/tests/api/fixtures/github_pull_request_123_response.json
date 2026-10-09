@@ -11,7 +11,11 @@
           "nodes": []
         },
         "comments": {
-          "totalCount": 0
+          "totalCount": 0,
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          }
         },
         "commits": {
           "nodes": [
@@ -86,7 +90,14 @@
         "mergedBy": null,
         "deletions": 1,
         "additions": 1,
-        "changedFiles": 1
+        "changedFiles": 1,
+        "reviewThreads": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": []
+        }
       }
     }
   }
