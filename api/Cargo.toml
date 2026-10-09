@@ -175,7 +175,7 @@ tracing-actix-web = { version = "0.7.0", features = [
   "uuid_v7"
 ] }
 tracing-log = "0.2.0"
-tracing-opentelemetry = { version = "0.33", features = ["tracing-log"] }
+tracing-opentelemetry = { version = "0.34", features = ["tracing-log"] }
 tracing-subscriber = { version = "0.3.0", features = [
   "std",
   "env-filter",
