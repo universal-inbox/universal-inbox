@@ -4,7 +4,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{
     FromRow, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow, query_builder::Separated,
 };
-use tracing::debug;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -14,7 +14,7 @@ use universal_inbox::{
         NotificationStatus, NotificationWithTask, service::NotificationPatch,
     },
     task::TaskId,
-    third_party::item::ThirdPartyItemId,
+    third_party::item::{ThirdPartyItemData, ThirdPartyItemId, ThirdPartyItemKind},
     user::UserId,
 };
 
@@ -24,7 +24,10 @@ use crate::{
     universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus},
 };
 
-use super::{FromRowWithPrefix, decode_rows_skipping_invalid, third_party::ThirdPartyItemRow};
+use super::{
+    FromRowWithPrefix, decode_rows_skipping_invalid,
+    third_party::{ThirdPartyItemRow, decrypt_third_party_item_data},
+};
 
 #[async_trait]
 pub trait NotificationRepository {
@@ -169,14 +172,14 @@ impl NotificationRepository for Repository {
                   notification.kind as notification__kind,
                   source_item.id as notification__source_item__id,
                   source_item.source_id as notification__source_item__source_id,
-                  source_item.data as notification__source_item__data,
+                  source_item.data_enc as notification__source_item__data_enc,
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
                   nested_source_item.id as notification__source_item__si__id,
                   nested_source_item.source_id as notification__source_item__si__source_id,
-                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.data_enc as notification__source_item__si__data_enc,
                   nested_source_item.created_at as notification__source_item__si__created_at,
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,
@@ -227,21 +230,21 @@ impl NotificationRepository for Repository {
                   notification.kind as notification__kind,
                   source_item.id as notification__source_item__id,
                   source_item.source_id as notification__source_item__source_id,
-                  source_item.data as notification__source_item__data,
+                  source_item.data_enc as notification__source_item__data_enc,
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
                   nested_source_item.id as notification__source_item__si__id,
                   nested_source_item.source_id as notification__source_item__si__source_id,
-                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.data_enc as notification__source_item__si__data_enc,
                   nested_source_item.created_at as notification__source_item__si__created_at,
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,
                   nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id,
                   task.id as notification__task__id,
                   task.title as notification__task__title,
-                  task.body as notification__task__body,
+                  task.body_enc as notification__task__body_enc,
                   task.status as notification__task__status,
                   task.completed_at as notification__task__completed_at,
                   task.priority as notification__task__priority,
@@ -256,14 +259,14 @@ impl NotificationRepository for Repository {
                   task.user_id as notification__task__user_id,
                   task_source_item.id as notification__task__source_item__id,
                   task_source_item.source_id as notification__task__source_item__source_id,
-                  task_source_item.data as notification__task__source_item__data,
+                  task_source_item.data_enc as notification__task__source_item__data_enc,
                   task_source_item.created_at as notification__task__source_item__created_at,
                   task_source_item.updated_at as notification__task__source_item__updated_at,
                   task_source_item.user_id as notification__task__source_item__user_id,
                   task_source_item.integration_connection_id as notification__task__source_item__integration_connection_id,
                   task_sink_item.id as notification__task__sink_item__id,
                   task_sink_item.source_id as notification__task__sink_item__source_id,
-                  task_sink_item.data as notification__task__sink_item__data,
+                  task_sink_item.data_enc as notification__task__sink_item__data_enc,
                   task_sink_item.created_at as notification__task__sink_item__created_at,
                   task_sink_item.updated_at as notification__task__sink_item__updated_at,
                   task_sink_item.user_id as notification__task__sink_item__user_id,
@@ -321,14 +324,14 @@ impl NotificationRepository for Repository {
                   notification.kind as notification__kind,
                   source_item.id as notification__source_item__id,
                   source_item.source_id as notification__source_item__source_id,
-                  source_item.data as notification__source_item__data,
+                  source_item.data_enc as notification__source_item__data_enc,
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
                   nested_source_item.id as notification__source_item__si__id,
                   nested_source_item.source_id as notification__source_item__si__source_id,
-                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.data_enc as notification__source_item__si__data_enc,
                   nested_source_item.created_at as notification__source_item__si__created_at,
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,
@@ -540,21 +543,21 @@ impl NotificationRepository for Repository {
                   notification.kind as notification__kind,
                   source_item.id as notification__source_item__id,
                   source_item.source_id as notification__source_item__source_id,
-                  source_item.data as notification__source_item__data,
+                  source_item.data_enc as notification__source_item__data_enc,
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
                   nested_source_item.id as notification__source_item__si__id,
                   nested_source_item.source_id as notification__source_item__si__source_id,
-                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.data_enc as notification__source_item__si__data_enc,
                   nested_source_item.created_at as notification__source_item__si__created_at,
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,
                   nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id,
                   task.id as notification__task__id,
                   task.title as notification__task__title,
-                  task.body as notification__task__body,
+                  task.body_enc as notification__task__body_enc,
                   task.status as notification__task__status,
                   task.completed_at as notification__task__completed_at,
                   task.priority as notification__task__priority,
@@ -569,14 +572,14 @@ impl NotificationRepository for Repository {
                   task.user_id as notification__task__user_id,
                   task_source_item.id as notification__task__source_item__id,
                   task_source_item.source_id as notification__task__source_item__source_id,
-                  task_source_item.data as notification__task__source_item__data,
+                  task_source_item.data_enc as notification__task__source_item__data_enc,
                   task_source_item.created_at as notification__task__source_item__created_at,
                   task_source_item.updated_at as notification__task__source_item__updated_at,
                   task_source_item.user_id as notification__task__source_item__user_id,
                   task_source_item.integration_connection_id as notification__task__source_item__integration_connection_id,
                   task_sink_item.id as notification__task__sink_item__id,
                   task_sink_item.source_id as notification__task__sink_item__source_id,
-                  task_sink_item.data as notification__task__sink_item__data,
+                  task_sink_item.data_enc as notification__task__sink_item__data_enc,
                   task_sink_item.created_at as notification__task__sink_item__created_at,
                   task_sink_item.updated_at as notification__task__sink_item__updated_at,
                   task_sink_item.user_id as notification__task__sink_item__user_id,
@@ -796,14 +799,14 @@ impl NotificationRepository for Repository {
                   notification.kind as notification__kind,
                   source_item.id as notification__source_item__id,
                   source_item.source_id as notification__source_item__source_id,
-                  source_item.data as notification__source_item__data,
+                  source_item.data_enc as notification__source_item__data_enc,
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
                   nested_source_item.id as notification__source_item__si__id,
                   nested_source_item.source_id as notification__source_item__si__source_id,
-                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.data_enc as notification__source_item__si__data_enc,
                   nested_source_item.created_at as notification__source_item__si__created_at,
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,
@@ -854,14 +857,14 @@ impl NotificationRepository for Repository {
                   notification.kind as notification__kind,
                   source_item.id as notification__source_item__id,
                   source_item.source_id as notification__source_item__source_id,
-                  source_item.data as notification__source_item__data,
+                  source_item.data_enc as notification__source_item__data_enc,
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
                   nested_source_item.id as notification__source_item__si__id,
                   nested_source_item.source_id as notification__source_item__si__source_id,
-                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.data_enc as notification__source_item__si__data_enc,
                   nested_source_item.created_at as notification__source_item__si__created_at,
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,
@@ -929,14 +932,14 @@ impl NotificationRepository for Repository {
                   notification.kind as notification__kind,
                   source_item.id as notification__source_item__id,
                   source_item.source_id as notification__source_item__source_id,
-                  source_item.data as notification__source_item__data,
+                  source_item.data_enc as notification__source_item__data_enc,
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
                   nested_source_item.id as notification__source_item__si__id,
                   nested_source_item.source_id as notification__source_item__si__source_id,
-                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.data_enc as notification__source_item__si__data_enc,
                   nested_source_item.created_at as notification__source_item__si__created_at,
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,
@@ -1205,14 +1208,14 @@ impl NotificationRepository for Repository {
                   notification.kind as notification__kind,
                   source_item.id as notification__source_item__id,
                   source_item.source_id as notification__source_item__source_id,
-                  source_item.data as notification__source_item__data,
+                  source_item.data_enc as notification__source_item__data_enc,
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
                   nested_source_item.id as notification__source_item__si__id,
                   nested_source_item.source_id as notification__source_item__si__source_id,
-                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.data_enc as notification__source_item__si__data_enc,
                   nested_source_item.created_at as notification__source_item__si__created_at,
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,
@@ -1353,14 +1356,14 @@ impl NotificationRepository for Repository {
                   notification.kind as notification__kind,
                   source_item.id as notification__source_item__id,
                   source_item.source_id as notification__source_item__source_id,
-                  source_item.data as notification__source_item__data,
+                  source_item.data_enc as notification__source_item__data_enc,
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
                   nested_source_item.id as notification__source_item__si__id,
                   nested_source_item.source_id as notification__source_item__si__source_id,
-                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.data_enc as notification__source_item__si__data_enc,
                   nested_source_item.created_at as notification__source_item__si__created_at,
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,
@@ -1479,6 +1482,74 @@ impl NotificationRepository for Repository {
         linear_issue_id: &str,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
+        // The issue id is in the encrypted source item data: select the candidate
+        // notifications, then match the issue id once decrypted
+        let candidate_rows = sqlx::query(
+            r#"
+                SELECT
+                  notification.id AS notification_id,
+                  source_item.id AS source_item_id,
+                  source_item.data_enc AS source_item_data_enc
+                FROM notification
+                INNER JOIN third_party_item AS source_item
+                  ON notification.source_item_id = source_item.id
+                WHERE
+                  notification.kind::TEXT = $1
+                  AND source_item.kind::TEXT = $2
+                  AND (notification.status::TEXT = 'Read' OR notification.status::TEXT = 'Unread')
+                  AND notification.user_id = $3
+            "#,
+        )
+        .bind(NotificationSourceKind::Linear.to_string())
+        .bind(ThirdPartyItemKind::LinearNotification.to_string())
+        .bind(user_id.0)
+        .fetch_all(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to fetch notifications for Linear issue {linear_issue_id} from storage: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+        let mut notification_ids = vec![];
+        for row in &candidate_rows {
+            let decode = || -> sqlx::Result<(Uuid, Uuid, Vec<u8>)> {
+                Ok((
+                    row.try_get("notification_id")?,
+                    row.try_get("source_item_id")?,
+                    row.try_get("source_item_data_enc")?,
+                ))
+            };
+            let (notification_id, source_item_id, data_enc) =
+                decode().map_err(|err| UniversalInboxError::DatabaseError {
+                    message: format!("Failed to decode notification for Linear issue: {err}"),
+                    source: err,
+                })?;
+            // Like the list queries, skip (and log) data that cannot be read anymore
+            let data = match decrypt_third_party_item_data(&data_enc, source_item_id) {
+                Ok(data) => data,
+                Err(err) => {
+                    warn!(
+                        "Skipping third_party_item {source_item_id} that cannot be read: {err:?}"
+                    );
+                    continue;
+                }
+            };
+            if let ThirdPartyItemData::LinearNotification(linear_notification) = data
+                && linear_notification
+                    .get_issue_id()
+                    .is_some_and(|issue_id| issue_id.to_string() == linear_issue_id)
+            {
+                notification_ids.push(notification_id);
+            }
+        }
+        if notification_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
         let mut query_builder = QueryBuilder::new("UPDATE notification SET");
         let mut separated = query_builder.separated(", ");
         separated
@@ -1501,8 +1572,9 @@ impl NotificationRepository for Repository {
         let mut separated = query_builder.separated(" AND ");
         separated.push(" notification.id = n.id ");
         separated
-            .push(" source_item.data->'content'->'content'->'issue'->>'id' = ")
-            .push_bind_unseparated(linear_issue_id);
+            .push(" notification.id = ANY(")
+            .push_bind_unseparated(notification_ids)
+            .push_unseparated(")");
         separated
             .push(" notification.kind::TEXT = ")
             .push_bind_unseparated(NotificationSourceKind::Linear.to_string());
@@ -1527,14 +1599,14 @@ impl NotificationRepository for Repository {
                   notification.kind as notification__kind,
                   source_item.id as notification__source_item__id,
                   source_item.source_id as notification__source_item__source_id,
-                  source_item.data as notification__source_item__data,
+                  source_item.data_enc as notification__source_item__data_enc,
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
                   nested_source_item.id as notification__source_item__si__id,
                   nested_source_item.source_id as notification__source_item__si__source_id,
-                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.data_enc as notification__source_item__si__data_enc,
                   nested_source_item.created_at as notification__source_item__si__created_at,
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,
@@ -1780,14 +1852,14 @@ impl Repository {
                   notification.kind as notification__kind,
                   source_item.id as notification__source_item__id,
                   source_item.source_id as notification__source_item__source_id,
-                  source_item.data as notification__source_item__data,
+                  source_item.data_enc as notification__source_item__data_enc,
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
                   nested_source_item.id as notification__source_item__si__id,
                   nested_source_item.source_id as notification__source_item__si__source_id,
-                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.data_enc as notification__source_item__si__data_enc,
                   nested_source_item.created_at as notification__source_item__si__created_at,
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,

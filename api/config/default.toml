@@ -373,6 +373,19 @@ required_oauth_scopes = ["tasks:read", "tasks:write"]
 is_enabled = true
 
 [oauth2]
+# Deprecated: used as data encryption key 1 only when `[data_encryption]` has no key.
 # Generate with: openssl rand -hex 32
 token_encryption_key = "to be generated"
+
+# Keys encrypting sensitive data at rest, see doc/src/config/data_encryption.md
+[data_encryption]
+# Id of the key encrypting new values
+active_key_id = 1
+# Required: hex-encoded 32-byte key of the blind indexes used to look encrypted email
+# addresses up, generate with: openssl rand -hex 32
+# Set it with UNIVERSAL_INBOX__DATA_ENCRYPTION__BLIND_INDEX_KEY rather than in a file.
+# blind_index_key = 
+# Hex-encoded 32-byte keys by id, generate with: openssl rand -hex 32
+# Set them with UNIVERSAL_INBOX__DATA_ENCRYPTION__KEYS__<id> rather than in a file.
+[data_encryption.keys]
 

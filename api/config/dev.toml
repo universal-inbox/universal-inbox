@@ -30,3 +30,7 @@ smtp_username = "user"
 smtp_password = "password"
 from_header = "nobody <nobody@example.com>"
 reply_to_header = "support <support@example.com>"
+
+[data_encryption]
+# Development only: refused outside the dev and test environments
+blind_index_key = "9a8b7c6d5e4f30211203f4e5d6c7b8a99a8b7c6d5e4f30211203f4e5d6c7b8a9"

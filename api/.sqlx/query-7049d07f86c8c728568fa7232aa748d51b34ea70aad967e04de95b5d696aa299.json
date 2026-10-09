@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT email_validation_token_hash FROM \"user\" WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email_validation_token_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "\"user\"",
+            "name": "email_validation_token_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "7049d07f86c8c728568fa7232aa748d51b34ea70aad967e04de95b5d696aa299"
+}

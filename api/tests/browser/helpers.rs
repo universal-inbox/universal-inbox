@@ -460,15 +460,9 @@ pub async fn verify_user_email(app: &BrowserTestedApp, email: &str) {
         .expect("Failed to look up registered user")
         .expect("Registered user should exist");
 
-    let token = app
-        .repository
-        .get_user_email_validation_token(&mut transaction, user.id)
-        .await
-        .expect("Failed to read email validation token")
-        .expect("Registered user should have an email validation token");
-
-    app.user_service
-        .verify_email(&mut transaction, user.id, token)
+    // Only the token hash is stored: validate the email directly
+    app.repository
+        .mark_email_as_validated(&mut transaction, user.id, chrono::Utc::now())
         .await
         .expect("Failed to verify email");
 

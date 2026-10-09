@@ -23,6 +23,11 @@ via stdin).
   If missing, ask the user.
 - **`backup_path`** (optional) — path to the `pg_dump` directory backup.
   Second arg. Default: `/tmp/prod.bak`.
+- **Prod data encryption keys** (required) — third-party payloads, task
+  bodies and OAuth tokens are encrypted at rest
+  (`doc/src/config/data_encryption.md`): the backup is unreadable without
+  the keys that encrypted it. Ask the user for them; never write them to a
+  committed file.
 
 Validate before doing anything else:
 - `notification_id` matches `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`.
@@ -97,10 +102,24 @@ until direnv exec . just status 2>/dev/null \
 
 `restore-db-backup` accepts a `pg_dump` directory backup.
 
+First add the prod data encryption keys to the worktree's `.local_envrc`
+(git-ignored), then `direnv allow`:
+
+```bash
+export UNIVERSAL_INBOX__DATA_ENCRYPTION__ACTIVE_KEY_ID=<prod active key id>
+export UNIVERSAL_INBOX__DATA_ENCRYPTION__KEYS__<id>=<prod key>   # one line per key
+export UNIVERSAL_INBOX__DATA_ENCRYPTION__BLIND_INDEX_KEY=<prod blind index key>  # email lookups
+```
+
 ```bash
 direnv exec . just restore-db-backup <backup_path>
 direnv exec . just api ensure-db
+# encrypts the rows of a backup taken before encryption, checks the keys read every value
+direnv exec . cargo run -p universal-inbox-api -- data-encryption encrypt-plaintext
 ```
+
+If `encrypt-plaintext` reports values on a key that is not configured, a
+key is missing: do not continue, the app would skip those rows.
 
 `ensure-db` creates the DB if missing and applies any newer migrations
 on top of the restored snapshot. Skipping it leaves the schema at the

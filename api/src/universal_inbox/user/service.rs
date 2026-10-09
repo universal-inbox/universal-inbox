@@ -53,7 +53,7 @@ use crate::{
     repository::notification::NotificationRepository,
     repository::oauth2::OAuth2Repository,
     repository::task::TaskRepository,
-    repository::user::UserRepository,
+    repository::user::{UserRepository, hash_one_time_token},
     repository::user_preferences::UserPreferencesRepository,
     universal_inbox::integration_connection::service::IntegrationConnectionService,
     universal_inbox::{
@@ -192,6 +192,25 @@ impl UserService {
 
     pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
         self.repository.begin().await
+    }
+
+    /// Set a validated email address on the user, eg. when anonymizing a database
+    pub async fn set_verified_email(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        email: &Pii<EmailAddress>,
+    ) -> Result<(), UniversalInboxError> {
+        if !self
+            .repository
+            .apply_verified_email_change(executor, user_id, email)
+            .await?
+        {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Email address of user {user_id} is already used by another user"
+            )));
+        }
+        Ok(())
     }
 
     pub async fn get_user(
@@ -1832,7 +1851,8 @@ impl UserService {
             .repository
             .get_pending_email_change(executor, user_id)
             .await?
-            && pending_change.validation_token == email_validation_token
+            && pending_change.validation_token_hash
+                == hash_one_time_token(&email_validation_token.0)
         {
             self.repository
                 .delete_pending_email_change(executor, user_id)
@@ -1860,13 +1880,13 @@ impl UserService {
             return Ok(());
         }
 
-        let stored_email_validation_token = self
+        let stored_email_validation_token_hash = self
             .repository
-            .get_user_email_validation_token(executor, user_id)
+            .get_user_email_validation_token_hash(executor, user_id)
             .await?;
 
-        match stored_email_validation_token {
-            Some(token) if token == email_validation_token => {
+        match stored_email_validation_token_hash {
+            Some(token_hash) if token_hash == hash_one_time_token(&email_validation_token.0) => {
                 let email_validation_sent_at = self
                     .repository
                     .get_user(executor, user_id)

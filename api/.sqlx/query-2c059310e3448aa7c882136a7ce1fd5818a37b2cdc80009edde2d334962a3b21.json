@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT body_enc FROM task WHERE id = $1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "body_enc",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "task",
+            "name": "body_enc"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "2c059310e3448aa7c882136a7ce1fd5818a37b2cdc80009edde2d334962a3b21"
+}

@@ -1,9 +1,7 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use sqlx::{
-    FromRow, PgConnection, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow, types::Json,
-};
+use sqlx::{FromRow, PgConnection, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow};
 use tracing::{debug, warn};
 use uuid::Uuid;
 
@@ -18,6 +16,7 @@ use crate::observability::attr;
 use crate::{
     repository::Repository,
     universal_inbox::{UniversalInboxError, UpsertStatus},
+    utils::crypto::{aad, data_keyring},
 };
 
 use super::{FromRowWithPrefix, decode_rows_skipping_invalid};
@@ -111,7 +110,6 @@ impl ThirdPartyItemRepository for Repository {
         executor: &mut Transaction<'_, Postgres>,
         third_party_item: Box<ThirdPartyItem>,
     ) -> Result<UpsertStatus<Box<ThirdPartyItem>>, UniversalInboxError> {
-        let data = Json(third_party_item.data.clone());
         let kind = third_party_item.kind();
 
         let mut query_builder = QueryBuilder::new(
@@ -119,14 +117,14 @@ impl ThirdPartyItemRepository for Repository {
               SELECT
                 third_party_item.id as third_party_item__id,
                 third_party_item.source_id as third_party_item__source_id,
-                third_party_item.data as third_party_item__data,
+                third_party_item.data_enc as third_party_item__data_enc,
                 third_party_item.created_at as third_party_item__created_at,
                 third_party_item.updated_at as third_party_item__updated_at,
                 third_party_item.user_id as third_party_item__user_id,
                 third_party_item.integration_connection_id as third_party_item__integration_connection_id,
                 source_item.id as third_party_item__si__id,
                 source_item.source_id as third_party_item__si__source_id,
-                source_item.data as third_party_item__si__data,
+                source_item.data_enc as third_party_item__si__data_enc,
                 source_item.created_at as third_party_item__si__created_at,
                 source_item.updated_at as third_party_item__si__updated_at,
                 source_item.user_id as third_party_item__si__user_id,
@@ -221,11 +219,15 @@ impl ThirdPartyItemRepository for Repository {
                 third_party_item.source_id,
                 third_party_item.user_id
             );
+            let data_enc = encrypt_third_party_item_data(
+                &third_party_item.data,
+                existing_third_party_item.id,
+            )?;
             let mut query_builder = QueryBuilder::new("UPDATE third_party_item SET ");
             let mut separated = query_builder.separated(", ");
             separated
-                .push("data = ")
-                .push_bind_unseparated(data.clone());
+                .push("data_enc = ")
+                .push_bind_unseparated(data_enc);
             separated
                 .push("updated_at = ")
                 .push_bind_unseparated(third_party_item.updated_at.naive_utc());
@@ -266,13 +268,15 @@ impl ThirdPartyItemRepository for Repository {
             "Creating new {} third_party_item {} (from {}) for {}",
             kind, third_party_item.id, third_party_item.source_id, third_party_item.user_id
         );
+        let data_enc = encrypt_third_party_item_data(&third_party_item.data, third_party_item.id)?;
         let query = sqlx::query_scalar!(
             r#"
                 INSERT INTO third_party_item
                   (
                     id,
                     source_id,
-                    data,
+                    kind,
+                    data_enc,
                     created_at,
                     updated_at,
                     user_id,
@@ -280,13 +284,14 @@ impl ThirdPartyItemRepository for Repository {
                     source_item_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8)
+                  ($1, $2, $3::third_party_item_kind, $4, $5, $6, $7, $8, $9)
                 RETURNING
                   id
                 "#,
             third_party_item.id.0, // no need to return the id as we already know it
             third_party_item.source_id,
-            data as Json<ThirdPartyItemData>, // force the macro to ignore type checking
+            kind.to_string() as _,
+            data_enc,
             third_party_item.created_at.naive_utc(),
             third_party_item.updated_at.naive_utc(),
             third_party_item.user_id.0,
@@ -335,14 +340,14 @@ impl ThirdPartyItemRepository for Repository {
               SELECT
                 third_party_item.id as third_party_item__id,
                 third_party_item.source_id as third_party_item__source_id,
-                third_party_item.data as third_party_item__data,
+                third_party_item.data_enc as third_party_item__data_enc,
                 third_party_item.created_at as third_party_item__created_at,
                 third_party_item.updated_at as third_party_item__updated_at,
                 third_party_item.user_id as third_party_item__user_id,
                 third_party_item.integration_connection_id as third_party_item__integration_connection_id,
                 source_item.id as third_party_item__si__id,
                 source_item.source_id as third_party_item__si__source_id,
-                source_item.data as third_party_item__si__data,
+                source_item.data_enc as third_party_item__si__data_enc,
                 source_item.created_at as third_party_item__si__created_at,
                 source_item.updated_at as third_party_item__si__updated_at,
                 source_item.user_id as third_party_item__si__user_id,
@@ -481,14 +486,14 @@ impl ThirdPartyItemRepository for Repository {
               SELECT
                 third_party_item.id as third_party_item__id,
                 third_party_item.source_id as third_party_item__source_id,
-                third_party_item.data as third_party_item__data,
+                third_party_item.data_enc as third_party_item__data_enc,
                 third_party_item.created_at as third_party_item__created_at,
                 third_party_item.updated_at as third_party_item__updated_at,
                 third_party_item.user_id as third_party_item__user_id,
                 third_party_item.integration_connection_id as third_party_item__integration_connection_id,
                 source_item.id as third_party_item__si__id,
                 source_item.source_id as third_party_item__si__source_id,
-                source_item.data as third_party_item__si__data,
+                source_item.data_enc as third_party_item__si__data_enc,
                 source_item.created_at as third_party_item__si__created_at,
                 source_item.updated_at as third_party_item__si__updated_at,
                 source_item.user_id as third_party_item__si__user_id,
@@ -547,14 +552,14 @@ impl ThirdPartyItemRepository for Repository {
               SELECT
                 third_party_item.id as third_party_item__id,
                 third_party_item.source_id as third_party_item__source_id,
-                third_party_item.data as third_party_item__data,
+                third_party_item.data_enc as third_party_item__data_enc,
                 third_party_item.created_at as third_party_item__created_at,
                 third_party_item.updated_at as third_party_item__updated_at,
                 third_party_item.user_id as third_party_item__user_id,
                 third_party_item.integration_connection_id as third_party_item__integration_connection_id,
                 source_item.id as third_party_item__si__id,
                 source_item.source_id as third_party_item__si__source_id,
-                source_item.data as third_party_item__si__data,
+                source_item.data_enc as third_party_item__si__data_enc,
                 source_item.created_at as third_party_item__si__created_at,
                 source_item.updated_at as third_party_item__si__updated_at,
                 source_item.user_id as third_party_item__si__user_id,
@@ -607,14 +612,14 @@ impl ThirdPartyItemRepository for Repository {
               SELECT
                 third_party_item.id as third_party_item__id,
                 third_party_item.source_id as third_party_item__source_id,
-                third_party_item.data as third_party_item__data,
+                third_party_item.data_enc as third_party_item__data_enc,
                 third_party_item.created_at as third_party_item__created_at,
                 third_party_item.updated_at as third_party_item__updated_at,
                 third_party_item.user_id as third_party_item__user_id,
                 third_party_item.integration_connection_id as third_party_item__integration_connection_id,
                 source_item.id as third_party_item__si__id,
                 source_item.source_id as third_party_item__si__source_id,
-                source_item.data as third_party_item__si__data,
+                source_item.data_enc as third_party_item__si__data_enc,
                 source_item.created_at as third_party_item__si__created_at,
                 source_item.updated_at as third_party_item__si__updated_at,
                 source_item.user_id as third_party_item__si__user_id,
@@ -668,14 +673,14 @@ impl ThirdPartyItemRepository for Repository {
               SELECT
                 third_party_item.id as third_party_item__id,
                 third_party_item.source_id as third_party_item__source_id,
-                third_party_item.data as third_party_item__data,
+                third_party_item.data_enc as third_party_item__data_enc,
                 third_party_item.created_at as third_party_item__created_at,
                 third_party_item.updated_at as third_party_item__updated_at,
                 third_party_item.user_id as third_party_item__user_id,
                 third_party_item.integration_connection_id as third_party_item__integration_connection_id,
                 source_item.id as third_party_item__si__id,
                 source_item.source_id as third_party_item__si__source_id,
-                source_item.data as third_party_item__si__data,
+                source_item.data_enc as third_party_item__si__data_enc,
                 source_item.created_at as third_party_item__si__created_at,
                 source_item.updated_at as third_party_item__si__updated_at,
                 source_item.user_id as third_party_item__si__user_id,
@@ -731,12 +736,12 @@ impl ThirdPartyItemRepository for Repository {
         sqlx::query(
             r#"
               UPDATE third_party_item
-              SET source_id = $1, data = $2, updated_at = $3
+              SET source_id = $1, data_enc = $2, updated_at = $3
               WHERE id = $4
             "#,
         )
         .bind(source_id)
-        .bind(Json(data))
+        .bind(encrypt_third_party_item_data(data, id)?)
         .bind(Utc::now().naive_utc())
         .bind(id.0)
         .execute(&mut **executor)
@@ -754,11 +759,29 @@ impl ThirdPartyItemRepository for Repository {
     }
 }
 
+const THIRD_PARTY_ITEM_DATA_AAD: &str = "third_party_item.data";
+
+fn encrypt_third_party_item_data(
+    data: &ThirdPartyItemData,
+    id: ThirdPartyItemId,
+) -> Result<Vec<u8>, UniversalInboxError> {
+    data_keyring()?.encrypt_json(data, &aad(THIRD_PARTY_ITEM_DATA_AAD, id.0))
+}
+
+/// Decrypt `third_party_item.data_enc` of the item `id`
+pub fn decrypt_third_party_item_data(
+    data_enc: &[u8],
+    id: Uuid,
+) -> Result<ThirdPartyItemData, UniversalInboxError> {
+    data_keyring()?.decrypt_json(data_enc, &aad(THIRD_PARTY_ITEM_DATA_AAD, id))
+}
+
 #[derive(Debug, Clone)]
 pub struct ThirdPartyItemRow {
     pub id: Uuid,
     pub source_id: String,
-    pub data: Json<ThirdPartyItemData>,
+    /// Decrypted from `third_party_item.data_enc`
+    pub data: ThirdPartyItemData,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub user_id: Uuid,
@@ -782,10 +805,14 @@ impl FromRow<'_, PgRow> for ThirdPartyItemRow {
 
 impl FromRowWithPrefix<'_, PgRow> for ThirdPartyItemRow {
     fn from_row_with_prefix(row: &PgRow, prefix: &str) -> sqlx::Result<Self> {
+        let id: Uuid = row.try_get(format!("{prefix}id").as_str())?;
+        let data_enc: Vec<u8> = row.try_get(format!("{prefix}data_enc").as_str())?;
+        let data = decrypt_third_party_item_data(&data_enc, id)
+            .map_err(|err| sqlx::Error::Decode(Box::new(err)))?;
         Ok(ThirdPartyItemRow {
-            id: row.try_get(format!("{prefix}id").as_str())?,
+            id,
             source_id: row.try_get(format!("{prefix}source_id").as_str())?,
-            data: row.try_get(format!("{prefix}data").as_str())?,
+            data,
             created_at: row.try_get(format!("{prefix}created_at").as_str())?,
             updated_at: row.try_get(format!("{prefix}updated_at").as_str())?,
             user_id: row.try_get(format!("{prefix}user_id").as_str())?,
@@ -814,7 +841,7 @@ impl TryFrom<&ThirdPartyItemRow> for ThirdPartyItem {
         Ok(ThirdPartyItem {
             id: row.id.into(),
             source_id: row.source_id.clone(),
-            data: row.data.0.clone(),
+            data: row.data.clone(),
             created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
             updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
             user_id: row.user_id.into(),

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::{Postgres, Transaction, types::Json};
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use universal_inbox::integration_connection::{
@@ -9,7 +9,11 @@ use universal_inbox::integration_connection::{
 };
 
 use crate::observability::attr;
-use crate::{repository::Repository, universal_inbox::UniversalInboxError};
+use crate::{
+    repository::Repository,
+    universal_inbox::UniversalInboxError,
+    utils::crypto::{aad, data_keyring},
+};
 
 /// An OAuth grant to revoke at its provider. The tokens are encrypted with the
 /// row id as AAD, so they outlive the integration connection.
@@ -107,7 +111,7 @@ impl OAuthGrantRevocationRepository for Repository {
             r#"
                 INSERT INTO oauth_grant_revocation
                   (id, provider_kind, integration_connection_id, provider_user_id,
-                   provider_context, encrypted_access_token, encrypted_refresh_token,
+                   provider_context_enc, encrypted_access_token, encrypted_refresh_token,
                    access_token_expires_at, attempts, last_error, next_attempt_at)
                 VALUES
                   ($1, $2::integration_provider_kind, $3, $4, $5, $6, $7, $8, 1, $9, $10)
@@ -116,7 +120,14 @@ impl OAuthGrantRevocationRepository for Repository {
             revocation.provider_kind.to_string() as _,
             revocation.integration_connection_id.map(Uuid::from),
             revocation.provider_user_id,
-            revocation.provider_context.map(Json) as Option<Json<IntegrationConnectionContext>>,
+            revocation
+                .provider_context
+                .as_ref()
+                .map(|context| data_keyring()?.encrypt_json(
+                    context,
+                    &aad("oauth_grant_revocation.provider_context", revocation.id)
+                ))
+                .transpose()?,
             &revocation.encrypted_access_token,
             revocation.encrypted_refresh_token.as_deref(),
             revocation.access_token_expires_at,

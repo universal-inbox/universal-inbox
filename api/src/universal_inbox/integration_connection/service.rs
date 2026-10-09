@@ -62,7 +62,7 @@ use crate::{
     universal_inbox::{UniversalInboxError, UpdateStatus, retry_on_transient_database_error},
     utils::{
         cache::{Cache, build_redis_cache},
-        crypto::{TokenEncryptionKey, decrypt_token, encrypt_token},
+        crypto::{DataKeyring, decrypt_token, encrypt_token},
     },
 };
 
@@ -163,7 +163,7 @@ pub struct IntegrationConnectionService {
     required_oauth_scopes: HashMap<IntegrationProviderKind, Vec<String>>,
     oauth2_providers: HashMap<IntegrationProviderKind, Arc<dyn OAuth2Provider>>,
     oauth2_flow_service: OAuth2FlowService,
-    token_encryption_key: SecretBox<TokenEncryptionKey>,
+    data_keyring: Arc<DataKeyring>,
     min_sync_notifications_interval_in_minutes: i64,
     min_sync_tasks_interval_in_minutes: i64,
     sync_backoff_base_delay_in_seconds: u64,
@@ -200,7 +200,7 @@ impl IntegrationConnectionService {
         required_oauth_scopes: HashMap<IntegrationProviderKind, Vec<String>>,
         oauth2_providers: HashMap<IntegrationProviderKind, Arc<dyn OAuth2Provider>>,
         oauth2_flow_service: OAuth2FlowService,
-        token_encryption_key: SecretBox<TokenEncryptionKey>,
+        data_keyring: Arc<DataKeyring>,
         min_sync_notifications_interval_in_minutes: i64,
         min_sync_tasks_interval_in_minutes: i64,
         sync_backoff_base_delay_in_seconds: u64,
@@ -218,7 +218,7 @@ impl IntegrationConnectionService {
             required_oauth_scopes,
             oauth2_providers,
             oauth2_flow_service,
-            token_encryption_key,
+            data_keyring,
             min_sync_notifications_interval_in_minutes,
             min_sync_tasks_interval_in_minutes,
             sync_backoff_base_delay_in_seconds,
@@ -1349,14 +1349,14 @@ impl IntegrationConnectionService {
         access_token_expires_at: Option<DateTime<Utc>>,
         aad_context: &[u8],
     ) -> Result<GrantTokens, UniversalInboxError> {
-        let token_encryption_key = self.token_encryption_key.expose_secret();
+        let data_keyring = self.data_keyring.as_ref();
         let access_token = AccessToken(decrypt_token(
             encrypted_access_token,
             aad_context,
-            token_encryption_key,
+            data_keyring,
         )?);
         let refresh_token = encrypted_refresh_token
-            .map(|encrypted| decrypt_token(encrypted, aad_context, token_encryption_key))
+            .map(|encrypted| decrypt_token(encrypted, aad_context, data_keyring))
             .transpose()?
             .map(RefreshToken);
         Ok(GrantTokens {
@@ -1371,18 +1371,13 @@ impl IntegrationConnectionService {
         tokens: &GrantTokens,
         aad_context: &[u8],
     ) -> Result<(Vec<u8>, Option<Vec<u8>>), UniversalInboxError> {
-        let token_encryption_key = self.token_encryption_key.expose_secret();
-        let encrypted_access_token = encrypt_token(
-            tokens.access_token.as_str(),
-            aad_context,
-            token_encryption_key,
-        )?;
+        let data_keyring = self.data_keyring.as_ref();
+        let encrypted_access_token =
+            encrypt_token(tokens.access_token.as_str(), aad_context, data_keyring)?;
         let encrypted_refresh_token = tokens
             .refresh_token
             .as_ref()
-            .map(|refresh_token| {
-                encrypt_token(refresh_token.as_str(), aad_context, token_encryption_key)
-            })
+            .map(|refresh_token| encrypt_token(refresh_token.as_str(), aad_context, data_keyring))
             .transpose()?;
         Ok((encrypted_access_token, encrypted_refresh_token))
     }
@@ -2214,12 +2209,12 @@ impl IntegrationConnectionService {
             )));
         }
 
-        let token_encryption_key = self.token_encryption_key.expose_secret();
+        let data_keyring = self.data_keyring.as_ref();
         let aad_context = integration_connection.id.0.as_bytes();
         let access_token = AccessToken(decrypt_token(
             &credential.encrypted_access_token,
             aad_context,
-            token_encryption_key,
+            data_keyring,
         )?);
 
         Ok(Some((access_token, integration_connection)))
@@ -2646,7 +2641,7 @@ impl IntegrationConnectionService {
         provider_kind: Option<IntegrationProviderKind>,
     ) -> Result<(usize, usize), UniversalInboxError> {
         let result: Result<(usize, usize), UniversalInboxError> = async move {
-        let token_encryption_key = self.token_encryption_key.expose_secret();
+        let data_keyring = self.data_keyring.as_ref();
         let flow_service = &self.oauth2_flow_service;
 
         let expiring_before = Utc::now()
@@ -2688,7 +2683,7 @@ impl IntegrationConnectionService {
             let refresh_token = match decrypt_token(
                 &credential.encrypted_refresh_token,
                 aad_context,
-                token_encryption_key,
+                data_keyring,
             ) {
                 Ok(t) => RefreshToken(t),
                 Err(err) => {
@@ -2749,7 +2744,7 @@ impl IntegrationConnectionService {
             let encrypted_access_token = match encrypt_token(
                 token_response.access_token.expose_secret().as_str(),
                 aad_context,
-                token_encryption_key,
+                data_keyring,
             ) {
                 Ok(t) => t,
                 Err(err) => {
@@ -2770,7 +2765,7 @@ impl IntegrationConnectionService {
                     encrypt_token(
                         rt.expose_secret().as_str(),
                         aad_context,
-                        token_encryption_key,
+                        data_keyring,
                     )
                 })
                 .transpose()
@@ -3022,7 +3017,7 @@ impl IntegrationConnectionService {
                 ))
             })?;
 
-        let token_encryption_key = self.token_encryption_key.expose_secret();
+        let data_keyring = self.data_keyring.as_ref();
 
         let token_response = self
             .oauth2_flow_service
@@ -3043,6 +3038,15 @@ impl IntegrationConnectionService {
                     .fetch_provider_user_id(provider, token_response.access_token.expose_secret())
                     .await?
             }
+        };
+        // A Google account is identified by its email address: only its blind index is stored
+        let provider_user_id = match state_data.provider_kind {
+            IntegrationProviderKind::GoogleMail
+            | IntegrationProviderKind::GoogleDrive
+            | IntegrationProviderKind::GoogleCalendar => provider_user_id
+                .map(|email| data_keyring.email_blind_index(&email))
+                .transpose()?,
+            _ => provider_user_id,
         };
 
         // Reconnecting with another provider account than the pinned one is
@@ -3065,18 +3069,12 @@ impl IntegrationConnectionService {
         let encrypted_access_token = encrypt_token(
             token_response.access_token.expose_secret().as_str(),
             aad_context,
-            token_encryption_key,
+            data_keyring,
         )?;
         let encrypted_refresh_token = token_response
             .refresh_token
             .as_ref()
-            .map(|rt| {
-                encrypt_token(
-                    rt.expose_secret().as_str(),
-                    aad_context,
-                    token_encryption_key,
-                )
-            })
+            .map(|rt| encrypt_token(rt.expose_secret().as_str(), aad_context, data_keyring))
             .transpose()?;
 
         let expires_at = token_response.expires_at();

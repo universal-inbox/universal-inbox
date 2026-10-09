@@ -8643,6 +8643,7 @@ dependencies = [
  "webauthn-authenticator-rs",
  "webauthn-rs",
  "wiremock",
+ "zstd",
 ]
 
 [[package]]

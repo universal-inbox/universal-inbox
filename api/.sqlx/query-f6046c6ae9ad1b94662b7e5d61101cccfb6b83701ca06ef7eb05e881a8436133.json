@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, auth_id_token_enc FROM user_auth WHERE auth_user_id = $1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "auth_id_token_enc",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "auth_id_token_enc"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "f6046c6ae9ad1b94662b7e5d61101cccfb6b83701ca06ef7eb05e881a8436133"
+}

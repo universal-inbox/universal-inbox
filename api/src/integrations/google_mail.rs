@@ -62,7 +62,7 @@ use crate::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService,
     },
-    utils::api::ApiClient,
+    utils::{api::ApiClient, crypto::data_keyring},
 };
 
 #[derive(Clone)]
@@ -668,8 +668,8 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
         let config = GoogleMailService::get_config(&integration_connection)?;
 
         // The cached address is stale once the connection has been reconnected
-        // with another Google account: `provider_user_id` is the lowercased
-        // email of the account pinned at the last OAuth exchange. The address
+        // with another Google account: `provider_user_id` is the email blind index
+        // of the account pinned at the last OAuth exchange. The address
         // is then read again from Gmail to keep its exact spelling.
         let user_email_address = match &integration_connection.provider {
             IntegrationProvider::GoogleMail {
@@ -680,7 +680,11 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
                 ..
             } if integration_connection.provider_user_id.as_ref().is_none_or(
                 |provider_user_id| {
-                    *provider_user_id == user_email_address.expose().as_str().to_lowercase()
+                    data_keyring()
+                        .and_then(|keyring| {
+                            keyring.email_blind_index(user_email_address.expose().as_str())
+                        })
+                        .is_ok_and(|email_blind_index| *provider_user_id == email_blind_index)
                 },
             ) =>
             {

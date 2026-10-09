@@ -31,6 +31,7 @@ use crate::{
 };
 
 pub mod anonymize;
+pub mod data_encryption;
 pub mod generate;
 pub mod integration_connection;
 pub mod oauth;
@@ -151,11 +152,35 @@ pub enum Commands {
         command: IntegrationConnectionCommands,
     },
 
+    /// Maintain the data encrypted at rest (see doc/src/config/data_encryption.md)
+    DataEncryption {
+        #[clap(subcommand)]
+        command: DataEncryptionCommands,
+    },
+
     /// Manage Stripe-backed billing state (reconciliation, etc.).
     /// No-op when `[billing]` is absent from configuration.
     Billing {
         #[clap(subcommand)]
         action: crate::billing::commands::BillingAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DataEncryptionCommands {
+    /// Count the encrypted values per key id and the values not encrypted yet
+    Status,
+    /// Encrypt the values stored before their column was encrypted, then check every
+    /// encrypted value can be read with the configured keys. Run before starting the
+    /// API and the workers (done by the container entrypoint).
+    EncryptPlaintext {
+        #[arg(short, long, default_value = "500")]
+        batch_size: i64,
+    },
+    /// Re-encrypt with the active key the values encrypted with another key (key rotation)
+    Reencrypt {
+        #[arg(short, long, default_value = "500")]
+        batch_size: i64,
     },
 }
 
@@ -687,6 +712,8 @@ impl Cli {
                 .await
                 .map(|_| ()),
             },
+
+            Commands::DataEncryption { command } => data_encryption::run(&settings, command).await,
 
             Commands::Billing { action } => {
                 crate::billing::commands::run(action, billing_service).await

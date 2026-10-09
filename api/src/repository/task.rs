@@ -17,6 +17,7 @@ use universal_inbox::{
 
 use crate::observability::attr;
 use crate::universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus};
+use crate::utils::crypto::{aad, data_keyring};
 
 use super::{
     FromRowWithPrefix, Repository, decode_rows_skipping_invalid, third_party::ThirdPartyItemRow,
@@ -109,7 +110,7 @@ impl TaskRepository for Repository {
                 SELECT
                   task.id as task__id,
                   task.title as task__title,
-                  task.body as task__body,
+                  task.body_enc as task__body_enc,
                   task.status as task__status,
                   task.completed_at as task__completed_at,
                   task.priority as task__priority,
@@ -124,14 +125,14 @@ impl TaskRepository for Repository {
                   task.user_id as task__user_id,
                   source_item.id as task__source_item__id,
                   source_item.source_id as task__source_item__source_id,
-                  source_item.data as task__source_item__data,
+                  source_item.data_enc as task__source_item__data_enc,
                   source_item.created_at as task__source_item__created_at,
                   source_item.updated_at as task__source_item__updated_at,
                   source_item.user_id as task__source_item__user_id,
                   source_item.integration_connection_id as task__source_item__integration_connection_id,
                   sink_item.id as task__sink_item__id,
                   sink_item.source_id as task__sink_item__source_id,
-                  sink_item.data as task__sink_item__data,
+                  sink_item.data_enc as task__sink_item__data_enc,
                   sink_item.created_at as task__sink_item__created_at,
                   sink_item.updated_at as task__sink_item__updated_at,
                   sink_item.user_id as task__sink_item__user_id,
@@ -196,7 +197,7 @@ impl TaskRepository for Repository {
                 SELECT
                   task.id as task__id,
                   task.title as task__title,
-                  task.body as task__body,
+                  task.body_enc as task__body_enc,
                   task.status as task__status,
                   task.completed_at as task__completed_at,
                   task.priority as task__priority,
@@ -211,14 +212,14 @@ impl TaskRepository for Repository {
                   task.user_id as task__user_id,
                   source_item.id as task__source_item__id,
                   source_item.source_id as task__source_item__source_id,
-                  source_item.data as task__source_item__data,
+                  source_item.data_enc as task__source_item__data_enc,
                   source_item.created_at as task__source_item__created_at,
                   source_item.updated_at as task__source_item__updated_at,
                   source_item.user_id as task__source_item__user_id,
                   source_item.integration_connection_id as task__source_item__integration_connection_id,
                   sink_item.id as task__sink_item__id,
                   sink_item.source_id as task__sink_item__source_id,
-                  sink_item.data as task__sink_item__data,
+                  sink_item.data_enc as task__sink_item__data_enc,
                   sink_item.created_at as task__sink_item__created_at,
                   sink_item.updated_at as task__sink_item__updated_at,
                   sink_item.user_id as task__sink_item__user_id,
@@ -303,7 +304,7 @@ impl TaskRepository for Repository {
                 SELECT
                   task.id as task__id,
                   task.title as task__title,
-                  task.body as task__body,
+                  task.body_enc as task__body_enc,
                   task.status as task__status,
                   task.completed_at as task__completed_at,
                   task.priority as task__priority,
@@ -318,14 +319,14 @@ impl TaskRepository for Repository {
                   task.user_id as task__user_id,
                   source_item.id as task__source_item__id,
                   source_item.source_id as task__source_item__source_id,
-                  source_item.data as task__source_item__data,
+                  source_item.data_enc as task__source_item__data_enc,
                   source_item.created_at as task__source_item__created_at,
                   source_item.updated_at as task__source_item__updated_at,
                   source_item.user_id as task__source_item__user_id,
                   source_item.integration_connection_id as task__source_item__integration_connection_id,
                   sink_item.id as task__sink_item__id,
                   sink_item.source_id as task__sink_item__source_id,
-                  sink_item.data as task__sink_item__data,
+                  sink_item.data_enc as task__sink_item__data_enc,
                   sink_item.created_at as task__sink_item__created_at,
                   sink_item.updated_at as task__sink_item__updated_at,
                   sink_item.user_id as task__sink_item__user_id,
@@ -387,7 +388,7 @@ impl TaskRepository for Repository {
                 SELECT
                   task.id as task__id,
                   task.title as task__title,
-                  task.body as task__body,
+                  task.body_enc as task__body_enc,
                   task.status as task__status,
                   task.completed_at as task__completed_at,
                   task.priority as task__priority,
@@ -402,14 +403,14 @@ impl TaskRepository for Repository {
                   task.user_id as task__user_id,
                   source_item.id as task__source_item__id,
                   source_item.source_id as task__source_item__source_id,
-                  source_item.data as task__source_item__data,
+                  source_item.data_enc as task__source_item__data_enc,
                   source_item.created_at as task__source_item__created_at,
                   source_item.updated_at as task__source_item__updated_at,
                   source_item.user_id as task__source_item__user_id,
                   source_item.integration_connection_id as task__source_item__integration_connection_id,
                   sink_item.id as task__sink_item__id,
                   sink_item.source_id as task__sink_item__source_id,
-                  sink_item.data as task__sink_item__data,
+                  sink_item.data_enc as task__sink_item__data_enc,
                   sink_item.created_at as task__sink_item__created_at,
                   sink_item.updated_at as task__sink_item__updated_at,
                   sink_item.user_id as task__sink_item__user_id,
@@ -474,7 +475,7 @@ impl TaskRepository for Repository {
                   task.id,
                   sink_item.source_id,
                   task.title,
-                  task.body,
+                  task.body_enc as "body_enc!",
                   task.priority,
                   task.due_at as "due_at: Json<Option<DueDate>>",
                   task.tags,
@@ -484,12 +485,12 @@ impl TaskRepository for Repository {
                   to_tsquery('english', $1) query,
                   third_party_item sink_item
                 WHERE
-                  query @@ title_body_project_tags_tsv
+                  query @@ title_project_tags_tsv
                   AND task.status::TEXT = 'Active'
                   AND task.user_id = $2
                   AND task.sink_item_id = sink_item.id
                   AND ($3::TEXT IS NULL OR task.kind::TEXT = $3)
-                ORDER BY ts_rank_cd(title_body_project_tags_tsv, query) DESC
+                ORDER BY ts_rank_cd(title_project_tags_tsv, query) DESC
                 LIMIT 10;
             "#,
             ts_query,
@@ -522,6 +523,7 @@ impl TaskRepository for Repository {
         task: Box<Task>,
     ) -> Result<Box<Task>, UniversalInboxError> {
         let priority: u8 = task.priority.into();
+        let body_enc = encrypt_task_body(&task.body, task.id)?;
 
         sqlx::query!(
             r#"
@@ -529,7 +531,7 @@ impl TaskRepository for Repository {
                   (
                     id,
                     title,
-                    body,
+                    body_enc,
                     status,
                     completed_at,
                     priority,
@@ -550,7 +552,7 @@ impl TaskRepository for Repository {
             "#,
             task.id.0,
             task.title,
-            task.body,
+            body_enc,
             task.status.to_string() as _,
             task.completed_at
                 .map(|last_read_at| last_read_at.naive_utc()),
@@ -659,7 +661,7 @@ impl TaskRepository for Repository {
                 RETURNING
                   task.id as task__id,
                   task.title as task__title,
-                  task.body as task__body,
+                  task.body_enc as task__body_enc,
                   task.status as task__status,
                   task.completed_at as task__completed_at,
                   task.priority as task__priority,
@@ -674,14 +676,14 @@ impl TaskRepository for Repository {
                   task.user_id as task__user_id,
                   source_item.id as task__source_item__id,
                   source_item.source_id as task__source_item__source_id,
-                  source_item.data as task__source_item__data,
+                  source_item.data_enc as task__source_item__data_enc,
                   source_item.created_at as task__source_item__created_at,
                   source_item.updated_at as task__source_item__updated_at,
                   source_item.user_id as task__source_item__user_id,
                   source_item.integration_connection_id as task__source_item__integration_connection_id,
                   sink_item.id as task__sink_item__id,
                   sink_item.source_id as task__sink_item__source_id,
-                  sink_item.data as task__sink_item__data,
+                  sink_item.data_enc as task__sink_item__data_enc,
                   sink_item.created_at as task__sink_item__created_at,
                   sink_item.updated_at as task__sink_item__updated_at,
                   sink_item.user_id as task__sink_item__user_id,
@@ -728,7 +730,7 @@ impl TaskRepository for Repository {
               SELECT
                 task.id as task__id,
                 task.title as task__title,
-                task.body as task__body,
+                task.body_enc as task__body_enc,
                 task.status as task__status,
                 task.completed_at as task__completed_at,
                 task.priority as task__priority,
@@ -743,14 +745,14 @@ impl TaskRepository for Repository {
                 task.user_id as task__user_id,
                 source_item.id as task__source_item__id,
                 source_item.source_id as task__source_item__source_id,
-                source_item.data as task__source_item__data,
+                source_item.data_enc as task__source_item__data_enc,
                 source_item.created_at as task__source_item__created_at,
                 source_item.updated_at as task__source_item__updated_at,
                 source_item.user_id as task__source_item__user_id,
                 source_item.integration_connection_id as task__source_item__integration_connection_id,
                 sink_item.id as task__sink_item__id,
                 sink_item.source_id as task__sink_item__source_id,
-                sink_item.data as task__sink_item__data,
+                sink_item.data_enc as task__sink_item__data_enc,
                 sink_item.created_at as task__sink_item__created_at,
                 sink_item.updated_at as task__sink_item__updated_at,
                 sink_item.user_id as task__sink_item__user_id,
@@ -866,8 +868,8 @@ impl TaskRepository for Repository {
                     .push_bind_unseparated(task_request.title.clone().into_value());
             }
             separated
-                .push("body = ")
-                .push_bind_unseparated(task_request.body.clone());
+                .push("body_enc = ")
+                .push_bind_unseparated(encrypt_task_body(&task_request.body, existing_task.id)?);
             separated
                 .push("status = ")
                 .push_bind_unseparated(task_request.status.to_string())
@@ -949,7 +951,7 @@ impl TaskRepository for Repository {
                   (
                     id,
                     title,
-                    body,
+                    body_enc,
                     status,
                     completed_at,
                     priority,
@@ -973,7 +975,7 @@ impl TaskRepository for Repository {
                     task_request.id.0,
                     // No stored task to fall back to: the seed *is* the value.
                     task_request.title.clone().into_value(),
-                    task_request.body,
+                    encrypt_task_body(&task_request.body, task_request.id)?,
                     task_request.status.to_string() as _,
                     completed_at,
                     priority as i32,
@@ -1028,6 +1030,31 @@ impl TaskRepository for Repository {
             });
         };
 
+        // The encrypted body cannot be compared in SQL to tell whether it changed
+        let body_changed = match &patch.body {
+            Some(body) => {
+                let current_body_enc: Option<Vec<u8>> = sqlx::query_scalar!(
+                    "SELECT body_enc FROM task WHERE id = $1 FOR UPDATE",
+                    task_id.0
+                )
+                .fetch_optional(&mut **executor)
+                .await
+                .map_err(|err| {
+                    let message = format!("Failed to fetch task {task_id} from storage: {err}");
+                    UniversalInboxError::DatabaseError {
+                        source: err,
+                        message,
+                    }
+                })?
+                .flatten();
+                Some(match current_body_enc {
+                    Some(body_enc) => decrypt_task_body(&body_enc, task_id.0)? != *body,
+                    None => true,
+                })
+            }
+            None => None,
+        };
+
         let mut query_builder = QueryBuilder::new("UPDATE task SET");
         let mut separated = query_builder.separated(", ");
         if let Some(status) = patch.status {
@@ -1061,7 +1088,9 @@ impl TaskRepository for Repository {
         }
 
         if let Some(body) = &patch.body {
-            separated.push(" body = ").push_bind_unseparated(body);
+            separated
+                .push(" body_enc = ")
+                .push_bind_unseparated(encrypt_task_body(body, task_id)?);
         }
 
         if let Some(title) = &patch.title {
@@ -1098,7 +1127,7 @@ impl TaskRepository for Repository {
                 RETURNING
                   task.id as task__id,
                   task.title as task__title,
-                  task.body as task__body,
+                  task.body_enc as task__body_enc,
                   task.status as task__status,
                   task.completed_at as task__completed_at,
                   task.priority as task__priority,
@@ -1113,14 +1142,14 @@ impl TaskRepository for Repository {
                   task.user_id as task__user_id,
                   source_item.id as task__source_item__id,
                   source_item.source_id as task__source_item__source_id,
-                  source_item.data as task__source_item__data,
+                  source_item.data_enc as task__source_item__data_enc,
                   source_item.created_at as task__source_item__created_at,
                   source_item.updated_at as task__source_item__updated_at,
                   source_item.user_id as task__source_item__user_id,
                   source_item.integration_connection_id as task__source_item__integration_connection_id,
                   sink_item.id as task__sink_item__id,
                   sink_item.source_id as task__sink_item__source_id,
-                  sink_item.data as task__sink_item__data,
+                  sink_item.data_enc as task__sink_item__data_enc,
                   sink_item.created_at as task__sink_item__created_at,
                   sink_item.updated_at as task__sink_item__updated_at,
                   sink_item.user_id as task__sink_item__user_id,
@@ -1164,8 +1193,9 @@ impl TaskRepository for Repository {
                 .push_bind_unseparated(priority as i32);
         }
 
-        if let Some(body) = &patch.body {
-            separated.push(" body != ").push_bind_unseparated(body);
+        if let Some(body_changed) = body_changed {
+            // The encrypted body cannot be compared in SQL
+            separated.push(if body_changed { " TRUE" } else { " FALSE" });
         }
 
         if let Some(title) = &patch.title {
@@ -1221,7 +1251,7 @@ impl TaskRepository for Repository {
                 SELECT
                   task.id as task__id,
                   task.title as task__title,
-                  task.body as task__body,
+                  task.body_enc as task__body_enc,
                   task.status as task__status,
                   task.completed_at as task__completed_at,
                   task.priority as task__priority,
@@ -1236,14 +1266,14 @@ impl TaskRepository for Repository {
                   task.user_id as task__user_id,
                   source_item.id as task__source_item__id,
                   source_item.source_id as task__source_item__source_id,
-                  source_item.data as task__source_item__data,
+                  source_item.data_enc as task__source_item__data_enc,
                   source_item.created_at as task__source_item__created_at,
                   source_item.updated_at as task__source_item__updated_at,
                   source_item.user_id as task__source_item__user_id,
                   source_item.integration_connection_id as task__source_item__integration_connection_id,
                   sink_item.id as task__sink_item__id,
                   sink_item.source_id as task__sink_item__source_id,
-                  sink_item.data as task__sink_item__data,
+                  sink_item.data_enc as task__sink_item__data_enc,
                   sink_item.created_at as task__sink_item__created_at,
                   sink_item.updated_at as task__sink_item__updated_at,
                   sink_item.user_id as task__sink_item__user_id,
@@ -1284,10 +1314,22 @@ enum PgTaskStatus {
     Deleted,
 }
 
+const TASK_BODY_AAD: &str = "task.body";
+
+fn encrypt_task_body(body: &str, id: TaskId) -> Result<Vec<u8>, UniversalInboxError> {
+    data_keyring()?.encrypt(body.as_bytes(), &aad(TASK_BODY_AAD, id.0))
+}
+
+/// Decrypt `task.body_enc` of the task `id`
+fn decrypt_task_body(body_enc: &[u8], id: Uuid) -> Result<String, UniversalInboxError> {
+    data_keyring()?.decrypt_string(body_enc, &aad(TASK_BODY_AAD, id))
+}
+
 #[derive(Debug)]
 pub struct TaskRow {
     id: Uuid,
     title: String,
+    /// Decrypted from `task.body_enc`
     body: String,
     status: PgTaskStatus,
     completed_at: Option<NaiveDateTime>,
@@ -1313,10 +1355,14 @@ impl FromRow<'_, PgRow> for TaskRow {
 
 impl FromRowWithPrefix<'_, PgRow> for TaskRow {
     fn from_row_with_prefix(row: &PgRow, prefix: &str) -> sqlx::Result<Self> {
+        let id: Uuid = row.try_get(format!("{prefix}id").as_str())?;
+        let body_enc: Vec<u8> = row.try_get(format!("{prefix}body_enc").as_str())?;
+        let body =
+            decrypt_task_body(&body_enc, id).map_err(|err| sqlx::Error::Decode(Box::new(err)))?;
         Ok(TaskRow {
-            id: row.try_get(format!("{prefix}id").as_str())?,
+            id,
             title: row.try_get(format!("{prefix}title").as_str())?,
-            body: row.try_get(format!("{prefix}body").as_str())?,
+            body,
             status: row.try_get::<PgTaskStatus, &str>(format!("{prefix}status").as_str())?,
             completed_at: row.try_get(format!("{prefix}completed_at").as_str())?,
             priority: row.try_get(format!("{prefix}priority").as_str())?,
@@ -1423,7 +1469,7 @@ pub struct TaskSummaryRow {
     id: Uuid,
     source_id: String,
     title: String,
-    body: String,
+    body_enc: Vec<u8>,
     priority: i32,
     due_at: Json<Option<DueDate>>,
     tags: Vec<String>,
@@ -1441,7 +1487,7 @@ impl TryFrom<&TaskSummaryRow> for TaskSummary {
             id: row.id.into(),
             source_id: row.source_id.to_string(),
             title: row.title.to_string(),
-            body: row.body.to_string(),
+            body: decrypt_task_body(&row.body_enc, row.id)?,
             priority,
             due_at: row.due_at.0.clone(),
             tags: row.tags.clone(),
