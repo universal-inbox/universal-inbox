@@ -1,0 +1,62 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "reviewThreads": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": [
+            {
+              "id": "PRRT_2",
+              "path": "lib/octokit/authenticator.rb",
+              "line": null,
+              "originalLine": 20,
+              "startLine": null,
+              "originalStartLine": null,
+              "isResolved": true,
+              "isOutdated": true,
+              "comments": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": [
+                  {
+                    "id": "RC_3",
+                    "bodyHTML": "<p>Nit: rename</p>",
+                    "createdAt": "2014-11-07T22:04:00Z",
+                    "url": "https://github.com/octokit/octokit.rb/pull/123#discussion_r3",
+                    "diffHunk": "@@ -10,6 +10,8 @@ impl Authenticator {\n     fn new() -> Self {\n         Self {}\n     }\n-    fn login(&self) {}\n+    fn login(&self, passkey: Passkey) {\n+        self.verify(passkey);\n+    }",
+                    "isMinimized": false,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/34727?v=4",
+                      "login": "reviewer",
+                      "name": "Reviewer"
+                    }
+                  },
+                  {
+                    "id": "RC_4",
+                    "bodyHTML": "<p>hidden</p>",
+                    "createdAt": "2014-11-07T22:05:00Z",
+                    "url": "https://github.com/octokit/octokit.rb/pull/123#discussion_r4",
+                    "diffHunk": "@@ -10,6 +10,8 @@ impl Authenticator {\n     fn new() -> Self {\n         Self {}\n     }\n-    fn login(&self) {}\n+    fn login(&self, passkey: Passkey) {\n+        self.verify(passkey);\n+    }",
+                    "isMinimized": true,
+                    "author": {
+                      "__typename": "User",
+                      "avatarUrl": "https://avatars.githubusercontent.com/u/34727?v=4",
+                      "login": "reviewer",
+                      "name": "Reviewer"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

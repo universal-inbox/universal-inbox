@@ -13,20 +13,23 @@ query PullRequestQuery($owner: String!, $repository: String!, $pr_number: Int!) 
           name
         }
       }
-      comments(first: 50) {
+      comments(first: 100) {
         totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
         nodes {
-          bodyHTML
-          createdAt
-          url
-          author {
-            __typename
-            avatarUrl
-            login
-            ... on User {
-              name
-            }
-          }
+          ...IssueCommentFields
+        }
+      }
+      reviewThreads(first: 50) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          ...ReviewThreadFields
         }
       }
       commits(last: 1) {
@@ -90,8 +93,11 @@ query PullRequestQuery($owner: String!, $repository: String!, $pr_number: Int!) 
       }
 
       reviewDecision
-      reviews(first: 20) {
+      reviews(first: 50) {
         nodes {
+          id
+          url
+          submittedAt
           author {
             __typename
             avatarUrl
@@ -102,7 +108,6 @@ query PullRequestQuery($owner: String!, $repository: String!, $pr_number: Int!) 
           }
           bodyHTML
           state
-
         }
       }
 
@@ -155,6 +160,118 @@ query PullRequestQuery($owner: String!, $repository: String!, $pr_number: Int!) 
       deletions
       additions
       changedFiles
+    }
+  }
+}
+
+query PullRequestCommentsQuery(
+  $owner: String!
+  $repository: String!
+  $pr_number: Int!
+  $after: String
+) {
+  repository(owner: $owner, name: $repository) {
+    pullRequest(number: $pr_number) {
+      comments(first: 100, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          ...IssueCommentFields
+        }
+      }
+    }
+  }
+}
+
+query PullRequestReviewThreadsQuery(
+  $owner: String!
+  $repository: String!
+  $pr_number: Int!
+  $after: String
+) {
+  repository(owner: $owner, name: $repository) {
+    pullRequest(number: $pr_number) {
+      reviewThreads(first: 50, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          ...ReviewThreadFields
+        }
+      }
+    }
+  }
+}
+
+query PullRequestReviewThreadCommentsQuery($thread_id: ID!, $after: String) {
+  node(id: $thread_id) {
+    __typename
+    ... on PullRequestReviewThread {
+      comments(first: 100, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          ...ReviewCommentFields
+        }
+      }
+    }
+  }
+}
+
+fragment IssueCommentFields on IssueComment {
+  id
+  bodyHTML
+  createdAt
+  url
+  isMinimized
+  author {
+    __typename
+    avatarUrl
+    login
+    ... on User {
+      name
+    }
+  }
+}
+
+fragment ReviewThreadFields on PullRequestReviewThread {
+  id
+  path
+  line
+  originalLine
+  startLine
+  originalStartLine
+  isResolved
+  isOutdated
+  comments(first: 50) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      ...ReviewCommentFields
+    }
+  }
+}
+
+fragment ReviewCommentFields on PullRequestReviewComment {
+  id
+  bodyHTML
+  createdAt
+  url
+  diffHunk
+  isMinimized
+  author {
+    __typename
+    avatarUrl
+    login
+    ... on User {
+      name
     }
   }
 }

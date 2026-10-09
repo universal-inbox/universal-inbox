@@ -602,6 +602,39 @@ pub struct GithubPullRequest {
     pub review_decision: Option<GithubPullRequestReviewDecision>,
     pub reviews: Vec<GithubPullRequestReview>,
     pub review_requests: Vec<GithubReviewer>,
+    /// Review comment threads on the code, oldest first. Defaults to empty
+    /// for items persisted before review threads were fetched.
+    #[serde(default)]
+    pub review_threads: Vec<GithubPullRequestReviewThread>,
+}
+
+/// A thread of review comments attached to a line (or range of lines) of a
+/// file of the pull request.
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubPullRequestReviewThread {
+    pub id: String,
+    pub path: String,
+    /// The diff hunk of the first comment, ending with the commented line.
+    pub diff_hunk: String,
+    /// The commented line, or the original one if the thread is outdated.
+    pub line: Option<i64>,
+    /// The first commented line of a multi-line thread.
+    pub start_line: Option<i64>,
+    pub is_resolved: bool,
+    pub is_outdated: bool,
+    /// Comments of the thread, oldest first.
+    pub comments: Vec<GithubPullRequestReviewComment>,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubPullRequestReviewComment {
+    pub id: String,
+    #[serde_as(as = "DisplayFromStr")]
+    pub url: Url,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+    pub author: Option<GithubActor>,
 }
 
 #[serde_as]
@@ -782,11 +815,21 @@ pub struct GithubWorkflow {
     pub url: Url,
 }
 
+#[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, Default)]
 pub struct GithubPullRequestReview {
     pub author: Option<GithubActor>,
     pub body: String,
     pub state: GithubPullRequestReviewState,
+    // The following fields default to empty for items persisted before they
+    // were fetched.
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub url: Option<Url>,
+    #[serde(default)]
+    pub submitted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Default)]
@@ -887,6 +930,9 @@ pub struct GithubDiscussionThreadComment {
 #[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GithubIssueComment {
+    /// Defaults to empty for items persisted before it was fetched.
+    #[serde(default)]
+    pub id: Option<String>,
     #[serde_as(as = "DisplayFromStr")]
     pub url: Url,
     pub body: String,
@@ -1158,6 +1204,35 @@ mod tests {
         fn test_is_answered() {
             assert!(!discussion(None).is_answered());
             assert!(discussion(Some(Utc::now())).is_answered());
+        }
+    }
+
+    mod legacy_deserialization {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[rstest]
+        fn test_deserialize_review_and_comment_stored_before_their_ids_were_fetched() {
+            let review: GithubPullRequestReview =
+                serde_json::from_str(r#"{"author":null,"body":"LGTM","state":"Approved"}"#)
+                    .unwrap();
+            assert_eq!(
+                review,
+                GithubPullRequestReview {
+                    author: None,
+                    body: "LGTM".to_string(),
+                    state: GithubPullRequestReviewState::Approved,
+                    id: None,
+                    url: None,
+                    submitted_at: None,
+                }
+            );
+
+            let comment: GithubIssueComment = serde_json::from_str(
+                r#"{"url":"https://github.com/o/r/pull/1#issuecomment-1","body":"hi","created_at":"2026-10-01T00:00:00Z","author":null}"#,
+            )
+            .unwrap();
+            assert_eq!(comment.id, None);
         }
     }
 }

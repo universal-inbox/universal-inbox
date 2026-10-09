@@ -2,16 +2,16 @@
 
 use std::{collections::HashMap, default::Default};
 
+use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
 use itertools::Itertools;
 
 use universal_inbox::third_party::integrations::github::{
     GithubActor, GithubBotSummary, GithubCheckConclusionState, GithubCheckRun,
-    GithubCheckStatusState, GithubCheckSuite, GithubCheckSuiteApp, GithubCommitChecks,
-    GithubIssueComment, GithubLabel, GithubMannequinSummary, GithubMergeableState,
-    GithubPullRequest, GithubPullRequestReview, GithubPullRequestReviewState,
-    GithubPullRequestState, GithubRepositorySummary, GithubReviewer, GithubTeamSummary,
-    GithubUserSummary, GithubWorkflow,
+    GithubCheckStatusState, GithubCheckSuite, GithubCheckSuiteApp, GithubCommitChecks, GithubLabel,
+    GithubMannequinSummary, GithubMergeableState, GithubPullRequest, GithubPullRequestReview,
+    GithubPullRequestReviewState, GithubPullRequestState, GithubRepositorySummary, GithubReviewer,
+    GithubTeamSummary, GithubUserSummary, GithubWorkflow,
 };
 
 use crate::{
@@ -19,22 +19,22 @@ use crate::{
         Tag, TagList, UserWithAvatar,
         integrations::github::{
             GithubActorDisplay, get_github_actor_name_and_url, icons::GithubPullRequestIcon,
+            preview::pull_request_comments::GithubPullRequestConversation,
         },
         preview_card_header::PreviewCardHeader,
-        thread::{Thread, ThreadItem},
-        threaded_message::ThreadedMessage,
         ui::{
             Card, CardVariant, MetadataGrid, MetadataItem, STATUS_ROW_ACTION_CLASS,
             STATUS_ROW_NAME_CLASS, StatusDot, StatusRow, StatusSection, StatusVariant,
         },
     },
-    utils::{format_elapsed_time, sanitize_html},
+    utils::format_elapsed_time,
 };
 
 #[component]
 pub fn GithubPullRequestPreview(
     github_pull_request: ReadSignal<GithubPullRequest>,
     title: ReadSignal<String>,
+    last_read_at: ReadSignal<Option<DateTime<Utc>>>,
     expand_details: ReadSignal<bool>,
 ) -> Element {
     let pr = github_pull_request();
@@ -72,7 +72,7 @@ pub fn GithubPullRequestPreview(
                 }
             }
 
-            GithubPullRequestDetails { github_pull_request, expand_details }
+            GithubPullRequestDetails { github_pull_request, last_read_at, expand_details }
         }
     }
 }
@@ -89,6 +89,7 @@ impl From<GithubLabel> for Tag {
 #[component]
 fn GithubPullRequestDetails(
     github_pull_request: ReadSignal<GithubPullRequest>,
+    last_read_at: ReadSignal<Option<DateTime<Utc>>>,
     expand_details: ReadSignal<bool>,
 ) -> Element {
     let show_base_and_head_repositories = match (
@@ -267,17 +268,7 @@ fn GithubPullRequestDetails(
                 }
             }
 
-            if !github_pull_request().body.is_empty() {
-                Card {
-                    variant: CardVariant::Default,
-                    p {
-                        class: "w-full max-w-full prose prose-sm dark:prose-invert",
-                        dangerous_inner_html: sanitize_html(&github_pull_request().body)
-                    }
-                }
-            }
-
-            GithubCommentList { comments: github_pull_request().comments }
+            GithubPullRequestConversation { github_pull_request, last_read_at, expand_details }
         }
     }
 }
@@ -534,19 +525,16 @@ fn ReviewsSection(
 
 #[component]
 fn GithubReviewRow(review: GithubReview) -> Element {
-    let (reviewer, review_body, review_status_icon, row_variant) = match review {
+    // Review bodies show in the pull request conversation
+    let (reviewer, review_status_icon, row_variant) = match review {
         GithubReview::Requested { reviewer } => (
             reviewer,
-            None,
             rsx! { span { class: "icon-[lucide--clock] size-4 text-info flex-none" } },
             StatusVariant::Default,
         ),
         GithubReview::Completed {
-            reviewer,
-            state,
-            body,
+            reviewer, state, ..
         } => {
-            let body = (!body.is_empty()).then_some(body);
             let (icon, variant) = match state {
                 GithubPullRequestReviewState::Approved => (
                     rsx! { span { class: "icon-[lucide--check-circle-2] size-4 text-success flex-none" } },
@@ -565,7 +553,7 @@ fn GithubReviewRow(review: GithubReview) -> Element {
                     StatusVariant::Default,
                 ),
             };
-            (reviewer, body, icon, variant)
+            (reviewer, icon, variant)
         }
     };
     let (reviewer_display_name, reviewer_avatar_url) = match reviewer {
@@ -588,52 +576,17 @@ fn GithubReviewRow(review: GithubReview) -> Element {
         }) => (login.clone(), Some(avatar_url.clone())),
     };
 
-    if let Some(review_body) = review_body {
-        // Reviewer header + review comment, both shown inline once the
-        // Reviewers section is open — single level of expansion, no nested
-        // collapse. The column-flex shell with tighter padding isn't a fit for
-        // the `StatusRow` shape, so we reuse the variant tint + row radius/font
-        // to stay in family.
-        let tint = match row_variant {
-            StatusVariant::Error => "bg-ui-error-subtle",
-            StatusVariant::Warning => "bg-ui-warning-subtle",
-            _ => "",
-        };
-        let class = format!(
-            "flex flex-col items-stretch gap-2.5 px-1 py-0.5 rounded-ui-sm text-[12.5px] {tint}"
-        );
-        rsx! {
+    rsx! {
+        StatusRow {
+            variant: row_variant,
             div {
-                class: "{class}",
-                div {
-                    class: "flex gap-2 items-center w-full p-2",
-                    { review_status_icon }
-                    UserWithAvatar {
-                        user_name: reviewer_display_name.clone(),
-                        avatar_url: reviewer_avatar_url,
-                        display_name: true,
-                    },
-                }
-
-                div {
-                    class: "bg-neutral text-neutral-content p-2 my-1 rounded-sm",
-                    dangerous_inner_html: sanitize_html(&review_body)
-                }
-            }
-        }
-    } else {
-        rsx! {
-            StatusRow {
-                variant: row_variant,
-                div {
-                    class: "{STATUS_ROW_NAME_CLASS}",
-                    { review_status_icon }
-                    UserWithAvatar {
-                        user_name: reviewer_display_name.clone(),
-                        avatar_url: reviewer_avatar_url,
-                        display_name: true,
-                    },
-                }
+                class: "{STATUS_ROW_NAME_CLASS}",
+                { review_status_icon }
+                UserWithAvatar {
+                    user_name: reviewer_display_name.clone(),
+                    avatar_url: reviewer_avatar_url,
+                    display_name: true,
+                },
             }
         }
     }
@@ -759,63 +712,6 @@ pub fn compute_pull_request_reviews(
         .sorted_by(|(k1, _), (k2, _)| Ord::cmp(&k1, &k2))
         .map(|(_, v)| v)
         .collect()
-}
-
-#[component]
-pub fn GithubCommentList(comments: ReadSignal<Vec<GithubIssueComment>>) -> Element {
-    let comments_v = comments();
-    if comments_v.is_empty() {
-        return rsx! {};
-    }
-    rsx! {
-        Card {
-            variant: CardVariant::Default,
-            Thread {
-                for comment in comments_v {
-                    GithubCommentRow { comment }
-                }
-            }
-        }
-    }
-}
-
-#[component]
-fn GithubCommentRow(comment: ReadSignal<GithubIssueComment>) -> Element {
-    let c = comment();
-    let body_html = c.body.clone();
-    let (author_name, avatar_url, subtitle) = match c.author {
-        Some(actor) => {
-            let login = github_actor_login(&actor);
-            let (name, url) = get_github_actor_name_and_url(actor);
-            let sub = match login {
-                Some(l) if l != name => Some(format!("@{l}")),
-                _ => None,
-            };
-            (name, Some(url), sub)
-        }
-        None => ("Unknown".to_string(), None, None),
-    };
-
-    rsx! {
-        ThreadItem {
-            ThreadedMessage {
-                author_name,
-                author_avatar_url: avatar_url,
-                author_subtitle: subtitle,
-                sent_at: Some(c.created_at),
-                body: rsx! {
-                    span { class: "prose prose-sm", dangerous_inner_html: sanitize_html(&body_html) }
-                },
-            }
-        }
-    }
-}
-
-fn github_actor_login(actor: &GithubActor) -> Option<String> {
-    match actor {
-        GithubActor::User(u) => Some(u.login.clone()),
-        GithubActor::Bot(b) => Some(b.login.clone()),
-    }
 }
 
 #[cfg(test)]
@@ -945,12 +841,14 @@ mod tests {
                             })),
                             body: "my review".to_string(),
                             state: GithubPullRequestReviewState::Approved,
+                            ..Default::default()
                         },
                         // ignored
                         GithubPullRequestReview {
                             author: None,
                             body: "".to_string(),
                             state: GithubPullRequestReviewState::Approved,
+                            ..Default::default()
                         }
                     ],
                     std::slice::from_ref(&requested_reviewer)
@@ -988,6 +886,7 @@ mod tests {
                             })),
                             body: "my review".to_string(),
                             state: GithubPullRequestReviewState::Approved,
+                            ..Default::default()
                         }
                     ],
                     std::slice::from_ref(&requested_reviewer)
