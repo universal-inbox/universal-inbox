@@ -83,6 +83,8 @@ To see how many values each key encrypted:
 universal-inbox data-encryption status
 ```
 
+In a terminal, `status` prints a table with one column per key: counts still to encrypt or re-encrypt are shown in yellow, counts no configured key can read in red. `encrypt-plaintext` and `reencrypt` show a live progress view (done/total, rate and remaining time per column) and end with that table; info logs are hidden meanwhile, add `-v` to see them. When the output is not a terminal (container logs, pipes), or with `--plain` (`universal-inbox data-encryption --plain status`), the commands print plain lines and logs instead.
+
 ## Rotating the key
 
 Rotate the key when it may have leaked, or periodically. The instance stays online during the whole procedure.
@@ -113,7 +115,7 @@ Rotate the key when it may have leaked, or periodically. The instance stays onli
    universal-inbox data-encryption status
    ```
 
-   Every line must only list `key 2` (and `plaintext: 0`). OAuth tokens never re-encrypted since the upgrade are listed as `key legacy`: they also use key `1` and are re-encrypted by step 4.
+   Every line must only list `key 2` (and `plaintext: 0`); in the table, only the `key 2 (active)` column has counts. OAuth tokens never re-encrypted since the upgrade are listed as `key legacy`: they also use key `1` and are re-encrypted by step 4.
 
 6. Remove `UNIVERSAL_INBOX__DATA_ENCRYPTION__KEYS__1` (and `UNIVERSAL_INBOX__OAUTH2__TOKEN_ENCRYPTION_KEY`, if it held the same key) and deploy. Containers refuse to start if some data still uses key `1`: run step 4 again in that case.
 7. Keep the old key archived, outside the instance configuration, for as long as you keep database backups taken before step 4: restoring one of them requires it.

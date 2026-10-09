@@ -115,6 +115,7 @@ opentelemetry-otlp = { version = "0.32", features = [
   "tls-roots"
 ] }
 rand = { version = "0.10" }
+ratatui = "0.30"
 ring = { version = "0.17.0", features = ["std"] }
 redis = { version = "1.7", features = [
   "tokio-comp",
@@ -166,7 +167,7 @@ sqlx = { version = "0.9", default-features = false, features = [
 ] }
 tabled = "0.22"
 thiserror = { workspace = true }
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal"] }
 tonic = { version = "0.14.0", features = ["gzip", "tls-native-roots"] }
 tracing = { workspace = true }
 tracing-actix-web = { version = "0.7.0", features = [
