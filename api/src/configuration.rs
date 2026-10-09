@@ -1,8 +1,8 @@
-use std::{collections::HashMap, env, time::Duration};
+use std::{collections::HashMap, env, fmt, time::Duration};
 
 use sqlx::ConnectOptions;
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use config::{Config, ConfigError, Environment, File};
 use hex;
 use openidconnect::{ClientId, ClientSecret as OidcClientSecret, IntrospectionUrl, IssuerUrl};
@@ -21,7 +21,10 @@ use universal_inbox::{
 };
 
 use crate::{
-    ExecutionContext, integrations::oauth2::ClientSecret, universal_inbox::UniversalInboxError,
+    ExecutionContext,
+    integrations::oauth2::ClientSecret,
+    universal_inbox::UniversalInboxError,
+    utils::crypto::{DataKeyring, KeyId, LEGACY_KEY_ID},
 };
 
 #[derive(Deserialize, Clone, Debug)]
@@ -31,6 +34,8 @@ pub struct Settings {
     pub redis: RedisSettings,
     pub integrations: HashMap<String, IntegrationSettings>,
     pub oauth2: Oauth2Settings,
+    #[serde(default)]
+    pub data_encryption: DataEncryptionSettings,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -636,11 +641,14 @@ impl HttpSessionSettings {
     }
 }
 
-/// OAuth token encryption keys committed to this repository
-/// (`api/config/test.toml`). Tokens encrypted with them can be decrypted by
+/// Encryption and blind index keys committed to this repository
+/// (`api/config/test.toml`, `api/config/dev.toml`). Tokens encrypted with them can be decrypted by
 /// anyone, so they are only acceptable in the `dev` and `test` environments.
-const COMMITTED_TOKEN_ENCRYPTION_KEYS: &[&str] =
-    &["7c996b56d9fef258ada8da44ad983733dbb0ac8edb4e3bb58b2f2290ff675a9b"];
+const COMMITTED_TOKEN_ENCRYPTION_KEYS: &[&str] = &[
+    "7c996b56d9fef258ada8da44ad983733dbb0ac8edb4e3bb58b2f2290ff675a9b",
+    "3f1c2a9e8b7d6c5f4e3d2c1b0a99887766554433221100ffeeddccbbaa998877",
+    "9a8b7c6d5e4f30211203f4e5d6c7b8a99a8b7c6d5e4f30211203f4e5d6c7b8a9",
+];
 
 /// Placeholder passwords shipped in `api/config/default.toml` for the database
 /// and SMTP server. Only acceptable in the `dev` and `test` environments.
@@ -723,6 +731,37 @@ pub struct Oauth2Settings {
     /// Defaults match draft-ietf-oauth-client-id-metadata-document recommendations.
     #[serde(default)]
     pub cimd: CimdSettings,
+}
+
+/// Keys encrypting sensitive columns at rest (see `doc/src/config/data_encryption.md`).
+#[derive(Deserialize, Clone, Default)]
+pub struct DataEncryptionSettings {
+    /// Id of the key encrypting new values. Defaults to 1.
+    #[serde(default)]
+    pub active_key_id: Option<KeyId>,
+    /// Hex-encoded 32-byte AES-256 keys indexed by key id
+    /// (`UNIVERSAL_INBOX__DATA_ENCRYPTION__KEYS__<id>`). When empty, key 1 is
+    /// `oauth2.token_encryption_key`, the key OAuth tokens were encrypted with
+    /// before the keyring existed. Empty values are ignored.
+    #[serde(default)]
+    pub keys: HashMap<String, String>,
+    /// Hex-encoded 32-byte key of the blind indexes used to look encrypted email addresses
+    /// up (`UNIVERSAL_INBOX__DATA_ENCRYPTION__BLIND_INDEX_KEY`). Required.
+    #[serde(default)]
+    pub blind_index_key: Option<String>,
+}
+
+impl fmt::Debug for DataEncryptionSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DataEncryptionSettings")
+            .field("active_key_id", &self.active_key_id)
+            .field("keys", &self.keys.keys().collect::<Vec<_>>())
+            .field(
+                "blind_index_key",
+                &self.blind_index_key.as_ref().map(|_| "[redacted]"),
+            )
+            .finish()
+    }
 }
 
 /// Knobs for the CIMD HTTP fetcher (timeout / body cap / cache TTL bounds).
@@ -1141,6 +1180,59 @@ impl Settings {
         Settings::new_from_file(None)
     }
 
+    /// Build the keyring encrypting data at rest from `[data_encryption]`, falling back to
+    /// `oauth2.token_encryption_key` as key 1 when no key is configured there.
+    pub fn data_keyring(&self) -> Result<DataKeyring, UniversalInboxError> {
+        let blind_index_key = self
+            .data_encryption
+            .blind_index_key
+            .as_deref()
+            .filter(|key| !key.trim().is_empty())
+            .ok_or_else(|| {
+                anyhow!(
+                    "Missing `data_encryption.blind_index_key` \
+                     (UNIVERSAL_INBOX__DATA_ENCRYPTION__BLIND_INDEX_KEY, generate it with \
+                     `openssl rand -hex 32`, see doc/src/config/data_encryption.md)"
+                )
+            })?;
+        self.data_keyring_without_blind_index()?
+            .with_blind_index_key(blind_index_key)
+    }
+
+    fn data_keyring_without_blind_index(&self) -> Result<DataKeyring, UniversalInboxError> {
+        let active_key_id = self.data_encryption.active_key_id.unwrap_or(LEGACY_KEY_ID);
+        // Empty values come from unset variables of an env file template
+        let configured_keys = self
+            .data_encryption
+            .keys
+            .iter()
+            .filter(|(_, key)| !key.trim().is_empty())
+            .collect::<Vec<_>>();
+        if configured_keys.is_empty() {
+            return DataKeyring::new(
+                active_key_id,
+                [(LEGACY_KEY_ID, self.oauth2.token_encryption_key.as_str())],
+            )
+            .context(
+                "Invalid `oauth2.token_encryption_key` (used as data encryption key 1, \
+                 see doc/src/config/data_encryption.md)",
+            )
+            .map_err(UniversalInboxError::Unexpected);
+        }
+        let keys = configured_keys
+            .into_iter()
+            .map(|(key_id, key)| {
+                key_id
+                    .parse::<KeyId>()
+                    .map(|key_id| (key_id, key.as_str()))
+                    .map_err(|_| {
+                        anyhow!("Invalid data encryption key id `{key_id}`: expected 0 to 255")
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        DataKeyring::new(active_key_id, keys)
+    }
+
     /// Refuse to run with secrets committed to the repository (signing keys,
     /// token encryption key, placeholder DB/SMTP passwords) outside the `dev` /
     /// `test` environments.
@@ -1156,6 +1248,24 @@ impl Settings {
             environment,
             "Generate your own with `openssl rand -hex 32`.",
         )?;
+        if let Some(blind_index_key) = &self.data_encryption.blind_index_key {
+            refuse_committed_value(
+                "data_encryption.blind_index_key",
+                blind_index_key,
+                COMMITTED_TOKEN_ENCRYPTION_KEYS,
+                environment,
+                "Generate your own with `openssl rand -hex 32`.",
+            )?;
+        }
+        for (key_id, key) in &self.data_encryption.keys {
+            refuse_committed_value(
+                &format!("data_encryption.keys.{key_id}"),
+                key,
+                COMMITTED_TOKEN_ENCRYPTION_KEYS,
+                environment,
+                "Generate your own with `openssl rand -hex 32`.",
+            )?;
+        }
         refuse_committed_value(
             "database.password",
             &self.database.password,
@@ -1744,6 +1854,11 @@ mod committed_secret_tests {
     fn test_check_committed_secrets() {
         let mut settings = Settings::new_from_file(Some("config/test".to_string()))
             .expect("Cannot load test configuration");
+        // Independent from any data encryption key set in the environment
+        settings.data_encryption = DataEncryptionSettings {
+            blind_index_key: Some(COMMITTED_TOKEN_ENCRYPTION_KEYS[1].to_string()),
+            ..Default::default()
+        };
         settings.database.password = "password".to_string();
         settings
             .application
@@ -1760,6 +1875,10 @@ mod committed_secret_tests {
 
         settings.oauth2.token_encryption_key = "my-own-key".to_string();
         let error = settings.check_committed_secrets().unwrap_err();
+        assert!(error.contains("data_encryption.blind_index_key"));
+
+        settings.data_encryption.blind_index_key = Some("my-own-blind-index-key".to_string());
+        let error = settings.check_committed_secrets().unwrap_err();
         assert!(error.contains("database.password"));
 
         settings.database.password = "s3cr3t".to_string();
@@ -1771,6 +1890,87 @@ mod committed_secret_tests {
 
         settings.application.email = None;
         assert!(settings.check_committed_secrets().is_ok());
+
+        settings.data_encryption.keys.insert(
+            "2".to_string(),
+            COMMITTED_TOKEN_ENCRYPTION_KEYS[0].to_string(),
+        );
+        let error = settings.check_committed_secrets().unwrap_err();
+        assert!(error.contains("data_encryption.keys.2"));
+    }
+
+    const KEY_1: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const KEY_2: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+
+    #[test]
+    fn test_data_keyring_defaults_to_oauth2_token_encryption_key() {
+        let mut settings = Settings::new_from_file(Some("config/test".to_string()))
+            .expect("Cannot load test configuration");
+        // Unset variables of the env file template
+        settings
+            .data_encryption
+            .keys
+            .insert("1".to_string(), String::new());
+
+        let keyring = settings.data_keyring().unwrap();
+
+        assert_eq!(keyring.active_key_id(), 1);
+        assert_eq!(keyring.key_ids(), vec![1]);
+        let legacy_keyring =
+            DataKeyring::new(1, [(1, settings.oauth2.token_encryption_key.as_str())]).unwrap();
+        let encrypted = legacy_keyring.encrypt(b"value", b"aad").unwrap();
+        assert_eq!(keyring.decrypt(&encrypted, b"aad").unwrap(), b"value");
+    }
+
+    #[test]
+    fn test_data_keyring_from_configured_keys() {
+        let mut settings = Settings::new_from_file(Some("config/test".to_string()))
+            .expect("Cannot load test configuration");
+        settings.data_encryption = DataEncryptionSettings {
+            blind_index_key: settings.data_encryption.blind_index_key.clone(),
+            active_key_id: Some(2),
+            keys: HashMap::from([
+                ("1".to_string(), KEY_1.to_string()),
+                ("2".to_string(), KEY_2.to_string()),
+            ]),
+        };
+
+        let keyring = settings.data_keyring().unwrap();
+
+        assert_eq!(keyring.active_key_id(), 2);
+        assert_eq!(keyring.key_ids(), vec![1, 2]);
+        assert!(!format!("{:?}", settings.data_encryption).contains(KEY_1));
+    }
+
+    #[test]
+    fn test_data_keyring_requires_blind_index_key() {
+        let mut settings = Settings::new_from_file(Some("config/test".to_string()))
+            .expect("Cannot load test configuration");
+        settings.data_encryption.blind_index_key = Some(" ".to_string());
+
+        let error = settings.data_keyring().unwrap_err();
+
+        assert!(format!("{error:?}").contains("BLIND_INDEX_KEY"));
+    }
+
+    #[rstest]
+    #[case::missing_active_key(Some(3), "1", KEY_1)]
+    #[case::invalid_key_id(None, "one", KEY_1)]
+    #[case::placeholder_key(None, "1", "to be generated")]
+    fn test_data_keyring_rejects_invalid_configuration(
+        #[case] active_key_id: Option<KeyId>,
+        #[case] key_id: &str,
+        #[case] key: &str,
+    ) {
+        let mut settings = Settings::new_from_file(Some("config/test".to_string()))
+            .expect("Cannot load test configuration");
+        settings.data_encryption = DataEncryptionSettings {
+            blind_index_key: settings.data_encryption.blind_index_key.clone(),
+            active_key_id,
+            keys: HashMap::from([(key_id.to_string(), key.to_string())]),
+        };
+
+        assert!(settings.data_keyring().is_err());
     }
 
     /// Deployments (prod config + env vars) must not inherit placeholder email

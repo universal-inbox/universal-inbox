@@ -32,6 +32,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::integration_connection::OAuthCredentialFixture;
+use crate::helpers::third_party::overwrite_third_party_item_data;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticate_user, authenticated_app},
     integration_connection::{
@@ -548,13 +549,12 @@ mod list_notifications {
             github_integration_connection.id,
         )
         .await;
-        sqlx::query(
-            r#"UPDATE third_party_item SET data = '{"type": "GithubNotification", "content": {"unexpected": true}}'::jsonb WHERE id = $1"#,
+        overwrite_third_party_item_data(
+            &app.app,
+            broken_notification.source_item.id.0,
+            r#"{"type": "GithubNotification", "content": {"unexpected": true}}"#,
         )
-        .bind(broken_notification.source_item.id.0)
-        .execute(&*app.app.repository.pool)
-        .await
-        .expect("Failed to corrupt the third party item data");
+        .await;
 
         let result = list_notifications(
             &app.client,

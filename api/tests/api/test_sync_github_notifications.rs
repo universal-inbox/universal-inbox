@@ -38,7 +38,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::integration_connection::OAuthCredentialFixture;
-use crate::helpers::third_party::create_task_third_party_item;
+use crate::helpers::third_party::{create_task_third_party_item, overwrite_third_party_item_data};
 use crate::helpers::{
     TestedApp,
     auth::{AuthenticatedApp, authenticated_app},
@@ -475,13 +475,12 @@ async fn test_sync_notifications_should_heal_undecodable_existing_third_party_it
         github_integration_connection.id,
     )
     .await;
-    sqlx::query(
-        r#"UPDATE third_party_item SET data = '{"type": "GithubNotification", "content": {"unexpected": true}}'::jsonb WHERE id = $1"#,
+    overwrite_third_party_item_data(
+        &app.app,
+        existing_notification.source_item.id.0,
+        r#"{"type": "GithubNotification", "content": {"unexpected": true}}"#,
     )
-    .bind(existing_notification.source_item.id.0)
-    .execute(&*app.app.repository.pool)
-    .await
-    .expect("Failed to corrupt the third party item data");
+    .await;
 
     let _github_notifications_mock = mock_github_notifications_service(
         &app.app.github_mock_server,

@@ -57,7 +57,7 @@ use universal_inbox_api::{
     },
 };
 
-use crate::helpers::integration_connection::OAuthCredentialFixture;
+use crate::helpers::integration_connection::{OAuthCredentialFixture, google_account_id};
 use crate::helpers::third_party::create_task_third_party_item;
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
@@ -1196,7 +1196,7 @@ async fn test_sync_notifications_should_refresh_user_email_address_of_pinned_acc
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
         OAuthCredentialFixture {
-            provider_user_id: provider_user_id.map(|id| id.to_string()),
+            provider_user_id: provider_user_id.map(google_account_id),
             ..google_mail_oauth_credential
         },
         None,

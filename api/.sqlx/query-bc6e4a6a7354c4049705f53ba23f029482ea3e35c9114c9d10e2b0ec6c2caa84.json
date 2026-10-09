@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT new_email_enc, validation_token_hash, requested_at\n                FROM user_email_change\n                WHERE user_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "new_email_enc",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "user_email_change",
+            "name": "new_email_enc"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "validation_token_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_email_change",
+            "name": "validation_token_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "requested_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "user_email_change",
+            "name": "requested_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "bc6e4a6a7354c4049705f53ba23f029482ea3e35c9114c9d10e2b0ec6c2caa84"
+}

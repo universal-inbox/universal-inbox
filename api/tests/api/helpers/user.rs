@@ -4,6 +4,8 @@ use reqwest::Client;
 use secrecy::SecretBox;
 use serde_json::Value;
 use universal_inbox::pii::Pii;
+use url::Url;
+use uuid::Uuid;
 use webauthn_rs::prelude::{CreationChallengeResponse, RegisterPublicKeyCredential};
 
 use universal_inbox::{
@@ -17,7 +19,7 @@ use universal_inbox::{
 
 use universal_inbox_api::{
     mailer::EmailTemplate,
-    repository::user::UserRepository,
+    repository::user::{UserRepository, hash_one_time_token},
     universal_inbox::user::model::{LocalUserAuth, UserAuth},
 };
 
@@ -139,18 +141,57 @@ pub async fn logout_user_response(client: &Client, api_address: &str) -> reqwest
         .unwrap()
 }
 
+/// One-time tokens are only stored hashed: find, among the tokens emailed to the user (most
+/// recent first), the one matching the stored hash.
+async fn find_emailed_token(
+    app: &TestedApp,
+    user_id: UserId,
+    token_hash: Option<String>,
+) -> Option<Uuid> {
+    let token_hash = token_hash?;
+    let mailer_stub = app.mailer_stub.read().await;
+    let emails_sent = mailer_stub.emails_sent.read().await;
+    let token = emails_sent
+        .iter()
+        .rev()
+        .filter(|(user, _)| user.id == user_id)
+        .flat_map(|(_, template)| emailed_urls(template))
+        .filter_map(|url| {
+            url.path_segments()
+                .and_then(|mut segments| segments.next_back())
+                .and_then(|segment| segment.parse::<Uuid>().ok())
+        })
+        .find(|token| hash_one_time_token(token) == token_hash);
+    Some(token.expect("The stored token hash should match a token sent by email"))
+}
+
+fn emailed_urls(template: &EmailTemplate) -> Vec<Url> {
+    match template {
+        EmailTemplate::EmailVerification {
+            email_verification_url,
+            ..
+        } => vec![email_verification_url.clone()],
+        EmailTemplate::PasswordReset {
+            password_reset_url, ..
+        } => vec![password_reset_url.clone()],
+        _ => vec![],
+    }
+}
+
 pub async fn get_user_email_validation_token(
     app: &TestedApp,
     user_id: UserId,
 ) -> Option<EmailValidationToken> {
     let mut transaction = app.repository.begin().await.unwrap();
-    let token = app
+    let token_hash = app
         .repository
-        .get_user_email_validation_token(&mut transaction, user_id)
+        .get_user_email_validation_token_hash(&mut transaction, user_id)
         .await
         .unwrap();
     transaction.commit().await.unwrap();
-    token
+    find_emailed_token(app, user_id, token_hash)
+        .await
+        .map(|token| token.into())
 }
 
 pub async fn get_pending_email_change_token(
@@ -164,7 +205,13 @@ pub async fn get_pending_email_change_token(
         .await
         .unwrap();
     transaction.commit().await.unwrap();
-    pending_change.map(|change| change.validation_token)
+    find_emailed_token(
+        app,
+        user_id,
+        pending_change.map(|change| change.validation_token_hash),
+    )
+    .await
+    .map(|token| token.into())
 }
 
 pub async fn get_password_reset_token(
@@ -172,13 +219,15 @@ pub async fn get_password_reset_token(
     user_id: UserId,
 ) -> Option<PasswordResetToken> {
     let mut transaction = app.repository.begin().await.unwrap();
-    let token = app
+    let token_hash = app
         .repository
-        .get_password_reset_token(&mut transaction, user_id)
+        .get_password_reset_token_hash(&mut transaction, user_id)
         .await
         .unwrap();
     transaction.commit().await.unwrap();
-    token
+    find_emailed_token(app, user_id, token_hash)
+        .await
+        .map(|token| token.into())
 }
 
 pub async fn reset_password_response(

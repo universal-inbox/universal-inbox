@@ -90,7 +90,7 @@ use crate::{
         third_party::service::ThirdPartyItemService, user::service::UserService,
     },
     utils::{
-        crypto::TokenEncryptionKey,
+        crypto::install_data_keyring,
         jwt::{Claims, JWT_SESSION_KEY, JWTBase64EncodedSigningKeys, JWTSigningKeys},
     },
 };
@@ -842,6 +842,12 @@ pub async fn build_services(
     Arc<OAuth2Service>,
     Option<Arc<billing::service::BillingService>>,
 ) {
+    // Installed before any repository use: rows are decrypted while they are decoded
+    let data_keyring = install_data_keyring(Arc::new(
+        settings
+            .data_keyring()
+            .expect("Invalid data encryption configuration"),
+    ));
     let repository = Arc::new(Repository::new(pool.clone()));
 
     let auth_token_service = Arc::new(RwLock::new(AuthenticationTokenService::new(
@@ -1003,11 +1009,6 @@ pub async fn build_services(
         );
     }
 
-    let token_encryption_key = SecretBox::new(Box::new(
-        TokenEncryptionKey::from_hex(&settings.oauth2.token_encryption_key)
-            .expect("Invalid token encryption key"),
-    ));
-
     let redirect_uri = settings
         .application
         .get_oauth_redirect_url()
@@ -1054,7 +1055,7 @@ pub async fn build_services(
         settings.required_oauth_scopes(),
         oauth2_providers,
         oauth2_flow_service,
-        token_encryption_key,
+        data_keyring,
         settings
             .application
             .min_sync_notifications_interval_in_minutes,

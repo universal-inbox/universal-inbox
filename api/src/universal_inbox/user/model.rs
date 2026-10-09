@@ -12,8 +12,8 @@ use universal_inbox::{
     notification::Notification,
     task::Task,
     user::{
-        EmailValidationToken, PasswordHash, User, UserAuthKind, UserAuthMethod,
-        UserAuthMethodDisplayInfo, UserId, UserPreferences, Username,
+        PasswordHash, User, UserAuthKind, UserAuthMethod, UserAuthMethodDisplayInfo, UserId,
+        UserPreferences, Username,
     },
 };
 use webauthn_rs::prelude::*;
@@ -119,7 +119,8 @@ impl From<AuthUserId> for String {
 #[derive(Debug, Clone)]
 pub struct PendingEmailChange {
     pub new_email: Pii<EmailAddress>,
-    pub validation_token: EmailValidationToken,
+    /// SHA-256 of the validation token, see `repository::user::hash_one_time_token`
+    pub validation_token_hash: String,
     pub requested_at: DateTime<Utc>,
 }
 
