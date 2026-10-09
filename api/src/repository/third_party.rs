@@ -138,8 +138,10 @@ impl ThirdPartyItemRepository for Repository {
         separated
             .push("third_party_item.source_id = ")
             .push_bind_unseparated(&third_party_item.source_id)
-            .push("third_party_item.kind::TEXT = ")
+            // Compare the enum column itself (not `kind::TEXT`) so the unique index is usable
+            .push("third_party_item.kind = ")
             .push_bind_unseparated(kind.to_string())
+            .push_unseparated("::third_party_item_kind")
             .push("third_party_item.user_id = ")
             .push_bind_unseparated(third_party_item.user_id.0)
             .push("third_party_item.integration_connection_id = ")
