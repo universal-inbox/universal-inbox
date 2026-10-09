@@ -23,7 +23,7 @@ use universal_inbox_api::{
         oauth_credential::OAuthCredentialRepository,
     },
     universal_inbox::UpdateStatus,
-    utils::crypto::{TokenEncryptionKey, encrypt_token},
+    utils::crypto::encrypt_token,
 };
 
 use crate::helpers::{TestedApp, auth::AuthenticatedApp};
@@ -233,8 +233,7 @@ pub async fn create_and_mock_integration_connection_with_backoff(
     )
     .await;
 
-    let token_encryption_key =
-        TokenEncryptionKey::from_hex(&settings.oauth2.token_encryption_key).unwrap();
+    let token_encryption_key = settings.data_keyring().unwrap();
     let aad_context = integration_connection.id.0.as_bytes();
     let encrypted_access_token = encrypt_token(
         credential.access_token.as_str(),
@@ -403,4 +402,12 @@ pub async fn create_ticktick_integration_connection(
         None,
     )
     .await
+}
+
+/// `provider_user_id` stored for a Google account: the blind index of its email address
+pub fn google_account_id(email: &str) -> String {
+    universal_inbox_api::utils::crypto::data_keyring()
+        .unwrap()
+        .email_blind_index(email)
+        .unwrap()
 }

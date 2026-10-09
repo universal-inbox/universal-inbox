@@ -333,13 +333,13 @@ impl OAuth2Repository for Repository {
         let mut query_builder = QueryBuilder::new(
             r#"
                 INSERT INTO oauth2_authorization_code
-                  (code, client_id, user_id, redirect_uri, scope,
+                  (code_hash, client_id, user_id, redirect_uri, scope,
                    code_challenge, resource, expires_at)
                 VALUES (
             "#,
         );
         let mut separated = query_builder.separated(", ");
-        separated.push_bind(code);
+        separated.push_bind(hash_authorization_code(code));
         separated.push_bind(client_id);
         separated.push_bind(user_id.0);
         separated.push_bind(redirect_uri);
@@ -374,14 +374,14 @@ impl OAuth2Repository for Repository {
         let mut query_builder = QueryBuilder::new(
             r#"
                 DELETE FROM oauth2_authorization_code
-                WHERE code =
+                WHERE code_hash =
             "#,
         );
-        query_builder.push_bind(code);
+        query_builder.push_bind(hash_authorization_code(code));
         query_builder.push(
             r#"
                 RETURNING
-                  code, client_id, user_id, redirect_uri, scope,
+                  code_hash AS code, client_id, user_id, redirect_uri, scope,
                   code_challenge, code_challenge_method, resource,
                   expires_at, created_at
             "#,
@@ -401,7 +401,11 @@ impl OAuth2Repository for Repository {
                 }
             })?;
 
-        Ok(row.map(|r| r.into()))
+        // Only the code hash is stored
+        Ok(row.map(|r| OAuth2AuthorizationCode {
+            code: code.to_string(),
+            ..r.into()
+        }))
     }
 
     #[tracing::instrument(
@@ -1009,6 +1013,12 @@ impl From<OAuth2ClientRow> for OAuth2Client {
             updated_at: row.updated_at,
         }
     }
+}
+
+/// SHA-256 digest (hex) of an authorization code, as stored in
+/// `oauth2_authorization_code.code_hash`: a database dump does not leak usable codes.
+fn hash_authorization_code(code: &str) -> String {
+    hex::encode(ring::digest::digest(&ring::digest::SHA256, code.as_bytes()))
 }
 
 #[derive(Debug, sqlx::FromRow)]

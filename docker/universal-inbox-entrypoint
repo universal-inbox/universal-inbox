@@ -64,6 +64,20 @@ if ! /usr/local/bin/sqlx migrate run; then
     exit 1
 fi
 
+case "${1:-}" in
+serve | start-workers)
+    # Encrypt the values stored before their column was encrypted and check every
+    # encrypted value can be read with the configured keys, before serving anything.
+    # Concurrent containers wait for each other (advisory lock).
+    # See doc/src/config/data_encryption.md
+    echo "Encrypting data at rest"
+    if ! /app/universal-inbox data-encryption encrypt-plaintext; then
+        echo "ERROR: Data encryption failed" >&2
+        exit 1
+    fi
+    ;;
+esac
+
 if [ -n "$UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL" ]; then
     echo "Updating index.html with canonical link to $UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL"
     sed -i "s#</head>#<link href=\"$UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL\" rel=\"canonical\" /></head>#" /app/statics/index.html

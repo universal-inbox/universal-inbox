@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT password_reset_token_hash FROM user_auth WHERE user_id = $1 AND kind = 'Local'::user_auth_kind",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "password_reset_token_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_auth",
+            "name": "password_reset_token_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "acfa4ea52d9c69bcf546d1a36f397d2348f805dfda83820a0cf53a18f1d7e5c0"
+}

@@ -27,6 +27,9 @@ dependencies_log_level = "debug"
 [oauth2]
 token_encryption_key = "7c996b56d9fef258ada8da44ad983733dbb0ac8edb4e3bb58b2f2290ff675a9b"
 
+[data_encryption]
+blind_index_key = "3f1c2a9e8b7d6c5f4e3d2c1b0a99887766554433221100ffeeddccbbaa998877"
+
 [application.http_session]
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
 jwt_secret_key = "MFECAQEwBQYDK2VwBCIEIJre1+y6O3ENLgP53GgxG5OYptX2FsnxnKTfepdW2U9JgSEAX3oq4VhLrIerpUyWqHG8GjBqUTB5RC07Pf0XaacoEAA="

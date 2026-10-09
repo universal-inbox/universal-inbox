@@ -214,7 +214,7 @@ mod find_access_token {
             oauth_credential::OAuthCredentialRepository,
         },
         universal_inbox::UniversalInboxError,
-        utils::crypto::{TokenEncryptionKey, encrypt_token},
+        utils::crypto::encrypt_token,
     };
 
     use crate::helpers::{TestedApp, settings};
@@ -241,8 +241,7 @@ mod find_access_token {
         )
         .await;
 
-        let token_encryption_key =
-            TokenEncryptionKey::from_hex(&settings.oauth2.token_encryption_key).unwrap();
+        let token_encryption_key = settings.data_keyring().unwrap();
         let aad_context = connection.id.0.as_bytes();
         let encrypted_access_token =
             encrypt_token("expired_access_token", aad_context, &token_encryption_key).unwrap();
