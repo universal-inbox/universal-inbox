@@ -952,6 +952,25 @@ Here is a [link](https://www.universal-inbox.com)"#
         }
 
         #[rstest]
+        fn test_render_message_with_plan_and_unknown_blocks(
+            mut slack_message: SlackMessageDetails,
+        ) {
+            let blocks_json = serde_json::json!([
+                { "type": "section", "text": { "type": "plain_text", "text": "Hello" } },
+                { "type": "plan", "title": "Release plan", "tasks": [] },
+                { "type": "some_future_block", "text": "Not modelled" }
+            ]);
+            let blocks: Vec<SlackBlock> = serde_json::from_value(blocks_json.clone()).unwrap();
+            assert!(matches!(blocks[1], SlackBlock::Plan(_)));
+            assert!(matches!(blocks[2], SlackBlock::Unknown(_)));
+            // Stored in `third_party_item.data`: must round-trip unchanged
+            assert_eq!(serde_json::to_value(&blocks).unwrap(), blocks_json);
+
+            slack_message.message.content.blocks = Some(blocks);
+            assert_eq!(slack_message.render_content(), "Hello".to_string());
+        }
+
+        #[rstest]
         fn test_render_message_with_message_mention(mut slack_message: SlackMessageDetails) {
             let message = &mut slack_message;
             message.message.content.blocks = Some(vec![SlackBlock::RichText(
@@ -1348,26 +1367,25 @@ mod test_rich_text_list_serde {
     }
 
     #[test]
-    fn test_legacy_rich_text_list_element_without_type_fails() {
-        // Shape produced by slack-morphism <= 2.21: list elements have no "type".
-        let result: Result<SlackBlock, _> = serde_json::from_value(rich_text_block_with_list(None));
-        let err =
-            result.expect_err("legacy rich_text_list shape must fail under slack-morphism 2.22");
+    fn test_legacy_rich_text_list_element_without_type_is_not_rich_text() {
+        // Shape produced by slack-morphism <= 2.21: list elements have no "type". Since
+        // slack-morphism 2.30 it no longer fails: it falls back to the untagged
+        // SlackBlock::Unknown variant, which renders nothing, so the backfill is still needed.
+        let block: SlackBlock = serde_json::from_value(rich_text_block_with_list(None)).unwrap();
         assert!(
-            err.to_string().contains("missing field `type`"),
-            "expected a missing `type` field error, got: {err}"
+            matches!(block, SlackBlock::Unknown(_)),
+            "legacy rich_text_list shape must not decode as rich text, got: {block:?}"
         );
     }
 
     #[test]
     fn test_backfilled_rich_text_list_element_with_type_deserializes() {
         // Shape after the backfill migration adds "type":"rich_text_section".
-        let result: Result<SlackBlock, _> =
-            serde_json::from_value(rich_text_block_with_list(Some("rich_text_section")));
+        let block: SlackBlock =
+            serde_json::from_value(rich_text_block_with_list(Some("rich_text_section"))).unwrap();
         assert!(
-            result.is_ok(),
-            "backfilled rich_text_list shape must deserialize, got: {:?}",
-            result.err()
+            matches!(block, SlackBlock::RichText(_)),
+            "backfilled rich_text_list shape must decode as rich text, got: {block:?}"
         );
     }
 }

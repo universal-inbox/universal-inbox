@@ -1397,6 +1397,79 @@ mod job {
         );
     }
 
+    /// A thread holding a block type slack-morphism did not model (`plan`, then any
+    /// unknown type) used to fail the whole `conversations.replies` decoding.
+    #[rstest]
+    #[tokio::test]
+    async fn test_handle_slack_message_in_thread_with_plan_and_unknown_blocks(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        slack_oauth_credential: OAuthCredentialFixture,
+        mut message_event: Box<SlackPushEventCallback>,
+    ) {
+        let app = authenticated_app.await;
+        let service = app.app.notification_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+        add_user_ref_in_message(&mut message_event, "U01");
+        create_slack_integration_connection_for_u01(&app, &settings, slack_oauth_credential).await;
+        let slack_message_id = "1732535291.911209";
+        mock_slack_message_ping_to_known_user(
+            &app.app,
+            slack_message_id,
+            "slack_fetch_thread_with_plan_block_response.json",
+            "slack_fetch_team_response.json",
+        )
+        .await;
+        mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json").await;
+
+        handle_slack_message_push_event(
+            &mut transaction,
+            &message_event,
+            app.app.notification_service.clone(),
+            app.app.integration_connection_service.clone(),
+            app.app.third_party_item_service.clone(),
+            app.app.slack_service.clone(),
+        )
+        .await
+        .unwrap();
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction")
+            .unwrap();
+
+        let notifications = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+
+        assert_eq!(notifications.len(), 1);
+        let ThirdPartyItemData::SlackThread(slack_thread) = &notifications[0].source_item.data
+        else {
+            unreachable!("Unexpected item data");
+        };
+        // The stored thread keeps both blocks through its database round-trip
+        let blocks = slack_thread
+            .messages
+            .last()
+            .content
+            .blocks
+            .as_ref()
+            .unwrap();
+        assert_eq!(blocks.len(), 3);
+        assert!(matches!(&blocks[1], SlackBlock::Plan(plan) if plan.title == "Release plan"));
+        assert!(
+            matches!(&blocks[2], SlackBlock::Unknown(value) if value["type"] == "some_future_block")
+        );
+    }
+
     #[rstest]
     #[tokio::test]
     async fn test_handle_slack_message_in_unknown_thread_without_ping(
