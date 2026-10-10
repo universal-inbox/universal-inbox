@@ -112,8 +112,25 @@ pub async fn instrument_client_call<T, E, F>(
 where
     F: Future<Output = Result<T, E>>,
 {
+    instrument_client_call_expecting(span, call, error_type, |_| false).await
+}
+
+/// Same as [`instrument_client_call`], but errors matching `is_expected` leave
+/// the span OK. An API answer the caller maps to a regular outcome (eg. Slack
+/// `bot_not_found` meaning "no such bot") is not a failed call.
+pub async fn instrument_client_call_expecting<T, E, F>(
+    span: Span,
+    call: F,
+    error_type: impl FnOnce(&E) -> String,
+    is_expected: impl FnOnce(&E) -> bool,
+) -> Result<T, E>
+where
+    F: Future<Output = Result<T, E>>,
+{
     let result = call.instrument(span.clone()).await;
-    if let Err(err) = &result {
+    if let Err(err) = &result
+        && !is_expected(err)
+    {
         span.record(attr::ERROR_TYPE, error_type(err));
         span.record(attr::OTEL_STATUS_CODE, "ERROR");
     }
@@ -258,5 +275,24 @@ mod tests {
                 ("otel.status_code".to_string(), "ERROR".to_string()),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn expected_client_call_error_keeps_span_ok() {
+        let recorded = Recorded::default();
+        let subscriber = Registry::default().with(recorded.clone());
+        let _default = tracing::subscriber::set_default(subscriber);
+
+        let result = instrument_client_call_expecting(
+            http_client_span("POST", "slack.com", "/api/bots.info"),
+            async { Err::<(), &str>("bot_not_found") },
+            |err| err.to_string(),
+            |err| *err == "bot_not_found",
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(recorded.events.lock().unwrap().is_empty());
+        assert!(recorded.fields.lock().unwrap().is_empty());
     }
 }
