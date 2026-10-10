@@ -136,6 +136,8 @@ fn TaskListItem(
         | ThirdPartyItemData::GoogleMailThread(_)
         | ThirdPartyItemData::GoogleCalendarEvent(_)
         | ThirdPartyItemData::GoogleDriveComment(_)
+        | ThirdPartyItemData::NotionComment(_)
+        | ThirdPartyItemData::NotionBlock(_)
         | ThirdPartyItemData::WebPage(_) => rsx! {},
     }
 }

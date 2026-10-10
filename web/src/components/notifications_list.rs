@@ -341,7 +341,10 @@ fn NotificationListItem(
                 on_select,
             }
         },
-        ThirdPartyItemData::LinearIssue(_) => rsx! {},
+        // Notion list items come with the notion-blocks-render crate
+        ThirdPartyItemData::NotionComment(_)
+        | ThirdPartyItemData::NotionBlock(_)
+        | ThirdPartyItemData::LinearIssue(_) => rsx! {},
         ThirdPartyItemData::WebPage(web_page) => rsx! {
             WebPageNotificationListItem {
                 notification,

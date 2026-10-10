@@ -297,6 +297,10 @@ impl NotificationService {
                 NotificationSourceKind::API => {
                     // API notifications do not have side effects
                 }
+                NotificationSourceKind::Notion => {
+                    // The Notion public API has no read, archive or unsubscribe
+                    // for comments and mentions: status changes stay local
+                }
             };
 
             if let Some(task_id) = patch.task_id

@@ -30,6 +30,7 @@ enum_derive = { workspace = true }
 html-escape = "0.2"
 git-url-parse = { version = "0.6.0", features = ["serde"] }
 macro-attr = { workspace = true }
+notionrs_types = { workspace = true }
 num_enum = "0.7.5"
 openidconnect = { workspace = true }
 regex = { workspace = true }
@@ -103,6 +104,9 @@ itertools = { version = "0.14.0" }
 lazy_static = { version = "1.4.0" }
 log = { version = "0.4.0" }
 macro-attr = { version = "0.2.0" }
+# Notion API types only (no HTTP client), so the domain crate stays WASM-friendly. Pinned exactly:
+# pre-1.0, and its serde shape is stored in third_party_item data.
+notionrs_types = { version = "=0.24.0" }
 openidconnect = { version = "4.0" }
 pretty_assertions = { version = "1.3.0" }
 regex = { version = "1.10.0" }
