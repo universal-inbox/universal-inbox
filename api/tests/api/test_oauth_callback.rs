@@ -368,6 +368,47 @@ async fn test_oauth_callback_missing_state_returns_invalid_state(#[future] teste
     );
 }
 
+/// Deliver the provider callback with the connection owner's session.
+async fn owner_callback(app: &AuthenticatedApp, state: &str) -> reqwest::Response {
+    let api_key: AuthenticationToken = app
+        .client
+        .post(format!(
+            "{}users/me/authentication-tokens",
+            app.app.api_address
+        ))
+        .header(
+            reqwest::header::ORIGIN,
+            crate::helpers::user::front_origin_header(&app.app),
+        )
+        .send()
+        .await
+        .expect("Failed to create API key")
+        .json()
+        .await
+        .expect("Failed to deserialize API key response");
+
+    no_redirect_client_builder()
+        .build()
+        .unwrap()
+        .get(format!(
+            "{}/api/oauth/callback?state={}&code=provider-code",
+            app.app.app_address.trim_end_matches('/'),
+            urlencoding::encode(state)
+        ))
+        .bearer_auth(&api_key.jwt_token.expose_secret().0)
+        .send()
+        .await
+        .expect("Failed to execute /api/oauth/callback request")
+}
+
+fn front_base_url(app: &AuthenticatedApp) -> String {
+    app.app
+        .front_base_url
+        .as_str()
+        .trim_end_matches('/')
+        .to_string()
+}
+
 mod google_provider_user_id {
     use std::str::FromStr;
 
@@ -486,47 +527,6 @@ mod google_provider_user_id {
             .expect(1)
             .mount(mock_server)
             .await;
-    }
-
-    /// Deliver the provider callback with the connection owner's session.
-    async fn owner_callback(app: &AuthenticatedApp, state: &str) -> reqwest::Response {
-        let api_key: AuthenticationToken = app
-            .client
-            .post(format!(
-                "{}users/me/authentication-tokens",
-                app.app.api_address
-            ))
-            .header(
-                reqwest::header::ORIGIN,
-                crate::helpers::user::front_origin_header(&app.app),
-            )
-            .send()
-            .await
-            .expect("Failed to create API key")
-            .json()
-            .await
-            .expect("Failed to deserialize API key response");
-
-        no_redirect_client_builder()
-            .build()
-            .unwrap()
-            .get(format!(
-                "{}/api/oauth/callback?state={}&code=google-code",
-                app.app.app_address.trim_end_matches('/'),
-                urlencoding::encode(state)
-            ))
-            .bearer_auth(&api_key.jwt_token.expose_secret().0)
-            .send()
-            .await
-            .expect("Failed to execute /api/oauth/callback request")
-    }
-
-    fn front_base_url(app: &AuthenticatedApp) -> String {
-        app.app
-            .front_base_url
-            .as_str()
-            .trim_end_matches('/')
-            .to_string()
     }
 
     /// Google's token response does not identify the account, so the
@@ -758,5 +758,175 @@ mod google_provider_user_id {
             IntegrationConnectionStatus::Created
         );
         assert_eq!(integration_connection.provider_user_id, None);
+    }
+}
+
+mod notion_provider {
+    use std::str::FromStr;
+
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    use email_address::EmailAddress;
+    use pretty_assertions::assert_eq;
+    use universal_inbox::{
+        integration_connection::{
+            integrations::notion::{NotionConfig, NotionContext},
+            provider::IntegrationProvider,
+        },
+        pii::Pii,
+    };
+    use universal_inbox_api::configuration::Settings;
+    use wiremock::matchers::body_string_contains;
+
+    use super::*;
+    use crate::helpers::settings;
+
+    /// Notion's token response names the human who installed the integration
+    /// (`owner.user`) and the workspace: the callback pins that user and keeps
+    /// the workspace and bot ids the webhooks are routed with.
+    #[rstest]
+    #[tokio::test]
+    async fn test_oauth_callback_pins_notion_owner_and_stores_context(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let notion_settings = &settings.integrations["notion"];
+        Mock::given(method("POST"))
+            .and(path("/v1/oauth/token"))
+            .and(header(
+                "authorization",
+                format!(
+                    "Basic {}",
+                    STANDARD.encode(format!(
+                        "{}:{}",
+                        notion_settings.oauth_client_id,
+                        notion_settings.oauth_client_secret.as_str()
+                    ))
+                ),
+            ))
+            .and(body_string_contains("grant_type=authorization_code"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "notion-access-token",
+                "token_type": "bearer",
+                "bot_id": "notion-bot-id",
+                "workspace_id": "notion-workspace-id",
+                "workspace_name": "Acme",
+                "workspace_icon": null,
+                "owner": {
+                    "type": "user",
+                    "user": {
+                        "object": "user",
+                        "id": "notion-user-id",
+                        "name": "Jane Doe",
+                        "avatar_url": null,
+                        "type": "person",
+                        "person": { "email": "jane.doe@example.com" }
+                    }
+                },
+                "duplicated_template_id": null
+            })))
+            .expect(1)
+            .mount(&app.app.notion_mock_server)
+            .await;
+        let (integration_connection_id, state) = start_oauth_flow_for(
+            &app,
+            IntegrationConnectionConfig::Notion(NotionConfig::default()),
+            None,
+        )
+        .await;
+
+        let response = owner_callback(&app, &state).await;
+
+        assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+        assert_eq!(
+            callback_location(&response),
+            format!("{}/settings?oauth_success=true", front_base_url(&app))
+        );
+        let integration_connection = get_integration_connection(&app, integration_connection_id)
+            .await
+            .expect("Integration connection must still exist");
+        assert_eq!(
+            integration_connection.status,
+            IntegrationConnectionStatus::Validated
+        );
+        assert_eq!(
+            integration_connection.provider_user_id,
+            Some("notion-user-id".to_string())
+        );
+        assert_eq!(
+            integration_connection.provider,
+            IntegrationProvider::Notion {
+                context: Some(NotionContext {
+                    workspace_id: "notion-workspace-id".to_string(),
+                    workspace_name: Some("Acme".to_string()),
+                    bot_id: "notion-bot-id".to_string(),
+                    user_display_name: Some(Pii::new("Jane Doe".to_string())),
+                    user_email_address: Some(Pii::new(
+                        EmailAddress::from_str("jane.doe@example.com").unwrap()
+                    )),
+                }),
+                config: NotionConfig {
+                    sync_comments_enabled: true,
+                    sync_mentions_enabled: true,
+                },
+            }
+        );
+    }
+
+    /// Notion asks for `owner=user` and grants access per page, not per scope.
+    #[rstest]
+    #[tokio::test]
+    async fn test_notion_authorize_url_asks_for_a_user_owner(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let integration_connection = create_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Notion(NotionConfig::default()),
+            IntegrationConnectionStatus::Created,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await;
+
+        let body: Value = app
+            .client
+            .get(format!(
+                "{}oauth/authorize-url/{}",
+                app.app.api_address, integration_connection.id
+            ))
+            .send()
+            .await
+            .expect("Failed to start OAuth authorization")
+            .json()
+            .await
+            .expect("Failed to parse authorize-url response");
+        let authorization_url =
+            url::Url::parse(body["authorization_url"].as_str().unwrap()).unwrap();
+
+        assert_eq!(
+            format!(
+                "{}://{}{}",
+                authorization_url.scheme(),
+                authorization_url.host_str().unwrap(),
+                authorization_url.path()
+            ),
+            "https://api.notion.com/v1/oauth/authorize"
+        );
+        let params: Vec<(String, String)> = authorization_url
+            .query_pairs()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect();
+        assert!(params.contains(&("owner".to_string(), "user".to_string())));
+        assert!(params.contains(&(
+            "client_id".to_string(),
+            settings.integrations["notion"].oauth_client_id.clone()
+        )));
+        assert!(!params.iter().any(|(key, _)| key == "scope"));
     }
 }

@@ -96,9 +96,8 @@ use crate::helpers::{
 /// One notification per provider, triaged, then a configuration `PUT`. Nothing
 /// may be removed and nothing may be disturbed — for any provider, any setting.
 ///
-/// `Notion` and `API` have no case: neither is a connection a user can
-/// configure. `Notion` is not even a value of the `integration_provider_kind`
-/// Postgres enum, so such a connection cannot be persisted at all.
+/// `Notion` and `API` have no case: Notion does not create notifications yet,
+/// and `API` is not a connection a user can configure.
 #[rstest]
 #[case(IntegrationProviderKind::Github)]
 #[case(IntegrationProviderKind::Linear)]
@@ -203,7 +202,7 @@ async fn test_mute_does_not_set_aside_task_derived_notifications(
 /// and are set aside, and reconnecting brings them back exactly as they were
 /// once the sync that reconciles them has completed.
 ///
-/// `Notion` has no notifications of its own, and `API` notifications are pushed
+/// `Notion` does not create notifications yet, and `API` notifications are pushed
 /// in by an external client rather than collected by a sync, so nothing could
 /// ever restore them — neither is set aside, and neither has a case here.
 #[rstest]
@@ -815,9 +814,8 @@ async fn seed_provider(
         }
         IntegrationProviderKind::Notion | IntegrationProviderKind::API => {
             unreachable!(
-                "{provider_kind} has no configuration a user can save: `Notion` is not even a \
-                 value of the `integration_provider_kind` Postgres enum, so such a connection \
-                 cannot be persisted"
+                "{provider_kind} has no case: Notion does not create notifications yet, and \
+                 `API` has no configuration a user can save"
             )
         }
     }

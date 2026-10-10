@@ -19,7 +19,8 @@
                 "TickTick",
                 "GoogleCalendar",
                 "API",
-                "GoogleDrive"
+                "GoogleDrive",
+                "Notion"
               ]
             }
           }

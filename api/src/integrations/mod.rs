@@ -26,6 +26,7 @@ pub mod google_oauth;
 pub mod icalendar;
 pub mod linear;
 pub mod mock;
+pub mod notion;
 pub mod oauth2;
 pub mod slack;
 pub mod slack_oauth;

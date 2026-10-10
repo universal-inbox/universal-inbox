@@ -410,3 +410,13 @@ pub fn google_account_id(email: &str) -> String {
         .email_blind_index(email)
         .unwrap()
 }
+
+#[fixture]
+pub fn notion_oauth_credential() -> OAuthCredentialFixture {
+    OAuthCredentialFixture {
+        access_token: AccessToken("notion_test_access_token".to_string()),
+        refresh_token: None,
+        provider_user_id: Some("notion_test_user_id".to_string()),
+        registered_oauth_scopes: vec![],
+    }
+}

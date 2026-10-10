@@ -5,6 +5,7 @@ pub mod google_drive;
 pub mod google_mail;
 pub mod icons;
 pub mod linear;
+pub mod notion;
 pub mod slack;
 pub mod ticktick;
 pub mod todoist;

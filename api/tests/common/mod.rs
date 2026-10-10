@@ -106,6 +106,7 @@ pub struct MockServers {
     pub google_calendar: MockServer,
     pub google_mail: MockServer,
     pub google_drive: MockServer,
+    pub notion: MockServer,
     pub slack: MockServer,
     pub todoist: MockServer,
     pub ticktick: MockServer,
@@ -119,6 +120,7 @@ impl MockServers {
         let google_calendar = MockServer::start().await;
         let google_mail = MockServer::start().await;
         let google_drive = MockServer::start().await;
+        let notion = MockServer::start().await;
         let slack = MockServer::start().await;
         let todoist = MockServer::start().await;
         let ticktick = MockServer::start().await;
@@ -129,6 +131,7 @@ impl MockServers {
             google_calendar,
             google_mail,
             google_drive,
+            notion,
             slack,
             todoist,
             ticktick,
@@ -169,6 +172,7 @@ pub fn with_mocked_oauth_urls(settings: &Settings, mock_servers: &MockServers) -
             "slack" => format!("{}/auth.revoke", mock_servers.slack.uri()),
             "todoist" => format!("{}/api/v1/revoke", mock_servers.todoist.uri()),
             "ticktick" => format!("{}/oauth/revoke", mock_servers.ticktick.uri()),
+            "notion" => format!("{}/v1/oauth/revoke", mock_servers.notion.uri()),
             "google_mail" => format!("{}/revoke", mock_servers.google_mail.uri()),
             "google_calendar" => format!("{}/revoke", mock_servers.google_calendar.uri()),
             "google_drive" => format!("{}/revoke", mock_servers.google_drive.uri()),
@@ -177,13 +181,14 @@ pub fn with_mocked_oauth_urls(settings: &Settings, mock_servers: &MockServers) -
         integration.oauth_revocation_url =
             Some(revocation_url.parse().expect("valid mock revocation URL"));
 
-        // Google code exchanges and Slack token refreshes hit the
+        // Google and Notion code exchanges and Slack token refreshes hit the
         // integration's mock server too.
         let token_url = match name.as_str() {
             "google_mail" => format!("{}/token", mock_servers.google_mail.uri()),
             "google_calendar" => format!("{}/token", mock_servers.google_calendar.uri()),
             "google_drive" => format!("{}/token", mock_servers.google_drive.uri()),
             "slack" => format!("{}/oauth.v2.access", mock_servers.slack.uri()),
+            "notion" => format!("{}/v1/oauth/token", mock_servers.notion.uri()),
             _ => continue,
         };
         integration.oauth_token_url = Some(token_url.parse().expect("valid mock token URL"));
