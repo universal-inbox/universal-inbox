@@ -895,7 +895,7 @@ impl SlackService {
         };
         current_span.set_attribute(attr::SLACK_CHANNEL_ID, channel_id.to_string());
         let root_ts = origin.thread_ts.as_ref().unwrap_or(&origin.ts);
-        let messages = self
+        let messages = match self
             .fetch_thread(
                 channel_id,
                 root_ts,
@@ -903,7 +903,26 @@ impl SlackService {
                 user_id,
                 &slack_api_token,
             )
-            .await?;
+            .await
+        {
+            Ok(messages) => messages,
+            // The user's token cannot see this thread (eg. the user is mentioned in a DM they are
+            // not a member of, or the thread was deleted): there is nothing to notify them about.
+            Err(error)
+                if matches!(
+                    slack_api_error_code(&error),
+                    Some("channel_not_found" | "thread_not_found")
+                ) =>
+            {
+                warn!(
+                    "Slack thread {root_ts} in channel {channel_id} is not accessible to user {user_id}, skipping it"
+                );
+                current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "skipped");
+                current_span.set_attribute(attr::SLACK_FETCH_SKIP_REASON, "thread_not_accessible");
+                return Ok(None);
+            }
+            Err(error) => return Err(error),
+        };
         let channel = self.fetch_channel(channel_id, &slack_api_token).await?;
         let team = self
             .fetch_team(&slack_push_event_callback.team_id, &slack_api_token)
