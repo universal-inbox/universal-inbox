@@ -49,7 +49,10 @@ pub mod redaction;
 pub mod spans;
 
 pub use attributes as attr;
-pub use spans::{RecordSpanError, http_client_span, instrument_client_call, redis_client_span};
+pub use spans::{
+    RecordSpanError, http_client_span, instrument_client_call, instrument_client_call_expecting,
+    redis_client_span,
+};
 
 use redaction::{RedactingLogProcessor, RedactingSpanProcessor};
 

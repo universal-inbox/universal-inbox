@@ -60,7 +60,7 @@ use crate::{
         notification::ThirdPartyNotificationSourceService, oauth2::AccessToken,
         task::ThirdPartyTaskService, third_party::ThirdPartyItemSourceService,
     },
-    observability::{http_client_span, instrument_client_call},
+    observability::{http_client_span, instrument_client_call_expecting},
     repository::{Repository, third_party::ThirdPartyItemRepository},
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
@@ -1213,10 +1213,27 @@ async fn slack_api_call<T>(
     method: &'static str,
     call: impl Future<Output = Result<T, SlackClientError>>,
 ) -> Result<T, SlackClientError> {
-    instrument_client_call(
+    slack_api_call_expecting(method, call, &[]).await
+}
+
+/// Same as [`slack_api_call`], but the Slack API error codes in `expected_codes` leave the span
+/// OK: the caller maps them to a regular outcome (eg. `bot_not_found` meaning "no such bot").
+async fn slack_api_call_expecting<T>(
+    method: &'static str,
+    call: impl Future<Output = Result<T, SlackClientError>>,
+    expected_codes: &'static [&'static str],
+) -> Result<T, SlackClientError> {
+    instrument_client_call_expecting(
         http_client_span("POST", "slack.com", &format!("/api/{method}")),
         call,
         slack_error_type,
+        |error| {
+            matches!(
+                error,
+                SlackClientError::ApiError(SlackClientApiError { code, .. })
+                    if expected_codes.contains(&code.as_str())
+            )
+        },
     )
     .await
 }
@@ -1371,9 +1388,10 @@ async fn cached_fetch_user(
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    match slack_api_call(
+    match slack_api_call_expecting(
         "users.info",
         session.users_info(&SlackApiUsersInfoRequest::new(user.clone())),
+        &["user_not_found"],
     )
     .await
     {
@@ -1459,9 +1477,10 @@ async fn cached_fetch_bot(
     let client = SlackService::build_slack_client_from_url(slack_base_url)?;
     let session = client.open_session(slack_api_token);
 
-    match slack_api_call(
+    match slack_api_call_expecting(
         "bots.info",
         session.bots_info(&SlackApiBotsInfoRequest::new().with_bot(bot.to_string())),
+        &["bot_not_found"],
     )
     .await
     {
