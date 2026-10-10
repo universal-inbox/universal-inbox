@@ -258,6 +258,7 @@ macro_attr! {
         GoogleMail,
         GoogleCalendar,
         GoogleDrive,
+        Notion,
         Slack,
         API,
     }
@@ -274,6 +275,9 @@ impl TryFrom<ThirdPartyItemSourceKind> for NotificationSourceKind {
             ThirdPartyItemSourceKind::LinearNotification => Ok(Self::Linear),
             ThirdPartyItemSourceKind::GoogleMailThread => Ok(Self::GoogleMail),
             ThirdPartyItemSourceKind::GoogleDriveComment => Ok(Self::GoogleDrive),
+            ThirdPartyItemSourceKind::NotionComment | ThirdPartyItemSourceKind::NotionBlock => {
+                Ok(Self::Notion)
+            }
             ThirdPartyItemSourceKind::SlackReaction | ThirdPartyItemSourceKind::SlackThread => {
                 Ok(Self::Slack)
             }
@@ -345,6 +349,7 @@ impl TryFrom<IntegrationProviderKind> for NotificationSourceKind {
             IntegrationProviderKind::GoogleMail => Ok(Self::GoogleMail),
             IntegrationProviderKind::GoogleCalendar => Ok(Self::GoogleCalendar),
             IntegrationProviderKind::GoogleDrive => Ok(Self::GoogleDrive),
+            IntegrationProviderKind::Notion => Ok(Self::Notion),
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
             IntegrationProviderKind::TickTick => Ok(Self::TickTick),
             IntegrationProviderKind::Slack => Ok(Self::Slack),
@@ -362,6 +367,7 @@ impl From<NotificationSourceKind> for IntegrationProviderKind {
             NotificationSourceKind::GoogleMail => Self::GoogleMail,
             NotificationSourceKind::GoogleCalendar => Self::GoogleCalendar,
             NotificationSourceKind::GoogleDrive => Self::GoogleDrive,
+            NotificationSourceKind::Notion => Self::Notion,
             NotificationSourceKind::Todoist => Self::Todoist,
             NotificationSourceKind::TickTick => Self::TickTick,
             NotificationSourceKind::Slack => Self::Slack,

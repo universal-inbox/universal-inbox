@@ -430,7 +430,10 @@ fn NotificationDetailsPreview(
         ThirdPartyItemData::WebPage(web_page) => rsx! {
             WebPagePreview { notification, web_page: *web_page }
         },
-        ThirdPartyItemData::LinearIssue(_)
+        // Notion previews come with the notion-blocks-render crate
+        ThirdPartyItemData::NotionComment(_)
+        | ThirdPartyItemData::NotionBlock(_)
+        | ThirdPartyItemData::LinearIssue(_)
         | ThirdPartyItemData::TodoistItem(_)
         | ThirdPartyItemData::TickTickItem(_) => rsx! {},
     }
@@ -444,6 +447,7 @@ fn source_display_name(kind: NotificationSourceKind) -> &'static str {
         NotificationSourceKind::GoogleMail => "Gmail",
         NotificationSourceKind::GoogleCalendar => "Google Calendar",
         NotificationSourceKind::GoogleDrive => "Google Drive",
+        NotificationSourceKind::Notion => "Notion",
         NotificationSourceKind::Slack => "Slack",
         NotificationSourceKind::Todoist => "Todoist",
         NotificationSourceKind::TickTick => "TickTick",
@@ -462,6 +466,8 @@ fn notification_sub_type(data: &ThirdPartyItemData) -> Option<&'static str> {
         ThirdPartyItemData::GoogleMailThread(_) => Some("Email"),
         ThirdPartyItemData::GoogleCalendarEvent(_) => Some("Event"),
         ThirdPartyItemData::GoogleDriveComment(_) => Some("Comment"),
+        ThirdPartyItemData::NotionComment(_) => Some("Comment"),
+        ThirdPartyItemData::NotionBlock(_) => Some("Mention"),
         ThirdPartyItemData::SlackReaction(_) => Some("Reaction"),
         ThirdPartyItemData::SlackThread(_) => Some("Thread"),
         ThirdPartyItemData::TodoistItem(_) | ThirdPartyItemData::TickTickItem(_) => Some("Task"),

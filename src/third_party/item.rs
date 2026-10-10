@@ -22,6 +22,7 @@ use crate::{
         google_drive::GoogleDriveComment,
         google_mail::GoogleMailThread,
         linear::{LinearIssue, LinearNotification, LinearWorkflowState, LinearWorkflowStateType},
+        notion::{NotionBlock, NotionComment},
         slack::{SlackReaction, SlackReactionState, SlackThread},
         ticktick::{TickTickItem, TickTickTaskStatus},
         todoist::TodoistItem,
@@ -75,6 +76,8 @@ impl HasHtmlUrl for ThirdPartyItem {
             ThirdPartyItemData::GoogleMailThread(ref thread) => thread.get_html_url(),
             ThirdPartyItemData::GoogleCalendarEvent(ref event) => event.get_html_url(),
             ThirdPartyItemData::GoogleDriveComment(ref comment) => comment.get_html_url(),
+            ThirdPartyItemData::NotionComment(ref comment) => comment.get_html_url(),
+            ThirdPartyItemData::NotionBlock(ref block) => block.get_html_url(),
             ThirdPartyItemData::WebPage(ref url) => url.get_html_url(),
         }
     }
@@ -95,6 +98,8 @@ pub enum ThirdPartyItemData {
     GoogleMailThread(Box<GoogleMailThread>),
     GoogleCalendarEvent(Box<GoogleCalendarEvent>),
     GoogleDriveComment(Box<GoogleDriveComment>),
+    NotionComment(Box<NotionComment>),
+    NotionBlock(Box<NotionBlock>),
     WebPage(Box<WebPage>),
 }
 
@@ -111,6 +116,8 @@ impl ThirdPartyItemData {
             ThirdPartyItemData::GoogleMailThread(_) => ThirdPartyItemKind::GoogleMailThread,
             ThirdPartyItemData::GoogleCalendarEvent(_) => ThirdPartyItemKind::GoogleCalendarEvent,
             ThirdPartyItemData::GoogleDriveComment(_) => ThirdPartyItemKind::GoogleDriveComment,
+            ThirdPartyItemData::NotionComment(_) => ThirdPartyItemKind::NotionComment,
+            ThirdPartyItemData::NotionBlock(_) => ThirdPartyItemKind::NotionBlock,
             ThirdPartyItemData::WebPage(_) => ThirdPartyItemKind::WebPage,
         }
     }
@@ -129,6 +136,8 @@ macro_attr! {
         GoogleMailThread,
         GoogleCalendarEvent,
         GoogleDriveComment,
+        NotionComment,
+        NotionBlock,
         WebPage,
     }
 }
@@ -152,6 +161,9 @@ impl IntegrationProviderSource for ThirdPartyItem {
             ThirdPartyItemData::GoogleMailThread(_) => IntegrationProviderKind::GoogleMail,
             ThirdPartyItemData::GoogleCalendarEvent(_) => IntegrationProviderKind::GoogleCalendar,
             ThirdPartyItemData::GoogleDriveComment(_) => IntegrationProviderKind::GoogleDrive,
+            ThirdPartyItemData::NotionComment(_) | ThirdPartyItemData::NotionBlock(_) => {
+                IntegrationProviderKind::Notion
+            }
             ThirdPartyItemData::WebPage(_) => IntegrationProviderKind::API,
         }
     }
@@ -178,6 +190,8 @@ impl ThirdPartyItemSource for ThirdPartyItem {
             ThirdPartyItemData::GoogleDriveComment(_) => {
                 ThirdPartyItemSourceKind::GoogleDriveComment
             }
+            ThirdPartyItemData::NotionComment(_) => ThirdPartyItemSourceKind::NotionComment,
+            ThirdPartyItemData::NotionBlock(_) => ThirdPartyItemSourceKind::NotionBlock,
             ThirdPartyItemData::WebPage(_) => ThirdPartyItemSourceKind::WebPage,
         }
     }
@@ -253,6 +267,8 @@ impl ThirdPartyItem {
             | ThirdPartyItemData::GoogleMailThread(_)
             | ThirdPartyItemData::GoogleCalendarEvent(_)
             | ThirdPartyItemData::GoogleDriveComment(_)
+            | ThirdPartyItemData::NotionComment(_)
+            | ThirdPartyItemData::NotionBlock(_)
             | ThirdPartyItemData::WebPage(_) => {
                 return self.clone();
             }
@@ -300,6 +316,8 @@ macro_attr! {
         GoogleMailThread,
         GoogleCalendarEvent,
         GoogleDriveComment,
+        NotionComment,
+        NotionBlock,
         WebPage,
     }
 }

@@ -203,6 +203,8 @@ pub fn TaskDetailsPreview(task: ReadSignal<Task>, expand_details: ReadSignal<boo
         | ThirdPartyItemData::GoogleMailThread(_)
         | ThirdPartyItemData::GoogleCalendarEvent(_)
         | ThirdPartyItemData::GoogleDriveComment(_)
+        | ThirdPartyItemData::NotionComment(_)
+        | ThirdPartyItemData::NotionBlock(_)
         | ThirdPartyItemData::WebPage(_) => rsx! {},
     }
 }
@@ -273,6 +275,8 @@ pub fn task_sub_type(task: &Task) -> &'static str {
         | ThirdPartyItemKind::GoogleMailThread
         | ThirdPartyItemKind::GoogleCalendarEvent
         | ThirdPartyItemKind::GoogleDriveComment
+        | ThirdPartyItemKind::NotionComment
+        | ThirdPartyItemKind::NotionBlock
         | ThirdPartyItemKind::WebPage => "Task",
     }
 }

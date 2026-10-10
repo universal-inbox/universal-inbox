@@ -53,7 +53,7 @@ impl IntegrationConnectionConfig {
             Self::Todoist(_) => Some(NotificationSourceKind::Todoist),
             Self::Linear(_) => Some(NotificationSourceKind::Linear),
             Self::Github(_) => Some(NotificationSourceKind::Github),
-            Self::Notion(_) => None,
+            Self::Notion(_) => Some(NotificationSourceKind::Notion),
             Self::Slack(_) => Some(NotificationSourceKind::Slack),
             Self::TickTick(_) => Some(NotificationSourceKind::TickTick),
             Self::API => Some(NotificationSourceKind::API),

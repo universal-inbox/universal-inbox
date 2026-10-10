@@ -831,10 +831,12 @@ fn all_notification_sources() -> Vec<NotificationSourceKind> {
     vec![
         NotificationSourceKind::Github,
         NotificationSourceKind::Todoist,
+        NotificationSourceKind::TickTick,
         NotificationSourceKind::Linear,
         NotificationSourceKind::GoogleMail,
         NotificationSourceKind::GoogleCalendar,
         NotificationSourceKind::GoogleDrive,
+        NotificationSourceKind::Notion,
         NotificationSourceKind::Slack,
         NotificationSourceKind::API,
     ]

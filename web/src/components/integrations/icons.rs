@@ -80,6 +80,7 @@ pub fn NotificationIcon(kind: NotificationSourceKind) -> Element {
         NotificationSourceKind::GoogleCalendar => rsx! { GoogleCalendar { class: "h-8 w-8" } },
         NotificationSourceKind::GoogleDrive => rsx! { GoogleDrive { class: "h-5 w-5" } },
         NotificationSourceKind::GoogleMail => rsx! { GoogleMail { class: "h-5 w-5" } },
+        NotificationSourceKind::Notion => rsx! { Notion { class: "h-5 w-5" } },
         NotificationSourceKind::Todoist => rsx! { Todoist { class: "h-5 w-5" } },
         NotificationSourceKind::TickTick => rsx! { TickTick { class: "h-5 w-5" } },
         NotificationSourceKind::Slack => rsx! { span { class: "icon-[logos--slack-icon] size-5" } },

@@ -1918,6 +1918,7 @@ enum PgNotificationSourceKind {
     GoogleMail,
     GoogleDrive,
     GoogleCalendar,
+    Notion,
     Slack,
     TickTick,
     #[allow(clippy::upper_case_acronyms)]

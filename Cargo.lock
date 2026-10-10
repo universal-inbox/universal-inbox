@@ -5165,6 +5165,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38bf9645c8b145698bb0b18a4637dcacbc421ea49bef2317e4fd8065a387cf21"
 
 [[package]]
+name = "notionrs_macro"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d96d62a2642cfdeb780b486040531719885628267aaad51338f36dd7dc423048"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "notionrs_types"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a1d3b885f74e27dccecda7e6b370fc8c245ff522df07d6a891a74d508ffcd92"
+dependencies = [
+ "notionrs_macro",
+ "serde",
+ "serde_json",
+ "serde_plain",
+ "time",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9160,6 +9184,7 @@ dependencies = [
  "git-url-parse",
  "html-escape",
  "macro-attr",
+ "notionrs_types",
  "num_enum",
  "openidconnect",
  "pretty_assertions",
