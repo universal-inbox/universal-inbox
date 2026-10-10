@@ -1223,19 +1223,64 @@ async fn slack_api_call_expecting<T>(
     call: impl Future<Output = Result<T, SlackClientError>>,
     expected_codes: &'static [&'static str],
 ) -> Result<T, SlackClientError> {
-    instrument_client_call_expecting(
-        http_client_span("POST", "slack.com", &format!("/api/{method}")),
-        call,
-        slack_error_type,
-        |error| {
-            matches!(
-                error,
-                SlackClientError::ApiError(SlackClientApiError { code, .. })
-                    if expected_codes.contains(&code.as_str())
-            )
-        },
-    )
+    let span = http_client_span("POST", "slack.com", &format!("/api/{method}"));
+    let result = instrument_client_call_expecting(span.clone(), call, slack_error_type, |error| {
+        matches!(
+            error,
+            SlackClientError::ApiError(SlackClientApiError { code, .. })
+                if expected_codes.contains(&code.as_str())
+        )
+    })
     .await
+    .map_err(without_response_body);
+    // A protocol error means Slack sent a payload slack-morphism cannot decode (an
+    // unknown block type, ...): the serde message names the culprit and its position.
+    if let Err(SlackClientError::ProtocolError(error)) = &result {
+        span.set_attribute(attr::ERROR_MESSAGE, error.json_error.to_string());
+    }
+    result
+}
+
+/// Drop the raw Slack response body slack-morphism keeps in its errors: their
+/// `Display` prints it, and it holds message contents and user names that must not
+/// reach the logs.
+fn without_response_body(mut error: SlackClientError) -> SlackClientError {
+    match &mut error {
+        SlackClientError::ApiError(error) => error.http_response_body = None,
+        SlackClientError::HttpError(error) => error.http_response_body = None,
+        SlackClientError::ProtocolError(error) => {
+            error.json_body = None;
+            error.json_error = redacted_json_error(&error.json_error);
+        }
+        _ => {}
+    }
+    error
+}
+
+/// serde_json quotes the offending input in some error messages (`invalid type: string
+/// "..."`), here Slack message contents. Keep the message only when it names schema items
+/// (an unknown block type, a missing field), else only its category and position.
+fn redacted_json_error(error: &serde_json::Error) -> serde_json::Error {
+    let message = error.to_string();
+    let names_schema_items = [
+        "unknown variant",
+        "unknown field",
+        "missing field",
+        "duplicate field",
+    ]
+    .iter()
+    .any(|prefix| message.starts_with(prefix));
+    let message = if names_schema_items {
+        message
+    } else {
+        format!(
+            "{:?} error at line {} column {}",
+            error.classify(),
+            error.line(),
+            error.column()
+        )
+    };
+    <serde_json::Error as serde::de::Error>::custom(message)
 }
 
 fn slack_error_type(error: &SlackClientError) -> String {
@@ -2172,5 +2217,66 @@ mod token_cache_scope_tests {
         assert_ne!(scope_a, scope_b);
         assert_eq!(scope_a, slack_token_cache_scope(&token("xoxp-user-a")));
         assert!(!scope_a.contains("xoxp"));
+    }
+}
+
+#[cfg(test)]
+mod without_response_body_tests {
+    use pretty_assertions::assert_eq;
+    use slack_morphism::errors::{SlackClientHttpError, SlackClientProtocolError};
+
+    use super::*;
+
+    const BODY: &str = r#"{"ok":true,"messages":[{"type":"message","text":"secret message"}]}"#;
+
+    fn protocol_error(json_error: serde_json::Error) -> SlackClientError {
+        without_response_body(SlackClientError::ProtocolError(
+            SlackClientProtocolError::new(json_error).with_json_body(BODY.to_string()),
+        ))
+    }
+
+    #[test]
+    fn protocol_error_keeps_a_schema_serde_message_and_drops_the_body() {
+        #[derive(Debug, serde::Deserialize)]
+        enum BlockType {
+            #[allow(dead_code)]
+            Section,
+        }
+        let json_error = serde_json::from_str::<BlockType>(r#""plan""#).unwrap_err();
+        let serde_message = json_error.to_string();
+
+        let message = protocol_error(json_error).to_string();
+
+        assert!(message.contains(&serde_message), "{message}");
+        assert!(message.contains("unknown variant `plan`"), "{message}");
+        assert!(!message.contains("secret message"), "{message}");
+    }
+
+    #[test]
+    fn protocol_error_redacts_a_serde_message_quoting_input_data() {
+        let json_error = serde_json::from_str::<u32>(r#""secret message""#).unwrap_err();
+
+        let message = protocol_error(json_error).to_string();
+
+        assert!(message.contains("Data error at line 1 column"), "{message}");
+        assert!(!message.contains("secret message"), "{message}");
+    }
+
+    #[test]
+    fn api_and_http_errors_drop_the_body() {
+        let api_error = without_response_body(SlackClientError::ApiError(
+            SlackClientApiError::new("channel_not_found".to_string())
+                .with_http_response_body(BODY.to_string()),
+        ));
+        let http_error = without_response_body(SlackClientError::HttpError(
+            SlackClientHttpError::new(http::StatusCode::BAD_GATEWAY)
+                .with_http_response_body(BODY.to_string()),
+        ));
+
+        assert!(api_error.to_string().contains("channel_not_found"));
+        assert_eq!(slack_error_type(&api_error), "channel_not_found");
+        for error in [api_error, http_error] {
+            assert!(!error.to_string().contains("secret message"));
+        }
     }
 }

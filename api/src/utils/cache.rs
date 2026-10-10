@@ -1,4 +1,4 @@
-use std::{future::Future, sync::Arc, time::Duration};
+use std::{future::Future, marker::PhantomData, sync::Arc, time::Duration};
 
 use anyhow::Context;
 use cached::{AsyncRedisCache, ConcurrentCacheBase, ConcurrentCachedAsync, RedisCacheError};
@@ -9,7 +9,7 @@ use redis::{
 };
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::{
     configuration::{RedisSettings, Settings},
@@ -90,6 +90,11 @@ impl Cache {
     }
 }
 
+/// Suffix of every cache prefix, naming the encoding of the cached values: entries
+/// written in another format (MessagePack before) live under other keys and are never
+/// read, they expire with their TTL.
+const VALUE_FORMAT_SUFFIX: &str = ".json";
+
 pub async fn build_redis_cache<T>(
     prefix: &str,
     ttl_in_seconds: Duration,
@@ -106,7 +111,7 @@ where
         &namespace,
         &prefix
     );
-    let inner = AsyncRedisCache::builder(prefix)
+    let inner = AsyncRedisCache::builder(format!("{prefix}{VALUE_FORMAT_SUFFIX}"))
         .ttl(ttl_in_seconds)
         .refresh_on_hit(refresh)
         .namespace(&namespace)
@@ -118,28 +123,65 @@ where
     TracedRedisCache {
         inner,
         prefix: prefix.to_string(),
+        value_type: PhantomData,
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CacheError {
+    #[error(transparent)]
+    Redis(#[from] RedisCacheError),
+    #[error("Failed to encode the cached value as JSON: {0}")]
+    Json(#[from] serde_json::Error),
 }
 
 /// An [`AsyncRedisCache`] giving each Redis command an INFO client span: the
 /// `cached` crate talks to Redis on its own connection, outside any traced client.
+///
+/// Values are stored as JSON rather than in the `cached` crate's compact MessagePack
+/// encoding, which writes structs as positional arrays without field names: types
+/// relying on tagged or untagged enums, or on skipped fields (most slack-morphism
+/// models), do not decode back reliably from it. Since slack-morphism 2.30, a cached
+/// `SlackBlock` silently came back as `SlackBlock::Unknown`.
 pub struct TracedRedisCache<V> {
-    inner: AsyncRedisCache<String, V>,
+    inner: AsyncRedisCache<String, String>,
     prefix: String,
+    value_type: PhantomData<V>,
 }
 
-impl<V> TracedRedisCache<V> {
+impl<V> TracedRedisCache<V>
+where
+    V: DeserializeOwned,
+{
     async fn traced<T>(
         &self,
         operation: &'static str,
         command: impl Future<Output = Result<T, RedisCacheError>>,
-    ) -> Result<T, RedisCacheError> {
-        instrument_client_call(
+    ) -> Result<T, CacheError> {
+        Ok(instrument_client_call(
             redis_client_span(operation, &self.prefix),
             command,
             redis_error_type,
         )
-        .await
+        .await?)
+    }
+
+    /// Decode a cached value. One that cannot be decoded is a cache miss: the value is
+    /// fetched again and overwrites it, rather than failing the request.
+    fn decode(&self, cached_value: Option<String>) -> Option<V> {
+        let cached_value = cached_value?;
+        serde_json::from_str(&cached_value)
+            .inspect_err(|err| {
+                // Neither the key nor the serde message: both can hold user data
+                warn!(
+                    "Ignoring undecodable `{}` cache entry: {:?} error at line {} column {}",
+                    self.prefix,
+                    err.classify(),
+                    err.line(),
+                    err.column()
+                )
+            })
+            .ok()
     }
 }
 
@@ -154,7 +196,7 @@ fn redis_error_type(error: &RedisCacheError) -> String {
 }
 
 impl<V> ConcurrentCacheBase for TracedRedisCache<V> {
-    type Error = RedisCacheError;
+    type Error = CacheError;
 }
 
 impl<V> ConcurrentCachedAsync<String, V> for TracedRedisCache<V>
@@ -162,23 +204,34 @@ where
     V: Serialize + DeserializeOwned + Send + Sync,
 {
     async fn async_cache_get(&self, k: &String) -> Result<Option<V>, Self::Error> {
-        self.traced("GET", self.inner.async_cache_get(k)).await
+        let cached_value = self.traced("GET", self.inner.async_cache_get(k)).await?;
+        Ok(self.decode(cached_value))
     }
 
     async fn async_cache_set(&self, k: String, v: V) -> Result<Option<V>, Self::Error> {
-        self.traced("SET", self.inner.async_cache_set(k, v)).await
+        let value = serde_json::to_string(&v)?;
+        let previous_value = self
+            .traced("SET", self.inner.async_cache_set(k, value))
+            .await?;
+        Ok(self.decode(previous_value))
     }
 
     async fn async_cache_remove(&self, k: &String) -> Result<Option<V>, Self::Error> {
-        self.traced("DEL", self.inner.async_cache_remove(k)).await
+        let removed_value = self.traced("DEL", self.inner.async_cache_remove(k)).await?;
+        Ok(self.decode(removed_value))
     }
 
     async fn async_cache_remove_entry(
         &self,
         k: &String,
     ) -> Result<Option<(String, V)>, Self::Error> {
-        self.traced("DEL", self.inner.async_cache_remove_entry(k))
-            .await
+        let removed_entry = self
+            .traced("DEL", self.inner.async_cache_remove_entry(k))
+            .await?;
+        Ok(removed_entry.and_then(|(key, value)| {
+            let value = self.decode(Some(value))?;
+            Some((key, value))
+        }))
     }
 
     async fn async_cache_contains(&self, k: &String) -> Result<bool, Self::Error>
