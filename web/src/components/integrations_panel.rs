@@ -27,7 +27,8 @@ use crate::{
             google_calendar::config::GoogleCalendarProviderConfiguration,
             google_drive::config::GoogleDriveProviderConfiguration,
             google_mail::config::GoogleMailProviderConfiguration,
-            linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
+            linear::config::LinearProviderConfiguration,
+            notion::config::NotionProviderConfiguration, slack::config::SlackProviderConfiguration,
             ticktick::config::TickTickProviderConfiguration,
             todoist::config::TodoistProviderConfiguration,
         },
@@ -1081,6 +1082,12 @@ pub fn IntegrationConnectionProviderConfiguration(
         },
         IntegrationProvider::GoogleDrive { config, .. } => rsx! {
             GoogleDriveProviderConfiguration {
+                on_config_change: move |c| on_config_change.call(c),
+                config: config.clone(),
+            }
+        },
+        IntegrationProvider::Notion { config, .. } => rsx! {
+            NotionProviderConfiguration {
                 on_config_change: move |c| on_config_change.call(c),
                 config: config.clone(),
             }

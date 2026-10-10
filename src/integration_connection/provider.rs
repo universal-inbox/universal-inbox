@@ -12,6 +12,7 @@ use crate::{
             google_drive::{GoogleDriveConfig, GoogleDriveContext},
             google_mail::{GoogleMailConfig, GoogleMailContext},
             linear::LinearConfig,
+            notion::{NotionConfig, NotionContext},
             slack::{
                 SlackConfig, SlackContext, SlackReactionConfig, SlackSyncTaskConfig, SlackSyncType,
             },
@@ -43,7 +44,10 @@ pub enum IntegrationProvider {
         context: Option<GoogleMailContext>,
         config: GoogleMailConfig,
     },
-    Notion,
+    Notion {
+        context: Option<NotionContext>,
+        config: NotionConfig,
+    },
     Slack {
         context: Option<SlackContext>,
         config: SlackConfig,
@@ -94,7 +98,18 @@ impl IntegrationProvider {
                     .transpose()?,
                 config,
             }),
-            IntegrationConnectionConfig::Notion => Ok(Self::Notion),
+            IntegrationConnectionConfig::Notion(config) => Ok(Self::Notion {
+                context: context
+                    .map(|c| {
+                        if let IntegrationConnectionContext::Notion(c) = c {
+                            Ok(c)
+                        } else {
+                            Err(anyhow!("Unexpect context for Notion provider: {c:?}"))
+                        }
+                    })
+                    .transpose()?,
+                config,
+            }),
             IntegrationConnectionConfig::Slack(config) => Ok(Self::Slack {
                 context: context
                     .map(|c| {
@@ -142,7 +157,7 @@ impl IntegrationProvider {
             IntegrationProvider::GoogleCalendar { .. } => false,
             IntegrationProvider::GoogleDrive { context, .. } => context.is_none(),
             IntegrationProvider::GoogleMail { context, .. } => context.is_none(),
-            IntegrationProvider::Notion => false,
+            IntegrationProvider::Notion { context, .. } => context.is_none(),
             IntegrationProvider::Slack { context, .. } => context.is_none(),
             IntegrationProvider::Todoist { context, .. } => context.is_none(),
             IntegrationProvider::TickTick { context, .. } => context.is_none(),
@@ -165,7 +180,7 @@ impl IntegrationProvider {
             IntegrationProvider::GoogleCalendar { .. } => IntegrationProviderKind::GoogleCalendar,
             IntegrationProvider::GoogleDrive { .. } => IntegrationProviderKind::GoogleDrive,
             IntegrationProvider::GoogleMail { .. } => IntegrationProviderKind::GoogleMail,
-            IntegrationProvider::Notion => IntegrationProviderKind::Notion,
+            IntegrationProvider::Notion { .. } => IntegrationProviderKind::Notion,
             IntegrationProvider::Slack { .. } => IntegrationProviderKind::Slack,
             IntegrationProvider::Todoist { .. } => IntegrationProviderKind::Todoist,
             IntegrationProvider::TickTick { .. } => IntegrationProviderKind::TickTick,
@@ -193,7 +208,9 @@ impl IntegrationProvider {
             IntegrationProvider::Todoist { config, .. } => {
                 IntegrationConnectionConfig::Todoist(config.clone())
             }
-            IntegrationProvider::Notion => IntegrationConnectionConfig::Notion,
+            IntegrationProvider::Notion { config, .. } => {
+                IntegrationConnectionConfig::Notion(config.clone())
+            }
             IntegrationProvider::Slack { config, .. } => {
                 IntegrationConnectionConfig::Slack(config.clone())
             }
@@ -226,10 +243,12 @@ impl IntegrationProvider {
             IntegrationProvider::TickTick { context, .. } => {
                 context.clone().map(IntegrationConnectionContext::TickTick)
             }
+            IntegrationProvider::Notion { context, .. } => {
+                context.clone().map(IntegrationConnectionContext::Notion)
+            }
             IntegrationProvider::Github { .. }
             | IntegrationProvider::Linear { .. }
             | IntegrationProvider::GoogleCalendar { .. }
-            | IntegrationProvider::Notion
             | IntegrationProvider::API => None,
         }
     }
@@ -241,6 +260,9 @@ impl IntegrationProvider {
             IntegrationProvider::GoogleDrive { config, .. } => config.sync_notifications_enabled,
             IntegrationProvider::GoogleMail { config, .. } => config.sync_notifications_enabled,
             IntegrationProvider::Slack { config, .. } => config.message_config.sync_enabled,
+            IntegrationProvider::Notion { config, .. } => {
+                config.sync_comments_enabled || config.sync_mentions_enabled
+            }
             _ => false,
         }
     }
@@ -250,7 +272,7 @@ impl IntegrationProvider {
     /// Scoped to the providers whose configuration actually carries a
     /// notification sync flag. `is_sync_notifications_enabled()` answers `false`
     /// for every other provider, so reusing it here would set aside Todoist,
-    /// TickTick, Google Calendar, Notion and API notifications on any
+    /// TickTick, Google Calendar and API notifications on any
     /// configuration save, with no notifications sync of their own to ever
     /// restore them.
     pub fn are_notifications_muted(&self) -> bool {
@@ -259,10 +281,11 @@ impl IntegrationProvider {
             | IntegrationProvider::Linear { .. }
             | IntegrationProvider::GoogleDrive { .. }
             | IntegrationProvider::GoogleMail { .. }
+            | IntegrationProvider::Notion { .. }
             | IntegrationProvider::Slack { .. } => !self.is_sync_notifications_enabled(),
             // Todoist and TickTick notifications are a byproduct of their task
             // sync, and the already collected ones stay in the inbox. Google
-            // Calendar, Notion and API have no notification mute toggle.
+            // Calendar and API have no notification mute toggle.
             _ => false,
         }
     }
@@ -306,8 +329,8 @@ impl IntegrationProvider {
     }
 
     /// Whether this provider kind carries any sync toggle at all, and so
-    /// whether [`Self::disable_all_syncs`] can restrict it. Google Calendar,
-    /// Notion and `API` carry none.
+    /// whether [`Self::disable_all_syncs`] can restrict it. Google Calendar
+    /// and `API` carry none.
     ///
     /// Asks about the kind, unlike `disable_all_syncs() == false`, which is
     /// also what an already-disabled config answers. A connection a pause
@@ -315,9 +338,7 @@ impl IntegrationProvider {
     pub fn has_sync_toggles(&self) -> bool {
         !matches!(
             self,
-            IntegrationProvider::GoogleCalendar { .. }
-                | IntegrationProvider::Notion
-                | IntegrationProvider::API
+            IntegrationProvider::GoogleCalendar { .. } | IntegrationProvider::API
         )
     }
 
@@ -380,9 +401,17 @@ impl IntegrationProvider {
                     changed = true;
                 }
             }
-            IntegrationProvider::GoogleCalendar { .. }
-            | IntegrationProvider::Notion
-            | IntegrationProvider::API => {
+            IntegrationProvider::Notion { config, .. } => {
+                if config.sync_comments_enabled {
+                    config.sync_comments_enabled = false;
+                    changed = true;
+                }
+                if config.sync_mentions_enabled {
+                    config.sync_mentions_enabled = false;
+                    changed = true;
+                }
+            }
+            IntegrationProvider::GoogleCalendar { .. } | IntegrationProvider::API => {
                 // No sync toggle to flip.
             }
         }
@@ -489,6 +518,7 @@ pub enum IntegrationConnectionContext {
     GoogleDrive(GoogleDriveContext),
     GoogleMail(GoogleMailContext),
     Slack(SlackContext),
+    Notion(NotionContext),
 }
 
 pub trait IntegrationProviderSource {
@@ -545,7 +575,9 @@ impl IntegrationProviderKind {
             IntegrationProviderKind::GoogleMail => {
                 IntegrationConnectionConfig::GoogleMail(Default::default())
             }
-            IntegrationProviderKind::Notion => IntegrationConnectionConfig::Notion,
+            IntegrationProviderKind::Notion => {
+                IntegrationConnectionConfig::Notion(Default::default())
+            }
             IntegrationProviderKind::Slack => {
                 IntegrationConnectionConfig::Slack(Default::default())
             }

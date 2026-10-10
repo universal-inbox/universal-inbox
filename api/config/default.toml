@@ -375,6 +375,16 @@ oauth_client_secret = ""
 # In production, set via env: UNIVERSAL_INBOX__INTEGRATIONS__SLACK__SIGNING_SECRET=…
 signing_secret = ""
 
+[integrations.notion]
+name = "Notion"
+kind = "Notion"
+# OAuth client credentials of a public integration from https://www.notion.so/profile/integrations
+# Notion grants access per page (chosen in its page picker), so there are no scopes.
+oauth_client_id = ""
+oauth_client_secret = ""
+required_oauth_scopes = []
+is_enabled = true
+
 [integrations.ticktick]
 name = "Tick Tick"
 kind = "TickTick"

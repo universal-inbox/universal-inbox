@@ -746,7 +746,7 @@ mod revoke_provider_grants {
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use universal_inbox::integration_connection::integrations::{
-        linear::LinearConfig, ticktick::TickTickConfig,
+        linear::LinearConfig, notion::NotionConfig, ticktick::TickTickConfig,
     };
     use universal_inbox_api::{
         configuration::Settings, integrations::oauth2::RefreshToken,
@@ -764,7 +764,7 @@ mod revoke_provider_grants {
         integration_connection::{
             OAuthCredentialFixture, create_and_mock_integration_connection,
             github_oauth_credential, google_mail_oauth_credential, linear_oauth_credential,
-            slack_oauth_credential, ticktick_oauth_credential,
+            notion_oauth_credential, slack_oauth_credential, ticktick_oauth_credential,
         },
         settings,
         user::delete_current_user_response,
@@ -1100,6 +1100,37 @@ mod revoke_provider_grants {
         disconnect(&app, &connection).await;
 
         assert_called_once(&guard, "TickTick").await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_disconnecting_notion_revokes_the_token(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect(
+            &app,
+            &settings,
+            IntegrationConnectionConfig::Notion(NotionConfig::enabled()),
+            notion_oauth_credential(),
+        )
+        .await;
+        let notion_settings = &settings.integrations["notion"];
+        let guard = Mock::given(method("POST"))
+            .and(path("/v1/oauth/revoke"))
+            .and(basic_auth(
+                &notion_settings.oauth_client_id,
+                notion_settings.oauth_client_secret.as_str(),
+            ))
+            .and(body_json(json!({ "token": "notion_test_access_token" })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .mount_as_scoped(&app.app.notion_mock_server)
+            .await;
+
+        disconnect(&app, &connection).await;
+
+        assert_called_once(&guard, "Notion").await;
     }
 
     #[rstest]

@@ -67,6 +67,7 @@ use crate::{
         google_mail::GoogleMailService,
         google_oauth::GoogleOAuth2Provider,
         linear::{LinearService, oauth::LinearOAuth2Provider},
+        notion::oauth::NotionOAuth2Provider,
         oauth2::provider::{OAuth2FlowService, OAuth2Provider},
         slack_oauth::SlackOAuth2Provider,
         ticktick::{TickTickService, oauth::TickTickOAuth2Provider},
@@ -1046,6 +1047,22 @@ pub async fn build_services(
                 TickTickOAuth2Provider::with_revocation_url,
             )),
         );
+    }
+
+    if let Some(notion_settings) = settings.integrations.get("notion") {
+        let mut provider = with_revocation_url_override(
+            NotionOAuth2Provider::new(
+                notion_settings.oauth_client_id.clone(),
+                SecretBox::new(Box::new(notion_settings.oauth_client_secret.clone())),
+                notion_settings.required_oauth_scopes.clone(),
+            ),
+            notion_settings,
+            NotionOAuth2Provider::with_revocation_url,
+        );
+        if let Some(token_url) = &notion_settings.oauth_token_url {
+            provider = provider.with_token_url(token_url.clone());
+        }
+        oauth2_providers.insert(IntegrationProviderKind::Notion, Arc::new(provider));
     }
 
     let redirect_uri = settings
