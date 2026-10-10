@@ -1237,6 +1237,69 @@ mod job {
         );
     }
 
+    /// Slack answers `channel_not_found` when the pinged user's token cannot see the conversation
+    /// (eg. the user is mentioned in a DM they are not a member of). There is nothing to notify
+    /// them about: the event must be skipped without failing the job.
+    #[rstest]
+    #[tokio::test]
+    async fn test_handle_slack_message_in_dm_not_visible_to_pinged_user(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        slack_oauth_credential: OAuthCredentialFixture,
+        mut message_event: Box<SlackPushEventCallback>,
+    ) {
+        let app = authenticated_app.await;
+        let service = app.app.notification_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+        add_user_ref_in_message(&mut message_event, "U01");
+        create_slack_integration_connection_for_u01(&app, &settings, slack_oauth_credential).await;
+        Mock::given(method("GET"))
+            .and(path("/conversations.replies"))
+            .and(query_param("ts", "1732535291.911209"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(
+                    std::fs::read_to_string(fixture_path(
+                        "slack_fetch_thread_channel_not_found_response.json",
+                    ))
+                    .unwrap(),
+                    "application/json",
+                ),
+            )
+            .expect(1)
+            .mount(&app.app.slack_mock_server)
+            .await;
+
+        handle_slack_message_push_event(
+            &mut transaction,
+            &message_event,
+            app.app.notification_service.clone(),
+            app.app.integration_connection_service.clone(),
+            app.app.third_party_item_service.clone(),
+            app.app.slack_service.clone(),
+        )
+        .await
+        .unwrap();
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction")
+            .unwrap();
+
+        let notifications = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+        assert!(notifications.is_empty());
+        app.app.slack_mock_server.verify().await;
+    }
+
     /// A usergroup that is not listed for the connected token must not prevent the other
     /// references of the thread from being resolved.
     #[rstest]
