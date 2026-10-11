@@ -46,6 +46,8 @@ pub enum NotionWebhookEventType {
     CommentUpdated,
     #[serde(rename = "comment.deleted")]
     CommentDeleted,
+    #[serde(rename = "page.content_updated")]
+    PageContentUpdated,
     #[serde(other)]
     Other,
 }
@@ -56,6 +58,7 @@ impl NotionWebhookEventType {
             Self::CommentCreated => "comment.created",
             Self::CommentUpdated => "comment.updated",
             Self::CommentDeleted => "comment.deleted",
+            Self::PageContentUpdated => "page.content_updated",
             Self::Other => "other",
         }
     }
@@ -65,6 +68,12 @@ impl NotionWebhookEventType {
             self,
             Self::CommentCreated | Self::CommentUpdated | Self::CommentDeleted
         )
+    }
+
+    /// The events a job handles: comments and page content updates (for
+    /// mentions in the page's blocks).
+    pub fn is_handled_event(&self) -> bool {
+        self.is_comment_event() || *self == Self::PageContentUpdated
     }
 }
 
@@ -80,6 +89,9 @@ pub struct NotionWebhookEventData {
     pub page_id: Option<String>,
     pub parent: Option<NotionWebhookObject>,
     pub discussion_id: Option<String>,
+    /// The blocks changed by a `page.content_updated` event.
+    #[serde(default)]
+    pub updated_blocks: Vec<NotionWebhookObject>,
 }
 
 #[cfg(test)]
@@ -132,6 +144,42 @@ mod tests {
 
         assert_eq!(event.event_type, NotionWebhookEventType::Other);
         assert!(!event.event_type.is_comment_event());
+        assert!(!event.event_type.is_handled_event());
+        assert_eq!(event.event_type.as_str(), "other");
         assert_eq!(event.accessible_person_ids(), None);
+    }
+
+    #[test]
+    fn test_parse_page_content_updated_event() {
+        let event: NotionWebhookEvent = serde_json::from_value(json!({
+            "id": "event-id",
+            "timestamp": "2026-10-10T09:00:00.000Z",
+            "workspace_id": "workspace-id",
+            "type": "page.content_updated",
+            "authors": [{ "id": "author-id", "type": "person" }],
+            "entity": { "id": "page-id", "type": "page" },
+            "data": {
+                "parent": { "id": "space-id", "type": "space" },
+                "updated_blocks": [
+                    { "id": "block-1", "type": "block" },
+                    { "id": "block-2", "type": "block" }
+                ]
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(event.event_type, NotionWebhookEventType::PageContentUpdated);
+        assert_eq!(event.event_type.as_str(), "page.content_updated");
+        assert!(event.event_type.is_handled_event());
+        assert!(!event.event_type.is_comment_event());
+        assert_eq!(
+            event
+                .data
+                .updated_blocks
+                .iter()
+                .map(|block| block.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["block-1", "block-2"]
+        );
     }
 }

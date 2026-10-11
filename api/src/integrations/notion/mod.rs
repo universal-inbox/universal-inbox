@@ -7,6 +7,7 @@ use http::{HeaderMap, HeaderValue};
 use serde::Deserialize;
 use serde_json::Value;
 use sqlx::{Postgres, Transaction};
+use tracing::debug;
 use url::Url;
 use uuid::Uuid;
 use vec1::Vec1;
@@ -20,8 +21,8 @@ use universal_inbox::{
     pii::Pii,
     third_party::{
         integrations::notion::{
-            NotionComment, NotionCommentMessage, NotionCommentParent, NotionPage, NotionUser,
-            parse_rich_text,
+            NotionBlock, NotionComment, NotionCommentMessage, NotionCommentParent, NotionPage,
+            NotionUser, parse_rich_text,
         },
         item::ThirdPartyItem,
     },
@@ -110,17 +111,46 @@ impl RawNotionPage {
     }
 }
 
+/// The parent of a block. Only pages and blocks are walked: a block in a
+/// database row is under the row's page.
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RawNotionBlockParent {
+    PageId {
+        page_id: String,
+    },
+    BlockId {
+        block_id: String,
+    },
+    #[serde(other)]
+    Other,
+}
+
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct RawNotionBlock {
     pub id: String,
     #[serde(rename = "type")]
     pub block_type: String,
+    #[serde(default)]
+    pub parent: Option<RawNotionBlockParent>,
     pub created_by: Option<RawNotionUserReference>,
+    #[serde(default)]
+    pub last_edited_by: Option<RawNotionUserReference>,
+    #[serde(default)]
+    pub last_edited_time: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub archived: bool,
+    #[serde(default)]
+    pub in_trash: bool,
     #[serde(flatten)]
     pub content: HashMap<String, Value>,
 }
 
 impl RawNotionBlock {
+    pub fn is_removed(&self) -> bool {
+        self.archived || self.in_trash
+    }
+
     /// The block's rich text segments. A `table_row`'s cells are flattened,
     /// separated by a ` | ` text segment.
     pub fn rich_text(&self) -> Vec<Value> {
@@ -174,6 +204,16 @@ pub fn mentioned_user_ids_in_raw_rich_text(rich_text: &[Value]) -> Vec<String> {
         .filter_map(|segment| segment["mention"]["user"]["id"].as_str())
         .map(|id| id.to_string())
         .collect()
+}
+
+/// How many parent blocks are read to find the page of a nested block.
+const MAX_BLOCK_PARENT_HOPS: usize = 5;
+
+/// Pages and users already read while handling one event, with one token.
+#[derive(Default)]
+pub struct NotionObjectCache {
+    pages: HashMap<String, NotionPage>,
+    users: HashMap<String, NotionUser>,
 }
 
 /// Whether a Notion call failed because the integration cannot see the
@@ -320,7 +360,7 @@ impl NotionService {
                 avatar_url: user.avatar_url,
             },
             Err(error) => {
-                tracing::debug!("Unable to fetch Notion user: {error:?}");
+                debug!("Unable to fetch Notion user: {error:?}");
                 NotionUser {
                     id: user_id.to_string(),
                     name: None,
@@ -328,6 +368,103 @@ impl NotionService {
                 }
             }
         }
+    }
+
+    async fn get_cached_page(
+        &self,
+        access_token: &AccessToken,
+        page_id: &str,
+        cache: &mut NotionObjectCache,
+    ) -> Result<NotionPage, UniversalInboxError> {
+        if let Some(page) = cache.pages.get(page_id) {
+            return Ok(page.clone());
+        }
+        let page = self.get_page(access_token, page_id).await?;
+        let page = NotionPage {
+            title: page.title(),
+            id: page.id,
+            url: page.url,
+            created_by: page.created_by.map(|user| user.id),
+        };
+        cache.pages.insert(page_id.to_string(), page.clone());
+        Ok(page)
+    }
+
+    async fn get_cached_user(
+        &self,
+        access_token: &AccessToken,
+        user_id: &str,
+        cache: &mut NotionObjectCache,
+    ) -> NotionUser {
+        if let Some(user) = cache.users.get(user_id) {
+            return user.clone();
+        }
+        let user = self.get_user(access_token, user_id).await;
+        cache.users.insert(user_id.to_string(), user.clone());
+        user
+    }
+
+    /// The id of the page a block belongs to, walking up its parent blocks.
+    /// `None` when the block is not under a page within a few hops.
+    async fn find_block_page_id(
+        &self,
+        access_token: &AccessToken,
+        block: &RawNotionBlock,
+    ) -> Result<Option<String>, UniversalInboxError> {
+        let mut parent = block.parent.clone();
+        for _ in 0..MAX_BLOCK_PARENT_HOPS {
+            match parent {
+                Some(RawNotionBlockParent::PageId { page_id }) => return Ok(Some(page_id)),
+                Some(RawNotionBlockParent::BlockId { block_id }) => {
+                    parent = self.get_block(access_token, &block_id).await?.parent;
+                }
+                Some(RawNotionBlockParent::Other) | None => return Ok(None),
+            }
+        }
+        Ok(None)
+    }
+
+    /// Read a block that may mention a user, with the user's token. `None`
+    /// when the block was deleted, archived or is no longer shared with the
+    /// integration.
+    pub async fn fetch_mention_block(
+        &self,
+        access_token: &AccessToken,
+        block_id: &str,
+        cache: &mut NotionObjectCache,
+    ) -> Result<Option<NotionBlock>, UniversalInboxError> {
+        let block = match self.get_block(access_token, block_id).await {
+            Ok(block) if !block.is_removed() => block,
+            Ok(_) => return Ok(None),
+            Err(error) if is_access_denied(&error) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        let page = match self.find_block_page_id(access_token, &block).await {
+            Ok(Some(page_id)) => self.get_cached_page(access_token, &page_id, cache).await,
+            Ok(None) => {
+                debug!("Notion block {block_id} is not under a page, ignoring it");
+                return Ok(None);
+            }
+            Err(error) => Err(error),
+        };
+        let page = match page {
+            Ok(page) => page,
+            Err(error) if is_access_denied(&error) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        let last_edited_by = match &block.last_edited_by {
+            Some(user) => Some(self.get_cached_user(access_token, &user.id, cache).await),
+            None => None,
+        };
+
+        Ok(Some(NotionBlock {
+            rich_text: parse_rich_text(&block.rich_text()),
+            last_edited_time: block.last_edited_time.unwrap_or_else(Utc::now),
+            id: block.id,
+            block_type: block.block_type,
+            page,
+            last_edited_by,
+        }))
     }
 
     /// Read a discussion with the user's token. `None` when every comment of
@@ -493,6 +630,84 @@ impl ThirdPartyNotificationSourceService<NotionComment> for NotionService {
     }
 }
 
+#[async_trait]
+impl ThirdPartyNotificationSourceService<NotionBlock> for NotionService {
+    async fn third_party_item_into_notification(
+        &self,
+        source: &NotionBlock,
+        source_third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<Box<Notification>, UniversalInboxError> {
+        let author = source
+            .last_edited_by
+            .as_ref()
+            .and_then(|user| user.name.as_ref())
+            .map(|name| name.expose().clone())
+            .unwrap_or_else(|| "someone".to_string());
+
+        // Mentions written by the user themselves are never saved
+        Ok(Box::new(Notification {
+            id: NotificationId(Uuid::new_v4()),
+            title: format!("Mentioned by {author} on {}", source.page.title),
+            status: NotificationStatus::Unread,
+            created_at: source.last_edited_time,
+            updated_at: source.last_edited_time,
+            last_read_at: None,
+            snoozed_until: None,
+            user_id,
+            task_id: None,
+            kind: NotificationSourceKind::Notion,
+            source_item: source_third_party_item.clone(),
+        }))
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_item.source_id)
+    )]
+    async fn delete_notification_from_source(
+        &self,
+        _executor: &mut Transaction<'_, Postgres>,
+        source_item: &ThirdPartyItem,
+        _user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        // The Notion public API cannot archive or mark a mention as read
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_item.source_id)
+    )]
+    async fn unsubscribe_notification_from_source(
+        &self,
+        _executor: &mut Transaction<'_, Postgres>,
+        source_item: &ThirdPartyItem,
+        _user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        // There is nothing to unfollow on a mention
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::THIRD_PARTY_ITEM_SOURCE_ID } = source_item.source_id)
+    )]
+    async fn snooze_notification_from_source(
+        &self,
+        _executor: &mut Transaction<'_, Postgres>,
+        source_item: &ThirdPartyItem,
+        _snoozed_until_at: DateTime<Utc>,
+        _user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        // Notion has no snooze
+        Ok(())
+    }
+}
+
 impl NotificationSource for NotionService {
     fn get_notification_source_kind(&self) -> NotificationSourceKind {
         NotificationSourceKind::Notion
@@ -578,6 +793,39 @@ mod tests {
             block.rich_text(),
             vec![json!({ "type": "text", "plain_text": "Hello" })]
         );
+    }
+
+    #[test]
+    fn test_block_parent_and_edit_metadata() {
+        let block: RawNotionBlock = serde_json::from_value(json!({
+            "id": "block-id",
+            "type": "paragraph",
+            "parent": { "type": "block_id", "block_id": "parent-block-id" },
+            "last_edited_by": { "object": "user", "id": "editor-id" },
+            "last_edited_time": "2026-10-10T09:00:00.000Z",
+            "in_trash": false,
+            "paragraph": { "rich_text": [] }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            block.parent,
+            Some(RawNotionBlockParent::BlockId {
+                block_id: "parent-block-id".to_string()
+            })
+        );
+        assert_eq!(block.last_edited_by.as_ref().unwrap().id, "editor-id");
+        assert!(!block.is_removed());
+
+        let archived: RawNotionBlock = serde_json::from_value(json!({
+            "id": "block-id",
+            "type": "paragraph",
+            "parent": { "type": "database_id", "database_id": "database-id" },
+            "archived": true
+        }))
+        .unwrap();
+        assert_eq!(archived.parent, Some(RawNotionBlockParent::Other));
+        assert!(archived.is_removed());
     }
 
     #[test]
