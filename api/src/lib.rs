@@ -67,7 +67,7 @@ use crate::{
         google_mail::GoogleMailService,
         google_oauth::GoogleOAuth2Provider,
         linear::{LinearService, oauth::LinearOAuth2Provider},
-        notion::oauth::NotionOAuth2Provider,
+        notion::{NotionService, oauth::NotionOAuth2Provider},
         oauth2::provider::{OAuth2FlowService, OAuth2Provider},
         slack_oauth::SlackOAuth2Provider,
         ticktick::{TickTickService, oauth::TickTickOAuth2Provider},
@@ -187,6 +187,16 @@ pub async fn run_server(
         // rejects every event instead of verifying against an empty HMAC key.
         .filter(|secret| !secret.expose_secret().0.is_empty());
     let slack_signing_secret_data = web::Data::new(slack_signing_secret);
+    // The Notion verification token only exists once the webhook
+    // subscription handshake is done, so it is not required at boot: without
+    // it the webhook only answers the handshake.
+    let notion_signing_secret_data = web::Data::new(routes::webhook::NotionSigningSecret(
+        settings
+            .integrations
+            .get("notion")
+            .and_then(|s| s.signing_secret.clone())
+            .filter(|secret| !secret.expose_secret().0.is_empty()),
+    ));
 
     // Setup HTTP session + JWT auth
     let session_secret_key = Key::from(settings.application.http_session.secret_key.as_bytes());
@@ -342,7 +352,8 @@ pub async fn run_server(
             .app_data(web::Data::new(slack_bridge_service.clone()))
             .app_data(web::Data::new(oauth2_service.clone()))
             .app_data(web::Data::new(audit_service.clone()))
-            .app_data(slack_signing_secret_data.clone());
+            .app_data(slack_signing_secret_data.clone())
+            .app_data(notion_signing_secret_data.clone());
 
         // Billing endpoints only exist when `[billing]` is configured. On a
         // self-hosted instance without billing, /api/billing/* returns 404 —
@@ -859,6 +870,7 @@ pub async fn build_services(
     slack_base_url: Option<String>,
     todoist_address: Option<String>,
     ticktick_address: Option<String>,
+    notion_base_url: Option<String>,
     mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
     webauthn: Arc<Webauthn>,
     execution_context: ExecutionContext,
@@ -1216,6 +1228,14 @@ pub async fn build_services(
         .expect("Failed to create new GoogleDriveService"),
     ));
 
+    let notion_service = Arc::new(
+        NotionService::new(
+            notion_base_url,
+            settings.get_integration_max_retry_duration(execution_context, "notion"),
+        )
+        .expect("Failed to create new NotionService"),
+    );
+
     let slack_bridge_service = Arc::new(SlackBridgeService::new(repository.clone()));
     let slack_service = Arc::new(SlackService::new(
         slack_base_url,
@@ -1246,6 +1266,7 @@ pub async fn build_services(
         google_drive_service.clone(),
         google_mail_service.clone(),
         slack_service.clone(),
+        notion_service.clone(),
         Weak::new(),
         integration_connection_service.clone(),
         Arc::downgrade(&third_party_item_service),

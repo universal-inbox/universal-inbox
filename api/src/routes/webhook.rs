@@ -29,8 +29,11 @@ use universal_inbox::{
 use crate::observability::attr;
 use crate::{
     configuration::WebhookSigningSecret,
-    integrations::slack::has_slack_references_in_message,
-    jobs::{JobStorage, UniversalInboxJob, push_job, slack::SlackPushEventCallbackJob},
+    integrations::{notion::webhook::NotionWebhookEvent, slack::has_slack_references_in_message},
+    jobs::{
+        JobStorage, UniversalInboxJob, notion::NotionWebhookEventJob, push_job,
+        slack::SlackPushEventCallbackJob,
+    },
     universal_inbox::{
         UniversalInboxError, audit::actor_context::with_actor,
         integration_connection::service::IntegrationConnectionService,
@@ -40,6 +43,13 @@ use crate::{
 
 pub type SlackSigningSecret = SecretBox<WebhookSigningSecret>;
 
+/// The Notion webhook verification token. A distinct type so it does not
+/// collide with Slack's secret in the Actix app data. `None` until the
+/// subscription handshake is done and the token is configured.
+pub struct NotionSigningSecret(pub Option<SecretBox<WebhookSigningSecret>>);
+
+const NOTION_SIGNATURE_HEADER: &str = "X-Notion-Signature";
+
 const SLACK_SIGNATURE_HEADER: &str = "X-Slack-Signature";
 const SLACK_TIMESTAMP_HEADER: &str = "X-Slack-Request-Timestamp";
 const SLACK_SIGNATURE_TOLERANCE_SECONDS: i64 = 300;
@@ -47,6 +57,145 @@ const SLACK_SIGNATURE_TOLERANCE_SECONDS: i64 = 300;
 pub fn scope() -> Scope {
     web::scope("/hooks")
         .service(web::resource("/slack/events").route(web::post().to(push_slack_event)))
+        .service(web::resource("/notion/events").route(web::post().to(push_notion_event)))
+}
+
+/// The one-time request Notion sends when a webhook subscription is created.
+#[derive(Deserialize)]
+struct NotionVerificationRequest {
+    verification_token: String,
+}
+
+/// Notion webhook. Only `comment.*` events of a workspace where a user has a
+/// validated Notion connection become a job: everything else is dropped here,
+/// before any Notion API call.
+#[tracing::instrument(level = "debug", skip_all)]
+pub async fn push_notion_event(
+    req: HttpRequest,
+    body: web::Bytes,
+    signing_secret: web::Data<NotionSigningSecret>,
+    integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
+    storage: web::Data<JobStorage>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let current_span = tracing::Span::current();
+
+    let Some(signing_secret) = signing_secret.0.as_ref() else {
+        // Until the token is configured, only the subscription handshake is
+        // accepted. Its token is logged so it can be pasted in the Notion
+        // dashboard and set as the signing secret.
+        if let Ok(verification) = serde_json::from_slice::<NotionVerificationRequest>(&body) {
+            warn!(
+                verification_token = verification.verification_token,
+                "Received the Notion webhook verification token: set it as \
+                 UNIVERSAL_INBOX__INTEGRATIONS__NOTION__SIGNING_SECRET"
+            );
+            current_span.set_attribute(attr::NOTION_EVENT_OUTCOME, "verification");
+            return Ok(HttpResponse::Ok().finish());
+        }
+        current_span.set_attribute(attr::NOTION_EVENT_OUTCOME, "rejected");
+        current_span.set_attribute(attr::NOTION_EVENT_REJECT_REASON, "no_signing_secret");
+        warn!("Rejected Notion webhook: no signing secret configured");
+        return Ok(HttpResponse::Unauthorized().finish());
+    };
+
+    let signature_header = req
+        .headers()
+        .get(NOTION_SIGNATURE_HEADER)
+        .and_then(|value| value.to_str().ok());
+    if let Err(reason) =
+        verify_notion_signature_parts(signature_header, &body, &signing_secret.expose_secret().0)
+    {
+        if serde_json::from_slice::<NotionVerificationRequest>(&body).is_ok() {
+            // A new handshake while a token is configured: acknowledged, never adopted
+            debug!("Received a Notion webhook verification request");
+            current_span.set_attribute(attr::NOTION_EVENT_OUTCOME, "verification");
+            return Ok(HttpResponse::Ok().finish());
+        }
+        current_span.set_attribute(attr::NOTION_EVENT_OUTCOME, "rejected");
+        current_span.set_attribute(attr::NOTION_EVENT_REJECT_REASON, reason);
+        warn!(reason, "Rejected unsigned/invalid Notion webhook");
+        return Ok(HttpResponse::Unauthorized().finish());
+    }
+
+    let event: NotionWebhookEvent = serde_json::from_slice(&body)
+        .context("Failed to deserialize Notion webhook event after signature verification")?;
+    current_span.set_attribute(attr::NOTION_EVENT_ID, event.id.clone());
+    current_span.set_attribute(attr::NOTION_EVENT_TYPE, event.event_type.as_str());
+    current_span.set_attribute(attr::NOTION_WORKSPACE_ID, event.workspace_id.clone());
+    if !event.event_type.is_comment_event() {
+        current_span.set_attribute(attr::NOTION_EVENT_OUTCOME, "discarded");
+        current_span.set_attribute(attr::NOTION_EVENT_DISCARD_REASON, "not_comment_event");
+        return Ok(HttpResponse::Ok().finish());
+    }
+
+    let service = integration_connection_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while checking a Notion event")?;
+    let has_workspace_connection = service
+        .has_validated_integration_connection_in_provider_workspace(
+            &mut transaction,
+            IntegrationProviderKind::Notion,
+            event.workspace_id.clone(),
+        )
+        .await?;
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while checking a Notion event")?;
+    if !has_workspace_connection {
+        debug!("Ignoring a Notion event of a workspace without Universal Inbox user");
+        current_span.set_attribute(attr::NOTION_EVENT_OUTCOME, "discarded");
+        current_span.set_attribute(attr::NOTION_EVENT_DISCARD_REASON, "no_workspace_connection");
+        return Ok(HttpResponse::Ok().finish());
+    }
+
+    let event_id = event.id.clone();
+    let task_id = Retry::start(
+        ExponentialBackoff::from_millis(10).map(jitter).take(10),
+        || async {
+            push_job(
+                &storage,
+                UniversalInboxJob::NotionWebhookEvent(NotionWebhookEventJob(event.clone())),
+            )
+            .await
+        },
+    )
+    .await
+    .context("Failed to push Notion event to queue")?;
+    debug!("Pushed Notion event {event_id} to the queue with job ID {task_id}");
+    current_span.set_attribute(attr::NOTION_EVENT_OUTCOME, "queued");
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+/// Verify a Notion webhook signature: `X-Notion-Signature` is `sha256=` and
+/// the hex `HMAC-SHA256(verification_token, body)`. Notion sends no
+/// timestamp, so there is no replay window; the job re-reads the comment from
+/// Notion, so a replayed event changes nothing.
+fn verify_notion_signature_parts(
+    signature_header: Option<&str>,
+    body: &[u8],
+    signing_secret: &str,
+) -> Result<(), &'static str> {
+    if signing_secret.is_empty() {
+        return Err("no signing secret configured");
+    }
+    let signature = signature_header.ok_or("missing signature header")?;
+    let Some(provided_hex) = signature.strip_prefix("sha256=") else {
+        return Err("missing sha256 prefix");
+    };
+    let provided_bytes = hex::decode(provided_hex).map_err(|_| "non-hex signature")?;
+
+    let key = hmac::Key::new(hmac::HMAC_SHA256, signing_secret.as_bytes());
+    let expected = hmac::sign(&key, body);
+
+    if expected.as_ref().ct_eq(&provided_bytes).into() {
+        Ok(())
+    } else {
+        Err("signature mismatch")
+    }
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
@@ -628,6 +777,61 @@ mod tests {
         assert_eq!(
             verify_slack_signature_parts(Some(&ts), Some(&sig), body, "different-secret", NOW),
             Err("signature mismatch")
+        );
+    }
+
+    fn sign_notion(body: &[u8]) -> String {
+        let key = hmac::Key::new(hmac::HMAC_SHA256, SECRET.as_bytes());
+        format!("sha256={}", hex::encode(hmac::sign(&key, body).as_ref()))
+    }
+
+    #[test]
+    fn notion_signature_accepts_a_valid_signature() {
+        let body = br#"{"type":"comment.created"}"#;
+        assert_eq!(
+            verify_notion_signature_parts(Some(&sign_notion(body)), body, SECRET),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn notion_signature_rejects_a_tampered_body() {
+        let signature = sign_notion(br#"{"type":"comment.created"}"#);
+        assert_eq!(
+            verify_notion_signature_parts(
+                Some(&signature),
+                br#"{"type":"comment.deleted"}"#,
+                SECRET
+            ),
+            Err("signature mismatch")
+        );
+    }
+
+    #[test]
+    fn notion_signature_rejects_missing_or_malformed_headers() {
+        let body = b"{}";
+        assert_eq!(
+            verify_notion_signature_parts(None, body, SECRET),
+            Err("missing signature header")
+        );
+        assert_eq!(
+            verify_notion_signature_parts(Some("abcd"), body, SECRET),
+            Err("missing sha256 prefix")
+        );
+        assert_eq!(
+            verify_notion_signature_parts(Some("sha256=zz"), body, SECRET),
+            Err("non-hex signature")
+        );
+    }
+
+    #[test]
+    fn notion_signature_rejects_an_empty_secret() {
+        let body = b"{}";
+        let key = hmac::Key::new(hmac::HMAC_SHA256, b"");
+        let signature = format!("sha256={}", hex::encode(hmac::sign(&key, body).as_ref()));
+        assert_eq!(
+            verify_notion_signature_parts(Some(&signature), body, ""),
+            Err("no signing secret configured")
         );
     }
 }

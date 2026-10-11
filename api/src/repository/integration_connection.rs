@@ -76,12 +76,14 @@ pub trait IntegrationConnectionRepository {
         required_oauth_scopes: &[String],
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
-    /// Every Slack connection of the workspace `team_id`, whatever its status,
-    /// optionally narrowed to the given Slack user ids.
-    async fn find_slack_integration_connections_per_team(
+    /// Every connection of the provider workspace `provider_workspace_id`
+    /// (Slack team, Notion workspace), whatever its status, optionally
+    /// narrowed to the given provider user ids.
+    async fn find_integration_connections_per_provider_workspace(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        team_id: &str,
+        integration_provider_kind: IntegrationProviderKind,
+        provider_workspace_id: &str,
         provider_user_ids: Option<&[String]>,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError>;
 
@@ -791,7 +793,7 @@ impl IntegrationConnectionRepository for Repository {
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
                 WHERE
-                    integration_connection.slack_team_id = $1
+                    integration_connection.provider_workspace_id = $1
                     AND integration_connection.provider_kind::TEXT = 'Slack'
                     AND integration_connection.status::TEXT = 'Validated'
                     AND integration_connection.registered_oauth_scopes::jsonb @> $2::jsonb
@@ -812,11 +814,16 @@ impl IntegrationConnectionRepository for Repository {
         row.map(|r| r.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields({ attr::SLACK_TEAM_ID } = %team_id))]
-    async fn find_slack_integration_connections_per_team(
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::INTEGRATION_PROVIDER_KIND } = integration_provider_kind.to_string())
+    )]
+    async fn find_integration_connections_per_provider_workspace(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        team_id: &str,
+        integration_provider_kind: IntegrationProviderKind,
+        provider_workspace_id: &str,
         provider_user_ids: Option<&[String]>,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
         let rows = sqlx::query_as!(
@@ -855,18 +862,19 @@ impl IntegrationConnectionRepository for Repository {
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
                 WHERE
-                    integration_connection.slack_team_id = $1
-                    AND integration_connection.provider_kind::TEXT = 'Slack'
-                    AND ($2::TEXT[] IS NULL OR integration_connection.provider_user_id = ANY($2))
+                    integration_connection.provider_kind::TEXT = $1
+                    AND integration_connection.provider_workspace_id = $2
+                    AND ($3::TEXT[] IS NULL OR integration_connection.provider_user_id = ANY($3))
             "#,
-            team_id,
+            integration_provider_kind.to_string(),
+            provider_workspace_id,
             provider_user_ids
         )
             .fetch_all(&mut **executor)
             .await
             .map_err(|err| {
                 let message = format!(
-                    "Failed to fetch Slack integration connections of team {team_id} from storage: {err}"
+                    "Failed to fetch {integration_provider_kind} integration connections of a workspace from storage: {err}"
                 );
                 UniversalInboxError::DatabaseError { source: err, message }
             })?;
@@ -1278,12 +1286,9 @@ impl IntegrationConnectionRepository for Repository {
         integration_connection_id: IntegrationConnectionId,
         context: Option<IntegrationConnectionContext>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        let slack_team_id = match &context {
-            Some(IntegrationConnectionContext::Slack(slack_context)) => {
-                Some(slack_context.team_id.to_string())
-            }
-            _ => None,
-        };
+        let provider_workspace_id = context
+            .as_ref()
+            .and_then(IntegrationConnectionContext::provider_workspace_id);
         let context_enc = context
             .as_ref()
             .map(|context| {
@@ -1294,8 +1299,8 @@ impl IntegrationConnectionRepository for Repository {
             QueryBuilder::new("UPDATE integration_connection SET context = NULL, context_enc = ");
         query_builder
             .push_bind(context_enc)
-            .push(", slack_team_id = ")
-            .push_bind(slack_team_id)
+            .push(", provider_workspace_id = ")
+            .push_bind(provider_workspace_id)
             .push(" FROM integration_connection_config ")
             .push(" WHERE ")
             .separated(" AND ")

@@ -30,6 +30,7 @@ use crate::{
 
 pub mod cron;
 pub mod envelope;
+pub mod notion;
 pub mod oauth;
 pub mod slack;
 pub mod sync;
@@ -42,6 +43,7 @@ pub enum UniversalInboxJob {
     SyncNotifications(sync::SyncNotificationsJob),
     SyncTasks(sync::SyncTasksJob),
     SlackPushEventCallback(slack::SlackPushEventCallbackJob),
+    NotionWebhookEvent(notion::NotionWebhookEventJob),
     ProcessNotificationSideEffects {
         notification_id: NotificationId,
         patch: NotificationPatch,
@@ -72,6 +74,7 @@ impl UniversalInboxJob {
             Self::SyncNotifications(_) => "SyncNotifications",
             Self::SyncTasks(_) => "SyncTasks",
             Self::SlackPushEventCallback(_) => "SlackPushEventCallback",
+            Self::NotionWebhookEvent(_) => "NotionWebhookEvent",
             Self::ProcessNotificationSideEffects { .. } => "ProcessNotificationSideEffects",
             Self::RefreshOAuthTokens { .. } => "RefreshOAuthTokens",
             Self::RetryOAuthGrantRevocations { .. } => "RetryOAuthGrantRevocations",
@@ -162,6 +165,15 @@ async fn run_universal_inbox_job(
                 integration_connection_service,
                 third_party_item_service,
                 slack_service,
+            )
+            .await
+        }
+        UniversalInboxJob::NotionWebhookEvent(job) => {
+            notion::handle_notion_webhook_event(
+                job,
+                notification_service,
+                integration_connection_service,
+                third_party_item_service,
             )
             .await
         }

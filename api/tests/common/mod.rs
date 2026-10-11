@@ -230,6 +230,7 @@ pub async fn build_test_services(
         Some(mock_servers.slack.uri()),
         Some(mock_servers.todoist.uri()),
         Some(mock_servers.ticktick.uri()),
+        Some(mock_servers.notion.uri()),
         mailer,
         webauthn,
         universal_inbox_api::ExecutionContext::Http,

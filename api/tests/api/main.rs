@@ -26,6 +26,7 @@ mod test_mcp_session_store;
 mod test_misc;
 mod test_multi_task_manager;
 mod test_notifications;
+mod test_notion_webhook;
 mod test_oauth2_cimd;
 mod test_oauth_callback;
 mod test_pause_integration_connections;

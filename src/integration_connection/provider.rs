@@ -521,6 +521,21 @@ pub enum IntegrationConnectionContext {
     Notion(NotionContext),
 }
 
+impl IntegrationConnectionContext {
+    /// The provider's workspace (Slack team, Notion workspace) the connection
+    /// belongs to. Stored in clear next to the encrypted context so webhook
+    /// events can be routed by workspace.
+    pub fn provider_workspace_id(&self) -> Option<String> {
+        match self {
+            Self::Slack(context) => Some(context.team_id.to_string()),
+            Self::Notion(context) => Some(context.workspace_id.clone()),
+            Self::Todoist(_) | Self::TickTick(_) | Self::GoogleDrive(_) | Self::GoogleMail(_) => {
+                None
+            }
+        }
+    }
+}
+
 pub trait IntegrationProviderSource {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind;
 }

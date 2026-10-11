@@ -384,6 +384,11 @@ oauth_client_id = ""
 oauth_client_secret = ""
 required_oauth_scopes = []
 is_enabled = true
+# Verification token of the webhook subscription (Notion dashboard → Webhooks), used
+# to verify inbound events sent to /api/hooks/notion/events. Notion sends it once when
+# the subscription is created: while it is unset the API logs it, set it via env:
+# UNIVERSAL_INBOX__INTEGRATIONS__NOTION__SIGNING_SECRET=…
+signing_secret = ""
 
 [integrations.ticktick]
 name = "Tick Tick"

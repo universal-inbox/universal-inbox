@@ -206,3 +206,11 @@ pub const SLACK_MATCHED_INTEGRATION_CONNECTIONS_COUNT: &str =
     "slack.matched_integration_connections.count";
 pub const SLACK_REFERENCED_USERS_COUNT: &str = "slack.referenced_users.count";
 pub const SLACK_REVOKED_CONNECTIONS_COUNT: &str = "slack.revoked_connections.count";
+
+// Notion
+pub const NOTION_WORKSPACE_ID: &str = "notion.workspace.id";
+pub const NOTION_EVENT_ID: &str = "notion.event.id";
+pub const NOTION_EVENT_TYPE: &str = "notion.event.type";
+pub const NOTION_EVENT_OUTCOME: &str = "notion.event.outcome";
+pub const NOTION_EVENT_DISCARD_REASON: &str = "notion.event.discard_reason";
+pub const NOTION_EVENT_REJECT_REASON: &str = "notion.event.reject_reason";
