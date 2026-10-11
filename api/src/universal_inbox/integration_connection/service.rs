@@ -1008,7 +1008,12 @@ impl IntegrationConnectionService {
     ) -> Result<usize, UniversalInboxError> {
         let integration_connections = self
             .repository
-            .find_slack_integration_connections_per_team(executor, team_id, provider_user_ids)
+            .find_integration_connections_per_provider_workspace(
+                executor,
+                IntegrationProviderKind::Slack,
+                team_id,
+                provider_user_ids,
+            )
             .await?;
 
         let mut revoked = 0;
@@ -2561,6 +2566,46 @@ impl IntegrationConnectionService {
             { attr::INTEGRATION_PROVIDER_KIND } = provider_kind.to_string()
         )
     )]
+    /// The validated connections of a provider workspace (Slack team, Notion
+    /// workspace).
+    pub async fn find_validated_integration_connections_per_provider_workspace(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        provider_kind: IntegrationProviderKind,
+        provider_workspace_id: &str,
+    ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
+        Ok(self
+            .repository
+            .find_integration_connections_per_provider_workspace(
+                executor,
+                provider_kind,
+                provider_workspace_id,
+                None,
+            )
+            .await?
+            .into_iter()
+            .filter(|connection| connection.status == IntegrationConnectionStatus::Validated)
+            .collect())
+    }
+
+    /// Whether any user has a validated connection to the provider workspace.
+    /// Cached: webhook routes call it for every event of a workspace, most of
+    /// them unrelated to Universal Inbox users.
+    pub async fn has_validated_integration_connection_in_provider_workspace(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        provider_kind: IntegrationProviderKind,
+        provider_workspace_id: String,
+    ) -> Result<bool, UniversalInboxError> {
+        cached_has_validated_integration_connection_in_provider_workspace(
+            self.repository.clone(),
+            executor,
+            provider_kind,
+            provider_workspace_id,
+        )
+        .await
+    }
+
     pub async fn get_integration_connection_config_for_provider_user_id(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -3124,6 +3169,31 @@ impl IntegrationConnectionService {
 
         Ok(())
     }
+}
+
+#[concurrent_cached(
+    key = "String",
+    convert = r#"{ format!("{}{}", provider_kind, provider_workspace_id) }"#,
+    ty = "crate::utils::cache::TracedRedisCache<bool>",
+    map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache `has_validated_connection_in_provider_workspace`: {:?}", e))"##,
+    create = r##" { build_redis_cache("has_validated_connection_in_provider_workspace", Duration::from_secs(6 * 60 * 60), false).await }"##
+)]
+async fn cached_has_validated_integration_connection_in_provider_workspace(
+    repository: Arc<Repository>,
+    executor: &mut Transaction<'_, Postgres>,
+    provider_kind: IntegrationProviderKind,
+    provider_workspace_id: String,
+) -> Result<bool, UniversalInboxError> {
+    Ok(repository
+        .find_integration_connections_per_provider_workspace(
+            executor,
+            provider_kind,
+            &provider_workspace_id,
+            None,
+        )
+        .await?
+        .iter()
+        .any(|connection| connection.status == IntegrationConnectionStatus::Validated))
 }
 
 #[concurrent_cached(

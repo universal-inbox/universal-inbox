@@ -32,6 +32,9 @@ pub struct NotionPage {
     pub title: String,
     /// The page object's `url`.
     pub url: Url,
+    /// Notion user id of the page's creator (`created_by.id`).
+    #[serde(default)]
+    pub created_by: Option<String>,
 }
 
 /// Where a discussion is attached: the page itself, or a block of it (block
@@ -54,9 +57,16 @@ pub struct NotionComment {
     /// range, so this is the whole block.
     #[serde(default)]
     pub quoted_content: Option<Vec<RichText>>,
+    /// Notion user id of the commented block's creator, when the discussion
+    /// is attached to a block.
+    #[serde(default)]
+    pub parent_block_created_by: Option<String>,
     /// Oldest first: the first comment opens the thread, the others are
     /// replies.
     pub comments: Vec1<NotionCommentMessage>,
+    /// Notion user id of the Universal Inbox user this item belongs to.
+    #[serde(default)]
+    pub user_notion_id: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
@@ -151,11 +161,14 @@ impl NotionComment {
         self.comments.last()
     }
 
-    /// The user wrote in the discussion or is mentioned in it.
+    /// The user created the page or the commented block, wrote in the
+    /// discussion, or is mentioned in it.
     pub fn is_user_involved(&self, notion_user_id: &str) -> bool {
-        self.comments.iter().any(|comment| {
-            comment.author.id == notion_user_id || comment.mentions_user(notion_user_id)
-        })
+        self.page.created_by.as_deref() == Some(notion_user_id)
+            || self.parent_block_created_by.as_deref() == Some(notion_user_id)
+            || self.comments.iter().any(|comment| {
+                comment.author.id == notion_user_id || comment.mentions_user(notion_user_id)
+            })
     }
 
     pub fn is_last_comment_from_user(&self, notion_user_id: &str) -> bool {
@@ -284,6 +297,8 @@ mod tests {
 
     const USER_ID: &str = "9188c6a5-7381-452f-b3dc-d4865aa89bdf";
     const OTHER_USER_ID: &str = "e79a0b74-3aba-4149-9f74-0bb5791a6ee6";
+    const PAGE_CREATOR_ID: &str = "0f1e2d3c-0000-4000-8000-0000000000cc";
+    const BLOCK_CREATOR_ID: &str = "0f1e2d3c-0000-4000-8000-0000000000dd";
 
     fn annotations() -> Value {
         json!({
@@ -332,6 +347,7 @@ mod tests {
             url: "https://www.notion.so/Roadmap-3c612f56fdd04a30a4d6bda7d7426309"
                 .parse()
                 .unwrap(),
+            created_by: Some(PAGE_CREATOR_ID.to_string()),
         }
     }
 
@@ -360,6 +376,8 @@ mod tests {
                 block_id: "b1b2b3b4-0000-4000-8000-0000000000bb".to_string(),
             },
             quoted_content: Some(rich_text(vec![text("The quoted paragraph")])),
+            parent_block_created_by: Some(BLOCK_CREATOR_ID.to_string()),
+            user_notion_id: Some(USER_ID.to_string()),
             comments: Vec1::try_from_vec(vec![
                 comment_message(
                     "c1",
@@ -567,6 +585,8 @@ mod tests {
     #[rstest]
     #[case::mentioned(USER_ID, true)]
     #[case::author(OTHER_USER_ID, true)]
+    #[case::page_creator(PAGE_CREATOR_ID, true)]
+    #[case::block_creator(BLOCK_CREATOR_ID, true)]
     #[case::neither("someone-else", false)]
     fn test_is_user_involved(
         notion_comment: NotionComment,

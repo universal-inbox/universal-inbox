@@ -39,6 +39,7 @@ pub mod auth;
 pub mod integration_connection;
 pub mod mailer;
 pub mod notification;
+pub mod notion;
 pub mod rest;
 pub mod slack;
 pub mod task;

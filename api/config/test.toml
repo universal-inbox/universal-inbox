@@ -63,6 +63,7 @@ oauth_client_secret = "ticktick_test_client_secret"
 [integrations.notion]
 oauth_client_id = "notion_test_client_id"
 oauth_client_secret = "notion_test_client_secret"
+signing_secret = "notion-test-signing-secret-do-not-use-in-prod"
 
 [integrations.slack]
 signing_secret = "test-signing-secret-do-not-use-in-prod"
