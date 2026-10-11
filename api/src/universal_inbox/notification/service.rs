@@ -34,6 +34,7 @@ use universal_inbox::{
             google_calendar::{
                 EventMethod, GoogleCalendarEvent, GoogleCalendarEventAttendeeResponseStatus,
             },
+            notion::{NotionBlock, NotionComment},
             slack::{SlackReaction, SlackThread},
         },
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId, ThirdPartyItemKind},
@@ -680,6 +681,14 @@ impl NotificationService {
                     )
                     .await
                 }
+                NotificationSyncSourceKind::Notion => {
+                    self.sync_third_party_notifications::<NotionComment, NotionService>(
+                        self.notion_service.clone(),
+                        user_id,
+                        force_sync,
+                    )
+                    .await
+                }
                 NotificationSyncSourceKind::Slack => {
                     self.sync_third_party_notifications(
                         self.slack_service.clone(),
@@ -763,6 +772,13 @@ impl NotificationService {
                 force_sync,
             )
             .await?;
+        let notifications_from_notion = self
+            .sync_notifications_with_transaction(
+                NotificationSyncSourceKind::Notion,
+                user_id,
+                force_sync,
+            )
+            .await?;
         let notifications_from_slack = self
             .sync_notifications_with_transaction(
                 NotificationSyncSourceKind::Slack,
@@ -790,6 +806,7 @@ impl NotificationService {
             .chain(notifications_from_linear)
             .chain(notifications_from_google_drive)
             .chain(notifications_from_google_mail)
+            .chain(notifications_from_notion)
             .chain(notifications_from_slack)
             .chain(notifications_from_todoist)
             .chain(notifications_from_ticktick)
@@ -1436,6 +1453,16 @@ impl NotificationService {
                             )
                             .await?
                     }
+                    // The Notion sync returns mentioning blocks along with
+                    // discussions
+                    ThirdPartyItemKind::NotionBlock => notification_service
+                        .create_notification_from_third_party_item::<NotionBlock, NotionService>(
+                            executor,
+                            third_party_item,
+                            notification_service.notion_service.clone(),
+                            user_id,
+                        )
+                        .await?,
                     _ => {
                         notification_service
                             .create_notification_from_third_party_item(

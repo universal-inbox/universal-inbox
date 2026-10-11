@@ -175,6 +175,7 @@ impl OAuth2Provider for NotionOAuth2Provider {
             user_email_address: user["person"]["email"]
                 .as_str()
                 .and_then(|email| Pii::<EmailAddress>::from_str(email).ok()),
+            comments_reconciled_at: None,
         }))
     }
 }
@@ -266,6 +267,7 @@ mod tests {
                 user_email_address: Some(Pii::new(
                     EmailAddress::from_str("john@example.com").unwrap()
                 )),
+                comments_reconciled_at: None,
             }))
         );
     }

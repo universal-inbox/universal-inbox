@@ -91,6 +91,9 @@ pub struct NotionBlock {
     pub rich_text: Vec<RichText>,
     pub last_edited_by: Option<NotionUser>,
     pub last_edited_time: DateTime<Utc>,
+    /// Notion user id of the Universal Inbox user this item belongs to.
+    #[serde(default)]
+    pub user_notion_id: Option<String>,
 }
 
 /// Parse a Notion `rich_text` array. A segment `notionrs_types` cannot read
@@ -153,6 +156,13 @@ impl NotionCommentMessage {
 impl NotionBlock {
     pub fn mentions_user(&self, notion_user_id: &str) -> bool {
         mentions_user(&self.rich_text, notion_user_id)
+    }
+
+    /// The block no longer mentions the user it was saved for.
+    pub fn is_mention_removed(&self) -> bool {
+        self.user_notion_id
+            .as_deref()
+            .is_some_and(|user_notion_id| !self.mentions_user(user_notion_id))
     }
 }
 
@@ -408,6 +418,7 @@ mod tests {
             ]),
             last_edited_by: Some(notion_user(OTHER_USER_ID, "Jane Doe")),
             last_edited_time: Utc.with_ymd_and_hms(2026, 10, 10, 9, 0, 0).unwrap(),
+            user_notion_id: Some(USER_ID.to_string()),
         }
     }
 
@@ -565,6 +576,33 @@ mod tests {
         assert_eq!(item.integration_connection_id, integration_connection_id);
         assert_eq!(item.marked_as_done(), item);
         assert_eq!(NotionComment::try_from(item).unwrap(), notion_comment);
+    }
+
+    #[rstest]
+    fn test_notion_block_mention_removed(notion_block: NotionBlock) {
+        assert!(!notion_block.is_mention_removed());
+
+        let without_mention = NotionBlock {
+            rich_text: rich_text(vec![text("Never mind")]),
+            ..notion_block.clone()
+        };
+        assert!(without_mention.is_mention_removed());
+
+        let without_user = NotionBlock {
+            user_notion_id: None,
+            ..without_mention
+        };
+        assert!(!without_user.is_mention_removed());
+    }
+
+    #[rstest]
+    fn test_notion_block_without_user_notion_id_deserializes(notion_block: NotionBlock) {
+        let mut value = serde_json::to_value(&notion_block).unwrap();
+        value.as_object_mut().unwrap().remove("user_notion_id");
+
+        let block: NotionBlock = serde_json::from_value(value).unwrap();
+
+        assert_eq!(block.user_notion_id, None);
     }
 
     #[rstest]

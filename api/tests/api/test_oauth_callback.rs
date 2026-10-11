@@ -864,6 +864,7 @@ mod notion_provider {
                     user_email_address: Some(Pii::new(
                         EmailAddress::from_str("jane.doe@example.com").unwrap()
                     )),
+                    comments_reconciled_at: None,
                 }),
                 config: NotionConfig {
                     sync_comments_enabled: true,

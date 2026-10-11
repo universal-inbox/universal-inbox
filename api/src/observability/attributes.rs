@@ -216,3 +216,7 @@ pub const NOTION_EVENT_DISCARD_REASON: &str = "notion.event.discard_reason";
 pub const NOTION_EVENT_REJECT_REASON: &str = "notion.event.reject_reason";
 pub const NOTION_UPDATED_BLOCKS_COUNT: &str = "notion.updated_blocks.count";
 pub const NOTION_MENTION_CANDIDATES_COUNT: &str = "notion.mention_candidates.count";
+pub const NOTION_SYNC_SEARCHED_PAGES_COUNT: &str = "notion.sync.searched_pages.count";
+pub const NOTION_SYNC_WALKED_BLOCKS_COUNT: &str = "notion.sync.walked_blocks.count";
+pub const NOTION_SYNC_RECONCILED_DISCUSSIONS_COUNT: &str =
+    "notion.sync.reconciled_discussions.count";
