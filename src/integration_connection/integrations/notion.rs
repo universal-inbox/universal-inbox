@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
 
@@ -43,4 +44,28 @@ pub struct NotionContext {
     pub bot_id: String,
     pub user_display_name: Option<Pii<String>>,
     pub user_email_address: Option<Pii<EmailAddress>>,
+    /// When the sync last re-read the tracked discussions.
+    #[serde(default)]
+    pub comments_reconciled_at: Option<DateTime<Utc>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use serde_json::json;
+
+    #[test]
+    fn test_context_stored_before_comment_reconciliation_deserializes() {
+        let context: NotionContext = serde_json::from_value(json!({
+            "workspace_id": "workspace-id",
+            "workspace_name": "Acme",
+            "bot_id": "bot-id",
+            "user_display_name": null,
+            "user_email_address": null
+        }))
+        .unwrap();
+
+        assert_eq!(context.comments_reconciled_at, None);
+    }
 }

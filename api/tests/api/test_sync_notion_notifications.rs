@@ -1,0 +1,567 @@
+use chrono::{DateTime, TimeDelta, Utc};
+use rstest::*;
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+use universal_inbox::{
+    integration_connection::{IntegrationConnection, integrations::notion::NotionConfig},
+    notification::{
+        Notification, NotificationSourceKind, NotificationStatus, NotificationSyncSourceKind,
+        service::NotificationPatch,
+    },
+    third_party::{
+        integrations::notion::{
+            NotionComment, NotionCommentMessage, NotionCommentParent, NotionPage, NotionUser,
+            to_plain_text,
+        },
+        item::ThirdPartyItemData,
+    },
+};
+use universal_inbox_api::{configuration::Settings, integrations::notion::NotionService};
+
+use crate::helpers::{
+    auth::{AuthenticatedApp, authenticated_app},
+    integration_connection::get_integration_connection,
+    notification::{
+        create_notification_from_source_item, list_notifications, sync_notifications,
+        update_notification,
+    },
+    notion::{
+        create_notion_integration_connection, mock_notion_block_children, mock_notion_discussion,
+        mock_notion_page_and_users, mock_notion_search, notion_search_page, text_segment,
+        user_mention_segment,
+    },
+    settings,
+};
+
+const ME: &str = "notion-user-me";
+const MY_TOKEN: &str = "notion-token-me";
+const SOMEONE: &str = "notion-user-someone";
+const PAGE_ID: &str = "3c612f56-fdd0-4a30-a4d6-bda7d7426309";
+const BLOCK_ID: &str = "b1b2b3b4-0000-4000-8000-0000000000bb";
+const DISCUSSION_ID: &str = "a2b6c3d4-0000-4000-8000-0000000000aa";
+
+fn minutes_ago(minutes: i64) -> DateTime<Utc> {
+    Utc::now() - TimeDelta::minutes(minutes)
+}
+
+fn paragraph(
+    last_edited_by: &str,
+    last_edited_time: DateTime<Utc>,
+    rich_text: Vec<Value>,
+) -> Value {
+    json!({
+        "object": "block",
+        "id": BLOCK_ID,
+        "parent": { "type": "page_id", "page_id": PAGE_ID },
+        "type": "paragraph",
+        "has_children": false,
+        "last_edited_by": { "object": "user", "id": last_edited_by },
+        "last_edited_time": last_edited_time.to_rfc3339(),
+        "paragraph": { "rich_text": rich_text }
+    })
+}
+
+fn mentioning_paragraph(last_edited_by: &str, last_edited_time: DateTime<Utc>) -> Value {
+    paragraph(
+        last_edited_by,
+        last_edited_time,
+        vec![
+            text_segment("Can you check "),
+            user_mention_segment(ME, "Me"),
+        ],
+    )
+}
+
+/// Replace the mocked Notion workspace: `PAGE_ID`, edited `page_edited`
+/// minutes ago, holds `blocks`.
+async fn mock_page(app: &AuthenticatedApp, page_edited: i64, blocks: Vec<Value>) {
+    let server = &app.app.notion_mock_server;
+    server.reset().await;
+    mock_notion_search(
+        server,
+        MY_TOKEN,
+        vec![notion_search_page(PAGE_ID, minutes_ago(page_edited))],
+        None,
+    )
+    .await;
+    mock_notion_block_children(server, MY_TOKEN, PAGE_ID, blocks).await;
+    mock_notion_page_and_users(server, MY_TOKEN, PAGE_ID).await;
+}
+
+async fn connect_me(
+    app: &AuthenticatedApp,
+    settings: &Settings,
+    config: NotionConfig,
+) -> Box<IntegrationConnection> {
+    create_notion_integration_connection(
+        &app.app,
+        app.user.id,
+        settings,
+        ME,
+        MY_TOKEN,
+        &Uuid::new_v4().to_string(),
+        config,
+    )
+    .await
+}
+
+fn mentions_only() -> NotionConfig {
+    NotionConfig {
+        sync_comments_enabled: false,
+        sync_mentions_enabled: true,
+    }
+}
+
+fn comments_only() -> NotionConfig {
+    NotionConfig {
+        sync_comments_enabled: true,
+        sync_mentions_enabled: false,
+    }
+}
+
+/// Sync Notion, ignoring the minimum interval between syncs.
+async fn force_sync(app: &AuthenticatedApp) {
+    app.app
+        .notification_service
+        .read()
+        .await
+        .sync_notifications_with_transaction(NotificationSyncSourceKind::Notion, app.user.id, true)
+        .await
+        .unwrap();
+}
+
+async fn notion_notifications(app: &AuthenticatedApp) -> Vec<Notification> {
+    list_notifications(
+        &app.client,
+        &app.app.api_address,
+        vec![
+            NotificationStatus::Unread,
+            NotificationStatus::Read,
+            NotificationStatus::Deleted,
+        ],
+        false,
+        None,
+        Some(NotificationSourceKind::Notion),
+        false,
+    )
+    .await
+}
+
+async fn requests_count(app: &AuthenticatedApp, path_prefix: &str) -> usize {
+    app.app
+        .notion_mock_server
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .filter(|request| request.url.path().starts_with(path_prefix))
+        .count()
+}
+
+async fn mark_as_read(app: &AuthenticatedApp, notification: &Notification) {
+    update_notification(
+        app,
+        notification.id,
+        &NotificationPatch {
+            status: Some(NotificationStatus::Read),
+            ..Default::default()
+        },
+        app.user.id,
+    )
+    .await;
+}
+
+mod mentions {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_sync_creates_a_missed_mention(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect_me(&app, &settings, mentions_only()).await;
+        mock_page(&app, 1, vec![mentioning_paragraph(SOMEONE, minutes_ago(1))]).await;
+
+        let synced = sync_notifications(
+            &app.client,
+            &app.app.api_address,
+            Some(NotificationSourceKind::Notion),
+            false,
+        )
+        .await;
+
+        assert_eq!(synced.len(), 1);
+        let notifications = notion_notifications(&app).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Unread);
+        assert_eq!(
+            notifications[0].title,
+            format!("Mentioned by User {SOMEONE} on Roadmap")
+        );
+        let ThirdPartyItemData::NotionBlock(block) = &notifications[0].source_item.data else {
+            panic!("Expected a NotionBlock item");
+        };
+        assert_eq!(block.page.id, PAGE_ID);
+        assert_eq!(block.user_notion_id.as_deref(), Some(ME));
+        assert_eq!(to_plain_text(&block.rich_text), "Can you check @Me");
+        let connection = get_integration_connection(&app, connection.id)
+            .await
+            .unwrap();
+        assert!(connection.last_notifications_sync_completed_at.is_some());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_known_mention_is_not_notified_again(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        connect_me(&app, &settings, mentions_only()).await;
+        mock_page(&app, 1, vec![mentioning_paragraph(SOMEONE, minutes_ago(1))]).await;
+        force_sync(&app).await;
+        mark_as_read(&app, &notion_notifications(&app).await[0]).await;
+
+        force_sync(&app).await;
+
+        let notifications = notion_notifications(&app).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Read);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_removed_mention_deletes_the_notification(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        connect_me(&app, &settings, mentions_only()).await;
+        mock_page(&app, 1, vec![mentioning_paragraph(SOMEONE, minutes_ago(1))]).await;
+        force_sync(&app).await;
+
+        mock_page(
+            &app,
+            0,
+            vec![paragraph(
+                SOMEONE,
+                minutes_ago(0),
+                vec![text_segment("Never mind")],
+            )],
+        )
+        .await;
+        force_sync(&app).await;
+
+        let notifications = notion_notifications(&app).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Deleted);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_mention_written_by_me_is_ignored(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        connect_me(&app, &settings, mentions_only()).await;
+        mock_page(&app, 1, vec![mentioning_paragraph(ME, minutes_ago(1))]).await;
+
+        force_sync(&app).await;
+
+        assert!(notion_notifications(&app).await.is_empty());
+    }
+
+    /// A block edited before the connection was created is not a missed
+    /// mention.
+    #[rstest]
+    #[tokio::test]
+    async fn test_block_edited_before_the_cursor_is_ignored(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        connect_me(&app, &settings, mentions_only()).await;
+        mock_page(
+            &app,
+            1,
+            vec![mentioning_paragraph(SOMEONE, minutes_ago(60))],
+        )
+        .await;
+
+        force_sync(&app).await;
+
+        assert!(notion_notifications(&app).await.is_empty());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_search_stops_at_the_first_page_older_than_the_cursor(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        connect_me(&app, &settings, mentions_only()).await;
+        let server = &app.app.notion_mock_server;
+        let old_page_id = "d0d0d0d0-0000-4000-8000-0000000000dd";
+        mock_notion_search(
+            server,
+            MY_TOKEN,
+            vec![
+                notion_search_page(PAGE_ID, minutes_ago(1)),
+                notion_search_page(old_page_id, minutes_ago(60)),
+            ],
+            Some("next-search-page"),
+        )
+        .await;
+        mock_notion_block_children(server, MY_TOKEN, PAGE_ID, vec![]).await;
+        mock_notion_page_and_users(server, MY_TOKEN, PAGE_ID).await;
+
+        force_sync(&app).await;
+
+        assert_eq!(requests_count(&app, "/v1/search").await, 1);
+        assert_eq!(
+            requests_count(&app, &format!("/v1/blocks/{old_page_id}")).await,
+            0
+        );
+        assert_eq!(
+            requests_count(&app, &format!("/v1/blocks/{PAGE_ID}/children")).await,
+            1
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_disabled_mentions_are_not_searched(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        connect_me(&app, &settings, comments_only()).await;
+        mock_page(&app, 1, vec![mentioning_paragraph(SOMEONE, minutes_ago(1))]).await;
+
+        force_sync(&app).await;
+
+        assert_eq!(requests_count(&app, "/v1/search").await, 0);
+        assert!(notion_notifications(&app).await.is_empty());
+    }
+}
+
+mod comments {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    fn comment(id: &str, author_id: &str, time: DateTime<Utc>, text: &str) -> Value {
+        json!({
+            "object": "comment",
+            "id": id,
+            "parent": { "type": "block_id", "block_id": BLOCK_ID },
+            "discussion_id": DISCUSSION_ID,
+            "created_time": time.to_rfc3339(),
+            "last_edited_time": time.to_rfc3339(),
+            "created_by": { "object": "user", "id": author_id },
+            "rich_text": [text_segment(text)]
+        })
+    }
+
+    /// Store the discussion as the webhook left it: one comment from
+    /// someone, notified and then read.
+    async fn track_discussion(
+        app: &AuthenticatedApp,
+        connection: &IntegrationConnection,
+        first_comment_time: DateTime<Utc>,
+    ) {
+        let discussion = NotionComment {
+            discussion_id: DISCUSSION_ID.to_string(),
+            page: NotionPage {
+                id: PAGE_ID.to_string(),
+                title: "Roadmap".to_string(),
+                url: "https://www.notion.so/Roadmap-3c612f56".parse().unwrap(),
+                created_by: Some(SOMEONE.to_string()),
+            },
+            parent: NotionCommentParent::Block {
+                block_id: BLOCK_ID.to_string(),
+            },
+            quoted_content: None,
+            parent_block_created_by: Some(ME.to_string()),
+            comments: vec1::vec1![NotionCommentMessage {
+                id: "comment-1".to_string(),
+                author: NotionUser {
+                    id: SOMEONE.to_string(),
+                    name: None,
+                    avatar_url: None,
+                },
+                rich_text: vec![],
+                created_time: first_comment_time,
+                last_edited_time: first_comment_time,
+            }],
+            user_notion_id: Some(ME.to_string()),
+        };
+        let notification = create_notification_from_source_item::<NotionComment, NotionService>(
+            &app.app,
+            DISCUSSION_ID.to_string(),
+            ThirdPartyItemData::NotionComment(Box::new(discussion)),
+            app.app
+                .notification_service
+                .read()
+                .await
+                .notion_service
+                .clone(),
+            app.user.id,
+            connection.id,
+        )
+        .await;
+        mark_as_read(app, &notification).await;
+    }
+
+    async fn mock_remote_discussion(app: &AuthenticatedApp, comments: Vec<Value>) {
+        app.app.notion_mock_server.reset().await;
+        mock_notion_discussion(
+            &app.app.notion_mock_server,
+            MY_TOKEN,
+            PAGE_ID,
+            SOMEONE,
+            BLOCK_ID,
+            ME,
+            comments,
+        )
+        .await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_missed_reply_reopens_the_discussion(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect_me(&app, &settings, comments_only()).await;
+        let first_comment_time = minutes_ago(120);
+        track_discussion(&app, &connection, first_comment_time).await;
+        mock_remote_discussion(
+            &app,
+            vec![
+                comment("comment-1", SOMEONE, first_comment_time, "Looks good"),
+                comment("comment-2", SOMEONE, minutes_ago(10), "Any news?"),
+            ],
+        )
+        .await;
+
+        force_sync(&app).await;
+
+        let notifications = notion_notifications(&app).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Unread);
+        let ThirdPartyItemData::NotionComment(discussion) = &notifications[0].source_item.data
+        else {
+            panic!("Expected a NotionComment item");
+        };
+        assert_eq!(discussion.comments.len(), 2);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_discussion_without_new_reply_is_untouched(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect_me(&app, &settings, comments_only()).await;
+        let first_comment_time = minutes_ago(120);
+        track_discussion(&app, &connection, first_comment_time).await;
+        mock_remote_discussion(
+            &app,
+            vec![comment(
+                "comment-1",
+                SOMEONE,
+                first_comment_time,
+                "Looks good",
+            )],
+        )
+        .await;
+
+        force_sync(&app).await;
+
+        let notifications = notion_notifications(&app).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Read);
+        assert!(requests_count(&app, "/v1/comments").await > 0);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_discussions_are_re_read_at_most_hourly(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect_me(&app, &settings, comments_only()).await;
+        let first_comment_time = minutes_ago(120);
+        track_discussion(&app, &connection, first_comment_time).await;
+        mock_remote_discussion(
+            &app,
+            vec![comment(
+                "comment-1",
+                SOMEONE,
+                first_comment_time,
+                "Looks good",
+            )],
+        )
+        .await;
+        force_sync(&app).await;
+        let first_sync_reads = requests_count(&app, "/v1/comments").await;
+
+        force_sync(&app).await;
+
+        assert!(first_sync_reads > 0);
+        assert_eq!(requests_count(&app, "/v1/comments").await, first_sync_reads);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_disabled_comments_are_not_re_read(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect_me(&app, &settings, mentions_only()).await;
+        track_discussion(&app, &connection, minutes_ago(120)).await;
+        mock_page(&app, 1, vec![]).await;
+
+        force_sync(&app).await;
+
+        assert_eq!(requests_count(&app, "/v1/comments").await, 0);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_discussions_inactive_for_two_weeks_are_not_re_read(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect_me(&app, &settings, comments_only()).await;
+        let old_time = Utc::now() - TimeDelta::days(15);
+        track_discussion(&app, &connection, old_time).await;
+        mock_remote_discussion(
+            &app,
+            vec![
+                comment("comment-1", SOMEONE, old_time, "Looks good"),
+                comment("comment-2", SOMEONE, minutes_ago(10), "Any news?"),
+            ],
+        )
+        .await;
+
+        force_sync(&app).await;
+
+        assert_eq!(requests_count(&app, "/v1/comments").await, 0);
+        assert_eq!(
+            notion_notifications(&app).await[0].status,
+            NotificationStatus::Read
+        );
+    }
+}

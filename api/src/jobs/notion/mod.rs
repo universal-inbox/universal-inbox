@@ -542,7 +542,7 @@ async fn save_mentions_for_connection(
             .transpose()?;
 
         let Some(block) = notion_service
-            .fetch_mention_block(&access_token, block_id, &mut cache)
+            .fetch_mention_block(&access_token, block_id, provider_user_id, &mut cache)
             .await?
         else {
             // Deleted, archived or no longer shared: nothing left to show

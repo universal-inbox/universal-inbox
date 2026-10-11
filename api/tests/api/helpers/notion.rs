@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use reqwest::{Client, Response};
 use ring::hmac;
 use serde_json::{Value, json};
@@ -110,6 +111,7 @@ pub async fn create_notion_integration_connection(
             bot_id: format!("bot-{notion_user_id}"),
             user_display_name: None,
             user_email_address: None,
+            comments_reconciled_at: None,
         })),
     )
     .await
@@ -332,7 +334,11 @@ pub async fn mock_notion_blocks(
     mock_notion_page_and_users(mock_server, access_token, page_id).await;
 }
 
-async fn mock_notion_page_and_users(mock_server: &MockServer, access_token: &str, page_id: &str) {
+pub async fn mock_notion_page_and_users(
+    mock_server: &MockServer,
+    access_token: &str,
+    page_id: &str,
+) {
     let authorization = format!("Bearer {access_token}");
     Mock::given(method("GET"))
         .and(path(format!("/v1/pages/{page_id}")))
@@ -391,4 +397,65 @@ pub async fn mock_notion_deleted_block(
         .mount(mock_server)
         .await;
     mock_notion_page_and_users(mock_server, access_token, page_id).await;
+}
+
+/// A page as returned by `POST /v1/search`.
+pub fn notion_search_page(page_id: &str, last_edited_time: DateTime<Utc>) -> Value {
+    json!({
+        "object": "page",
+        "id": page_id,
+        "url": format!("https://www.notion.so/Roadmap-{}", page_id.replace('-', "")),
+        "created_by": { "object": "user", "id": "page-owner" },
+        "last_edited_time": last_edited_time.to_rfc3339(),
+        "properties": {
+            "title": { "id": "title", "type": "title", "title": [text_segment("Roadmap")] }
+        }
+    })
+}
+
+/// Mock `POST /v1/search` made with `access_token`: one result page with
+/// `pages`, followed by another one when `next_cursor` is set.
+pub async fn mock_notion_search(
+    mock_server: &MockServer,
+    access_token: &str,
+    pages: Vec<Value>,
+    next_cursor: Option<&str>,
+) {
+    Mock::given(method("POST"))
+        .and(path("/v1/search"))
+        .and(header(
+            "authorization",
+            format!("Bearer {access_token}").as_str(),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": "list",
+            "results": pages,
+            "next_cursor": next_cursor,
+            "has_more": next_cursor.is_some()
+        })))
+        .mount(mock_server)
+        .await;
+}
+
+/// Mock `GET /v1/blocks/{parent_id}/children` made with `access_token`.
+pub async fn mock_notion_block_children(
+    mock_server: &MockServer,
+    access_token: &str,
+    parent_id: &str,
+    blocks: Vec<Value>,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/blocks/{parent_id}/children")))
+        .and(header(
+            "authorization",
+            format!("Bearer {access_token}").as_str(),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": "list",
+            "results": blocks,
+            "next_cursor": null,
+            "has_more": false
+        })))
+        .mount(mock_server)
+        .await;
 }

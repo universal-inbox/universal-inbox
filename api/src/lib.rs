@@ -1231,6 +1231,8 @@ pub async fn build_services(
     let notion_service = Arc::new(
         NotionService::new(
             notion_base_url,
+            repository.clone(),
+            integration_connection_service.clone(),
             settings.get_integration_max_retry_duration(execution_context, "notion"),
         )
         .expect("Failed to create new NotionService"),

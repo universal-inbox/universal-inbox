@@ -1,19 +1,27 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use http::{HeaderMap, HeaderValue};
 use serde::Deserialize;
 use serde_json::Value;
 use sqlx::{Postgres, Transaction};
+use tokio::sync::RwLock;
 use tracing::debug;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 use uuid::Uuid;
 use vec1::Vec1;
 
 use universal_inbox::{
-    integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
+    integration_connection::{
+        IntegrationConnection,
+        provider::{
+            IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind,
+            IntegrationProviderSource,
+        },
+    },
     notification::{
         Notification, NotificationId, NotificationSource, NotificationSourceKind,
         NotificationStatus,
@@ -24,15 +32,23 @@ use universal_inbox::{
             NotionBlock, NotionComment, NotionCommentMessage, NotionCommentParent, NotionPage,
             NotionUser, parse_rich_text,
         },
-        item::ThirdPartyItem,
+        item::{
+            ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemKind, ThirdPartyItemSourceKind,
+        },
     },
     user::UserId,
 };
 
 use crate::{
-    integrations::{notification::ThirdPartyNotificationSourceService, oauth2::AccessToken},
+    integrations::{
+        notification::ThirdPartyNotificationSourceService, oauth2::AccessToken,
+        third_party::ThirdPartyItemSourceService,
+    },
     observability::attr,
-    universal_inbox::UniversalInboxError,
+    repository::{Repository, third_party::ThirdPartyItemRepository},
+    universal_inbox::{
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+    },
     utils::api::{ApiClient, ApiClientError},
 };
 
@@ -44,10 +60,28 @@ static NOTION_BASE_URL: &str = "https://api.notion.com";
 /// version.
 static NOTION_VERSION: &str = "2022-06-28";
 
+/// How far back the sync looks before its cursor: Notion rounds
+/// `last_edited_time` to the minute.
+const SYNC_CURSOR_MARGIN_MINUTES: i64 = 5;
+/// How many pages edited since the cursor the sync reads.
+const MAX_SEARCHED_PAGES: usize = 500;
+/// How many blocks the sync reads, all pages together.
+const MAX_WALKED_BLOCKS: usize = 5000;
+/// How deep the sync walks nested blocks.
+const MAX_BLOCK_DEPTH: usize = 3;
+/// How often the sync re-reads the tracked discussions: a new comment does not
+/// bump the page's `last_edited_time`, so search cannot find it.
+const COMMENTS_RECONCILIATION_INTERVAL_MINUTES: i64 = 60;
+/// Only discussions active in this window are re-read.
+const RECONCILED_DISCUSSIONS_MAX_AGE_DAYS: i64 = 14;
+const MAX_RECONCILED_DISCUSSIONS: usize = 30;
+
 #[derive(Clone)]
 pub struct NotionService {
     notion_base_url: String,
     notion_base_path: String,
+    repository: Arc<Repository>,
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     max_retry_duration: Duration,
 }
 
@@ -90,7 +124,36 @@ pub struct RawNotionPage {
     pub url: Url,
     pub created_by: Option<RawNotionUserReference>,
     #[serde(default)]
+    pub last_edited_time: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub properties: HashMap<String, Value>,
+}
+
+#[derive(Deserialize, Debug)]
+struct RawNotionPageList {
+    results: Vec<RawNotionPage>,
+    #[serde(default)]
+    has_more: bool,
+    next_cursor: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct RawNotionBlockList {
+    results: Vec<RawNotionBlock>,
+    #[serde(default)]
+    has_more: bool,
+    next_cursor: Option<String>,
+}
+
+impl From<RawNotionPage> for NotionPage {
+    fn from(page: RawNotionPage) -> Self {
+        NotionPage {
+            title: page.title(),
+            id: page.id,
+            url: page.url,
+            created_by: page.created_by.map(|user| user.id),
+        }
+    }
 }
 
 impl RawNotionPage {
@@ -142,6 +205,8 @@ pub struct RawNotionBlock {
     pub archived: bool,
     #[serde(default)]
     pub in_trash: bool,
+    #[serde(default)]
+    pub has_children: bool,
     #[serde(flatten)]
     pub content: HashMap<String, Value>,
 }
@@ -149,6 +214,12 @@ pub struct RawNotionBlock {
 impl RawNotionBlock {
     pub fn is_removed(&self) -> bool {
         self.archived || self.in_trash
+    }
+
+    /// Nested pages and databases are pages of their own: the sync finds
+    /// them through search.
+    fn has_walkable_children(&self) -> bool {
+        self.has_children && self.block_type != "child_page" && self.block_type != "child_database"
     }
 
     /// The block's rich text segments. A `table_row`'s cells are flattened,
@@ -253,6 +324,8 @@ async fn notion_get<R: serde::de::DeserializeOwned>(
 impl NotionService {
     pub fn new(
         notion_base_url: Option<String>,
+        repository: Arc<Repository>,
+        integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         max_retry_duration: Duration,
     ) -> Result<NotionService, UniversalInboxError> {
         let notion_base_url = notion_base_url.unwrap_or_else(|| NOTION_BASE_URL.to_string());
@@ -264,6 +337,8 @@ impl NotionService {
         Ok(NotionService {
             notion_base_url: notion_base_url.trim_end_matches('/').to_string(),
             notion_base_path,
+            repository,
+            integration_connection_service,
             max_retry_duration,
         })
     }
@@ -379,13 +454,7 @@ impl NotionService {
         if let Some(page) = cache.pages.get(page_id) {
             return Ok(page.clone());
         }
-        let page = self.get_page(access_token, page_id).await?;
-        let page = NotionPage {
-            title: page.title(),
-            id: page.id,
-            url: page.url,
-            created_by: page.created_by.map(|user| user.id),
-        };
+        let page: NotionPage = self.get_page(access_token, page_id).await?.into();
         cache.pages.insert(page_id.to_string(), page.clone());
         Ok(page)
     }
@@ -431,6 +500,7 @@ impl NotionService {
         &self,
         access_token: &AccessToken,
         block_id: &str,
+        user_notion_id: &str,
         cache: &mut NotionObjectCache,
     ) -> Result<Option<NotionBlock>, UniversalInboxError> {
         let block = match self.get_block(access_token, block_id).await {
@@ -452,19 +522,308 @@ impl NotionService {
             Err(error) if is_access_denied(&error) => return Ok(None),
             Err(error) => return Err(error),
         };
+        Ok(Some(
+            self.build_mention_block(access_token, block, page, user_notion_id, cache)
+                .await,
+        ))
+    }
+
+    async fn build_mention_block(
+        &self,
+        access_token: &AccessToken,
+        block: RawNotionBlock,
+        page: NotionPage,
+        user_notion_id: &str,
+        cache: &mut NotionObjectCache,
+    ) -> NotionBlock {
         let last_edited_by = match &block.last_edited_by {
             Some(user) => Some(self.get_cached_user(access_token, &user.id, cache).await),
             None => None,
         };
 
-        Ok(Some(NotionBlock {
+        NotionBlock {
             rich_text: parse_rich_text(&block.rich_text()),
             last_edited_time: block.last_edited_time.unwrap_or_else(Utc::now),
             id: block.id,
             block_type: block.block_type,
             page,
             last_edited_by,
-        }))
+            user_notion_id: Some(user_notion_id.to_string()),
+        }
+    }
+
+    /// Pages visible to the integration, last edited first.
+    async fn search_pages(
+        &self,
+        access_token: &AccessToken,
+        start_cursor: Option<&str>,
+    ) -> Result<RawNotionPageList, UniversalInboxError> {
+        let mut body = serde_json::json!({
+            "filter": { "property": "object", "value": "page" },
+            "sort": { "direction": "descending", "timestamp": "last_edited_time" },
+            "page_size": 100
+        });
+        if let Some(start_cursor) = start_cursor {
+            body["start_cursor"] = Value::String(start_cursor.to_string());
+        }
+        self.build_notion_client(access_token)?
+            .post(format!("{}/v1/search", self.notion_base_url), Some(&body))
+            .await
+            .map_err(|error| {
+                anyhow!(error)
+                    .context("Failed to search Notion pages")
+                    .into()
+            })
+    }
+
+    async fn list_block_children(
+        &self,
+        access_token: &AccessToken,
+        block_id: &str,
+        start_cursor: Option<&str>,
+    ) -> Result<RawNotionBlockList, UniversalInboxError> {
+        let url = format!(
+            "{}/v1/blocks/{block_id}/children?page_size=100{}",
+            self.notion_base_url,
+            start_cursor
+                .map(|cursor| format!("&start_cursor={cursor}"))
+                .unwrap_or_default()
+        );
+        notion_get(
+            &self.build_notion_client(access_token)?,
+            url,
+            "block children",
+        )
+        .await
+    }
+
+    /// The pages edited since `since`, newest first.
+    async fn find_pages_edited_since(
+        &self,
+        access_token: &AccessToken,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<RawNotionPage>, UniversalInboxError> {
+        let mut pages = vec![];
+        let mut start_cursor: Option<String> = None;
+        loop {
+            let result = self
+                .search_pages(access_token, start_cursor.as_deref())
+                .await?;
+            for page in result.results {
+                if page.last_edited_time.is_some_and(|time| time < since) {
+                    return Ok(pages);
+                }
+                pages.push(page);
+                if pages.len() >= MAX_SEARCHED_PAGES {
+                    debug!("Reached the {MAX_SEARCHED_PAGES} Notion pages to sync");
+                    return Ok(pages);
+                }
+            }
+            if !result.has_more || result.next_cursor.is_none() {
+                return Ok(pages);
+            }
+            start_cursor = result.next_cursor;
+        }
+    }
+
+    /// The blocks of a page edited since `since`, walking nested blocks.
+    /// `walked_blocks` counts the blocks read across pages.
+    async fn find_blocks_edited_since(
+        &self,
+        access_token: &AccessToken,
+        page_id: &str,
+        since: DateTime<Utc>,
+        walked_blocks: &mut usize,
+    ) -> Result<Vec<RawNotionBlock>, UniversalInboxError> {
+        let mut edited_blocks = vec![];
+        let mut parents = vec![(page_id.to_string(), 0)];
+        while let Some((parent_id, depth)) = parents.pop() {
+            let mut start_cursor: Option<String> = None;
+            loop {
+                let result = self
+                    .list_block_children(access_token, &parent_id, start_cursor.as_deref())
+                    .await?;
+                for block in result.results {
+                    *walked_blocks += 1;
+                    if block.has_walkable_children() && depth + 1 < MAX_BLOCK_DEPTH {
+                        parents.push((block.id.clone(), depth + 1));
+                    }
+                    if block.last_edited_time.is_some_and(|time| time >= since)
+                        && !block.is_removed()
+                    {
+                        edited_blocks.push(block);
+                    }
+                    if *walked_blocks >= MAX_WALKED_BLOCKS {
+                        debug!("Reached the {MAX_WALKED_BLOCKS} Notion blocks to sync");
+                        return Ok(edited_blocks);
+                    }
+                }
+                if !result.has_more || result.next_cursor.is_none() {
+                    break;
+                }
+                start_cursor = result.next_cursor;
+            }
+        }
+        Ok(edited_blocks)
+    }
+
+    /// The blocks whose mention of the user changed since `since`: a new
+    /// mention, a mention made again, or a removed mention.
+    async fn fetch_changed_mentions(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        access_token: &AccessToken,
+        connection: &IntegrationConnection,
+        user_notion_id: &str,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        let current_span = tracing::Span::current();
+        let pages = self.find_pages_edited_since(access_token, since).await?;
+        current_span.set_attribute(attr::NOTION_SYNC_SEARCHED_PAGES_COUNT, pages.len() as i64);
+
+        let mut cache = NotionObjectCache::default();
+        let mut walked_blocks = 0;
+        let mut items = vec![];
+        for raw_page in pages {
+            if walked_blocks >= MAX_WALKED_BLOCKS {
+                break;
+            }
+            let page_id = raw_page.id.clone();
+            let page: NotionPage = raw_page.into();
+            cache.pages.insert(page_id.clone(), page.clone());
+            let blocks = match self
+                .find_blocks_edited_since(access_token, &page_id, since, &mut walked_blocks)
+                .await
+            {
+                Ok(blocks) => blocks,
+                Err(error) if is_access_denied(&error) => {
+                    debug!("Skipping Notion page {page_id}: {error}");
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
+
+            for raw_block in blocks {
+                let stored_block = self
+                    .repository
+                    .find_third_party_items_for_source_id(
+                        executor,
+                        ThirdPartyItemKind::NotionBlock,
+                        &raw_block.id,
+                        Some(connection.user_id),
+                    )
+                    .await?
+                    .into_iter()
+                    .find(|item| item.integration_connection_id == connection.id)
+                    .map(NotionBlock::try_from)
+                    .transpose()?;
+                let is_mentioned = mentioned_user_ids_in_raw_rich_text(&raw_block.rich_text())
+                    .iter()
+                    .any(|id| id == user_notion_id);
+                let is_edited_by_user = raw_block
+                    .last_edited_by
+                    .as_ref()
+                    .is_some_and(|user| user.id == user_notion_id);
+                let was_mentioned = stored_block
+                    .as_ref()
+                    .map(|block| block.mentions_user(user_notion_id));
+                let is_changed = match (is_mentioned, was_mentioned) {
+                    // New or mentioned again, unless the user wrote it
+                    (true, None | Some(false)) => !is_edited_by_user,
+                    // Notify on creation only
+                    (true, Some(true)) => false,
+                    (false, Some(true)) => true,
+                    (false, None | Some(false)) => false,
+                };
+                if !is_changed {
+                    continue;
+                }
+
+                let block = self
+                    .build_mention_block(
+                        access_token,
+                        raw_block,
+                        page.clone(),
+                        user_notion_id,
+                        &mut cache,
+                    )
+                    .await;
+                items.push(block.into_third_party_item(connection.user_id, connection.id));
+            }
+        }
+        current_span.set_attribute(attr::NOTION_SYNC_WALKED_BLOCKS_COUNT, walked_blocks as i64);
+        Ok(items)
+    }
+
+    /// The tracked discussions with a comment newer than the stored one: a
+    /// reply whose webhook was lost.
+    async fn fetch_changed_discussions(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        access_token: &AccessToken,
+        connection: &IntegrationConnection,
+        user_notion_id: &str,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        let oldest_activity = Utc::now() - TimeDelta::days(RECONCILED_DISCUSSIONS_MAX_AGE_DAYS);
+        let mut tracked_discussions: Vec<NotionComment> = self
+            .repository
+            .find_third_party_items_for_user_id(
+                executor,
+                ThirdPartyItemKind::NotionComment,
+                connection.user_id,
+            )
+            .await?
+            .into_iter()
+            .filter(|item| item.integration_connection_id == connection.id)
+            .map(NotionComment::try_from)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|discussion| discussion.latest_comment().last_edited_time >= oldest_activity)
+            .collect();
+        tracked_discussions.sort_by_key(|discussion| {
+            std::cmp::Reverse(discussion.latest_comment().last_edited_time)
+        });
+        tracked_discussions.truncate(MAX_RECONCILED_DISCUSSIONS);
+        tracing::Span::current().set_attribute(
+            attr::NOTION_SYNC_RECONCILED_DISCUSSIONS_COUNT,
+            tracked_discussions.len() as i64,
+        );
+
+        let mut items = vec![];
+        for tracked in tracked_discussions {
+            let parent_id = match &tracked.parent {
+                NotionCommentParent::Page { page_id } => page_id,
+                NotionCommentParent::Block { block_id } => block_id,
+            };
+            let discussion = match self
+                .fetch_discussion(
+                    access_token,
+                    &tracked.page.id,
+                    parent_id,
+                    &tracked.discussion_id,
+                    user_notion_id,
+                )
+                .await
+            {
+                Ok(Some(discussion)) => discussion,
+                // Deleted discussions are only handled by webhooks
+                Ok(None) => continue,
+                Err(error) if is_access_denied(&error) => {
+                    debug!(
+                        "Skipping Notion discussion {}: {error}",
+                        tracked.discussion_id
+                    );
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
+            if discussion.latest_comment().last_edited_time
+                > tracked.latest_comment().last_edited_time
+            {
+                items.push(discussion.into_third_party_item(connection.user_id, connection.id));
+            }
+        }
+        Ok(items)
     }
 
     /// Read a discussion with the user's token. `None` when every comment of
@@ -646,10 +1005,15 @@ impl ThirdPartyNotificationSourceService<NotionBlock> for NotionService {
             .unwrap_or_else(|| "someone".to_string());
 
         // Mentions written by the user themselves are never saved
+        let status = if source.is_mention_removed() {
+            NotificationStatus::Deleted
+        } else {
+            NotificationStatus::Unread
+        };
         Ok(Box::new(Notification {
             id: NotificationId(Uuid::new_v4()),
             title: format!("Mentioned by {author} on {}", source.page.title),
-            status: NotificationStatus::Unread,
+            status,
             created_at: source.last_edited_time,
             updated_at: source.last_edited_time,
             last_read_at: None,
@@ -708,6 +1072,107 @@ impl ThirdPartyNotificationSourceService<NotionBlock> for NotionService {
     }
 }
 
+#[async_trait]
+impl ThirdPartyItemSourceService<NotionComment> for NotionService {
+    /// A safety net for the webhooks, which Notion delivers at most once. It
+    /// returns only the items whose notification must change: the generic
+    /// sync would otherwise reopen notifications the user already handled.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            { attr::USER_ID } = user_id.to_string(),
+            { attr::NOTION_SYNC_SEARCHED_PAGES_COUNT } = tracing::field::Empty,
+            { attr::NOTION_SYNC_WALKED_BLOCKS_COUNT } = tracing::field::Empty,
+            { attr::NOTION_SYNC_RECONCILED_DISCUSSIONS_COUNT } = tracing::field::Empty
+        )
+    )]
+    async fn fetch_items(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        last_sync_completed_at: Option<DateTime<Utc>>,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        let (access_token, connection) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Notion, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot sync Notion notifications without an access token"))?;
+        let Some(user_notion_id) = connection.provider_user_id.clone() else {
+            return Err(anyhow!(
+                "Cannot sync Notion notifications of a connection without a Notion user id"
+            )
+            .into());
+        };
+        let IntegrationProvider::Notion { config, context } = &connection.provider else {
+            return Err(anyhow!("Expected a Notion integration connection").into());
+        };
+
+        let mut items = vec![];
+        if config.sync_mentions_enabled {
+            let since = last_sync_completed_at.unwrap_or(connection.created_at)
+                - TimeDelta::minutes(SYNC_CURSOR_MARGIN_MINUTES);
+            items.extend(
+                self.fetch_changed_mentions(
+                    executor,
+                    &access_token,
+                    &connection,
+                    &user_notion_id,
+                    since,
+                )
+                .await?,
+            );
+        }
+
+        if config.sync_comments_enabled
+            && let Some(context) = context
+        {
+            let now = Utc::now();
+            let is_due = context.comments_reconciled_at.is_none_or(|reconciled_at| {
+                now - reconciled_at >= TimeDelta::minutes(COMMENTS_RECONCILIATION_INTERVAL_MINUTES)
+            });
+            if is_due {
+                items.extend(
+                    self.fetch_changed_discussions(
+                        executor,
+                        &access_token,
+                        &connection,
+                        &user_notion_id,
+                    )
+                    .await?,
+                );
+                self.integration_connection_service
+                    .read()
+                    .await
+                    .update_integration_connection_context(
+                        executor,
+                        connection.id,
+                        IntegrationConnectionContext::Notion(
+                            universal_inbox::integration_connection::integrations::notion::NotionContext {
+                                comments_reconciled_at: Some(now),
+                                ..context.clone()
+                            },
+                        ),
+                    )
+                    .await?;
+            }
+        }
+
+        Ok(items)
+    }
+
+    fn is_sync_incremental(&self) -> bool {
+        // A sync only reads what changed: never delete what it did not see
+        true
+    }
+
+    fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
+        ThirdPartyItemSourceKind::NotionComment
+    }
+}
+
 impl NotificationSource for NotionService {
     fn get_notification_source_kind(&self) -> NotificationSourceKind {
         NotificationSourceKind::Notion
@@ -731,6 +1196,8 @@ fn otel_known_paths(base_path: &str) -> Vec<String> {
         "/v1/comments",
         "/v1/pages/{page_id}",
         "/v1/blocks/{block_id}",
+        "/v1/blocks/{block_id}/children",
+        "/v1/search",
         "/v1/users/{user_id}",
     ]
     .iter()

@@ -240,6 +240,7 @@ macro_attr! {
         Linear,
         GoogleMail,
         GoogleDrive,
+        Notion,
         Slack,
         Todoist,
         TickTick
@@ -299,6 +300,7 @@ impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
             IntegrationProviderKind::Linear => Ok(Self::Linear),
             IntegrationProviderKind::GoogleMail => Ok(Self::GoogleMail),
             IntegrationProviderKind::GoogleDrive => Ok(Self::GoogleDrive),
+            IntegrationProviderKind::Notion => Ok(Self::Notion),
             IntegrationProviderKind::Slack => Ok(Self::Slack),
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
             IntegrationProviderKind::TickTick => Ok(Self::TickTick),
@@ -317,6 +319,7 @@ impl From<NotificationSyncSourceKind> for IntegrationProviderKind {
             NotificationSyncSourceKind::Linear => IntegrationProviderKind::Linear,
             NotificationSyncSourceKind::GoogleMail => IntegrationProviderKind::GoogleMail,
             NotificationSyncSourceKind::GoogleDrive => IntegrationProviderKind::GoogleDrive,
+            NotificationSyncSourceKind::Notion => IntegrationProviderKind::Notion,
             NotificationSyncSourceKind::Slack => IntegrationProviderKind::Slack,
             NotificationSyncSourceKind::Todoist => IntegrationProviderKind::Todoist,
             NotificationSyncSourceKind::TickTick => IntegrationProviderKind::TickTick,
