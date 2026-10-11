@@ -214,3 +214,5 @@ pub const NOTION_EVENT_TYPE: &str = "notion.event.type";
 pub const NOTION_EVENT_OUTCOME: &str = "notion.event.outcome";
 pub const NOTION_EVENT_DISCARD_REASON: &str = "notion.event.discard_reason";
 pub const NOTION_EVENT_REJECT_REASON: &str = "notion.event.reject_reason";
+pub const NOTION_UPDATED_BLOCKS_COUNT: &str = "notion.updated_blocks.count";
+pub const NOTION_MENTION_CANDIDATES_COUNT: &str = "notion.mention_candidates.count";

@@ -254,3 +254,141 @@ pub async fn mock_notion_not_accessible(mock_server: &MockServer, access_token: 
 fn path_regex_users() -> wiremock::matchers::PathRegexMatcher {
     wiremock::matchers::path_regex(r"^/v1/users/[^/]+$")
 }
+
+pub fn notion_page_content_event(
+    workspace_id: &str,
+    event_id: &str,
+    page_id: &str,
+    block_ids: &[&str],
+    accessible_by: &[&str],
+) -> Value {
+    json!({
+        "id": event_id,
+        "timestamp": "2026-10-10T09:00:00.000Z",
+        "workspace_id": workspace_id,
+        "workspace_name": "Acme",
+        "subscription_id": "subscription-id",
+        "integration_id": "integration-id",
+        "type": "page.content_updated",
+        "authors": [],
+        "accessible_by": accessible_by
+            .iter()
+            .map(|id| json!({ "id": id, "type": "person" }))
+            .collect::<Vec<_>>(),
+        "attempt_number": 1,
+        "entity": { "id": page_id, "type": "page" },
+        "data": {
+            "parent": { "id": "space-id", "type": "space" },
+            "updated_blocks": block_ids
+                .iter()
+                .map(|id| json!({ "id": id, "type": "block" }))
+                .collect::<Vec<_>>()
+        }
+    })
+}
+
+/// A `paragraph` block of `parent` (`json!({"type": "page_id", ...})` or
+/// `json!({"type": "block_id", ...})`), last edited by `last_edited_by` at
+/// 09:`minute`.
+pub fn notion_paragraph_block(
+    block_id: &str,
+    parent: Value,
+    last_edited_by: &str,
+    minute: u32,
+    rich_text: Vec<Value>,
+) -> Value {
+    json!({
+        "object": "block",
+        "id": block_id,
+        "parent": parent,
+        "type": "paragraph",
+        "created_by": { "object": "user", "id": last_edited_by },
+        "last_edited_by": { "object": "user", "id": last_edited_by },
+        "last_edited_time": format!("2026-10-10T09:{minute:02}:00.000Z"),
+        "archived": false,
+        "in_trash": false,
+        "paragraph": { "rich_text": rich_text }
+    })
+}
+
+/// Mock the Notion API calls made with `access_token` to read mentioning
+/// blocks: `blocks` (by their `id`), the page `page_id` and users.
+pub async fn mock_notion_blocks(
+    mock_server: &MockServer,
+    access_token: &str,
+    page_id: &str,
+    blocks: Vec<Value>,
+) {
+    let authorization = format!("Bearer {access_token}");
+    for block in blocks {
+        let block_id = block["id"].as_str().unwrap().to_string();
+        Mock::given(method("GET"))
+            .and(path(format!("/v1/blocks/{block_id}")))
+            .and(header("authorization", authorization.as_str()))
+            .respond_with(ResponseTemplate::new(200).set_body_json(block))
+            .mount(mock_server)
+            .await;
+    }
+    mock_notion_page_and_users(mock_server, access_token, page_id).await;
+}
+
+async fn mock_notion_page_and_users(mock_server: &MockServer, access_token: &str, page_id: &str) {
+    let authorization = format!("Bearer {access_token}");
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/pages/{page_id}")))
+        .and(header("authorization", authorization.as_str()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": "page",
+            "id": page_id,
+            "url": format!("https://www.notion.so/Roadmap-{}", page_id.replace('-', "")),
+            "created_by": { "object": "user", "id": "page-owner" },
+            "properties": {
+                "title": {
+                    "id": "title",
+                    "type": "title",
+                    "title": [text_segment("Roadmap")]
+                }
+            }
+        })))
+        .mount(mock_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex_users())
+        .and(header("authorization", authorization.as_str()))
+        .respond_with(|request: &wiremock::Request| {
+            let user_id = request.url.path().trim_start_matches("/v1/users/");
+            ResponseTemplate::new(200).set_body_json(json!({
+                "object": "user",
+                "id": user_id,
+                "name": format!("User {user_id}"),
+                "avatar_url": null,
+                "type": "person"
+            }))
+        })
+        .mount(mock_server)
+        .await;
+}
+
+/// Mock `block_id` as deleted (Notion answers 404), and the page and users.
+pub async fn mock_notion_deleted_block(
+    mock_server: &MockServer,
+    access_token: &str,
+    page_id: &str,
+    block_id: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/blocks/{block_id}")))
+        .and(header(
+            "authorization",
+            format!("Bearer {access_token}").as_str(),
+        ))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+            "object": "error",
+            "status": 404,
+            "code": "object_not_found",
+            "message": "Could not find block"
+        })))
+        .mount(mock_server)
+        .await;
+    mock_notion_page_and_users(mock_server, access_token, page_id).await;
+}

@@ -6,21 +6,25 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::integrations::notion::NotionConfig,
-    notification::{Notification, NotificationSourceKind, NotificationStatus},
-    third_party::item::ThirdPartyItemData,
+    notification::{
+        Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
+    },
+    third_party::{integrations::notion::to_plain_text, item::ThirdPartyItemData},
 };
 use universal_inbox_api::{
-    configuration::Settings, integrations::notion::webhook::NotionWebhookEvent,
-    jobs::notion::handle_notion_comment_event,
+    configuration::Settings,
+    integrations::notion::webhook::NotionWebhookEvent,
+    jobs::notion::{handle_notion_comment_event, handle_notion_page_content_event},
 };
 
 use crate::helpers::{
     TestedApp,
     auth::{AuthenticatedApp, authenticate_user, authenticated_app},
-    notification::list_notifications,
+    notification::{list_notifications, update_notification},
     notion::{
-        create_notion_integration_connection, mock_notion_discussion, mock_notion_not_accessible,
-        notion_comment, notion_comment_event, post_signed_notion_event, text_segment,
+        create_notion_integration_connection, mock_notion_blocks, mock_notion_deleted_block,
+        mock_notion_discussion, mock_notion_not_accessible, notion_comment, notion_comment_event,
+        notion_page_content_event, notion_paragraph_block, post_signed_notion_event, text_segment,
         user_mention_segment,
     },
     settings,
@@ -114,6 +118,36 @@ mod route {
             &app.client,
             &app.app.api_address,
             &comment_event(&workspace_id, "comment.created", "comment-1"),
+        )
+        .await;
+
+        assert_eq!(response.status(), 200);
+        assert_eq!(pushed_jobs_count(&app.app).await, 1);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_page_content_event_of_a_connected_workspace_is_queued(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = new_workspace_id();
+        create_notion_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings,
+            ME,
+            MY_TOKEN,
+            &workspace_id,
+            NotionConfig::enabled(),
+        )
+        .await;
+
+        let response = post_signed_notion_event(
+            &app.client,
+            &app.app.api_address,
+            &notion_page_content_event(&workspace_id, "event-1", PAGE_ID, &[BLOCK_ID], &[ME]),
         )
         .await;
 
@@ -515,7 +549,7 @@ mod job {
         assert_eq!(notifications[0].status, NotificationStatus::Unread);
     }
 
-    async fn connect_me(
+    pub(super) async fn connect_me(
         app: &AuthenticatedApp,
         settings: &Settings,
         config: NotionConfig,
@@ -614,7 +648,7 @@ mod job {
             .unwrap();
     }
 
-    fn all_statuses() -> Vec<NotificationStatus> {
+    pub(super) fn all_statuses() -> Vec<NotificationStatus> {
         vec![
             NotificationStatus::Unread,
             NotificationStatus::Read,
@@ -623,7 +657,7 @@ mod job {
         ]
     }
 
-    async fn notion_notifications(
+    pub(super) async fn notion_notifications(
         app: &AuthenticatedApp,
         status_filter: Vec<NotificationStatus>,
     ) -> Vec<Notification> {
@@ -637,6 +671,340 @@ mod job {
             false,
         )
         .await
+    }
+}
+
+mod mention {
+    use super::{
+        job::{all_statuses, connect_me, notion_notifications},
+        *,
+    };
+    use pretty_assertions::assert_eq;
+
+    const TABLE_BLOCK_ID: &str = "c1c2c3c4-0000-4000-8000-0000000000cc";
+
+    fn in_page() -> Value {
+        json!({ "type": "page_id", "page_id": PAGE_ID })
+    }
+
+    fn mentioning_block(last_edited_by: &str, minute: u32, text: &str) -> Value {
+        notion_paragraph_block(
+            BLOCK_ID,
+            in_page(),
+            last_edited_by,
+            minute,
+            vec![text_segment(text), user_mention_segment(ME, "Me")],
+        )
+    }
+
+    fn plain_block(minute: u32, text: &str) -> Value {
+        notion_paragraph_block(
+            BLOCK_ID,
+            in_page(),
+            SOMEONE,
+            minute,
+            vec![text_segment(text)],
+        )
+    }
+
+    /// Replace the mocked blocks with `blocks`.
+    async fn mock_blocks(app: &AuthenticatedApp, blocks: Vec<Value>) {
+        app.app.notion_mock_server.reset().await;
+        mock_notion_blocks(&app.app.notion_mock_server, MY_TOKEN, PAGE_ID, blocks).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_mention_creates_an_unread_notification(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
+
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+
+        let notifications = notion_notifications(&app, vec![]).await;
+        assert_eq!(notifications.len(), 1);
+        let notification = &notifications[0];
+        assert_eq!(notification.status, NotificationStatus::Unread);
+        assert_eq!(
+            notification.title,
+            format!("Mentioned by User {SOMEONE} on Roadmap")
+        );
+        assert_eq!(
+            notification.updated_at.to_rfc3339(),
+            "2026-10-10T09:05:00+00:00"
+        );
+        let ThirdPartyItemData::NotionBlock(block) = &notification.source_item.data else {
+            panic!("Expected a NotionBlock item");
+        };
+        assert_eq!(block.id, BLOCK_ID);
+        assert_eq!(block.page.id, PAGE_ID);
+        assert_eq!(to_plain_text(&block.rich_text), "Can you check @Me");
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_repeated_block_creates_one_notification(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
+
+        handle(&app, &workspace_id, &[BLOCK_ID, BLOCK_ID], &[ME]).await;
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+
+        let notifications = notion_notifications(&app, all_statuses()).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Unread);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_edit_keeping_the_mention_leaves_the_notification_as_is(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+        let notification = &notion_notifications(&app, vec![]).await[0];
+        update_notification(
+            &app,
+            notification.id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Read),
+                ..Default::default()
+            },
+            app.user.id,
+        )
+        .await;
+
+        mock_blocks(&app, vec![mentioning_block(SOMEONE, 7, "Could you check ")]).await;
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+
+        let notifications = notion_notifications(&app, all_statuses()).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Read);
+        let ThirdPartyItemData::NotionBlock(block) = &notifications[0].source_item.data else {
+            panic!("Expected a NotionBlock item");
+        };
+        assert_eq!(to_plain_text(&block.rich_text), "Could you check @Me");
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_removed_mention_deletes_the_notification_and_a_new_one_restores_it(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+
+        mock_blocks(&app, vec![plain_block(7, "Never mind")]).await;
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+        let notifications = notion_notifications(&app, all_statuses()).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Deleted);
+
+        mock_blocks(&app, vec![mentioning_block(SOMEONE, 9, "Actually, ")]).await;
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+        let notifications = notion_notifications(&app, all_statuses()).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Unread);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_deleted_block_deletes_the_notification(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+
+        app.app.notion_mock_server.reset().await;
+        mock_notion_deleted_block(&app.app.notion_mock_server, MY_TOKEN, PAGE_ID, BLOCK_ID).await;
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+
+        let notifications = notion_notifications(&app, all_statuses()).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Deleted);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_mentioning_myself_creates_nothing(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        mock_blocks(&app, vec![mentioning_block(ME, 5, "Reminder for ")]).await;
+
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+
+        assert!(notion_notifications(&app, all_statuses()).await.is_empty());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_disabled_mention_sync_creates_nothing(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(
+            &app,
+            &settings,
+            NotionConfig {
+                sync_comments_enabled: true,
+                sync_mentions_enabled: false,
+            },
+        )
+        .await;
+        mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
+
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+
+        assert!(notion_notifications(&app, all_statuses()).await.is_empty());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_page_not_accessible_to_me_creates_nothing(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
+
+        handle(&app, &workspace_id, &[BLOCK_ID], &[SOMEONE]).await;
+
+        assert!(notion_notifications(&app, all_statuses()).await.is_empty());
+    }
+
+    /// A table cell mention: the row is under its table block, itself under
+    /// the page.
+    #[rstest]
+    #[tokio::test]
+    async fn test_mention_in_a_nested_table_row_creates_a_notification(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let table = json!({
+            "object": "block",
+            "id": TABLE_BLOCK_ID,
+            "parent": in_page(),
+            "type": "table",
+            "table": { "table_width": 2 }
+        });
+        let row = json!({
+            "object": "block",
+            "id": BLOCK_ID,
+            "parent": { "type": "block_id", "block_id": TABLE_BLOCK_ID },
+            "type": "table_row",
+            "last_edited_by": { "object": "user", "id": SOMEONE },
+            "last_edited_time": "2026-10-10T09:05:00.000Z",
+            "table_row": {
+                "cells": [
+                    [text_segment("Owner")],
+                    [user_mention_segment(ME, "Me")]
+                ]
+            }
+        });
+        mock_blocks(&app, vec![table, row]).await;
+
+        handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
+
+        let notifications = notion_notifications(&app, vec![]).await;
+        assert_eq!(notifications.len(), 1);
+        let ThirdPartyItemData::NotionBlock(block) = &notifications[0].source_item.data else {
+            panic!("Expected a NotionBlock item");
+        };
+        assert_eq!(block.block_type, "table_row");
+        assert_eq!(block.page.id, PAGE_ID);
+        assert_eq!(to_plain_text(&block.rich_text), "Owner | @Me");
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_only_the_first_blocks_of_a_big_update_are_read(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let block_ids: Vec<String> = (0..60)
+            .map(|index| format!("d0d0d0d0-0000-4000-8000-{index:012}"))
+            .collect();
+        let blocks = block_ids
+            .iter()
+            .map(|block_id| {
+                notion_paragraph_block(block_id, in_page(), SOMEONE, 5, vec![text_segment("x")])
+            })
+            .collect();
+        mock_blocks(&app, blocks).await;
+
+        let block_ids: Vec<&str> = block_ids.iter().map(String::as_str).collect();
+        handle(&app, &workspace_id, &block_ids, &[ME]).await;
+
+        let block_reads = app
+            .app
+            .notion_mock_server
+            .received_requests()
+            .await
+            .unwrap()
+            .iter()
+            .filter(|request| request.url.path().starts_with("/v1/blocks/"))
+            .count();
+        assert_eq!(block_reads, 50);
+    }
+
+    async fn handle(
+        app: &AuthenticatedApp,
+        workspace_id: &str,
+        block_ids: &[&str],
+        accessible_by: &[&str],
+    ) {
+        let event: NotionWebhookEvent = serde_json::from_value(notion_page_content_event(
+            workspace_id,
+            &format!("event-{}", Uuid::new_v4()),
+            PAGE_ID,
+            block_ids,
+            accessible_by,
+        ))
+        .unwrap();
+        let service = app.app.notification_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+
+        handle_notion_page_content_event(
+            &mut transaction,
+            &event,
+            app.app.notification_service.clone(),
+            app.app.integration_connection_service.clone(),
+            app.app.third_party_item_service.clone(),
+        )
+        .await
+        .unwrap();
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction")
+            .unwrap();
     }
 }
 

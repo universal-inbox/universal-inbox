@@ -122,9 +122,9 @@ pub async fn push_notion_event(
     current_span.set_attribute(attr::NOTION_EVENT_ID, event.id.clone());
     current_span.set_attribute(attr::NOTION_EVENT_TYPE, event.event_type.as_str());
     current_span.set_attribute(attr::NOTION_WORKSPACE_ID, event.workspace_id.clone());
-    if !event.event_type.is_comment_event() {
+    if !event.event_type.is_handled_event() {
         current_span.set_attribute(attr::NOTION_EVENT_OUTCOME, "discarded");
-        current_span.set_attribute(attr::NOTION_EVENT_DISCARD_REASON, "not_comment_event");
+        current_span.set_attribute(attr::NOTION_EVENT_DISCARD_REASON, "not_handled_event");
         return Ok(HttpResponse::Ok().finish());
     }
 
