@@ -74,6 +74,9 @@ pub struct ApplicationSettings {
     /// `serde(default)` so the section can be omitted entirely from config files.
     #[serde(default)]
     pub cron: CronSettings,
+    /// Audit log of notification and task changes.
+    #[serde(default)]
+    pub audit_log: AuditLogSettings,
     /// Optional Stripe billing configuration. When absent, no billing code runs,
     /// no billing UI is rendered, and every user has unlimited access (default for
     /// self-hosted instances). When present, billing enforcement is active.
@@ -91,6 +94,64 @@ pub struct CronSettings {
     pub retry_oauth_grant_revocations: RetryOAuthGrantRevocationsCronSettings,
     #[serde(default)]
     pub pause_integration_connections: PauseIntegrationConnectionsCronSettings,
+    #[serde(default)]
+    pub purge_audit_events: PurgeAuditEventsCronSettings,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct AuditLogSettings {
+    /// Audit events older than this are deleted by the `purge-audit-events` cron
+    #[serde(default = "default_audit_log_retention_days")]
+    pub retention_days: u32,
+    /// Reject notification and task writes made without an audit actor instead of recording
+    /// them with an `Unknown` actor. Enabled in tests so a write path missing its actor fails.
+    #[serde(default)]
+    pub strict_actor: bool,
+}
+
+impl Default for AuditLogSettings {
+    fn default() -> Self {
+        Self {
+            retention_days: default_audit_log_retention_days(),
+            strict_actor: false,
+        }
+    }
+}
+
+fn default_audit_log_retention_days() -> u32 {
+    7
+}
+
+/// Configuration for the `purge-audit-events` cron, deleting the audit events older than
+/// `application.audit_log.retention_days`. Enabled by default: the audit log would otherwise
+/// grow without bound.
+#[derive(Deserialize, Clone, Debug)]
+pub struct PurgeAuditEventsCronSettings {
+    #[serde(default = "yes")]
+    pub is_enabled: bool,
+    /// Cron expression with a seconds field, e.g. `0 17 * * * *`
+    #[serde(default = "default_purge_audit_events_schedule")]
+    pub schedule: String,
+    /// TTL of the per-tick deduplication lock key in Redis
+    #[serde(default = "default_purge_audit_events_lock_ttl_seconds")]
+    pub lock_ttl_seconds: u64,
+}
+
+impl Default for PurgeAuditEventsCronSettings {
+    fn default() -> Self {
+        Self {
+            is_enabled: yes(),
+            schedule: default_purge_audit_events_schedule(),
+            lock_ttl_seconds: default_purge_audit_events_lock_ttl_seconds(),
+        }
+    }
+}
+
+fn default_purge_audit_events_schedule() -> String {
+    "0 17 * * * *".to_string()
+}
+fn default_purge_audit_events_lock_ttl_seconds() -> u64 {
+    300
 }
 
 /// Configuration for the `retry-oauth-grant-revocations` cron, retrying the

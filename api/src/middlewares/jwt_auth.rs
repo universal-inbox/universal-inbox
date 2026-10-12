@@ -94,6 +94,17 @@ pub struct JWTSessionKey(pub String);
 pub struct Authenticated<T> {
     pub jwt: JWT,
     pub claims: T,
+    /// Where the token came from, used to tell the web application (session cookie) from
+    /// API keys and OAuth tokens (bearer) in the audit log.
+    #[serde(default)]
+    pub source: AuthSource,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Default)]
+pub enum AuthSource {
+    #[default]
+    Session,
+    Bearer,
 }
 
 impl<T> FromRequest for Authenticated<T>
@@ -372,6 +383,11 @@ where
                 req.extensions_mut().insert(Authenticated {
                     jwt,
                     claims: decoded.claims,
+                    source: if is_bearer {
+                        AuthSource::Bearer
+                    } else {
+                        AuthSource::Session
+                    },
                 });
             }
             Err(error) => {

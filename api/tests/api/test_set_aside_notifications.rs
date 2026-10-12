@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     Page,
+    audit::AuditActor,
     integration_connection::{
         IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
@@ -62,6 +63,7 @@ use universal_inbox_api::{
         notification::NotificationRepository, task::TaskRepository,
         third_party::ThirdPartyItemRepository,
     },
+    universal_inbox::audit::actor_context::with_actor,
 };
 
 use crate::helpers::{
@@ -278,17 +280,27 @@ async fn test_inactivity_pause_sets_aside_and_reconnect_restores(
         )
         .mount_as_scoped(&app.app.slack_mock_server)
         .await;
-    let (paused, failed) = app
-        .app
-        .integration_connection_service
-        .read()
-        .await
-        .pause_integration_connections_of_inactive_users(
-            Utc::now() - chrono::TimeDelta::days(90),
-            None,
-        )
-        .await
-        .unwrap();
+    // Runs, in production, as the PauseIntegrationConnections job
+    let (paused, failed) = with_actor(
+        AuditActor::System {
+            job: "PauseIntegrationConnections".to_string(),
+            source: None,
+            triggered_by: None,
+        },
+        async {
+            app.app
+                .integration_connection_service
+                .read()
+                .await
+                .pause_integration_connections_of_inactive_users(
+                    Utc::now() - chrono::TimeDelta::days(90),
+                    None,
+                )
+                .await
+        },
+    )
+    .await
+    .unwrap();
     assert_eq!((paused, failed), (1, 0));
 
     assert_notification_set_aside(&app, &triaged_notification).await;

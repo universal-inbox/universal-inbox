@@ -150,6 +150,7 @@ pub struct TestServices {
     pub slack_bridge_service:
         Arc<universal_inbox_api::universal_inbox::slack_bridge::service::SlackBridgeService>,
     pub oauth2_service: Arc<OAuth2Service>,
+    pub audit_service: Arc<universal_inbox_api::universal_inbox::audit::service::AuditService>,
 }
 
 /// Point every provider's OAuth grant revocation endpoint (and the Google and
@@ -211,6 +212,7 @@ pub async fn build_test_services(
         slack_service,
         slack_bridge_service,
         oauth2_service,
+        audit_service,
         _billing_service,
     ) = universal_inbox_api::build_services(
         pool,
@@ -238,6 +240,7 @@ pub async fn build_test_services(
         slack_service,
         slack_bridge_service,
         oauth2_service,
+        audit_service,
     };
 
     (services, auth_token_service)
@@ -266,6 +269,7 @@ pub async fn spawn_test_server(
         services.third_party_item_service.clone(),
         services.slack_bridge_service.clone(),
         services.oauth2_service.clone(),
+        services.audit_service.clone(),
         None, // billing service: tests opt in explicitly when they need it
     )
     .await
@@ -290,6 +294,7 @@ pub async fn spawn_test_worker(
         services.integration_connection_service.clone(),
         services.third_party_item_service.clone(),
         services.slack_service.clone(),
+        services.audit_service.clone(),
     )
     .await;
 
@@ -556,6 +561,7 @@ pub async fn spawn_test_server_with_billing(
         services.third_party_item_service.clone(),
         services.slack_bridge_service.clone(),
         services.oauth2_service.clone(),
+        services.audit_service.clone(),
         billing_service,
     )
     .await

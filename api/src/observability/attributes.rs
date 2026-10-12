@@ -151,6 +151,12 @@ pub const JOB_NAME: &str = "job.name";
 pub const JOB_ATTEMPT: &str = "job.attempt";
 pub const CRON_TICK: &str = "cron.tick";
 
+// Audit log
+/// Kind of actor the audit log records for the changes made in the span (`User`, `Mcp`, ...)
+pub const AUDIT_ACTOR_KIND: &str = "audit.actor.kind";
+/// Job of a `System` audit actor, eg. `SyncNotifications`
+pub const AUDIT_ACTOR_JOB: &str = "audit.actor.job";
+
 // Emails
 pub const EMAIL_SUBJECT: &str = "email.subject";
 

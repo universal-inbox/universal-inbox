@@ -13,6 +13,7 @@ use validator::Validate;
 
 use universal_inbox::{
     Page, PageToken,
+    audit::{AuditActorKind, AuditChangeKind, AuditEntityKind, AuditEvent, AuditEventFilter},
     auth::oauth2::{OAUTH2_SCOPE_READ, OAUTH2_SCOPE_WRITE},
     notification::{
         Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
@@ -30,8 +31,11 @@ use crate::observability::attr;
 use crate::{
     jobs::JobStorage,
     universal_inbox::{
-        UpdateStatus, integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, task::service::TaskService,
+        UpdateStatus,
+        audit::service::{AuditService, MAX_AUDIT_EVENTS_PAGE_SIZE},
+        integration_connection::service::IntegrationConnectionService,
+        notification::service::NotificationService,
+        task::service::TaskService,
     },
     utils::rate_limit::{UserRateLimiters, check_user_rate_limit},
 };
@@ -41,6 +45,7 @@ pub struct McpServices {
     pub notification_service: Arc<RwLock<NotificationService>>,
     pub task_service: Arc<RwLock<TaskService>>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    pub audit_service: Arc<AuditService>,
     pub job_storage: JobStorage,
     pub user_rate_limiters: UserRateLimiters,
 }
@@ -211,6 +216,43 @@ pub(crate) struct SearchTasksArgs {
     matches: String,
 }
 
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub(crate) struct SearchAuditLogArgs {
+    #[schemars(description = "Case-insensitive text to match in notification and task titles.")]
+    query: Option<String>,
+    #[schemars(
+        description = "Only events of notifications or of tasks. Ignored when entity_id is set."
+    )]
+    entity_kind: Option<AuditEntityKind>,
+    #[schemars(
+        description = "History of one notification or task id. A task's history also includes the events of the notifications linked to it."
+    )]
+    entity_id: Option<uuid::Uuid>,
+    #[serde(default)]
+    #[schemars(description = "Only changes made by these kinds of actors.")]
+    actor_kinds: Vec<AuditActorKind>,
+    #[serde(default)]
+    #[schemars(
+        description = "Only events of these sources (notification or task source kinds, eg. Github, Slack, Todoist)."
+    )]
+    source_kinds: Vec<String>,
+    #[schemars(description = "Only this kind of change.")]
+    change: Option<AuditChangeKind>,
+    #[schemars(description = "Only events at or after this time.")]
+    since: Option<DateTime<Utc>>,
+    #[schemars(description = "Only events before this time.")]
+    until: Option<DateTime<Utc>>,
+    #[schemars(
+        description = "Opaque pagination cursor — pass the next_page_token returned by a prior search_audit_log response."
+    )]
+    page_token: Option<PageToken>,
+    #[schemars(
+        range(min = 1, max = 200),
+        description = "Events per page, 50 by default."
+    )]
+    limit: Option<usize>,
+}
+
 #[derive(Deserialize, Serialize, JsonSchema, Validate)]
 pub(crate) struct UpdateTaskArgs {
     task_id: TaskId,
@@ -231,9 +273,8 @@ pub(crate) struct SyncTasksArgs {
 /// enqueues the syncs that are already due on their regular schedule.
 pub fn required_scope(tool_name: &str) -> &'static str {
     match tool_name {
-        "list_notifications" | "get_notification" | "list_tasks" | "get_task" | "search_tasks" => {
-            OAUTH2_SCOPE_READ
-        }
+        "list_notifications" | "get_notification" | "list_tasks" | "get_task" | "search_tasks"
+        | "search_audit_log" => OAUTH2_SCOPE_READ,
         _ => OAUTH2_SCOPE_WRITE,
     }
 }
@@ -481,6 +522,41 @@ pub async fn execute_tool(
                 .await
                 .map_err(ToolCallError::execution)?;
             serialize_result(SearchTasksResult { tasks })
+        }
+        "search_audit_log" => {
+            let args: SearchAuditLogArgs = parse_args(arguments)?;
+            let filter = AuditEventFilter {
+                entity_kind: args.entity_kind,
+                entity_id: args.entity_id,
+                actor_kinds: args.actor_kinds,
+                source_kinds: args.source_kinds,
+                change: args.change,
+                query: args.query,
+                since: args.since,
+                until: args.until,
+            };
+            let service = &services.audit_service;
+            let mut transaction = service.begin().await.map_err(ToolCallError::execution)?;
+            let page = service
+                .fetch_audit_events(
+                    &mut transaction,
+                    user_id,
+                    &filter,
+                    args.page_token,
+                    args.limit
+                        .map(|limit| limit.min(MAX_AUDIT_EVENTS_PAGE_SIZE)),
+                )
+                .await
+                .map_err(ToolCallError::execution)?;
+            transaction
+                .commit()
+                .await
+                .map_err(ToolCallError::execution)?;
+            serialize_result(SearchAuditLogResult {
+                total: page.total,
+                next_page_token: page.next_page_token,
+                events: page.content,
+            })
         }
         "update_task" => {
             let args: UpdateTaskArgs = parse_validated_args(arguments)?;
@@ -791,6 +867,15 @@ pub struct SearchTasksResult {
 }
 
 #[derive(Serialize, JsonSchema)]
+pub struct SearchAuditLogResult {
+    /// Number of events matching the filters, across all pages
+    pub total: usize,
+    pub next_page_token: Option<PageToken>,
+    /// Newest first
+    pub events: Vec<AuditEvent>,
+}
+
+#[derive(Serialize, JsonSchema)]
 pub struct SyncTasksResult {
     pub count: usize,
     pub tasks: Vec<TaskSummaryWithStatus>,
@@ -836,6 +921,10 @@ pub(crate) fn get_task_output_schema() -> Arc<JsonObject> {
 
 pub(crate) fn search_tasks_output_schema() -> Arc<JsonObject> {
     schema_for_output::<SearchTasksResult>()
+}
+
+pub(crate) fn search_audit_log_output_schema() -> Arc<JsonObject> {
+    schema_for_output::<SearchAuditLogResult>()
 }
 
 pub(crate) fn update_task_output_schema() -> Arc<JsonObject> {
@@ -921,6 +1010,13 @@ mod output_schema_tests {
     fn search_tasks_output_schema_shape() {
         let schema = search_tasks_output_schema();
         assert_object_with_keys(&schema, &["tasks"]);
+    }
+
+    #[test]
+    fn search_audit_log_output_schema_shape() {
+        let schema = search_audit_log_output_schema();
+        // `next_page_token` is optional, so not a required key
+        assert_object_with_keys(&schema, &["total", "events"]);
     }
 
     #[test]

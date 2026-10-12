@@ -286,6 +286,26 @@ pub fn strip_markdown_links(text: &str) -> String {
     re.replace_all(text, "$1").into_owned()
 }
 
+/// Plain text of a markdown title: links keep their label, emphasis and code markers are
+/// dropped, line breaks become spaces.
+pub fn markdown_to_plain_text(text: &str) -> String {
+    use comrak::{Arena, Options, nodes::NodeValue, parse_document};
+
+    let arena = Arena::new();
+    let root = parse_document(&arena, text, &Options::default());
+    let mut plain = String::new();
+    for node in root.descendants() {
+        match &node.data().value {
+            NodeValue::Text(text) => plain.push_str(text),
+            NodeValue::Code(code) => plain.push_str(&code.literal),
+            NodeValue::HtmlInline(html) => plain.push_str(html),
+            NodeValue::SoftBreak | NodeValue::LineBreak => plain.push(' '),
+            _ => {}
+        }
+    }
+    plain.trim().to_string()
+}
+
 /// Absolute timestamp like `Sep 16, 2023, 9:00 PM` — used as the `title`
 /// tooltip on the relative-time badge in `ThreadedMessage`.
 pub fn format_absolute_time(dt: DateTime<Utc>) -> String {
@@ -375,6 +395,24 @@ mod tests {
         assert!(!sanitized.contains("onchange"));
         assert!(sanitized.contains(r#"href="https://github.com""#));
         assert!(sanitized.contains(r#"target="_blank""#));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_markdown_to_plain_text() {
+        assert_eq!(
+            markdown_to_plain_text(
+                "[Add keyboard shortcuts](https://linear.app/issue/UNI-138) for **preview** `pane`"
+            ),
+            "Add keyboard shortcuts for preview pane"
+        );
+        assert_eq!(
+            markdown_to_plain_text("Fix flaky test in CI pipeline (#812)"),
+            "Fix flaky test in CI pipeline (#812)"
+        );
+        assert_eq!(
+            markdown_to_plain_text("line one\nline two"),
+            "line one line two"
+        );
     }
 
     #[wasm_bindgen_test]

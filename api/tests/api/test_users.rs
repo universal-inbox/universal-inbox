@@ -2598,6 +2598,8 @@ mod delete_user {
 
         let owned_before = rows_owned_by(&app.app, app.user.id).await;
         for table in [
+            // Recorded by the audit triggers when the notification is seeded
+            "audit_event.user_id",
             "authentication_token.user_id",
             "integration_connection.user_id",
             "notification.user_id",

@@ -8,14 +8,15 @@ use uuid::Uuid;
 
 use universal_inbox_api::{
     configuration::{
-        PauseIntegrationConnectionsCronSettings, RefreshOAuthTokensCronSettings, Settings,
-        VacuumJobsCronSettings,
+        PauseIntegrationConnectionsCronSettings, PurgeAuditEventsCronSettings,
+        RefreshOAuthTokensCronSettings, Settings, VacuumJobsCronSettings,
     },
     jobs::{
         JobStorage,
         cron::{
-            handle_pause_integration_connections_cron_tick, handle_refresh_oauth_tokens_cron_tick,
-            handle_vacuum_jobs_cron_tick, try_acquire_cron_tick_lock,
+            handle_pause_integration_connections_cron_tick, handle_purge_audit_events_cron_tick,
+            handle_refresh_oauth_tokens_cron_tick, handle_vacuum_jobs_cron_tick,
+            try_acquire_cron_tick_lock,
         },
     },
     utils::cache::Cache,
@@ -111,6 +112,41 @@ async fn test_pause_integration_connections_cron_tick_enqueues_job_once(
             Data::new(redis_storage.clone()),
             Data::new(cache.clone()),
             Data::new(cron_settings.clone()),
+        )
+        .await
+        .expect("Failed to handle cron tick");
+    }
+
+    let queued_jobs = redis_storage
+        .len()
+        .await
+        .expect("Failed to get Redis storage length");
+    assert_eq!(
+        queued_jobs, 1,
+        "the same tick handled by 2 processes should enqueue exactly 1 job"
+    );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_purge_audit_events_cron_tick_enqueues_job_once(
+    settings: Settings,
+    #[future] redis_storage: JobStorage,
+) {
+    let mut redis_storage = redis_storage.await;
+    let cache = Cache::new(&settings.redis)
+        .await
+        .expect("Failed to create cache");
+    let tick = cron_tick();
+
+    // Simulate 2 worker processes handling the same cron tick
+    for _ in 0..2 {
+        handle_purge_audit_events_cron_tick(
+            Default::default(),
+            CronContext::new(tick),
+            Data::new(redis_storage.clone()),
+            Data::new(cache.clone()),
+            Data::new(PurgeAuditEventsCronSettings::default()),
         )
         .await
         .expect("Failed to handle cron tick");
@@ -514,4 +550,15 @@ fn test_pause_integration_connections_cron_settings(settings: Settings) {
     assert_eq!(cron_settings.inactivity_warning_days, 7);
     assert_eq!(cron_settings.failing_threshold_days, 30);
     assert_eq!(cron_settings.lock_ttl_seconds, 300);
+}
+
+#[rstest]
+fn test_purge_audit_events_cron_settings(settings: Settings) {
+    let cron_settings = settings.application.cron.purge_audit_events;
+    // Disabled in tests only: the purge is exercised by calling it directly
+    assert!(!cron_settings.is_enabled);
+    assert_eq!(cron_settings.schedule, "0 17 * * * *");
+    assert_eq!(cron_settings.lock_ttl_seconds, 300);
+    assert_eq!(settings.application.audit_log.retention_days, 7);
+    assert!(settings.application.audit_log.strict_actor);
 }

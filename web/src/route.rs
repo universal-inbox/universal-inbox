@@ -12,6 +12,7 @@ use crate::{
         authenticated::AuthenticatedLayout, fullpage::FullpageLayout, nav_bar::NavBarLayout,
     },
     pages::{
+        audit_log_page::AuditLogPage,
         billing_page::BillingPage,
         email_validation_required_page::EmailValidationRequiredPage,
         email_verification_page::EmailVerificationPage,
@@ -78,6 +79,8 @@ pub enum Route {
         SettingsPage {},
         #[route("/security")]
         SecurityPage {},
+        #[route("/audit-log?:entity_id")]
+        AuditLogPage { entity_id: String },
         #[route("/profile")]
         UserProfilePage {},
         #[route("/billing")]

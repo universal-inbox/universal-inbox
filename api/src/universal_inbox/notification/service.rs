@@ -43,6 +43,7 @@ use universal_inbox::{
 
 use crate::observability::RecordSpanError;
 use crate::observability::attr;
+use crate::universal_inbox::audit::actor_context::with_system_actor;
 use crate::{
     integrations::{
         github::GithubService, google_calendar::GoogleCalendarService,
@@ -1336,7 +1337,38 @@ impl NotificationService {
         Ok(Some(notification))
     }
 
+    /// Synchronize a source as a system job, triggered by the current audit actor: the
+    /// changes it makes are recorded as made by the "SyncNotifications" job.
     async fn sync_third_party_notifications<T, U>(
+        &self,
+        third_party_notification_service: Arc<U>,
+        user_id: UserId,
+        force_sync: bool,
+    ) -> Result<Vec<Notification>, UniversalInboxError>
+    where
+        T: TryFrom<ThirdPartyItem> + Debug,
+        U: ThirdPartyNotificationSourceService<T>
+            + ThirdPartyItemSourceService<T>
+            + NotificationSource
+            + Send
+            + Sync,
+        <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+    {
+        let integration_provider_kind =
+            third_party_notification_service.get_integration_provider_kind();
+        with_system_actor(
+            "SyncNotifications",
+            Some(integration_provider_kind),
+            self.run_sync_third_party_notifications(
+                third_party_notification_service,
+                user_id,
+                force_sync,
+            ),
+        )
+        .await
+    }
+
+    async fn run_sync_third_party_notifications<T, U>(
         &self,
         third_party_notification_service: Arc<U>,
         user_id: UserId,

@@ -4,6 +4,7 @@ use url::ParseError;
 use uuid::Uuid;
 use validator::ValidationErrors;
 
+pub mod audit;
 pub mod auth_token;
 pub mod data_encryption;
 pub mod integration_connection;

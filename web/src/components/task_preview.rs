@@ -17,8 +17,8 @@ use crate::{
         },
         markdown::Markdown,
         notification_preview::{
-            DETAIL_BODY_INNER, DETAIL_KBD, SOURCE_PILL_ACTIVE, SOURCE_PILL_BASE, SOURCE_PILL_SUB,
-            SOURCE_PILL_TILE,
+            DETAIL_BODY_INNER, DETAIL_KBD, HistoryToggleButton, SOURCE_PILL_ACTIVE,
+            SOURCE_PILL_BASE, SOURCE_PILL_SUB, SOURCE_PILL_TILE,
         },
         tasks_list::TaskListContext,
         ui::{ActionButton, Button, ButtonVariant},
@@ -103,6 +103,8 @@ pub fn TaskPreview(
                 if shortcut_visibility_style == "visible" {
                     span { class: DETAIL_KBD, "e" }
                 }
+
+                HistoryToggleButton { ui_model, show_shortcut: shortcut_visibility_style == "visible" }
 
                 // Open in source button — common to every task kind
                 Button {

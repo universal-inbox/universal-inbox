@@ -15,6 +15,7 @@ extern crate macro_attr;
 #[macro_use]
 extern crate enum_derive;
 
+pub mod audit;
 pub mod auth;
 pub mod billing;
 pub mod integration_connection;
@@ -38,6 +39,9 @@ pub struct FrontConfig {
     /// False when no email (SMTP) settings are configured: the flows that
     /// need to send an email (password reset, verification resend) are hidden.
     pub email_enabled: bool,
+    /// Number of days audit events are kept
+    #[serde(default)]
+    pub audit_log_retention_days: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]

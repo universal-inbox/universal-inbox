@@ -15,12 +15,17 @@ use serde::{Deserialize, Serialize};
 use tracing::{Instrument, Span, field, info_span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::{jobs::UniversalInboxJob, observability::attr};
+use universal_inbox::audit::AuditActor;
+
+use crate::{
+    jobs::UniversalInboxJob, observability::attr,
+    universal_inbox::audit::actor_context::current_actor,
+};
 
 pub type JobStorage = RedisStorage<JobEnvelope>;
 
-/// Payload stored on the job queue: the job and the W3C trace context of the
-/// span that enqueued it.
+/// Payload stored on the job queue: the job, the W3C trace context of the
+/// span that enqueued it and the audit actor that enqueued it.
 ///
 /// The job is flattened so a payload queued before trace propagation existed (a
 /// bare `UniversalInboxJob`) still deserializes, with an empty context.
@@ -28,18 +33,24 @@ pub type JobStorage = RedisStorage<JobEnvelope>;
 pub struct JobEnvelope {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub trace_context: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audit_actor: Option<AuditActor>,
     #[serde(flatten)]
     pub job: UniversalInboxJob,
 }
 
 impl JobEnvelope {
-    /// Wraps `job` with the trace context of the current span.
+    /// Wraps `job` with the trace context of the current span and the current audit actor.
     pub fn new(job: UniversalInboxJob) -> Self {
         let mut trace_context = HashMap::new();
         global::get_text_map_propagator(|propagator| {
             propagator.inject_context(&Span::current().context(), &mut trace_context)
         });
-        JobEnvelope { trace_context, job }
+        JobEnvelope {
+            trace_context,
+            audit_actor: current_actor(),
+            job,
+        }
     }
 }
 
@@ -136,6 +147,7 @@ mod tests {
         let envelope: JobEnvelope = serde_json::from_str(&legacy_payload).unwrap();
 
         assert!(envelope.trace_context.is_empty());
+        assert_eq!(envelope.audit_actor, None);
         assert_eq!(envelope.job.name(), "SyncTasks");
     }
 
@@ -146,6 +158,7 @@ mod tests {
                 "traceparent".to_string(),
                 "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01".to_string(),
             )]),
+            audit_actor: Some(AuditActor::ApiKey),
             job: sync_tasks_job(),
         };
 
@@ -153,6 +166,7 @@ mod tests {
         let decoded: JobEnvelope = serde_json::from_str(&payload).unwrap();
 
         assert_eq!(decoded.trace_context, envelope.trace_context);
+        assert_eq!(decoded.audit_actor, Some(AuditActor::ApiKey));
         assert_eq!(decoded.job.name(), "SyncTasks");
     }
 

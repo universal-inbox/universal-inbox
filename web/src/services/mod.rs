@@ -1,4 +1,5 @@
 pub mod api;
+pub mod audit_service;
 pub mod authentication_token_service;
 pub mod billing_service;
 pub mod crisp;

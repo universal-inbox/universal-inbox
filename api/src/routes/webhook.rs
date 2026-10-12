@@ -17,6 +17,7 @@ use tokio_retry::{
 use tracing::{debug, warn};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use universal_inbox::{
+    audit::AuditActor,
     integration_connection::{
         config::IntegrationConnectionConfig,
         integrations::slack::{SlackConfig, SlackReactionConfig},
@@ -31,7 +32,8 @@ use crate::{
     integrations::slack::has_slack_references_in_message,
     jobs::{JobStorage, UniversalInboxJob, push_job, slack::SlackPushEventCallbackJob},
     universal_inbox::{
-        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+        UniversalInboxError, audit::actor_context::with_actor,
+        integration_connection::service::IntegrationConnectionService,
         third_party::service::ThirdPartyItemService,
     },
 };
@@ -375,9 +377,17 @@ async fn send_slack_push_event_callback_job(
     let task_id = Retry::start(
         ExponentialBackoff::from_millis(10).map(jitter).take(10),
         || async {
-            push_job(
-                storage,
-                UniversalInboxJob::SlackPushEventCallback(SlackPushEventCallbackJob(event.clone())),
+            // The job, and the changes it makes, are attributed to the Slack webhook
+            with_actor(
+                AuditActor::Webhook {
+                    provider: IntegrationProviderKind::Slack,
+                },
+                push_job(
+                    storage,
+                    UniversalInboxJob::SlackPushEventCallback(SlackPushEventCallbackJob(
+                        event.clone(),
+                    )),
+                ),
             )
             .await
         },

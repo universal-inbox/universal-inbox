@@ -4,8 +4,9 @@ use sqlx::{FromRow, PgPool, Postgres, Row, Transaction, pool::PoolConnection, po
 use tracing::error;
 use uuid::Uuid;
 
-use crate::universal_inbox::UniversalInboxError;
+use crate::universal_inbox::{UniversalInboxError, audit::actor_context::current_actor};
 
+pub mod audit_event;
 pub mod auth_token;
 pub mod data_encryption;
 pub mod integration_connection;
@@ -22,11 +23,22 @@ pub mod user_preferences;
 #[derive(Debug)]
 pub struct Repository {
     pub pool: Arc<PgPool>,
+    /// Reject audited writes made without an audit actor (tests), instead of recording them
+    /// with an `Unknown` actor.
+    audit_strict: bool,
 }
 
 impl Repository {
     pub fn new(pool: Arc<PgPool>) -> Repository {
-        Repository { pool }
+        Repository {
+            pool,
+            audit_strict: false,
+        }
+    }
+
+    pub fn with_audit_strict(mut self, audit_strict: bool) -> Repository {
+        self.audit_strict = audit_strict;
+        self
     }
 
     pub async fn connect(&self) -> Result<PoolConnection<Postgres>, UniversalInboxError> {
@@ -36,11 +48,37 @@ impl Repository {
             .map_err(|err| pool_error(err, "Failed to connection to the database"))
     }
 
+    /// Begin a transaction carrying the current audit actor (see
+    /// `universal_inbox::audit::actor_context`), recorded by the audit triggers.
     pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
-        self.pool
+        let mut transaction = self
+            .pool
             .begin()
             .await
-            .map_err(|err| pool_error(err, "Failed to begin database transaction"))
+            .map_err(|err| pool_error(err, "Failed to begin database transaction"))?;
+
+        let actor = current_actor()
+            .map(|actor| serde_json::to_string(&actor))
+            .transpose()
+            .map_err(|err| {
+                UniversalInboxError::Unexpected(
+                    anyhow::Error::new(err).context("Failed to serialize the audit actor"),
+                )
+            })?
+            .unwrap_or_default();
+        sqlx::query(
+            "SELECT set_config('app.audit_actor', $1, true), set_config('app.audit_strict', $2, true)",
+        )
+        .bind(actor)
+        .bind(if self.audit_strict { "on" } else { "off" })
+        .execute(&mut *transaction)
+        .await
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            message: format!("Failed to set the audit actor of the transaction: {err}"),
+            source: err,
+        })?;
+
+        Ok(transaction)
     }
 }
 
