@@ -411,12 +411,24 @@ mod comments {
     use super::*;
     use pretty_assertions::assert_eq;
 
+    const OTHER_DISCUSSION_ID: &str = "a2b6c3d4-0000-4000-8000-0000000000ab";
+
     fn comment(id: &str, author_id: &str, time: DateTime<Utc>, text: &str) -> Value {
+        comment_in(DISCUSSION_ID, id, author_id, time, text)
+    }
+
+    fn comment_in(
+        discussion_id: &str,
+        id: &str,
+        author_id: &str,
+        time: DateTime<Utc>,
+        text: &str,
+    ) -> Value {
         json!({
             "object": "comment",
             "id": id,
             "parent": { "type": "block_id", "block_id": BLOCK_ID },
-            "discussion_id": DISCUSSION_ID,
+            "discussion_id": discussion_id,
             "created_time": time.to_rfc3339(),
             "last_edited_time": time.to_rfc3339(),
             "created_by": { "object": "user", "id": author_id },
@@ -429,10 +441,11 @@ mod comments {
     async fn track_discussion(
         app: &AuthenticatedApp,
         connection: &IntegrationConnection,
+        discussion_id: &str,
         first_comment_time: DateTime<Utc>,
     ) {
         let discussion = NotionComment {
-            discussion_id: DISCUSSION_ID.to_string(),
+            discussion_id: discussion_id.to_string(),
             page: NotionPage {
                 id: PAGE_ID.to_string(),
                 title: "Roadmap".to_string(),
@@ -459,7 +472,7 @@ mod comments {
         };
         let notification = create_notification_from_source_item::<NotionComment, NotionService>(
             &app.app,
-            DISCUSSION_ID.to_string(),
+            discussion_id.to_string(),
             ThirdPartyItemData::NotionComment(Box::new(discussion)),
             app.app
                 .notification_service
@@ -489,7 +502,7 @@ mod comments {
             .await
             .connection;
         let first_comment_time = minutes_ago(120);
-        track_discussion(&app, &connection, first_comment_time).await;
+        track_discussion(&app, &connection, DISCUSSION_ID, first_comment_time).await;
         mock_remote_discussion(
             &app,
             vec![
@@ -526,7 +539,7 @@ mod comments {
             .await
             .connection;
         let first_comment_time = minutes_ago(120);
-        track_discussion(&app, &connection, first_comment_time).await;
+        track_discussion(&app, &connection, DISCUSSION_ID, first_comment_time).await;
         update_notification(
             &app,
             notion_notifications(&app).await[0].id,
@@ -568,6 +581,56 @@ mod comments {
         assert_eq!(notifications.len(), 1);
     }
 
+    /// Discussions on the same page read it once.
+    #[rstest]
+    #[tokio::test]
+    async fn test_missed_replies_on_one_page_read_it_once(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect_me(&app, &settings, comments_only())
+            .await
+            .connection;
+        let first_comment_time = minutes_ago(120);
+        track_discussion(&app, &connection, DISCUSSION_ID, first_comment_time).await;
+        track_discussion(&app, &connection, OTHER_DISCUSSION_ID, first_comment_time).await;
+        mock_remote_discussion(
+            &app,
+            vec![
+                comment("comment-1", SOMEONE, first_comment_time, "Looks good"),
+                comment_in(
+                    OTHER_DISCUSSION_ID,
+                    "comment-3",
+                    SOMEONE,
+                    first_comment_time,
+                    "Typo here",
+                ),
+                comment("comment-2", SOMEONE, minutes_ago(10), "Any news?"),
+                comment_in(
+                    OTHER_DISCUSSION_ID,
+                    "comment-4",
+                    SOMEONE,
+                    minutes_ago(10),
+                    "Fixed?",
+                ),
+            ],
+        )
+        .await;
+
+        force_sync(&app).await;
+
+        let notifications = notion_notifications(&app).await;
+        assert_eq!(notifications.len(), 2);
+        assert!(
+            notifications
+                .iter()
+                .all(|notification| notification.status == NotificationStatus::Unread)
+        );
+        assert_eq!(requests_count(&app, "/v1/pages/").await, 1);
+        assert_eq!(requests_count(&app, "/v1/users/").await, 1);
+    }
+
     #[rstest]
     #[tokio::test]
     async fn test_discussion_without_new_reply_is_untouched(
@@ -579,7 +642,7 @@ mod comments {
             .await
             .connection;
         let first_comment_time = minutes_ago(120);
-        track_discussion(&app, &connection, first_comment_time).await;
+        track_discussion(&app, &connection, DISCUSSION_ID, first_comment_time).await;
         mock_remote_discussion(
             &app,
             vec![comment(
@@ -610,7 +673,7 @@ mod comments {
             .await
             .connection;
         let first_comment_time = minutes_ago(120);
-        track_discussion(&app, &connection, first_comment_time).await;
+        track_discussion(&app, &connection, DISCUSSION_ID, first_comment_time).await;
         mock_remote_discussion(
             &app,
             vec![comment(
@@ -640,7 +703,7 @@ mod comments {
         let connection = connect_me(&app, &settings, mentions_only())
             .await
             .connection;
-        track_discussion(&app, &connection, minutes_ago(120)).await;
+        track_discussion(&app, &connection, DISCUSSION_ID, minutes_ago(120)).await;
         mock_page(&app, 1, vec![]).await;
 
         force_sync(&app).await;
@@ -659,7 +722,7 @@ mod comments {
             .await
             .connection;
         let old_time = Utc::now() - TimeDelta::days(15);
-        track_discussion(&app, &connection, old_time).await;
+        track_discussion(&app, &connection, DISCUSSION_ID, old_time).await;
         mock_remote_discussion(
             &app,
             vec![

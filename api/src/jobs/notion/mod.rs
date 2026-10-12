@@ -852,6 +852,7 @@ async fn save_discussion_for_connection(
             parent_id,
             discussion_id,
             &provider_user_id,
+            &mut NotionObjectCache::default(),
         )
         .await?;
 
