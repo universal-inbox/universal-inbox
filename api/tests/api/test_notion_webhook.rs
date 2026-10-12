@@ -200,6 +200,45 @@ mod route {
     }
 
     #[rstest]
+    #[case::comment_page_id(|workspace_id: &str| notion_comment_event(
+        workspace_id, "comment.created", "comment-1", SOMEONE, DISCUSSION_ID, "../v1/users",
+        BLOCK_ID, &[ME],
+    ))]
+    #[case::comment_parent(|workspace_id: &str| notion_comment_event(
+        workspace_id, "comment.created", "comment-1", SOMEONE, DISCUSSION_ID, PAGE_ID,
+        "../v1/users", &[ME],
+    ))]
+    #[case::updated_block(|workspace_id: &str| notion_page_content_event(
+        workspace_id, "event-1", PAGE_ID, &[BLOCK_ID, "../v1/users"], &[ME],
+    ))]
+    #[tokio::test]
+    async fn test_event_with_a_malformed_resource_id_is_dropped(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        #[case] event: fn(&str) -> Value,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = new_workspace_id();
+        create_notion_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings,
+            ME,
+            MY_TOKEN,
+            &workspace_id,
+            NotionConfig::enabled(),
+        )
+        .await;
+
+        let response =
+            post_signed_notion_event(&app.client, &app.app.api_address, &event(&workspace_id))
+                .await;
+
+        assert_eq!(response.status(), 200);
+        assert_eq!(pushed_jobs_count(&app.app).await, 0);
+    }
+
+    #[rstest]
     #[tokio::test]
     async fn test_events_of_a_disconnected_workspace_are_dropped(
         settings: Settings,

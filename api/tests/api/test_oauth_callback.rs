@@ -779,7 +779,10 @@ mod notion_provider {
 
     use super::*;
     use crate::helpers::{
-        notion::{notion_comment_event, post_signed_notion_event, pushed_jobs_count},
+        notion::{
+            BLOCK_ID, DISCUSSION_ID, PAGE_ID, notion_comment_event, post_signed_notion_event,
+            pushed_jobs_count,
+        },
         settings,
     };
 
@@ -842,9 +845,9 @@ mod notion_provider {
             "comment.created",
             "comment-1",
             "notion-user-someone",
-            "discussion-1",
-            "page-1",
-            "block-1",
+            DISCUSSION_ID,
+            PAGE_ID,
+            BLOCK_ID,
             &["notion-user-id"],
         );
         post_signed_notion_event(&app.client, &app.app.api_address, &event).await;

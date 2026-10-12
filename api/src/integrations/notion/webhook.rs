@@ -21,7 +21,40 @@ pub struct NotionWebhookEvent {
     pub data: NotionWebhookEventData,
 }
 
+/// Whether `id` is a Notion id: a UUID, with or without dashes. Webhook ids
+/// end up in API paths, so nothing else may get through.
+pub fn is_notion_id(id: &str) -> bool {
+    let bytes = id.as_bytes();
+    match bytes.len() {
+        32 => bytes.iter().all(u8::is_ascii_hexdigit),
+        36 => bytes.iter().enumerate().all(|(index, byte)| match index {
+            8 | 13 | 18 | 23 => *byte == b'-',
+            _ => byte.is_ascii_hexdigit(),
+        }),
+        _ => false,
+    }
+}
+
 impl NotionWebhookEvent {
+    /// Whether the ids the jobs put in Notion API paths (the page, the
+    /// commented block and the updated blocks) are Notion ids. The parent of
+    /// a page event (a space, for instance) is never read, so not checked.
+    pub fn has_well_formed_resource_ids(&self) -> bool {
+        let parent_is_read = self.event_type.is_comment_event();
+        self.data.page_id.iter().all(|id| is_notion_id(id))
+            && (!parent_is_read
+                || self
+                    .data
+                    .parent
+                    .iter()
+                    .all(|parent| is_notion_id(&parent.id)))
+            && self
+                .data
+                .updated_blocks
+                .iter()
+                .all(|block| is_notion_id(&block.id))
+    }
+
     /// Person ids in `accessible_by`; `None` when Notion did not send the
     /// list.
     pub fn accessible_person_ids(&self) -> Option<Vec<&str>> {
@@ -98,6 +131,7 @@ pub struct NotionWebhookEventData {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use rstest::*;
     use serde_json::json;
 
     #[test]
@@ -128,6 +162,70 @@ mod tests {
         assert_eq!(event.event_type, NotionWebhookEventType::CommentCreated);
         assert_eq!(event.data.discussion_id.as_deref(), Some("discussion-id"));
         assert_eq!(event.accessible_person_ids(), Some(vec!["person-id"]));
+    }
+
+    #[rstest]
+    #[case::dashed("3c612f56-fdd0-4a30-a4d6-bda7d7426309")]
+    #[case::undashed("3c612f56fdd04a30a4d6bda7d7426309")]
+    #[case::uppercase("3C612F56-FDD0-4A30-A4D6-BDA7D7426309")]
+    fn test_notion_ids_are_accepted(#[case] id: &str) {
+        assert!(is_notion_id(id));
+    }
+
+    #[rstest]
+    #[case::path_traversal("../v1/users")]
+    #[case::braced("{3c612f56-fdd0-4a30-a4d6-bda7d7426309}")]
+    #[case::urn("urn:uuid:3c612f56-fdd0-4a30-a4d6-bda7d7426309")]
+    #[case::empty("")]
+    #[case::too_short("3c612f56fdd04a30a4d6bda7d742630")]
+    #[case::slash("3c612f56-fdd0-4a30-a4d6/bda7d7426309")]
+    #[case::query("3c612f56fdd04a30a4d6bda7d742630?")]
+    #[case::misplaced_dash("3c612f5-6fdd0-4a30-a4d6-bda7d7426309")]
+    fn test_other_ids_are_rejected(#[case] id: &str) {
+        assert!(!is_notion_id(id));
+    }
+
+    #[rstest]
+    #[case::page_id("comment.created", json!({ "page_id": "../v1/users" }))]
+    #[case::comment_parent(
+        "comment.created",
+        json!({ "parent": { "id": "../v1/users", "type": "block" } })
+    )]
+    #[case::updated_block("page.content_updated", json!({
+        "updated_blocks": [
+            { "id": "3c612f56-fdd0-4a30-a4d6-bda7d7426309", "type": "block" },
+            { "id": "../v1/users", "type": "block" }
+        ]
+    }))]
+    fn test_a_malformed_resource_id_is_detected(
+        #[case] event_type: &str,
+        #[case] data: serde_json::Value,
+    ) {
+        assert!(event(event_type, json!({})).has_well_formed_resource_ids());
+
+        assert!(!event(event_type, data).has_well_formed_resource_ids());
+    }
+
+    #[test]
+    fn test_the_parent_of_a_page_event_is_not_checked() {
+        let event = event(
+            "page.content_updated",
+            json!({ "parent": { "id": "space-id", "type": "space" } }),
+        );
+
+        assert!(event.has_well_formed_resource_ids());
+    }
+
+    fn event(event_type: &str, data: serde_json::Value) -> NotionWebhookEvent {
+        serde_json::from_value(json!({
+            "id": "event-id",
+            "timestamp": "2026-10-10T09:00:00.000Z",
+            "workspace_id": "workspace-id",
+            "type": event_type,
+            "entity": { "id": "entity-id", "type": "page" },
+            "data": data
+        }))
+        .unwrap()
     }
 
     #[test]

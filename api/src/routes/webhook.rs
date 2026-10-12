@@ -98,18 +98,25 @@ pub async fn push_notion_event(
         // Verify dialog, which accepts only the token Notion sent, and then
         // set as the signing secret.
         if let Ok(verification) = serde_json::from_slice::<NotionVerificationRequest>(&body) {
+            // The socket address can't be forged (behind a proxy it is the
+            // proxy's); the forwarded one is whatever the sender claims.
+            let peer_address = req
+                .peer_addr()
+                .map_or_else(|| "unknown".to_string(), |address| address.ip().to_string());
             let connection_info = req.connection_info();
-            let peer_address = connection_info.realip_remote_addr().unwrap_or("unknown");
+            let forwarded_for = connection_info.realip_remote_addr().unwrap_or("unknown");
             if take_first_handshake(&NOTION_HANDSHAKE_LOGGED) {
                 warn!(
                     verification_token = verification.verification_token,
                     peer_address,
+                    forwarded_for,
                     "Received a Notion webhook verification token: paste it in Notion's Verify \
                      dialog, then set it as UNIVERSAL_INBOX__INTEGRATIONS__NOTION__SIGNING_SECRET"
                 );
             } else {
                 warn!(
                     peer_address,
+                    forwarded_for,
                     "Received another Notion webhook verification request; its token is not \
                      logged. If Verify fails, restart the API and click Resend token in Notion"
                 );
@@ -150,6 +157,14 @@ pub async fn push_notion_event(
     if !event.event_type.is_handled_event() {
         current_span.set_attribute(attr::NOTION_EVENT_OUTCOME, "discarded");
         current_span.set_attribute(attr::NOTION_EVENT_DISCARD_REASON, "not_handled_event");
+        return Ok(HttpResponse::Ok().finish());
+    }
+    // The jobs put these ids in Notion API paths. Notion signed the event, so a
+    // retry would not fix it: discard it rather than reject it.
+    if !event.has_well_formed_resource_ids() {
+        warn!("Discarded a signed Notion event carrying a malformed resource id");
+        current_span.set_attribute(attr::NOTION_EVENT_OUTCOME, "discarded");
+        current_span.set_attribute(attr::NOTION_EVENT_DISCARD_REASON, "malformed_id");
         return Ok(HttpResponse::Ok().finish());
     }
 
