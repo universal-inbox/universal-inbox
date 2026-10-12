@@ -5165,6 +5165,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38bf9645c8b145698bb0b18a4637dcacbc421ea49bef2317e4fd8065a387cf21"
 
 [[package]]
+name = "notion-blocks-render"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe526edf9dd2f5e1cd43a810b61e8a4bd458194ba7817928e3fb7f1e8714d15d"
+dependencies = [
+ "html-escape",
+ "notionrs_types",
+]
+
+[[package]]
 name = "notionrs_macro"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9340,6 +9350,8 @@ dependencies = [
  "json_value_merge",
  "lazy_static",
  "log",
+ "notion-blocks-render",
+ "notionrs_types",
  "openidconnect",
  "pretty_assertions",
  "rand 0.10.3",
@@ -9358,6 +9370,7 @@ dependencies = [
  "universal-inbox",
  "url",
  "uuid",
+ "vec1",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",

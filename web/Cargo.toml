@@ -35,6 +35,8 @@ js-sys = "0.3"
 json_value_merge = "2.0.1"
 lazy_static = { workspace = true }
 log = { workspace = true }
+notion-blocks-render = { workspace = true }
+notionrs_types = { workspace = true }
 openidconnect = { workspace = true }
 rand = { version = "0.10" }
 regex = { workspace = true }
@@ -107,6 +109,7 @@ ignored = ["getrandom"]
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
+vec1 = { workspace = true }
 wasm-bindgen-test = "0.3.0"
 
 [features]

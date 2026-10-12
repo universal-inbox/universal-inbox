@@ -27,6 +27,7 @@ use crate::{
             google_mail::preview::GoogleMailThreadPreview,
             icons::{NotificationIcon, TaskIcon},
             linear::preview::LinearNotificationPreview,
+            notion::preview::{NotionBlockPreview, NotionCommentPreview},
             slack::preview::{
                 file::SlackFilePreview, message::SlackMessagePreview, thread::SlackThreadPreview,
             },
@@ -430,10 +431,17 @@ fn NotificationDetailsPreview(
         ThirdPartyItemData::WebPage(web_page) => rsx! {
             WebPagePreview { notification, web_page: *web_page }
         },
-        // Notion previews come with the notion-blocks-render crate
-        ThirdPartyItemData::NotionComment(_)
-        | ThirdPartyItemData::NotionBlock(_)
-        | ThirdPartyItemData::LinearIssue(_)
+        ThirdPartyItemData::NotionComment(notion_comment) => rsx! {
+            NotionCommentPreview {
+                notification,
+                notion_comment: *notion_comment,
+                expand_details
+            }
+        },
+        ThirdPartyItemData::NotionBlock(notion_block) => rsx! {
+            NotionBlockPreview { notion_block: *notion_block }
+        },
+        ThirdPartyItemData::LinearIssue(_)
         | ThirdPartyItemData::TodoistItem(_)
         | ThirdPartyItemData::TickTickItem(_) => rsx! {},
     }
