@@ -24,13 +24,13 @@ use universal_inbox::{
     },
     notification::{
         Notification, NotificationId, NotificationSource, NotificationSourceKind,
-        NotificationStatus,
+        NotificationStatus, service::NotificationPatch,
     },
     pii::Pii,
     third_party::{
         integrations::notion::{
-            NotionBlock, NotionComment, NotionCommentMessage, NotionCommentParent, NotionPage,
-            NotionUser, parse_rich_text,
+            MentionChange, MentionedBlock, NotionBlock, NotionComment, NotionCommentMessage,
+            NotionCommentParent, NotionPage, NotionUser, mention_change, parse_rich_text,
         },
         item::{
             ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemKind, ThirdPartyItemSourceKind,
@@ -643,8 +643,9 @@ impl NotionService {
         }
     }
 
-    /// The blocks of a page edited since `since`, walking nested blocks.
-    /// `walked_blocks` counts the blocks read across pages.
+    /// The blocks of a page edited since `since`, walking nested blocks, the
+    /// removed ones included. `walked_blocks` counts the blocks read across
+    /// pages.
     async fn find_blocks_edited_since(
         &self,
         access_token: &AccessToken,
@@ -662,12 +663,13 @@ impl NotionService {
                     .await?;
                 for block in result.results {
                     *walked_blocks += 1;
-                    if block.has_walkable_children() && depth + 1 < MAX_BLOCK_DEPTH {
+                    if block.has_walkable_children()
+                        && !block.is_removed()
+                        && depth + 1 < MAX_BLOCK_DEPTH
+                    {
                         parents.push((block.id.clone(), depth + 1));
                     }
-                    if block.last_edited_time.is_some_and(|time| time >= since)
-                        && !block.is_removed()
-                    {
+                    if block.last_edited_time.is_some_and(|time| time >= since) {
                         edited_blocks.push(block);
                     }
                     if *walked_blocks >= MAX_WALKED_BLOCKS {
@@ -734,26 +736,37 @@ impl NotionService {
                     .find(|item| item.integration_connection_id == connection.id)
                     .map(NotionBlock::try_from)
                     .transpose()?;
-                let is_mentioned = mentioned_user_ids_in_raw_rich_text(&raw_block.rich_text())
-                    .iter()
-                    .any(|id| id == user_notion_id);
-                let is_edited_by_user = raw_block
-                    .last_edited_by
-                    .as_ref()
-                    .is_some_and(|user| user.id == user_notion_id);
+                let mentioned_block = if raw_block.is_removed() {
+                    MentionedBlock::Removed
+                } else {
+                    MentionedBlock::Present {
+                        is_mentioned: mentioned_user_ids_in_raw_rich_text(&raw_block.rich_text())
+                            .iter()
+                            .any(|id| id == user_notion_id),
+                        is_edited_by_user: raw_block
+                            .last_edited_by
+                            .as_ref()
+                            .is_some_and(|user| user.id == user_notion_id),
+                    }
+                };
                 let was_mentioned = stored_block
                     .as_ref()
                     .map(|block| block.mentions_user(user_notion_id));
-                let is_changed = match (is_mentioned, was_mentioned) {
-                    // New or mentioned again, unless the user wrote it
-                    (true, None | Some(false)) => !is_edited_by_user,
-                    // Notify on creation only
-                    (true, Some(true)) => false,
-                    (false, Some(true)) => true,
-                    (false, None | Some(false)) => false,
-                };
-                if !is_changed {
-                    continue;
+                match mention_change(mentioned_block, was_mentioned) {
+                    // The sync notifies on creation only: a synced item would
+                    // reset the notification as the user left it
+                    MentionChange::Ignore | MentionChange::Refresh => continue,
+                    MentionChange::Delete if mentioned_block == MentionedBlock::Removed => {
+                        self.mark_block_notification_as_deleted(
+                            executor,
+                            &raw_block.id,
+                            connection,
+                        )
+                        .await?;
+                        continue;
+                    }
+                    // A removed mention makes a deleted notification
+                    MentionChange::Notify | MentionChange::Delete => {}
                 }
 
                 let block = self
@@ -770,6 +783,34 @@ impl NotionService {
         }
         current_span.set_attribute(attr::NOTION_SYNC_WALKED_BLOCKS_COUNT, walked_blocks as i64);
         Ok(items)
+    }
+
+    /// Delete the mention notification of a block moved to the trash.
+    async fn mark_block_notification_as_deleted(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        block_id: &str,
+        connection: &IntegrationConnection,
+    ) -> Result<(), UniversalInboxError> {
+        let Some(notification) = self
+            .repository
+            .get_notification_for_source_id(executor, block_id, connection.user_id)
+            .await?
+        else {
+            return Ok(());
+        };
+        self.repository
+            .update_notification(
+                executor,
+                notification.id,
+                &NotificationPatch {
+                    status: Some(NotificationStatus::Deleted),
+                    ..Default::default()
+                },
+                connection.user_id,
+            )
+            .await?;
+        Ok(())
     }
 
     /// The tracked discussions with a comment newer than the stored one: a

@@ -297,6 +297,28 @@ mod mentions {
 
     #[rstest]
     #[tokio::test]
+    async fn test_block_moved_to_the_trash_deletes_the_notification(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        connect_me(&app, &settings, mentions_only()).await;
+        mock_page(&app, 1, vec![mentioning_paragraph(SOMEONE, minutes_ago(1))]).await;
+        force_sync(&app).await;
+        mark_as_read(&app, &notion_notifications(&app).await[0]).await;
+
+        let mut trashed_block = mentioning_paragraph(SOMEONE, minutes_ago(0));
+        trashed_block["in_trash"] = json!(true);
+        mock_page(&app, 0, vec![trashed_block]).await;
+        force_sync(&app).await;
+
+        let notifications = notion_notifications(&app).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Deleted);
+    }
+
+    #[rstest]
+    #[tokio::test]
     async fn test_mention_written_by_me_is_ignored(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,

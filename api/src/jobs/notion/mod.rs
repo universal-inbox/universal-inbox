@@ -20,7 +20,9 @@ use universal_inbox::{
     },
     notification::{NotificationStatus, service::NotificationPatch},
     third_party::{
-        integrations::notion::{NotionBlock, NotionComment},
+        integrations::notion::{
+            MentionChange, MentionedBlock, NotionBlock, NotionComment, mention_change,
+        },
         item::{ThirdPartyItemFromSource, ThirdPartyItemKind},
     },
 };
@@ -595,72 +597,74 @@ async fn save_mentions_for_connection(
             .map(NotionBlock::try_from)
             .transpose()?;
 
-        let Some(block) = notion_service
+        let block = notion_service
             .fetch_mention_block(&access_token, block_id, provider_user_id, &mut cache)
-            .await?
-        else {
-            // Deleted, archived or no longer shared: nothing left to show
-            if existing_block.is_some() {
+            .await?;
+        let mentioned_block = match &block {
+            // Deleted, archived or no longer shared
+            None => MentionedBlock::Removed,
+            Some(block) => MentionedBlock::Present {
+                is_mentioned: block.mentions_user(provider_user_id),
+                is_edited_by_user: block
+                    .last_edited_by
+                    .as_ref()
+                    .is_some_and(|user| user.id == provider_user_id),
+            },
+        };
+        let was_mentioned = existing_block
+            .as_ref()
+            .map(|existing_block| existing_block.mentions_user(provider_user_id));
+
+        // A removed block is only ever ignored or deleted
+        match mention_change(mentioned_block, was_mentioned) {
+            MentionChange::Ignore => {
+                debug!("Notion block {block_id} does not change the mention, ignoring it");
+            }
+            MentionChange::Notify => {
+                if let Some(block) = block {
+                    save_block_and_notify(
+                        executor,
+                        block,
+                        connection,
+                        notion_service,
+                        notification_service,
+                        third_party_item_service,
+                    )
+                    .await?;
+                }
+            }
+            MentionChange::Refresh => {
+                // An edit keeps the notification as the user left it
+                if let Some(block) = block {
+                    save_block(executor, block, connection, third_party_item_service).await?;
+                }
+            }
+            MentionChange::Delete => {
+                if let Some(block) = block {
+                    save_block(executor, block, connection, third_party_item_service).await?;
+                }
                 mark_notification_as_deleted(executor, block_id, connection, notification_service)
                     .await?;
             }
-            continue;
-        };
-
-        let is_mentioned = block.mentions_user(provider_user_id);
-        if is_mentioned
-            && block
-                .last_edited_by
-                .as_ref()
-                .is_some_and(|user| user.id == provider_user_id)
-        {
-            debug!("Notion block {block_id} was last edited by the mentioned user, ignoring it");
-            continue;
-        }
-        let Some(existing_block) = existing_block else {
-            if is_mentioned {
-                save_block_and_notify(
-                    executor,
-                    block,
-                    connection,
-                    notion_service,
-                    notification_service,
-                    third_party_item_service,
-                )
-                .await?;
-            }
-            continue;
-        };
-
-        let was_mentioned = existing_block.mentions_user(provider_user_id);
-        if is_mentioned && !was_mentioned {
-            // Mentioned again after the mention was removed
-            save_block_and_notify(
-                executor,
-                block,
-                connection,
-                notion_service,
-                notification_service,
-                third_party_item_service,
-            )
-            .await?;
-            continue;
-        }
-
-        // An edit keeps the notification as the user left it
-        third_party_item_service
-            .read()
-            .await
-            .create_or_update_third_party_item(
-                executor,
-                Box::new(block.into_third_party_item(connection.user_id, connection.id)),
-            )
-            .await?;
-        if !is_mentioned {
-            mark_notification_as_deleted(executor, block_id, connection, notification_service)
-                .await?;
         }
     }
+    Ok(())
+}
+
+async fn save_block(
+    executor: &mut Transaction<'_, Postgres>,
+    block: NotionBlock,
+    connection: &IntegrationConnection,
+    third_party_item_service: &Arc<RwLock<ThirdPartyItemService>>,
+) -> Result<(), UniversalInboxError> {
+    third_party_item_service
+        .read()
+        .await
+        .create_or_update_third_party_item(
+            executor,
+            Box::new(block.into_third_party_item(connection.user_id, connection.id)),
+        )
+        .await?;
     Ok(())
 }
 

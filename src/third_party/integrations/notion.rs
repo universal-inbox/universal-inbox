@@ -166,6 +166,55 @@ impl NotionBlock {
     }
 }
 
+/// A changed block, as seen by the user it may mention.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MentionedBlock {
+    /// Deleted, archived, moved to the trash or no longer shared.
+    Removed,
+    Present {
+        is_mentioned: bool,
+        /// The user is the block's last editor.
+        is_edited_by_user: bool,
+    },
+}
+
+/// What a block change means for the user's mention notification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MentionChange {
+    Ignore,
+    /// A new mention, or a mention made again: notify the user.
+    Notify,
+    /// Keep the stored block up to date, the notification as the user left it.
+    Refresh,
+    /// The mention is gone: delete the notification.
+    Delete,
+}
+
+/// The mention notification rules shared by the webhook job and the sync.
+/// `was_mentioned` is `None` when no block is stored for the user.
+pub fn mention_change(block: MentionedBlock, was_mentioned: Option<bool>) -> MentionChange {
+    let MentionedBlock::Present {
+        is_mentioned,
+        is_edited_by_user,
+    } = block
+    else {
+        return match was_mentioned {
+            Some(_) => MentionChange::Delete,
+            None => MentionChange::Ignore,
+        };
+    };
+    match (is_mentioned, was_mentioned) {
+        // Mentions written by the user themselves are never notified
+        (true, _) if is_edited_by_user => MentionChange::Ignore,
+        (true, None | Some(false)) => MentionChange::Notify,
+        (true, Some(true)) => MentionChange::Refresh,
+        (false, Some(true)) => MentionChange::Delete,
+        // The notification was already deleted with the mention
+        (false, Some(false)) => MentionChange::Refresh,
+        (false, None) => MentionChange::Ignore,
+    }
+}
+
 impl NotionComment {
     pub fn latest_comment(&self) -> &NotionCommentMessage {
         self.comments.last()
@@ -312,6 +361,33 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use serde_json::json;
+
+    #[rstest]
+    #[case::removed_unknown(MentionedBlock::Removed, None, MentionChange::Ignore)]
+    #[case::removed_mentioned(MentionedBlock::Removed, Some(true), MentionChange::Delete)]
+    #[case::removed_unmentioned(MentionedBlock::Removed, Some(false), MentionChange::Delete)]
+    #[case::written_by_user_new(present(true, true), None, MentionChange::Ignore)]
+    #[case::written_by_user_known(present(true, true), Some(true), MentionChange::Ignore)]
+    #[case::new_mention(present(true, false), None, MentionChange::Notify)]
+    #[case::mentioned_again(present(true, false), Some(false), MentionChange::Notify)]
+    #[case::still_mentioned(present(true, false), Some(true), MentionChange::Refresh)]
+    #[case::mention_removed(present(false, false), Some(true), MentionChange::Delete)]
+    #[case::still_unmentioned(present(false, false), Some(false), MentionChange::Refresh)]
+    #[case::never_mentioned(present(false, false), None, MentionChange::Ignore)]
+    fn test_mention_change(
+        #[case] block: MentionedBlock,
+        #[case] was_mentioned: Option<bool>,
+        #[case] expected: MentionChange,
+    ) {
+        assert_eq!(mention_change(block, was_mentioned), expected);
+    }
+
+    fn present(is_mentioned: bool, is_edited_by_user: bool) -> MentionedBlock {
+        MentionedBlock::Present {
+            is_mentioned,
+            is_edited_by_user,
+        }
+    }
 
     const USER_ID: &str = "9188c6a5-7381-452f-b3dc-d4865aa89bdf";
     const OTHER_USER_ID: &str = "e79a0b74-3aba-4149-9f74-0bb5791a6ee6";
