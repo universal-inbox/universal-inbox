@@ -66,9 +66,9 @@ static NOTION_VERSION: &str = "2022-06-28";
 /// `last_edited_time` to the minute.
 const SYNC_CURSOR_MARGIN_MINUTES: i64 = 5;
 /// How many pages edited since the cursor the sync reads.
-const MAX_SEARCHED_PAGES: usize = 500;
+const MAX_SEARCHED_PAGES: usize = 100;
 /// How many blocks the sync reads, all pages together.
-const MAX_WALKED_BLOCKS: usize = 5000;
+const MAX_WALKED_BLOCKS: usize = 1000;
 /// How deep the sync walks nested blocks.
 const MAX_BLOCK_DEPTH: usize = 3;
 /// How often the sync re-reads the tracked discussions: a new comment does not
@@ -722,20 +722,28 @@ impl NotionService {
                 Err(error) => return Err(error),
             };
 
+            if blocks.is_empty() {
+                continue;
+            }
+            // The stored blocks of the page, in one query
+            let mut stored_blocks: HashMap<String, NotionBlock> = self
+                .repository
+                .find_third_party_items_for_source_ids(
+                    executor,
+                    ThirdPartyItemKind::NotionBlock,
+                    &blocks
+                        .iter()
+                        .map(|block| block.id.clone())
+                        .collect::<Vec<_>>(),
+                    Some(connection.user_id),
+                )
+                .await?
+                .into_iter()
+                .filter(|item| item.integration_connection_id == connection.id)
+                .map(|item| Ok((item.source_id.clone(), NotionBlock::try_from(item)?)))
+                .collect::<Result<_, UniversalInboxError>>()?;
             for raw_block in blocks {
-                let stored_block = self
-                    .repository
-                    .find_third_party_items_for_source_id(
-                        executor,
-                        ThirdPartyItemKind::NotionBlock,
-                        &raw_block.id,
-                        Some(connection.user_id),
-                    )
-                    .await?
-                    .into_iter()
-                    .find(|item| item.integration_connection_id == connection.id)
-                    .map(NotionBlock::try_from)
-                    .transpose()?;
+                let stored_block = stored_blocks.remove(&raw_block.id);
                 let mentioned_block = if raw_block.is_removed() {
                     MentionedBlock::Removed
                 } else {

@@ -60,6 +60,15 @@ pub trait ThirdPartyItemRepository {
         user_id: Option<UserId>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
 
+    /// The items of any of `source_ids`, in one query.
+    async fn find_third_party_items_for_source_ids(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        kind: ThirdPartyItemKind,
+        source_ids: &[String],
+        user_id: Option<UserId>,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
+
     async fn find_third_party_items_for_user_id(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -483,6 +492,30 @@ impl ThirdPartyItemRepository for Repository {
         source_id: &str,
         user_id: Option<UserId>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        self.find_third_party_items_for_source_ids(
+            executor,
+            kind,
+            &[source_id.to_string()],
+            user_id,
+        )
+        .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            { attr::THIRD_PARTY_ITEM_KIND } = kind.to_string(),
+            { attr::USER_ID } = user_id.map(|id| id.to_string()),
+        )
+    )]
+    async fn find_third_party_items_for_source_ids(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        kind: ThirdPartyItemKind,
+        source_ids: &[String],
+        user_id: Option<UserId>,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new(
             r#"
               SELECT
@@ -504,9 +537,9 @@ impl ThirdPartyItemRepository for Repository {
               LEFT JOIN third_party_item as source_item ON third_party_item.source_item_id = source_item.id
             "#,
         );
-        query_builder.push(" WHERE third_party_item.source_id = ");
-        query_builder.push_bind(source_id);
-        query_builder.push(" AND third_party_item.kind::TEXT = ");
+        query_builder.push(" WHERE third_party_item.source_id = ANY(");
+        query_builder.push_bind(source_ids.to_vec());
+        query_builder.push(") AND third_party_item.kind::TEXT = ");
         query_builder.push_bind(kind.to_string());
         if let Some(user_id) = user_id {
             query_builder.push(" AND third_party_item.user_id = ");
@@ -518,7 +551,7 @@ impl ThirdPartyItemRepository for Repository {
             .fetch_all(&mut **executor)
             .await
             .map_err(|err| {
-                let message = format!("Failed to find {kind} third party item from source_id {source_id} from storage: {err}");
+                let message = format!("Failed to find {kind} third party items from source_ids {source_ids:?} from storage: {err}");
                 UniversalInboxError::DatabaseError {
                     source: err,
                     message,

@@ -267,6 +267,39 @@ mod mentions {
         assert_eq!(notifications[0].status, NotificationStatus::Read);
     }
 
+    /// The stored blocks of a page are read together: each keeps its own
+    /// notification.
+    #[rstest]
+    #[tokio::test]
+    async fn test_known_mentions_of_one_page_are_not_notified_again(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        connect_me(&app, &settings, mentions_only()).await;
+        let mut other_block = mentioning_paragraph(SOMEONE, minutes_ago(1));
+        other_block["id"] = json!("b1b2b3b4-0000-4000-8000-0000000000bc");
+        let blocks = vec![mentioning_paragraph(SOMEONE, minutes_ago(1)), other_block];
+        mock_page(&app, 1, blocks.clone()).await;
+        force_sync(&app).await;
+        let notifications = notion_notifications(&app).await;
+        assert_eq!(notifications.len(), 2);
+        for notification in &notifications {
+            mark_as_read(&app, notification).await;
+        }
+
+        mock_page(&app, 1, blocks).await;
+        force_sync(&app).await;
+
+        let notifications = notion_notifications(&app).await;
+        assert_eq!(notifications.len(), 2);
+        assert!(
+            notifications
+                .iter()
+                .all(|notification| notification.status == NotificationStatus::Read)
+        );
+    }
+
     #[rstest]
     #[tokio::test]
     async fn test_removed_mention_deletes_the_notification(
