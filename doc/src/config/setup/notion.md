@@ -42,7 +42,10 @@ A periodic synchronization catches part of what a webhook may miss:
   most recent ones);
 - at each synchronization, page mentions added or removed since the previous one.
 
-New discussions, deleted discussions and deleted blocks are only picked up through webhooks.
+New discussions, deleted discussions and deleted blocks are only picked up through webhooks. Notion retries a webhook
+that Universal Inbox did not receive for about 24 hours. The Notion API cannot find new comments afterwards: adding a
+comment does not change a page's last edited time, and no endpoint lists a workspace's comments. A new discussion whose
+webhook never arrives is not notified.
 
 ## Available Actions
 
