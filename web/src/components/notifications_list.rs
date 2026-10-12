@@ -22,6 +22,7 @@ use crate::{
             google_mail::notification_list_item::GoogleMailThreadListItem,
             icons::IntegrationProviderIcon,
             linear::notification_list_item::LinearNotificationListItem,
+            notion::notification_list_item::{NotionBlockListItem, NotionCommentListItem},
             slack::notification_list_item::{
                 SlackReactionNotificationListItem, SlackThreadNotificationListItem,
             },
@@ -341,10 +342,23 @@ fn NotificationListItem(
                 on_select,
             }
         },
-        // Notion list items come with the notion-blocks-render crate
-        ThirdPartyItemData::NotionComment(_)
-        | ThirdPartyItemData::NotionBlock(_)
-        | ThirdPartyItemData::LinearIssue(_) => rsx! {},
+        ThirdPartyItemData::NotionComment(notion_comment) => rsx! {
+            NotionCommentListItem {
+                notification,
+                page_title: notion_comment.page.title,
+                is_selected,
+                on_select,
+            }
+        },
+        ThirdPartyItemData::NotionBlock(notion_block) => rsx! {
+            NotionBlockListItem {
+                notification,
+                page_title: notion_block.page.title,
+                is_selected,
+                on_select,
+            }
+        },
+        ThirdPartyItemData::LinearIssue(_) => rsx! {},
         ThirdPartyItemData::WebPage(web_page) => rsx! {
             WebPageNotificationListItem {
                 notification,

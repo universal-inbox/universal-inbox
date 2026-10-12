@@ -366,6 +366,16 @@ pub fn sanitize_html(html: &str) -> String {
         .to_string()
 }
 
+/// Like [`sanitize_html`], but keeps the `class` of `span` elements, so that
+/// the mentions highlighted by `notion-blocks-render` keep their style.
+pub fn sanitize_html_keeping_span_classes(html: &str) -> String {
+    ammonia::Builder::default()
+        .set_tag_attribute_value("a", "target", "_blank")
+        .add_tag_attributes("span", &["class"])
+        .clean(html)
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -412,6 +422,18 @@ mod tests {
         assert_eq!(
             markdown_to_plain_text("line one\nline two"),
             "line one line two"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_sanitize_html_keeping_span_classes() {
+        let sanitized = sanitize_html_keeping_span_classes(
+            r#"<span class="text-warning" onclick="alert(1)">@John</span><p class="x">p</p><a href="javascript:alert(1)">link</a>"#,
+        );
+
+        assert_eq!(
+            sanitized,
+            r#"<span class="text-warning">@John</span><p>p</p><a target="_blank" rel="noopener noreferrer">link</a>"#
         );
     }
 
