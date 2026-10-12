@@ -28,7 +28,7 @@ use universal_inbox::{
 use crate::{
     integrations::notion::{
         NotionObjectCache, NotionService, RawNotionComment, RawNotionPage, is_access_denied,
-        mentioned_user_ids_in_raw_rich_text,
+        is_unsubscribed_without_new_mention, mentioned_user_ids_in_raw_rich_text,
         webhook::{NotionWebhookEvent, NotionWebhookEventType, NotionWebhookObject},
     },
     integrations::oauth2::AccessToken,
@@ -813,6 +813,23 @@ async fn save_discussion_for_connection(
 
     if existing_item.is_none() && !discussion.is_user_involved(&provider_user_id) {
         return Ok(());
+    }
+    if let Some(existing_item) = existing_item {
+        let existing_notification = notification_service
+            .read()
+            .await
+            .get_notification_for_source_id(executor, discussion_id, connection.user_id)
+            .await?;
+        let tracked = NotionComment::try_from(existing_item)?;
+        if is_unsubscribed_without_new_mention(
+            existing_notification.as_ref(),
+            &tracked,
+            &discussion,
+            &provider_user_id,
+        ) {
+            debug!("Ignoring a reply in an unsubscribed Notion discussion");
+            return Ok(());
+        }
     }
 
     let third_party_item = discussion.into_third_party_item(connection.user_id, connection.id);

@@ -45,7 +45,9 @@ use crate::{
         third_party::ThirdPartyItemSourceService,
     },
     observability::attr,
-    repository::{Repository, third_party::ThirdPartyItemRepository},
+    repository::{
+        Repository, notification::NotificationRepository, third_party::ThirdPartyItemRepository,
+    },
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
     },
@@ -291,6 +293,21 @@ pub struct NotionObjectCache {
 /// object (the page is not shared with it).
 pub fn is_access_denied(error: &UniversalInboxError) -> bool {
     matches!(error, UniversalInboxError::Forbidden(_))
+}
+
+/// The user unsubscribed from the `tracked` discussion and none of the
+/// comments since mentions them: `discussion` must not bring it back. The
+/// Notion API cannot unsubscribe, so this is how Universal Inbox honors it.
+pub fn is_unsubscribed_without_new_mention(
+    existing_notification: Option<&Notification>,
+    tracked: &NotionComment,
+    discussion: &NotionComment,
+    user_notion_id: &str,
+) -> bool {
+    existing_notification
+        .is_some_and(|notification| notification.status == NotificationStatus::Unsubscribed)
+        && !discussion
+            .mentions_user_since(user_notion_id, tracked.latest_comment().last_edited_time)
 }
 
 /// GET a Notion object. Notion answers 404 (or 403) for an object the
@@ -818,10 +835,27 @@ impl NotionService {
                 Err(error) => return Err(error),
             };
             if discussion.latest_comment().last_edited_time
-                > tracked.latest_comment().last_edited_time
+                <= tracked.latest_comment().last_edited_time
             {
-                items.push(discussion.into_third_party_item(connection.user_id, connection.id));
+                continue;
             }
+            let existing_notification = self
+                .repository
+                .get_notification_for_source_id(
+                    executor,
+                    &tracked.discussion_id,
+                    connection.user_id,
+                )
+                .await?;
+            if is_unsubscribed_without_new_mention(
+                existing_notification.as_ref(),
+                &tracked,
+                &discussion,
+                user_notion_id,
+            ) {
+                continue;
+            }
+            items.push(discussion.into_third_party_item(connection.user_id, connection.id));
         }
         Ok(items)
     }

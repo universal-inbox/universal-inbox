@@ -66,9 +66,9 @@ struct NotionVerificationRequest {
     verification_token: String,
 }
 
-/// Notion webhook. Only `comment.*` events of a workspace where a user has a
-/// validated Notion connection become a job: everything else is dropped here,
-/// before any Notion API call.
+/// Notion webhook. Only `comment.*` and `page.content_updated` events of a
+/// workspace where a user has a validated Notion connection become a job:
+/// everything else is dropped here, before any Notion API call.
 #[tracing::instrument(level = "debug", skip_all)]
 pub async fn push_notion_event(
     req: HttpRequest,
@@ -803,6 +803,15 @@ mod tests {
                 br#"{"type":"comment.deleted"}"#,
                 SECRET
             ),
+            Err("signature mismatch")
+        );
+    }
+
+    #[test]
+    fn notion_signature_rejects_another_secret() {
+        let body = br#"{"type":"comment.created"}"#;
+        assert_eq!(
+            verify_notion_signature_parts(Some(&sign_notion(body)), body, "another-secret"),
             Err("signature mismatch")
         );
     }

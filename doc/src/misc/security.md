@@ -37,7 +37,7 @@ For each authorized client you can see:
 Use the per-row action to revoke a client's access. Once revoked, that client's refresh tokens are invalidated immediately and any access token will stop working at the next request.
 
 ```admonish tip
-Universal Inbox's integrations (GitHub, Linear, Slack, Todoist, TickTick, Google Mail/Calendar/Drive) run their OAuth flows directly against the upstream provider. You can review and revoke Universal Inbox's access to each provider from that provider's own security settings, the same way you would for any other connected app.
+Universal Inbox's integrations (GitHub, Linear, Slack, Notion, Todoist, TickTick, Google Mail/Calendar/Drive) run their OAuth flows directly against the upstream provider. You can review and revoke Universal Inbox's access to each provider from that provider's own security settings, the same way you would for any other connected app.
 ```
 
 ## API keys

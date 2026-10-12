@@ -22,20 +22,14 @@ use crate::helpers::{
     auth::{AuthenticatedApp, authenticate_user, authenticated_app},
     notification::{list_notifications, update_notification},
     notion::{
-        create_notion_integration_connection, mock_notion_blocks, mock_notion_deleted_block,
-        mock_notion_discussion, mock_notion_not_accessible, notion_comment, notion_comment_event,
-        notion_page_content_event, notion_paragraph_block, post_signed_notion_event, text_segment,
-        user_mention_segment,
+        BLOCK_ID, DISCUSSION_ID, ME, MY_TOKEN, PAGE_ID, SOMEONE, connect_me,
+        create_notion_integration_connection, mock_my_discussion, mock_notion_blocks,
+        mock_notion_deleted_block, mock_notion_discussion, mock_notion_not_accessible,
+        notion_comment, notion_comment_event, notion_page_content_event, notion_paragraph_block,
+        post_signed_notion_event, text_segment, user_mention_segment,
     },
     settings,
 };
-
-const ME: &str = "notion-user-me";
-const MY_TOKEN: &str = "notion-token-me";
-const SOMEONE: &str = "notion-user-someone";
-const PAGE_ID: &str = "3c612f56-fdd0-4a30-a4d6-bda7d7426309";
-const BLOCK_ID: &str = "b1b2b3b4-0000-4000-8000-0000000000bb";
-const DISCUSSION_ID: &str = "a2b6c3d4-0000-4000-8000-0000000000aa";
 
 /// A workspace id unique to the test, so the cached workspace lookup of one
 /// test never answers for another.
@@ -226,7 +220,9 @@ mod job {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         let comments = vec![notion_comment(
             "comment-1",
             DISCUSSION_ID,
@@ -281,7 +277,9 @@ mod job {
         #[case] block_created_by: &str,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         mock_notion_discussion(
             &app.app.notion_mock_server,
             MY_TOKEN,
@@ -314,7 +312,9 @@ mod job {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         mock_notion_discussion(
             &app.app.notion_mock_server,
             MY_TOKEN,
@@ -353,7 +353,8 @@ mod job {
                 sync_mentions_enabled: true,
             },
         )
-        .await;
+        .await
+        .workspace_id;
         mock_mentioning_discussion(&app, MY_TOKEN).await;
 
         handle(&app, &workspace_id, "comment-1", SOMEONE, &[ME]).await;
@@ -383,7 +384,9 @@ mod job {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         mock_notion_not_accessible(&app.app.notion_mock_server, MY_TOKEN).await;
 
         handle(&app, &workspace_id, "comment-1", SOMEONE, &[ME]).await;
@@ -398,7 +401,9 @@ mod job {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         let mention = notion_comment(
             "comment-1",
             DISCUSSION_ID,
@@ -449,7 +454,9 @@ mod job {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         mock_mentioning_discussion(&app, MY_TOKEN).await;
         handle(&app, &workspace_id, "comment-1", SOMEONE, &[ME]).await;
         assert_eq!(notion_notifications(&app, vec![]).await.len(), 1);
@@ -549,23 +556,105 @@ mod job {
         assert_eq!(notifications[0].status, NotificationStatus::Unread);
     }
 
-    pub(super) async fn connect_me(
+    /// Notion may deliver an event more than once: the discussion stays one
+    /// notification, and a redelivery does not bring a read one back.
+    #[rstest]
+    #[tokio::test]
+    async fn test_redelivered_comment_event_creates_one_notification(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
+        mock_mentioning_discussion(&app, MY_TOKEN).await;
+
+        handle(&app, &workspace_id, "comment-1", SOMEONE, &[ME]).await;
+        handle(&app, &workspace_id, "comment-1", SOMEONE, &[ME]).await;
+        let notifications = notion_notifications(&app, all_statuses()).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Unread);
+
+        set_status(&app, &notifications[0], NotificationStatus::Read).await;
+        handle(&app, &workspace_id, "comment-1", SOMEONE, &[ME]).await;
+        let notifications = notion_notifications(&app, all_statuses()).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Read);
+    }
+
+    #[rstest]
+    #[case::deleted(NotificationStatus::Deleted, false, NotificationStatus::Unread)]
+    #[case::unsubscribed(
+        NotificationStatus::Unsubscribed,
+        false,
+        NotificationStatus::Unsubscribed
+    )]
+    #[case::unsubscribed_then_mentioned(
+        NotificationStatus::Unsubscribed,
+        true,
+        NotificationStatus::Unread
+    )]
+    #[tokio::test]
+    async fn test_new_reply_after_delete_or_unsubscribe(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        #[case] dismissed_as: NotificationStatus,
+        #[case] reply_mentions_me: bool,
+        #[case] status_after_reply: NotificationStatus,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
+        let mention = notion_comment(
+            "comment-1",
+            DISCUSSION_ID,
+            BLOCK_ID,
+            SOMEONE,
+            5,
+            vec![text_segment("Ping "), user_mention_segment(ME, "Me")],
+        );
+        let reply = notion_comment(
+            "comment-2",
+            DISCUSSION_ID,
+            BLOCK_ID,
+            SOMEONE,
+            15,
+            if reply_mentions_me {
+                vec![text_segment("Any news "), user_mention_segment(ME, "Me")]
+            } else {
+                vec![text_segment("Any news?")]
+            },
+        );
+        mock_comments(&app, vec![mention.clone()]).await;
+        handle(&app, &workspace_id, "comment-1", SOMEONE, &[ME]).await;
+        let notifications = notion_notifications(&app, all_statuses()).await;
+        set_status(&app, &notifications[0], dismissed_as).await;
+
+        mock_comments(&app, vec![mention, reply]).await;
+        handle(&app, &workspace_id, "comment-2", SOMEONE, &[ME]).await;
+
+        let notifications = notion_notifications(&app, all_statuses()).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, status_after_reply);
+    }
+
+    pub(super) async fn set_status(
         app: &AuthenticatedApp,
-        settings: &Settings,
-        config: NotionConfig,
-    ) -> String {
-        let workspace_id = new_workspace_id();
-        create_notion_integration_connection(
-            &app.app,
+        notification: &Notification,
+        status: NotificationStatus,
+    ) {
+        update_notification(
+            app,
+            notification.id,
+            &NotificationPatch {
+                status: Some(status),
+                ..Default::default()
+            },
             app.user.id,
-            settings,
-            ME,
-            MY_TOKEN,
-            &workspace_id,
-            config,
         )
         .await;
-        workspace_id
     }
 
     async fn mock_mentioning_discussion(app: &AuthenticatedApp, access_token: &str) {
@@ -590,17 +679,7 @@ mod job {
 
     /// Replace the mocked discussion with `comments`.
     async fn mock_comments(app: &AuthenticatedApp, comments: Vec<Value>) {
-        app.app.notion_mock_server.reset().await;
-        mock_notion_discussion(
-            &app.app.notion_mock_server,
-            MY_TOKEN,
-            PAGE_ID,
-            SOMEONE,
-            BLOCK_ID,
-            SOMEONE,
-            comments,
-        )
-        .await;
+        mock_my_discussion(app, SOMEONE, comments).await;
     }
 
     async fn handle(
@@ -676,7 +755,7 @@ mod job {
 
 mod mention {
     use super::{
-        job::{all_statuses, connect_me, notion_notifications},
+        job::{all_statuses, notion_notifications},
         *,
     };
     use pretty_assertions::assert_eq;
@@ -720,7 +799,9 @@ mod mention {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
 
         handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
@@ -752,7 +833,9 @@ mod mention {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
 
         handle(&app, &workspace_id, &[BLOCK_ID, BLOCK_ID], &[ME]).await;
@@ -770,7 +853,9 @@ mod mention {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
         handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
         let notification = &notion_notifications(&app, vec![]).await[0];
@@ -804,7 +889,9 @@ mod mention {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
         handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
 
@@ -828,7 +915,9 @@ mod mention {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
         handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
 
@@ -848,7 +937,9 @@ mod mention {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         mock_blocks(&app, vec![mentioning_block(ME, 5, "Reminder for ")]).await;
 
         handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
@@ -871,7 +962,8 @@ mod mention {
                 sync_mentions_enabled: false,
             },
         )
-        .await;
+        .await
+        .workspace_id;
         mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
 
         handle(&app, &workspace_id, &[BLOCK_ID], &[ME]).await;
@@ -886,7 +978,9 @@ mod mention {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         mock_blocks(&app, vec![mentioning_block(SOMEONE, 5, "Can you check ")]).await;
 
         handle(&app, &workspace_id, &[BLOCK_ID], &[SOMEONE]).await;
@@ -903,7 +997,9 @@ mod mention {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         let table = json!({
             "object": "block",
             "id": TABLE_BLOCK_ID,
@@ -946,7 +1042,9 @@ mod mention {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled()).await;
+        let workspace_id = connect_me(&app, &settings, NotionConfig::enabled())
+            .await
+            .workspace_id;
         let block_ids: Vec<String> = (0..60)
             .map(|index| format!("d0d0d0d0-0000-4000-8000-{index:012}"))
             .collect();

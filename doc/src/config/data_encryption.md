@@ -8,7 +8,7 @@ Universal Inbox encrypts the most sensitive data it stores in PostgreSQL, so a l
 
 **Encrypted** (AES-256-GCM):
 
-- Content synced from your tools: Slack messages, emails, calendar events, GitHub and Linear issues, Google Drive comments, Todoist and TickTick tasks
+- Content synced from your tools: Slack messages, emails, calendar events, GitHub and Linear issues, Google Drive and Notion comments, Todoist and TickTick tasks
 - Task descriptions
 - User email addresses (account and pending email change) and the email addresses of the connected Google accounts, stored with a keyed hash (blind index) to look them up
 - OAuth access and refresh tokens of the connected tools, and raw OAuth token responses

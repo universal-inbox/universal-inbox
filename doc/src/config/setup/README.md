@@ -37,5 +37,6 @@ For detailed setup instructions for each tool, select the appropriate guide:
 - [Google Mail](gmail.md)
 - [Google Calendar](gcal.md)
 - [Google Drive](gdrive.md)
+- [Notion](notion.md)
 - [Todoist](todoist.md)
 - [TickTick](ticktick.md)

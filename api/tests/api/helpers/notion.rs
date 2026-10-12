@@ -20,8 +20,69 @@ use universal_inbox_api::{configuration::Settings, integrations::oauth2::AccessT
 
 use crate::helpers::{
     TestedApp,
+    auth::AuthenticatedApp,
     integration_connection::{OAuthCredentialFixture, create_and_mock_integration_connection},
 };
+
+/// Notion ids shared by the Notion tests: the connected user (`ME`, whose API
+/// calls use `MY_TOKEN`), another user, and the page, block and discussion
+/// the tests comment on.
+pub const ME: &str = "notion-user-me";
+pub const MY_TOKEN: &str = "notion-token-me";
+pub const SOMEONE: &str = "notion-user-someone";
+pub const PAGE_ID: &str = "3c612f56-fdd0-4a30-a4d6-bda7d7426309";
+pub const BLOCK_ID: &str = "b1b2b3b4-0000-4000-8000-0000000000bb";
+pub const DISCUSSION_ID: &str = "a2b6c3d4-0000-4000-8000-0000000000aa";
+
+pub struct NotionTestConnection {
+    pub workspace_id: String,
+    pub connection: Box<IntegrationConnection>,
+}
+
+/// Connect `ME` to Notion in a workspace unique to the test, so the cached
+/// workspace lookup of one test never answers for another.
+pub async fn connect_me(
+    app: &AuthenticatedApp,
+    settings: &Settings,
+    config: NotionConfig,
+) -> NotionTestConnection {
+    let workspace_id = uuid::Uuid::new_v4().to_string();
+    let connection = create_notion_integration_connection(
+        &app.app,
+        app.user.id,
+        settings,
+        ME,
+        MY_TOKEN,
+        &workspace_id,
+        config,
+    )
+    .await;
+    NotionTestConnection {
+        workspace_id,
+        connection,
+    }
+}
+
+/// Replace the mocked Notion API with the discussion `DISCUSSION_ID` on
+/// `BLOCK_ID` (created by `block_created_by`) of `PAGE_ID` (created by
+/// `SOMEONE`), holding `comments`.
+pub async fn mock_my_discussion(
+    app: &AuthenticatedApp,
+    block_created_by: &str,
+    comments: Vec<Value>,
+) {
+    app.app.notion_mock_server.reset().await;
+    mock_notion_discussion(
+        &app.app.notion_mock_server,
+        MY_TOKEN,
+        PAGE_ID,
+        SOMEONE,
+        BLOCK_ID,
+        block_created_by,
+        comments,
+    )
+    .await;
+}
 
 /// Signing secret matching `api/config/test.toml::[integrations.notion].signing_secret`.
 const TEST_NOTION_SIGNING_SECRET: &str = "notion-test-signing-secret-do-not-use-in-prod";
