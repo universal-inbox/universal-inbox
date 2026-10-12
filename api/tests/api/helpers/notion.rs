@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use chrono::{DateTime, Utc};
 use redis_apalis::AsyncCommands;
 use reqwest::{Client, Response};
@@ -324,6 +326,52 @@ pub async fn mock_notion_not_accessible(mock_server: &MockServer, access_token: 
     })))
     .mount(mock_server)
     .await;
+}
+
+/// Fail the `request_path` calls made with `access_token`, except the first
+/// `request_path` call of the test, whatever its token: the triage (which
+/// may use any connection) still reads the object, then the save of
+/// `access_token`'s connection fails. A 400, as the API client retries a
+/// 5xx for a while before failing.
+pub async fn mock_notion_failure_after_triage(
+    mock_server: &MockServer,
+    request_path: &str,
+    access_token: &str,
+) {
+    Mock::given(FailingAfterTriage {
+        request_path: request_path.to_string(),
+        authorization: format!("Bearer {access_token}"),
+        calls: AtomicUsize::new(0),
+    })
+    .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+        "object": "error",
+        "status": 400,
+        "code": "validation_error",
+        "message": "Invalid request"
+    })))
+    .with_priority(1)
+    .mount(mock_server)
+    .await;
+}
+
+struct FailingAfterTriage {
+    request_path: String,
+    authorization: String,
+    calls: AtomicUsize,
+}
+
+impl wiremock::Match for FailingAfterTriage {
+    fn matches(&self, request: &wiremock::Request) -> bool {
+        if request.url.path() != self.request_path {
+            return false;
+        }
+        let previous_calls = self.calls.fetch_add(1, Ordering::SeqCst);
+        previous_calls > 0
+            && request
+                .headers
+                .get("authorization")
+                .is_some_and(|value| value == self.authorization.as_str())
+    }
 }
 
 fn path_regex_users() -> wiremock::matchers::PathRegexMatcher {
