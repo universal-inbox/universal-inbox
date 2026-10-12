@@ -32,10 +32,10 @@ use crate::helpers::{
     notion::{
         BLOCK_ID, DISCUSSION_ID, ME, MY_TOKEN, PAGE_ID, SOMEONE, connect_me, mock_my_discussion,
         mock_notion_block_children, mock_notion_blocks, mock_notion_page_and_users,
-        mock_notion_search, notion_page_content_event, notion_search_page, text_segment,
-        user_mention_segment,
+        mock_notion_search, notion_page_content_event, notion_search_page, notion_webhook_actor,
+        text_segment, user_mention_segment,
     },
-    settings,
+    set_audit_actor, settings,
 };
 
 fn minutes_ago(minutes: i64) -> DateTime<Utc> {
@@ -234,6 +234,7 @@ mod mentions {
         .unwrap();
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &notion_webhook_actor()).await;
         handle_notion_page_content_event(
             &mut transaction,
             &event,
