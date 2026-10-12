@@ -23,7 +23,7 @@ use universal_inbox_api::{
         NotionWebhookEventJob, handle_notion_comment_event, handle_notion_page_content_event,
         handle_notion_webhook_event,
     },
-    universal_inbox::UniversalInboxError,
+    universal_inbox::{UniversalInboxError, audit::actor_context::with_actor},
 };
 
 use crate::helpers::{
@@ -34,11 +34,11 @@ use crate::helpers::{
         create_notion_integration_connection, mock_my_discussion, mock_notion_blocks,
         mock_notion_deleted_block, mock_notion_discussion, mock_notion_failure_after_triage,
         mock_notion_not_accessible, notion_comment, notion_comment_event,
-        notion_page_content_event, notion_paragraph_block, post_signed_notion_event,
-        pushed_jobs_count, text_segment, user_mention_segment,
+        notion_page_content_event, notion_paragraph_block, notion_webhook_actor,
+        post_signed_notion_event, pushed_jobs_count, text_segment, user_mention_segment,
     },
     rest::delete_resource,
-    settings,
+    set_audit_actor, settings,
 };
 
 /// A workspace id unique to the test, so the cached workspace lookup of one
@@ -90,11 +90,14 @@ async fn connect_me_and_someone(
 /// Run the job as the worker does: its transaction is committed even when
 /// a connection failed.
 async fn run_job(app: &AuthenticatedApp, event: Value) -> Result<(), UniversalInboxError> {
-    handle_notion_webhook_event(
-        NotionWebhookEventJob(serde_json::from_value(event).unwrap()),
-        Data::new(Arc::clone(&app.app.notification_service)),
-        Data::new(Arc::clone(&app.app.integration_connection_service)),
-        Data::new(Arc::clone(&app.app.third_party_item_service)),
+    with_actor(
+        notion_webhook_actor(),
+        handle_notion_webhook_event(
+            NotionWebhookEventJob(serde_json::from_value(event).unwrap()),
+            Data::new(Arc::clone(&app.app.notification_service)),
+            Data::new(Arc::clone(&app.app.integration_connection_service)),
+            Data::new(Arc::clone(&app.app.third_party_item_service)),
+        ),
     )
     .await
 }
@@ -913,6 +916,7 @@ mod job {
         let event: NotionWebhookEvent = serde_json::from_value(event).unwrap();
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &notion_webhook_actor()).await;
 
         handle_notion_comment_event(
             &mut transaction,
@@ -1356,6 +1360,7 @@ mod mention {
         .unwrap();
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &notion_webhook_actor()).await;
 
         handle_notion_page_content_event(
             &mut transaction,

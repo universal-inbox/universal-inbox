@@ -11,11 +11,12 @@ use wiremock::{
 };
 
 use universal_inbox::{
+    audit::AuditActor,
     integration_connection::{
         IntegrationConnection,
         config::IntegrationConnectionConfig,
         integrations::notion::{NotionConfig, NotionContext},
-        provider::IntegrationConnectionContext,
+        provider::{IntegrationConnectionContext, IntegrationProviderKind},
     },
     user::UserId,
 };
@@ -40,6 +41,14 @@ pub const DISCUSSION_ID: &str = "a2b6c3d4-0000-4000-8000-0000000000aa";
 pub struct NotionTestConnection {
     pub workspace_id: String,
     pub connection: Box<IntegrationConnection>,
+}
+
+/// The job handlers called directly by the tests run, in production, as the
+/// Notion webhook.
+pub fn notion_webhook_actor() -> AuditActor {
+    AuditActor::Webhook {
+        provider: IntegrationProviderKind::Notion,
+    }
 }
 
 /// Connect `ME` to Notion in a workspace unique to the test, so the cached

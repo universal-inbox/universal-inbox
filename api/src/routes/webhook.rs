@@ -195,9 +195,15 @@ pub async fn push_notion_event(
     let task_id = Retry::start(
         ExponentialBackoff::from_millis(10).map(jitter).take(10),
         || async {
-            push_job(
-                &storage,
-                UniversalInboxJob::NotionWebhookEvent(NotionWebhookEventJob(event.clone())),
+            // The job, and the changes it makes, are attributed to the Notion webhook
+            with_actor(
+                AuditActor::Webhook {
+                    provider: IntegrationProviderKind::Notion,
+                },
+                push_job(
+                    &storage,
+                    UniversalInboxJob::NotionWebhookEvent(NotionWebhookEventJob(event.clone())),
+                ),
             )
             .await
         },

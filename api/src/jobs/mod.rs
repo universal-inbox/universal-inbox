@@ -117,13 +117,14 @@ pub async fn handle_universal_inbox_job(
     .await
 }
 
-/// Audit actor of a job: the side effects of a notification change and the Slack webhook
-/// events belong to whoever enqueued them, other jobs are system jobs triggered by them.
+/// Audit actor of a job: the side effects of a notification change and the Slack and Notion
+/// webhook events belong to whoever enqueued them, other jobs are system jobs triggered by them.
 fn job_audit_actor(job: &UniversalInboxJob, enqueued_by: Option<AuditActor>) -> AuditActor {
     match (job, enqueued_by) {
         (
             UniversalInboxJob::ProcessNotificationSideEffects { .. }
-            | UniversalInboxJob::SlackPushEventCallback(_),
+            | UniversalInboxJob::SlackPushEventCallback(_)
+            | UniversalInboxJob::NotionWebhookEvent(_),
             Some(actor),
         ) => actor,
         (job, enqueued_by) => AuditActor::System {
