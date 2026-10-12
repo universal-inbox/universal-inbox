@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use actix_web::{HttpRequest, HttpResponse, Scope, web};
 use anyhow::Context;
@@ -50,6 +53,16 @@ pub struct NotionSigningSecret(pub Option<SecretBox<WebhookSigningSecret>>);
 
 const NOTION_SIGNATURE_HEADER: &str = "X-Notion-Signature";
 
+/// Whether this process already logged a Notion verification token. Only the
+/// first one is logged, so a token posted by someone else cannot hide among
+/// Notion's; a restart logs the next one again.
+static NOTION_HANDSHAKE_LOGGED: AtomicBool = AtomicBool::new(false);
+
+/// `true` the first time it is called on `logged`, `false` afterwards.
+fn take_first_handshake(logged: &AtomicBool) -> bool {
+    !logged.swap(true, Ordering::SeqCst)
+}
+
 const SLACK_SIGNATURE_HEADER: &str = "X-Slack-Signature";
 const SLACK_TIMESTAMP_HEADER: &str = "X-Slack-Request-Timestamp";
 const SLACK_SIGNATURE_TOLERANCE_SECONDS: i64 = 300;
@@ -81,14 +94,26 @@ pub async fn push_notion_event(
 
     let Some(signing_secret) = signing_secret.0.as_ref() else {
         // Until the token is configured, only the subscription handshake is
-        // accepted. Its token is logged so it can be pasted in the Notion
-        // dashboard and set as the signing secret.
+        // accepted. The first token is logged so it can be pasted in Notion's
+        // Verify dialog, which accepts only the token Notion sent, and then
+        // set as the signing secret.
         if let Ok(verification) = serde_json::from_slice::<NotionVerificationRequest>(&body) {
-            warn!(
-                verification_token = verification.verification_token,
-                "Received the Notion webhook verification token: set it as \
-                 UNIVERSAL_INBOX__INTEGRATIONS__NOTION__SIGNING_SECRET"
-            );
+            let connection_info = req.connection_info();
+            let peer_address = connection_info.realip_remote_addr().unwrap_or("unknown");
+            if take_first_handshake(&NOTION_HANDSHAKE_LOGGED) {
+                warn!(
+                    verification_token = verification.verification_token,
+                    peer_address,
+                    "Received a Notion webhook verification token: paste it in Notion's Verify \
+                     dialog, then set it as UNIVERSAL_INBOX__INTEGRATIONS__NOTION__SIGNING_SECRET"
+                );
+            } else {
+                warn!(
+                    peer_address,
+                    "Received another Notion webhook verification request; its token is not \
+                     logged. If Verify fails, restart the API and click Resend token in Notion"
+                );
+            }
             current_span.set_attribute(attr::NOTION_EVENT_OUTCOME, "verification");
             return Ok(HttpResponse::Ok().finish());
         }
@@ -628,6 +653,15 @@ fn verify_slack_signature_parts(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_first_notion_handshake_is_taken() {
+        let logged = AtomicBool::new(false);
+
+        assert!(take_first_handshake(&logged));
+        assert!(!take_first_handshake(&logged));
+        assert!(!take_first_handshake(&logged));
+    }
 
     const SECRET: &str = "test-signing-secret-do-not-use-in-prod";
     const NOW: i64 = 1_700_000_000;
