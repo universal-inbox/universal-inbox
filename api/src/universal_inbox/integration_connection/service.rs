@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{Context, anyhow};
 
-use cached::proc_macro::concurrent_cached;
+use cached::{ConcurrentCachedAsync, proc_macro::concurrent_cached};
 use chrono::{DateTime, TimeDelta, Utc};
 use clap::ValueEnum;
 use oauth2::{CsrfToken, PkceCodeChallenge};
@@ -61,7 +61,7 @@ use crate::{
     },
     universal_inbox::{UniversalInboxError, UpdateStatus, retry_on_transient_database_error},
     utils::{
-        cache::{Cache, build_redis_cache},
+        cache::{Cache, TracedRedisCache, build_redis_cache},
         crypto::{DataKeyring, decrypt_token, encrypt_token},
     },
 };
@@ -715,6 +715,7 @@ impl IntegrationConnectionService {
             .get_integration_connection(executor, integration_connection_id)
             .await?
         {
+            invalidate_cached_provider_lookups(&integration_connection).await;
             self.reconcile_set_aside_notifications(executor, &integration_connection)
                 .await?;
         }
@@ -1434,6 +1435,7 @@ impl IntegrationConnectionService {
                     for_user_id,
                 )
                 .await?;
+            invalidate_cached_provider_lookups(&integration_connection).await;
 
             // Disconnecting stops feeding the inbox just as muting does, so it
             // is no more destructive: the notifications leave the inbox and are
@@ -1983,6 +1985,7 @@ impl IntegrationConnectionService {
                 paused_reason,
             )
             .await?;
+        invalidate_cached_provider_lookups(&integration_connection).await;
 
         // Pausing stops feeding the inbox just as disconnecting does.
         if let Some(paused_integration_connection) = &paused_integration_connection {
@@ -2612,7 +2615,8 @@ impl IntegrationConnectionService {
         provider_kind: IntegrationProviderKind,
         provider_user_id: String,
     ) -> Result<Option<IntegrationConnectionConfig>, UniversalInboxError> {
-        // Using cache as the Slack event webhook will receive a lot of requests not related to Universal Inbox users
+        // Cached: webhook routes receive many events unrelated to Universal Inbox users.
+        // Invalidated by `invalidate_cached_provider_lookups`.
         cached_get_integration_connection_config_for_provider_user_id(
             self.repository.clone(),
             executor,
@@ -3167,16 +3171,110 @@ impl IntegrationConnectionService {
         )
         .await?;
 
+        // Both the identity the connection had before this callback and the
+        // one it has now may be cached.
+        invalidate_cached_provider_lookups(&integration_connection).await;
+        if let Some(validated_integration_connection) = self
+            .repository
+            .get_integration_connection(executor, state_data.integration_connection_id)
+            .await?
+        {
+            invalidate_cached_provider_lookups(&validated_integration_connection).await;
+        }
+
         Ok(())
+    }
+}
+
+const PROVIDER_LOOKUP_CACHE_TTL: Duration = Duration::from_secs(6 * 60 * 60);
+
+fn provider_workspace_cache_key(
+    provider_kind: IntegrationProviderKind,
+    provider_workspace_id: &str,
+) -> String {
+    format!("{provider_kind}{provider_workspace_id}")
+}
+
+fn provider_user_cache_key(
+    provider_kind: IntegrationProviderKind,
+    provider_user_id: &str,
+) -> String {
+    format!("{provider_kind}{provider_user_id}")
+}
+
+async fn build_provider_workspace_cache() -> TracedRedisCache<bool> {
+    build_redis_cache(
+        "has_validated_connection_in_provider_workspace",
+        PROVIDER_LOOKUP_CACHE_TTL,
+        false,
+    )
+    .await
+}
+
+async fn build_provider_user_cache() -> TracedRedisCache<Option<IntegrationConnectionConfig>> {
+    build_redis_cache(
+        "provider_user_connection_config",
+        PROVIDER_LOOKUP_CACHE_TTL,
+        false,
+    )
+    .await
+}
+
+/// Forget what the webhook prefilters cached about `integration_connection`:
+/// whether its workspace has a validated connection, and its config. Call it
+/// whenever the status, the config or the provider identity of a connection
+/// changes, so webhook events see the change before the cache expires.
+///
+/// It runs before the caller's transaction commits: an event read in between
+/// may cache the previous state again, until the TTL. A failure is only logged,
+/// as the TTL bounds a stale entry anyway.
+pub(crate) async fn invalidate_cached_provider_lookups(
+    integration_connection: &IntegrationConnection,
+) {
+    let provider_kind = integration_connection.provider.kind();
+    if let Some(provider_user_id) = &integration_connection.provider_user_id {
+        let cache = CACHED_GET_INTEGRATION_CONNECTION_CONFIG_FOR_PROVIDER_USER_ID
+            .get_or_init(build_provider_user_cache)
+            .await;
+        if let Err(error) = cache
+            .async_cache_remove(&provider_user_cache_key(provider_kind, provider_user_id))
+            .await
+        {
+            warn!(
+                "Failed to invalidate the cached config of integration connection {}: {error:?}",
+                integration_connection.id
+            );
+        }
+    }
+    if let Some(provider_workspace_id) = integration_connection
+        .provider
+        .context()
+        .and_then(|context| context.provider_workspace_id())
+    {
+        let cache = CACHED_HAS_VALIDATED_INTEGRATION_CONNECTION_IN_PROVIDER_WORKSPACE
+            .get_or_init(build_provider_workspace_cache)
+            .await;
+        if let Err(error) = cache
+            .async_cache_remove(&provider_workspace_cache_key(
+                provider_kind,
+                &provider_workspace_id,
+            ))
+            .await
+        {
+            warn!(
+                "Failed to invalidate the cached workspace of integration connection {}: {error:?}",
+                integration_connection.id
+            );
+        }
     }
 }
 
 #[concurrent_cached(
     key = "String",
-    convert = r#"{ format!("{}{}", provider_kind, provider_workspace_id) }"#,
-    ty = "crate::utils::cache::TracedRedisCache<bool>",
+    convert = r#"{ provider_workspace_cache_key(provider_kind, &provider_workspace_id) }"#,
+    ty = "TracedRedisCache<bool>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache `has_validated_connection_in_provider_workspace`: {:?}", e))"##,
-    create = r##" { build_redis_cache("has_validated_connection_in_provider_workspace", Duration::from_secs(6 * 60 * 60), false).await }"##
+    create = r##" { build_provider_workspace_cache().await }"##
 )]
 async fn cached_has_validated_integration_connection_in_provider_workspace(
     repository: Arc<Repository>,
@@ -3198,10 +3296,10 @@ async fn cached_has_validated_integration_connection_in_provider_workspace(
 
 #[concurrent_cached(
     key = "String",
-    convert = r#"{ format!("{}{}", provider_kind, provider_user_id) }"#,
-    ty = "crate::utils::cache::TracedRedisCache<Option<IntegrationConnectionConfig>>",
-    map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `is_known_provider_user_id`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:is_known_provider_user_id", Duration::from_secs(6 * 60 * 60), false).await }"##
+    convert = r#"{ provider_user_cache_key(provider_kind, &provider_user_id) }"#,
+    ty = "TracedRedisCache<Option<IntegrationConnectionConfig>>",
+    map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache `provider_user_connection_config`: {:?}", e))"##,
+    create = r##" { build_provider_user_cache().await }"##
 )]
 async fn cached_get_integration_connection_config_for_provider_user_id(
     repository: Arc<Repository>,
