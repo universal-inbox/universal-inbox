@@ -128,6 +128,7 @@ async fn main() -> std::io::Result<()> {
         slack_service,
         slack_bridge_service,
         oauth2_service,
+        audit_service,
         billing_service,
     ) = build_services(
         pool,
@@ -158,6 +159,7 @@ async fn main() -> std::io::Result<()> {
             slack_service,
             slack_bridge_service,
             oauth2_service,
+            audit_service,
             billing_service,
         )
         .await;

@@ -75,6 +75,18 @@ inactivity_warning_days = 7
 failing_threshold_days = 30
 lock_ttl_seconds = 300
 
+# Delete the audit events older than `application.audit_log.retention_days`.
+# Enabled by default: the audit log would otherwise grow without bound.
+[application.cron.purge_audit_events]
+is_enabled = true
+# Cron expression with a seconds field
+schedule = "0 17 * * * *"
+lock_ttl_seconds = 300
+
+# Audit log of notification and task changes, shown on the Audit log page
+[application.audit_log]
+retention_days = 7
+
 # Optional: without an [application.email] section, no email is sent (see
 # api/config/dev.toml for an example). Once any email setting is set, all of
 # them are required except `smtp_port` (defaults to 465).

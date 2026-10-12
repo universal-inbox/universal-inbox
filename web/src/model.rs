@@ -26,6 +26,8 @@ pub struct UniversalInboxUIModel {
     pub is_syncing_notifications: bool,
     pub is_syncing_tasks: bool,
     pub preview_cards_expanded: bool,
+    /// History drawer next to the notification or task detail, toggled with `i`
+    pub is_history_open: bool,
     #[allow(dead_code)]
     details_panel_width: f64,
     #[allow(dead_code)]
@@ -55,6 +57,7 @@ impl UniversalInboxUIModel {
             is_syncing_notifications: false,
             is_syncing_tasks: false,
             preview_cards_expanded: false,
+            is_history_open: false,
             details_panel_width: settings.ui.details_panel_width,
             details_panel_height: settings.ui.details_panel_height,
             details_panel_position: settings.ui.details_panel_position.clone(),

@@ -5,10 +5,13 @@ use rstest::*;
 use slack_morphism::prelude::*;
 
 use universal_inbox::{
+    audit::AuditActor,
     integration_connection::{
-        IntegrationConnectionStatus, config::IntegrationConnectionConfig,
-        integrations::slack::SlackConfig, integrations::slack::SlackContext,
-        provider::IntegrationConnectionContext,
+        IntegrationConnectionStatus,
+        config::IntegrationConnectionConfig,
+        integrations::slack::SlackConfig,
+        integrations::slack::SlackContext,
+        provider::{IntegrationConnectionContext, IntegrationProviderKind},
     },
     notification::{NotificationSourceKind, NotificationStatus},
     third_party::{integrations::slack::SlackThread, item::ThirdPartyItemData},
@@ -43,11 +46,18 @@ use crate::helpers::{
             slack_push_message_in_thread_event, slack_thread,
         },
     },
-    settings,
+    set_audit_actor, settings,
     slack::post_signed_slack_event,
     tested_app_with_local_auth,
     user::create_user_and_login,
 };
+
+/// The job handlers called directly by these tests run, in production, as the Slack webhook
+fn slack_webhook_actor() -> AuditActor {
+    AuditActor::Webhook {
+        provider: IntegrationProviderKind::Slack,
+    }
+}
 
 mod webhook {
     use super::*;
@@ -289,6 +299,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
 
         handle_slack_message_push_event(
             &mut transaction,
@@ -329,6 +340,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
         create_integration_connection(
             &app.app,
             app.user.id,
@@ -382,6 +394,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
         create_integration_connection(
             &app.app,
             app.user.id,
@@ -441,6 +454,7 @@ mod job {
         let app = tested_app_with_local_auth.await;
         let service = app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
         add_usergroup_ref_in_message(&mut message_event, "G01");
         let _slack_list_users_in_usergroup_mock = mock_slack_list_users_in_usergroup(
             &app.slack_mock_server,
@@ -651,6 +665,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
         if user_in_group {
             add_usergroup_ref_in_message(&mut message_event, "G01");
             mock_slack_list_users_in_usergroup(
@@ -791,6 +806,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
         add_user_ref_in_message(&mut message_event, "U01");
         slack_oauth_credential.provider_user_id = Some("U01".to_string());
         slack_oauth_credential.access_token =
@@ -907,6 +923,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
         add_user_ref_in_message(&mut message_event, "U01");
         slack_oauth_credential.provider_user_id = Some("U01".to_string());
         slack_oauth_credential.access_token =
@@ -1135,6 +1152,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
         add_usergroup_ref_in_message(&mut message_event, "S06UNKNOWN");
         mock_slack_list_users_in_usergroup(
             &app.app.slack_mock_server,
@@ -1187,6 +1205,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
         add_user_ref_in_message(&mut message_event, "U01");
         create_slack_integration_connection_for_u01(&app, &settings, slack_oauth_credential).await;
         let slack_message_id = "1732535291.911209";
@@ -1251,6 +1270,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
         add_user_ref_in_message(&mut message_event, "U01");
         create_slack_integration_connection_for_u01(&app, &settings, slack_oauth_credential).await;
         Mock::given(method("GET"))
@@ -1313,6 +1333,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
         add_user_ref_in_message(&mut message_event, "U01");
         create_slack_integration_connection_for_u01(&app, &settings, slack_oauth_credential).await;
         let slack_message_id = "1732535291.911209";
@@ -1410,6 +1431,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
         add_user_ref_in_message(&mut message_event, "U01");
         create_slack_integration_connection_for_u01(&app, &settings, slack_oauth_credential).await;
         let slack_message_id = "1732535291.911209";
@@ -1479,6 +1501,7 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
 
         handle_slack_message_push_event(
             &mut transaction,
@@ -1561,6 +1584,7 @@ mod job {
 
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
 
         let SlackPushEventCallback {
             event: SlackEventCallbackBody::Message(ref mut message),
@@ -1740,6 +1764,7 @@ mod job {
 
         let service = app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
 
         let SlackPushEventCallback {
             event: SlackEventCallbackBody::Message(ref mut message),

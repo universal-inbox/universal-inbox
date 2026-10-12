@@ -8,6 +8,7 @@ use tracing::{error, info};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use universal_inbox::{
+    audit::AuditActor,
     notification::{NotificationId, service::NotificationPatch},
     user::UserId,
 };
@@ -17,6 +18,7 @@ use crate::{
     integrations::slack::SlackService,
     universal_inbox::{
         UniversalInboxError,
+        audit::{actor_context::with_actor, service::AuditService},
         integration_connection::service::{
             GrantRevocationRetryPolicy, IntegrationConnectionService,
         },
@@ -61,6 +63,7 @@ pub enum UniversalInboxJob {
         inactivity_warning_days: i64,
         failing_threshold_days: i64,
     },
+    PurgeAuditEvents,
 }
 
 impl UniversalInboxJob {
@@ -73,6 +76,7 @@ impl UniversalInboxJob {
             Self::RefreshOAuthTokens { .. } => "RefreshOAuthTokens",
             Self::RetryOAuthGrantRevocations { .. } => "RetryOAuthGrantRevocations",
             Self::PauseIntegrationConnections { .. } => "PauseIntegrationConnections",
+            Self::PurgeAuditEvents => "PurgeAuditEvents",
         }
     }
 }
@@ -82,13 +86,61 @@ impl UniversalInboxJob {
 /// span.
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_universal_inbox_job(
-    JobEnvelope { job, .. }: JobEnvelope,
+    JobEnvelope {
+        job, audit_actor, ..
+    }: JobEnvelope,
     task_id: TaskId,
     notification_service: Data<Arc<RwLock<NotificationService>>>,
     task_service: Data<Arc<RwLock<TaskService>>>,
     integration_connection_service: Data<Arc<RwLock<IntegrationConnectionService>>>,
     third_party_item_service: Data<Arc<RwLock<ThirdPartyItemService>>>,
     slack_service: Data<Arc<SlackService>>,
+    audit_service: Data<Arc<AuditService>>,
+) -> Result<(), UniversalInboxError> {
+    let actor = job_audit_actor(&job, audit_actor);
+    with_actor(
+        actor,
+        run_universal_inbox_job(
+            job,
+            task_id,
+            notification_service,
+            task_service,
+            integration_connection_service,
+            third_party_item_service,
+            slack_service,
+            audit_service,
+        ),
+    )
+    .await
+}
+
+/// Audit actor of a job: the side effects of a notification change and the Slack webhook
+/// events belong to whoever enqueued them, other jobs are system jobs triggered by them.
+fn job_audit_actor(job: &UniversalInboxJob, enqueued_by: Option<AuditActor>) -> AuditActor {
+    match (job, enqueued_by) {
+        (
+            UniversalInboxJob::ProcessNotificationSideEffects { .. }
+            | UniversalInboxJob::SlackPushEventCallback(_),
+            Some(actor),
+        ) => actor,
+        (job, enqueued_by) => AuditActor::System {
+            job: job.name().to_string(),
+            source: None,
+            triggered_by: enqueued_by.map(Box::new),
+        },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_universal_inbox_job(
+    job: UniversalInboxJob,
+    task_id: TaskId,
+    notification_service: Data<Arc<RwLock<NotificationService>>>,
+    task_service: Data<Arc<RwLock<TaskService>>>,
+    integration_connection_service: Data<Arc<RwLock<IntegrationConnectionService>>>,
+    third_party_item_service: Data<Arc<RwLock<ThirdPartyItemService>>>,
+    slack_service: Data<Arc<SlackService>>,
+    audit_service: Data<Arc<AuditService>>,
 ) -> Result<(), UniversalInboxError> {
     let current_span = tracing::Span::current();
 
@@ -159,6 +211,9 @@ pub async fn handle_universal_inbox_job(
                 failing_threshold_days,
             )
             .await
+        }
+        UniversalInboxJob::PurgeAuditEvents => {
+            audit_service.purge_expired_audit_events().await.map(|_| ())
         }
     };
 

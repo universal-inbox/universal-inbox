@@ -293,6 +293,7 @@ mod protocol {
         assert!(tool_names.contains(&"create_task_from_notification".to_string()));
         assert!(tool_names.contains(&"list_tasks".to_string()));
         assert!(tool_names.contains(&"update_task".to_string()));
+        assert!(tool_names.contains(&"search_audit_log".to_string()));
     }
 
     #[rstest]
@@ -1693,6 +1694,104 @@ mod oauth2 {
         )
         .await;
         assert_eq!(body["result"]["isError"], false, "got: {body}");
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn oauth2_mcp_changes_are_recorded_and_searchable_in_the_audit_log(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        github_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            github_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        let notification = create_notification_from_github_notification(
+            &app.app,
+            &crate::helpers::notification::github::github_notification(),
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+        let token_response = oauth2_access_token_with_scope(&app, Some("read write")).await;
+        let access_token = token_response["access_token"].as_str().unwrap();
+
+        let body = mcp_tool_call(
+            &app.app,
+            access_token,
+            "act_on_notification",
+            json!({
+                "notification_id": notification.id,
+                "action": "snooze_until",
+                "snoozed_until": "2064-01-01T09:00:00Z"
+            }),
+        )
+        .await;
+        assert_eq!(body["result"]["isError"], false, "got: {body}");
+
+        // A read scope is enough to search the audit log
+        let read_token_response = oauth2_access_token_with_scope(&app, Some("read")).await;
+        let body = mcp_tool_call(
+            &app.app,
+            read_token_response["access_token"].as_str().unwrap(),
+            "search_audit_log",
+            json!({ "entity_id": notification.id, "actor_kinds": ["Mcp"] }),
+        )
+        .await;
+        assert_eq!(body["result"]["isError"], false, "got: {body}");
+        let result = &body["result"]["structuredContent"];
+        assert_eq!(result["total"], 1, "got: {body}");
+        let event = &result["events"][0];
+        assert_eq!(event["actor"]["kind"], "Mcp");
+        assert!(
+            event["actor"]["client_id"]
+                .as_str()
+                .is_some_and(|client_id| !client_id.is_empty()),
+            "got: {body}"
+        );
+        assert_eq!(event["actor_name"], "test-mcp-client");
+        assert_eq!(
+            event["changes"]["snoozed_until"]["to"],
+            "2064-01-01T09:00:00"
+        );
+
+        // Another user does not see these events
+        let (other_user_client, _) =
+            authenticate_user(&app.app, "5678", "Jane", "Roe", "jane@example.com").await;
+        let other_api_key: AuthenticationToken = other_user_client
+            .post(format!(
+                "{}users/me/authentication-tokens",
+                app.app.api_address
+            ))
+            .header(
+                reqwest::header::ORIGIN,
+                crate::helpers::user::front_origin_header(&app.app),
+            )
+            .send()
+            .await
+            .expect("Failed to create API key")
+            .json()
+            .await
+            .expect("Failed to deserialize API key response");
+        let body = mcp_tool_call(
+            &app.app,
+            &other_api_key.jwt_token.expose_secret().0,
+            "search_audit_log",
+            json!({ "entity_id": notification.id }),
+        )
+        .await;
+        assert_eq!(
+            body["result"]["structuredContent"]["total"], 0,
+            "got: {body}"
+        );
     }
 
     #[rstest]

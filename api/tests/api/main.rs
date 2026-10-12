@@ -3,6 +3,7 @@
 mod common;
 mod helpers;
 mod test_api_notification;
+mod test_audit_log;
 mod test_auth;
 mod test_auth_methods;
 mod test_billing;

@@ -15,12 +15,14 @@ use playwright_rs::{Browser, BrowserContext, LaunchOptions, Locator, Page, Playw
 /// especially on resource-constrained CI runners.
 pub const EXPECT_TIMEOUT: Duration = Duration::from_secs(60);
 
+use universal_inbox::audit::AuditActor;
 use universal_inbox::notification::{Notification, NotificationId};
 use universal_inbox_api::{
     commands::generate::generate_testing_user,
     configuration::{AuthenticationSettings, LocalAuthenticationSettings, Settings},
     jobs::JobStorage,
     repository::{Repository, notification::NotificationRepository, user::UserRepository},
+    universal_inbox::audit::actor_context::with_actor,
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
@@ -280,13 +282,19 @@ pub async fn launch_browser() -> (BrowserContext, Page) {
 
 /// Generate a test user with sample data and return the email address.
 pub async fn generate_test_user(app: &BrowserTestedApp) -> String {
-    generate_testing_user(
-        app.user_service.clone(),
-        app.integration_connection_service.clone(),
-        app.notification_service.clone(),
-        app.task_service.clone(),
-        app.third_party_item_service.clone(),
-        app.settings.clone(),
+    // Runs, in production, as the `test generate-user` CLI command
+    with_actor(
+        AuditActor::Cli {
+            command: "test".to_string(),
+        },
+        generate_testing_user(
+            app.user_service.clone(),
+            app.integration_connection_service.clone(),
+            app.notification_service.clone(),
+            app.task_service.clone(),
+            app.third_party_item_service.clone(),
+            app.settings.clone(),
+        ),
     )
     .await
     .expect("Failed to generate test user")

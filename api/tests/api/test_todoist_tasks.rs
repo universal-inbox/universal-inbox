@@ -972,11 +972,12 @@ mod legacy_todoist_ids {
     use super::*;
     use pretty_assertions::assert_eq;
 
-    use universal_inbox::task::TaskId;
+    use universal_inbox::{audit::AuditActor, task::TaskId};
     use universal_inbox_api::{
         commands::todoist::migrate_legacy_ids,
         integrations::todoist::TodoistSyncCommandItemCompleteArgs,
         repository::third_party::ThirdPartyItemRepository,
+        universal_inbox::audit::actor_context::with_actor,
     };
 
     use crate::helpers::task::todoist::{
@@ -1321,11 +1322,17 @@ mod legacy_todoist_ids {
         )
         .await;
 
-        migrate_legacy_ids(
-            app.app.task_service.clone(),
-            app.app.integration_connection_service.clone(),
-            Some(app.user.id),
-            false,
+        // Runs, in production, as a CLI command
+        with_actor(
+            AuditActor::Cli {
+                command: "todoist".to_string(),
+            },
+            migrate_legacy_ids(
+                app.app.task_service.clone(),
+                app.app.integration_connection_service.clone(),
+                Some(app.user.id),
+                false,
+            ),
         )
         .await
         .unwrap();

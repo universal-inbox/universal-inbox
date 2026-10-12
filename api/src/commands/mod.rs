@@ -10,6 +10,7 @@ use tracing::info;
 use universal_inbox::pii::Pii;
 
 use universal_inbox::{
+    audit::AuditActor,
     integration_connection::provider::IntegrationProviderKind,
     notification::{NotificationSourceKind, NotificationSyncSourceKind},
     task::TaskSyncSourceKind,
@@ -21,11 +22,16 @@ use crate::{
     integrations::slack::SlackService,
     run_ping_server, run_server, run_worker,
     universal_inbox::{
-        UniversalInboxError, auth_token::service::AuthenticationTokenService,
+        UniversalInboxError,
+        audit::{actor_context::with_actor, service::AuditService},
+        auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, oauth2::service::OAuth2Service,
-        slack_bridge::service::SlackBridgeService, task::service::TaskService,
-        third_party::service::ThirdPartyItemService, user::service::UserService,
+        notification::service::NotificationService,
+        oauth2::service::OAuth2Service,
+        slack_bridge::service::SlackBridgeService,
+        task::service::TaskService,
+        third_party::service::ThirdPartyItemService,
+        user::service::UserService,
     },
     utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
 };
@@ -398,6 +404,59 @@ impl Cli {
         slack_service: Arc<SlackService>,
         slack_bridge_service: Arc<SlackBridgeService>,
         oauth2_service: Arc<OAuth2Service>,
+        audit_service: Arc<AuditService>,
+        billing_service: Option<Arc<crate::billing::service::BillingService>>,
+    ) -> Result<(), UniversalInboxError> {
+        let execution = self.execute_command(
+            settings,
+            notification_service,
+            task_service,
+            user_service,
+            integration_connection_service,
+            auth_token_service,
+            third_party_item_service,
+            slack_service,
+            slack_bridge_service,
+            oauth2_service,
+            audit_service,
+            billing_service,
+        );
+        match self.audit_command_name() {
+            Some(command) => with_actor(AuditActor::Cli { command }, execution).await,
+            // The server and the workers set the actor of each request and job
+            None => execution.await,
+        }
+    }
+
+    /// Name recorded as the audit actor of the changes a command makes, `None` for the
+    /// long-running server and workers.
+    fn audit_command_name(&self) -> Option<String> {
+        match self.command {
+            Commands::Serve { .. } | Commands::StartWorkers { .. } => None,
+            // The subcommand as typed, eg. `sync-notifications`: the first non-flag argument
+            _ => Some(
+                std::env::args()
+                    .skip(1)
+                    .find(|arg| !arg.starts_with('-'))
+                    .unwrap_or_else(|| "unknown".to_string()),
+            ),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn execute_command(
+        &self,
+        settings: Settings,
+        notification_service: Arc<RwLock<NotificationService>>,
+        task_service: Arc<RwLock<TaskService>>,
+        user_service: Arc<UserService>,
+        integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+        auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
+        third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
+        slack_service: Arc<SlackService>,
+        slack_bridge_service: Arc<SlackBridgeService>,
+        oauth2_service: Arc<OAuth2Service>,
+        audit_service: Arc<AuditService>,
         billing_service: Option<Arc<crate::billing::service::BillingService>>,
     ) -> Result<(), UniversalInboxError> {
         match &self.command {
@@ -473,6 +532,7 @@ impl Cli {
                     third_party_item_service.clone(),
                     slack_bridge_service,
                     oauth2_service,
+                    audit_service.clone(),
                     billing_service,
                 )
                 .await
@@ -492,6 +552,7 @@ impl Cli {
                         integration_connection_service,
                         third_party_item_service,
                         slack_service,
+                        audit_service,
                     )
                     .await;
 
@@ -555,6 +616,7 @@ impl Cli {
                     integration_connection_service,
                     third_party_item_service,
                     slack_service,
+                    audit_service,
                 )
                 .await;
 

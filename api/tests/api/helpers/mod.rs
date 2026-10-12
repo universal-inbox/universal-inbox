@@ -2,7 +2,7 @@ use std::{collections::HashMap, env, fs, sync::Arc};
 
 use openidconnect::{ClientId, IntrospectionUrl, IssuerUrl};
 use rstest::*;
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::info;
 use wiremock::MockServer;
@@ -17,6 +17,7 @@ use universal_inbox_api::{
     jobs::JobStorage,
     repository::Repository,
     universal_inbox::{
+        audit::service::AuditService,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, oauth2::service::OAuth2Service,
         task::service::TaskService, third_party::service::ThirdPartyItemService,
@@ -24,6 +25,8 @@ use universal_inbox_api::{
     },
     utils::cache::Cache,
 };
+
+use universal_inbox::audit::AuditActor;
 
 use crate::common::mailer::MailerStub;
 use crate::common::{build_and_spawn, setup_test_env};
@@ -54,6 +57,7 @@ pub struct TestedApp {
     pub third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     pub slack_service: Arc<SlackService>,
     pub oauth2_service: Arc<OAuth2Service>,
+    pub audit_service: Arc<AuditService>,
     pub github_mock_server: MockServer,
     pub linear_mock_server: MockServer,
     pub google_calendar_mock_server: MockServer,
@@ -151,6 +155,7 @@ pub async fn tested_app(
         third_party_item_service: services.third_party_item_service,
         slack_service: services.slack_service,
         oauth2_service: services.oauth2_service.clone(),
+        audit_service: services.audit_service.clone(),
         github_mock_server: mock_servers.github,
         linear_mock_server: mock_servers.linear,
         google_calendar_mock_server: mock_servers.google_calendar,
@@ -315,6 +320,7 @@ async fn setup_tested_app_with_local_auth(
         third_party_item_service: services.third_party_item_service,
         slack_service: services.slack_service,
         oauth2_service: services.oauth2_service.clone(),
+        audit_service: services.audit_service.clone(),
         github_mock_server: mock_servers.github,
         linear_mock_server: mock_servers.linear,
         google_calendar_mock_server: mock_servers.google_calendar,
@@ -400,6 +406,7 @@ pub async fn tested_app_with_domain_blacklist(
         third_party_item_service: services.third_party_item_service,
         slack_service: services.slack_service,
         oauth2_service: services.oauth2_service.clone(),
+        audit_service: services.audit_service.clone(),
         github_mock_server: mock_servers.github,
         linear_mock_server: mock_servers.linear,
         google_calendar_mock_server: mock_servers.google_calendar,
@@ -438,6 +445,16 @@ impl wiremock::Match for QueryParamPresent {
             .query_pairs()
             .any(|(name, _)| name == self.0.as_str())
     }
+}
+
+/// Set the audit actor of a transaction begun by a test outside of any entry point (which
+/// would set it, see `universal_inbox_api::universal_inbox::audit::actor_context`).
+pub async fn set_audit_actor(transaction: &mut Transaction<'_, Postgres>, actor: &AuditActor) {
+    sqlx::query("SELECT set_config('app.audit_actor', $1, true)")
+        .bind(serde_json::to_string(actor).unwrap())
+        .execute(&mut **transaction)
+        .await
+        .expect("Failed to set the audit actor");
 }
 
 pub fn fixture_path(fixture_file_name: &str) -> String {

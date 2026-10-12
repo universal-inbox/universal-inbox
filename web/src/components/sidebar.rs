@@ -298,6 +298,18 @@ pub fn Sidebar() -> Element {
                         }
                     }
 
+                    Tooltip {
+                        class: "block",
+                        text: "Audit log",
+                        placement: TooltipPlacement::Right,
+                        disabled: !*IS_SIDEBAR_COLLAPSED.read(),
+                        NavItem {
+                            icon_class: "icon-[lucide--history] size-4".to_string(),
+                            label: "Audit log".to_string(),
+                            to: Route::AuditLogPage { entity_id: String::new() },
+                        }
+                    }
+
                     // Billing entry: only visible when the API exposes
                     // /api/billing/* (i.e. [billing] is configured). On
                     // self-hosted instances BILLING_STATE is Disabled and

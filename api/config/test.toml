@@ -20,6 +20,14 @@ sync_failure_window_in_hours = 1
 [application.cron.vacuum_jobs]
 is_enabled = false
 
+# The purge is exercised by calling it directly
+[application.cron.purge_audit_events]
+is_enabled = false
+
+# A notification or task write without an audit actor fails the test
+[application.audit_log]
+strict_actor = true
+
 [application.observability.logging]
 log_directive = "debug"
 dependencies_log_level = "debug"

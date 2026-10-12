@@ -7,14 +7,16 @@ use web_sys::KeyboardEvent;
 
 use universal_inbox::{
     HasHtmlUrl, Page,
+    audit::AuditEntityKind,
     notification::{NotificationId, NotificationStatus, NotificationWithTask},
 };
 
 use crate::{
     components::{
-        notification_preview::NotificationPreview, notifications_list::NotificationsList,
-        welcome_hero::WelcomeHero,
+        audit::HistoryDrawer, notification_preview::NotificationPreview,
+        notifications_list::NotificationsList, welcome_hero::WelcomeHero,
     },
+    config::APP_CONFIG,
     keyboard_manager::{KEYBOARD_MANAGER, KeyboardHandler},
     model::{PreviewPane, UI_MODEL},
     route::Route,
@@ -242,6 +244,15 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
                                 ui_model: UI_MODEL.signal()
                             }
                         }
+
+                        if UI_MODEL.read().is_history_open {
+                            HistoryDrawer {
+                                entity_kind: AuditEntityKind::Notification,
+                                entity_id: notification.id.0,
+                                retention_days: APP_CONFIG.read().as_ref().map(|config| config.audit_log_retention_days).unwrap_or(7),
+                                on_close: move |_| UI_MODEL.write().is_history_open = false,
+                            }
+                        }
                     }
                 }
             }
@@ -430,6 +441,10 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
                         open_link(url.as_str())
                     };
                 }
+            }
+            ("i", false, false, false, false) => {
+                let mut ui_model = UI_MODEL.write();
+                ui_model.is_history_open = !ui_model.is_history_open;
             }
             ("h", false, false, false, false) | ("?", false, false, false, false) => {
                 UI_MODEL.write().toggle_help()

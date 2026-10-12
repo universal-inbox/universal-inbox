@@ -34,6 +34,7 @@ use universal_inbox::{
 
 use crate::observability::RecordSpanError;
 use crate::observability::attr;
+use crate::universal_inbox::audit::actor_context::with_system_actor;
 use crate::{
     integrations::{
         linear::LinearService,
@@ -725,7 +726,34 @@ impl TaskService {
         }))
     }
 
+    /// Synchronize a source as a system job, triggered by the current audit actor: the
+    /// changes it makes are recorded as made by the "SyncTasks" job.
     async fn sync_third_party_tasks<T, U>(
+        &self,
+        third_party_task_service: Arc<U>,
+        user_id: UserId,
+        force_sync: bool,
+    ) -> Result<Vec<TaskCreationResult>, UniversalInboxError>
+    where
+        T: TryFrom<ThirdPartyItem> + Debug,
+        U: ThirdPartyTaskService<T>
+            + ThirdPartyItemSourceService<T>
+            + NotificationSource
+            + TaskSource
+            + Send
+            + Sync,
+        <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+    {
+        let integration_provider_kind = third_party_task_service.get_integration_provider_kind();
+        with_system_actor(
+            "SyncTasks",
+            Some(integration_provider_kind),
+            self.run_sync_third_party_tasks(third_party_task_service, user_id, force_sync),
+        )
+        .await
+    }
+
+    async fn run_sync_third_party_tasks<T, U>(
         &self,
         third_party_task_service: Arc<U>,
         user_id: UserId,

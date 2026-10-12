@@ -75,15 +75,17 @@ use crate::{
     },
     jobs::{
         cron::{
-            handle_pause_integration_connections_cron_tick, handle_refresh_oauth_tokens_cron_tick,
-            handle_retry_oauth_grant_revocations_cron_tick, handle_vacuum_jobs_cron_tick,
+            handle_pause_integration_connections_cron_tick, handle_purge_audit_events_cron_tick,
+            handle_refresh_oauth_tokens_cron_tick, handle_retry_oauth_grant_revocations_cron_tick,
+            handle_vacuum_jobs_cron_tick,
         },
         handle_universal_inbox_job,
     },
     observability::AuthenticatedRootSpanBuilder,
     repository::Repository,
     universal_inbox::{
-        UniversalInboxError, auth_token::service::AuthenticationTokenService,
+        UniversalInboxError, audit::service::AuditService,
+        auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, oauth2::service::OAuth2Service,
         slack_bridge::service::SlackBridgeService, task::service::TaskService,
@@ -124,6 +126,7 @@ pub async fn run_server(
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     slack_bridge_service: Arc<SlackBridgeService>,
     oauth2_service: Arc<OAuth2Service>,
+    audit_service: Arc<AuditService>,
     billing_service: Option<Arc<billing::service::BillingService>>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
@@ -270,6 +273,7 @@ pub async fn run_server(
         notification_service.clone(),
         task_service.clone(),
         integration_connection_service.clone(),
+        audit_service.clone(),
         redis_storage.clone(),
         user_rate_limiters.clone(),
         mcp_session_store,
@@ -320,6 +324,7 @@ pub async fn run_server(
             .service(routes::webhook::scope())
             .service(routes::third_party::scope())
             .service(routes::slack_bridge::scope())
+            .service(routes::audit_event::scope())
             .service(mcp::scope(
                 mcp_http_service.clone(),
                 mcp_session_owners.clone(),
@@ -335,6 +340,7 @@ pub async fn run_server(
             .app_data(web::Data::new(third_party_item_service.clone()))
             .app_data(web::Data::new(slack_bridge_service.clone()))
             .app_data(web::Data::new(oauth2_service.clone()))
+            .app_data(web::Data::new(audit_service.clone()))
             .app_data(slack_signing_secret_data.clone());
 
         // Billing endpoints only exist when `[billing]` is configured. On a
@@ -392,6 +398,7 @@ pub async fn run_server(
                 http::header::ACCEPT,
                 http::header::HeaderName::from_static("mcp-session-id"),
                 http::header::HeaderName::from_static("mcp-protocol-version"),
+                http::header::HeaderName::from_static(middlewares::audit_actor::CLIENT_HEADER),
             ])
             .expose_headers(vec![
                 http::header::HeaderName::from_static("x-app-version"),
@@ -419,6 +426,9 @@ pub async fn run_server(
             })
             // Declared before the auth middleware so that it runs after it
             // (`wrap` is LIFO) and sees the authenticated user.
+            .wrap(middleware::from_fn(
+                middlewares::audit_actor::audit_actor_middleware,
+            ))
             .wrap(middlewares::user_activity::RecordUserActivity::new(
                 user_service.clone(),
             ))
@@ -681,6 +691,7 @@ pub async fn run_worker(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     slack_service: Arc<SlackService>,
+    audit_service: Arc<AuditService>,
 ) -> Monitor {
     let count = workers_count.unwrap_or_else(|| {
         thread::available_parallelism()
@@ -697,6 +708,7 @@ pub async fn run_worker(
             .data(integration_connection_service)
             .data(third_party_item_service)
             .data(slack_service)
+            .data(audit_service)
             .backend(redis_storage.clone())
             .build_fn(handle_universal_inbox_job),
     );
@@ -770,10 +782,29 @@ pub async fn run_worker(
             WorkerBuilder::new("universal-inbox-cron-pause-integration-connections")
                 .layer(cron_trace_layer())
                 .data(redis_storage.clone())
-                .data(cache)
+                .data(cache.clone())
                 .data(pause_integration_connections_settings)
                 .backend(CronStream::new_with_timezone(schedule, Utc))
                 .build_fn(handle_pause_integration_connections_cron_tick),
+        );
+    }
+
+    let purge_audit_events_settings = cron_settings.purge_audit_events;
+    if purge_audit_events_settings.is_enabled {
+        let schedule = Schedule::from_str(&purge_audit_events_settings.schedule)
+            .expect("Invalid cron schedule for the purge-audit-events job");
+        info!(
+            "Registering purge-audit-events cron worker with schedule `{}`",
+            purge_audit_events_settings.schedule
+        );
+        monitor = monitor.register(
+            WorkerBuilder::new("universal-inbox-cron-purge-audit-events")
+                .layer(cron_trace_layer())
+                .data(redis_storage.clone())
+                .data(cache)
+                .data(purge_audit_events_settings)
+                .backend(CronStream::new_with_timezone(schedule, Utc))
+                .build_fn(handle_purge_audit_events_cron_tick),
         );
     }
 
@@ -840,6 +871,7 @@ pub async fn build_services(
     Arc<SlackService>,
     Arc<SlackBridgeService>,
     Arc<OAuth2Service>,
+    Arc<AuditService>,
     Option<Arc<billing::service::BillingService>>,
 ) {
     // Installed before any repository use: rows are decrypted while they are decoded
@@ -848,7 +880,14 @@ pub async fn build_services(
             .data_keyring()
             .expect("Invalid data encryption configuration"),
     ));
-    let repository = Arc::new(Repository::new(pool.clone()));
+    let repository = Arc::new(
+        Repository::new(pool.clone())
+            .with_audit_strict(settings.application.audit_log.strict_actor),
+    );
+    let audit_service = Arc::new(AuditService::new(
+        repository.clone(),
+        settings.application.audit_log.retention_days,
+    ));
 
     let auth_token_service = Arc::new(RwLock::new(AuthenticationTokenService::new(
         repository.clone(),
@@ -1265,6 +1304,7 @@ pub async fn build_services(
         slack_service,
         slack_bridge_service,
         oauth2_service,
+        audit_service,
         billing_service,
     )
 }

@@ -245,6 +245,8 @@ pub fn NotificationPreview(
                         }
                     }
 
+                    HistoryToggleButton { ui_model, show_shortcut: shortcut_visibility_style == "visible" }
+
                     // Open in source button — common to every preview kind
                     Button {
                         variant: ButtonVariant::Ghost,
@@ -756,5 +758,37 @@ pub fn get_notification_action_buttons(
                 }
             },
         ]
+    }
+}
+
+/// Detail header button opening the History drawer, also toggled with `i`
+#[component]
+pub fn HistoryToggleButton(
+    ui_model: Signal<UniversalInboxUIModel>,
+    show_shortcut: bool,
+) -> Element {
+    let is_open = ui_model.read().is_history_open;
+    let active_class = if is_open {
+        "text-primary bg-primary/10"
+    } else {
+        ""
+    };
+
+    rsx! {
+        if show_shortcut {
+            span { class: DETAIL_KBD, "i" }
+        }
+        Button {
+            variant: ButtonVariant::Ghost,
+            class: active_class.to_string(),
+            aria_label: if is_open { "Hide history".to_string() } else { "Show history".to_string() },
+            title: "History".to_string(),
+            onclick: move |_| {
+                let mut ui_model = ui_model.write();
+                ui_model.is_history_open = !ui_model.is_history_open;
+            },
+            icon_class: "icon-[lucide--history]".to_string(),
+            enable_tooltip: true,
+        }
     }
 }

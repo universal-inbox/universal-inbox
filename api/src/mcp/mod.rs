@@ -33,24 +33,27 @@ use rmcp_actix_web::transport::{StreamableHttpService, on_request_extensions};
 use tokio::sync::RwLock;
 use tracing::{debug, error, warn};
 
-use universal_inbox::user::UserId;
+use universal_inbox::{audit::AuditActor, user::UserId};
 
 use crate::{
     jobs::JobStorage,
     mcp::tools::{
         ActOnNotificationArgs, BulkActNotificationsArgs, CreateTaskFromNotificationArgs,
         GetNotificationArgs, GetTaskArgs, ListNotificationsArgs, ListTasksArgs, McpServices,
-        SearchTasksArgs, SyncNotificationsArgs, SyncTasksArgs, ToolCallError, UpdateTaskArgs,
-        act_on_notification_output_schema, bulk_act_notifications_output_schema,
+        SearchAuditLogArgs, SearchTasksArgs, SyncNotificationsArgs, SyncTasksArgs, ToolCallError,
+        UpdateTaskArgs, act_on_notification_output_schema, bulk_act_notifications_output_schema,
         create_task_from_notification_output_schema, execute_tool, get_notification_output_schema,
         get_task_output_schema, list_notifications_output_schema, list_tasks_output_schema,
-        required_scope, search_tasks_output_schema, sync_notifications_output_schema,
-        sync_tasks_output_schema, update_task_output_schema,
+        required_scope, search_audit_log_output_schema, search_tasks_output_schema,
+        sync_notifications_output_schema, sync_tasks_output_schema, update_task_output_schema,
     },
     routes::{self, INTERNAL_ERROR_MESSAGE},
     universal_inbox::{
-        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, task::service::TaskService,
+        UniversalInboxError,
+        audit::{actor_context::with_actor, service::AuditService},
+        integration_connection::service::IntegrationConnectionService,
+        notification::service::NotificationService,
+        task::service::TaskService,
     },
     utils::jwt::Claims,
     utils::rate_limit::{UserRateLimiter, UserRateLimiters},
@@ -80,10 +83,12 @@ const SUPPORTED_PROTOCOL_VERSIONS: &[&str] =
 ///
 /// `allowed_hosts` is the `Host` header allow-list rmcp enforces against DNS
 /// rebinding (see [`mcp_allowed_hosts`]); it must not be empty.
+#[allow(clippy::too_many_arguments)]
 pub fn build_http_service(
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    audit_service: Arc<AuditService>,
     job_storage: JobStorage,
     user_rate_limiters: UserRateLimiters,
     session_store: Arc<dyn SessionStore>,
@@ -98,6 +103,7 @@ pub fn build_http_service(
         notification_service,
         task_service,
         integration_connection_service,
+        audit_service,
         job_storage,
         user_rate_limiters,
     };
@@ -478,7 +484,7 @@ impl UniversalInboxMcpServer {
         &self,
         tool_name: &str,
         context: &RequestContext<RoleServer>,
-    ) -> Result<UserId, ErrorData> {
+    ) -> Result<(UserId, AuditActor), ErrorData> {
         // Values written by the `on_request` hook travel inside the bridged
         // HTTP request's `Parts`, not directly in `context.extensions`.
         let authenticated = on_request_extensions(&context.extensions)
@@ -513,7 +519,15 @@ impl UniversalInboxMcpServer {
             ));
         }
 
-        Ok(user_id)
+        // OAuth tokens carry an audience and the MCP client id; API keys can call MCP too.
+        let actor = if authenticated.claims.aud.is_some() {
+            AuditActor::Mcp {
+                client_id: authenticated.claims.client_id.clone().unwrap_or_default(),
+            }
+        } else {
+            AuditActor::ApiKey
+        };
+        Ok((user_id, actor))
     }
 
     #[tracing::instrument(name = "mcp.call_tool", skip_all, fields({ attr::MCP_TOOL_NAME } = %tool_name))]
@@ -523,12 +537,19 @@ impl UniversalInboxMcpServer {
         args: T,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        let user_id = self.authorize_tool_call(tool_name, &context)?;
+        let (user_id, actor) = self.authorize_tool_call(tool_name, &context)?;
         let arguments = serde_json::to_value(args).map(Some).map_err(|err| {
             ErrorData::invalid_params(format!("Failed to serialize tool arguments: {err}"), None)
         })?;
 
-        match execute_tool(tool_name, arguments, &self.services, user_id).await {
+        // rmcp may serve the call on another task than the HTTP request: the actor set by the
+        // HTTP middleware does not reach it.
+        match with_actor(
+            actor,
+            execute_tool(tool_name, arguments, &self.services, user_id),
+        )
+        .await
+        {
             Ok(result) => Ok(CallToolResult::structured(result)),
             Err(ToolCallError::InvalidArguments(err)) => {
                 Err(ErrorData::invalid_params(err.to_string(), None))
@@ -691,6 +712,22 @@ impl UniversalInboxMcpServer {
     }
 
     #[tool(
+        name = "search_audit_log",
+        title = "Search audit log",
+        description = "Search the audit log of changes to notifications and tasks: status changes (from -> to), snoozes, set aside, task links, task creations with their parameters, and who made each change (the user from the web app, an API key, the browser extension, an MCP client, a sync job, a webhook or an agent, with its reason). Use it to answer \"who changed this and why\", for example with entity_id for the history of one notification or task. Newest first, one page per call; events are kept for a limited retention period.",
+        output_schema = search_audit_log_output_schema(),
+        annotations(read_only_hint = true, idempotent_hint = true)
+    )]
+    async fn search_audit_log(
+        &self,
+        Parameters(args): Parameters<SearchAuditLogArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call_structured_tool("search_audit_log", args, context)
+            .await
+    }
+
+    #[tool(
         name = "update_task",
         title = "Update task",
         description = "Change fields of one task synchronized through Universal Inbox (see the patch schema for the fields you can set; omitted fields stay unchanged). Changes execute immediately and are applied to the task provider.",
@@ -802,8 +839,8 @@ mod registration_tests {
         let tools = UniversalInboxMcpServer::tool_router().list_all();
         assert_eq!(
             tools.len(),
-            11,
-            "expected all 11 MCP tools to be registered"
+            12,
+            "expected all 12 MCP tools to be registered"
         );
         for tool in &tools {
             assert!(
@@ -844,8 +881,8 @@ mod registration_tests {
         let tools = UniversalInboxMcpServer::tool_router().list_all();
         assert_eq!(
             tools.len(),
-            11,
-            "expected all 11 MCP tools to be registered"
+            12,
+            "expected all 12 MCP tools to be registered"
         );
 
         let expected_required: std::collections::HashMap<&str, &[&str]> = [

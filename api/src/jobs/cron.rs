@@ -10,8 +10,9 @@ use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::{
     configuration::{
-        PauseIntegrationConnectionsCronSettings, RefreshOAuthTokensCronSettings,
-        RetryOAuthGrantRevocationsCronSettings, VacuumJobsCronSettings,
+        PauseIntegrationConnectionsCronSettings, PurgeAuditEventsCronSettings,
+        RefreshOAuthTokensCronSettings, RetryOAuthGrantRevocationsCronSettings,
+        VacuumJobsCronSettings,
     },
     jobs::{JobStorage, UniversalInboxJob, push_job},
     universal_inbox::{
@@ -170,6 +171,50 @@ pub async fn handle_pause_integration_connections_cron_tick(
         .await
         .context("Failed to enqueue PauseIntegrationConnections job")?;
         info!("Enqueued PauseIntegrationConnections job");
+        Ok(())
+    }
+    .await;
+    result.record_span_error()
+}
+
+/// Cron tick request for the `purge-audit-events` job. Carries no data; the
+/// scheduled tick timestamp is injected via [`CronContext`].
+#[derive(Debug, Clone, Default)]
+pub struct PurgeAuditEventsCronTick;
+
+/// Handles a cron tick by electing a single winner across all worker processes
+/// (per-tick Redis lock) and enqueuing a durable `PurgeAuditEvents` job on the
+/// shared Redis-backed queue: the cron workers have no database access.
+#[tracing::instrument(
+    name = "purge-audit-events-cron-tick",
+    level = "info",
+    skip_all,
+    fields({ attr::CRON_TICK } = %ctx.get_timestamp(), { attr::ERROR_TYPE } = tracing::field::Empty)
+)]
+pub async fn handle_purge_audit_events_cron_tick(
+    _tick: PurgeAuditEventsCronTick,
+    ctx: CronContext<Utc>,
+    storage: Data<JobStorage>,
+    cache: Data<Cache>,
+    settings: Data<PurgeAuditEventsCronSettings>,
+) -> Result<(), UniversalInboxError> {
+    let result: Result<(), UniversalInboxError> = async move {
+        if !try_acquire_cron_tick_lock(
+            &cache,
+            &queue_scoped_cron_job_name(&storage, "purge-audit-events"),
+            ctx.get_timestamp(),
+            settings.lock_ttl_seconds,
+        )
+        .await?
+        {
+            info!("Tick already handled by another worker process, skipping");
+            return Ok(());
+        }
+
+        push_job(&storage, UniversalInboxJob::PurgeAuditEvents)
+            .await
+            .context("Failed to enqueue PurgeAuditEvents job")?;
+        info!("Enqueued PurgeAuditEvents job");
         Ok(())
     }
     .await;

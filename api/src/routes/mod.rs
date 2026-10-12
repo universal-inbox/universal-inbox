@@ -1,3 +1,4 @@
+pub mod audit_event;
 pub mod auth;
 pub mod config;
 pub mod health_check;
