@@ -847,6 +847,8 @@ impl NotionService {
             tracked_discussions.len() as i64,
         );
 
+        // Discussions often share a page and authors
+        let mut cache = NotionObjectCache::default();
         let mut items = vec![];
         for tracked in tracked_discussions {
             let parent_id = match &tracked.parent {
@@ -860,6 +862,7 @@ impl NotionService {
                     parent_id,
                     &tracked.discussion_id,
                     user_notion_id,
+                    &mut cache,
                 )
                 .await
             {
@@ -910,6 +913,7 @@ impl NotionService {
         parent_id: &str,
         discussion_id: &str,
         user_notion_id: &str,
+        cache: &mut NotionObjectCache,
     ) -> Result<Option<NotionComment>, UniversalInboxError> {
         let raw_comments: Vec<RawNotionComment> = self
             .list_comments(access_token, parent_id)
@@ -929,7 +933,7 @@ impl NotionService {
             },
         };
 
-        let page = self.get_page(access_token, page_id).await?;
+        let page = self.get_cached_page(access_token, page_id, cache).await?;
         let (quoted_content, parent_block_created_by) = match &parent {
             NotionCommentParent::Block { block_id } => {
                 let block = self.get_block(access_token, block_id).await?;
@@ -941,17 +945,14 @@ impl NotionService {
             NotionCommentParent::Page { .. } => (None, None),
         };
 
-        let mut users: HashMap<String, NotionUser> = HashMap::new();
         let mut comments = vec![];
         for raw_comment in raw_comments {
-            let author_id = raw_comment.created_by.id.clone();
-            if !users.contains_key(&author_id) {
-                let user = self.get_user(access_token, &author_id).await;
-                users.insert(author_id.clone(), user);
-            }
+            let author = self
+                .get_cached_user(access_token, &raw_comment.created_by.id, cache)
+                .await;
             comments.push(NotionCommentMessage {
                 id: raw_comment.id,
-                author: users[&author_id].clone(),
+                author,
                 rich_text: parse_rich_text(&raw_comment.rich_text),
                 created_time: raw_comment.created_time,
                 last_edited_time: raw_comment.last_edited_time,
@@ -960,12 +961,7 @@ impl NotionService {
 
         Ok(Some(NotionComment {
             discussion_id: discussion_id.to_string(),
-            page: NotionPage {
-                title: page.title(),
-                id: page.id,
-                url: page.url,
-                created_by: page.created_by.map(|user| user.id),
-            },
+            page,
             parent,
             quoted_content,
             parent_block_created_by,
