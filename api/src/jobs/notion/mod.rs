@@ -3,10 +3,10 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use apalis::prelude::Data;
 use serde::{Deserialize, Serialize};
-use sqlx::{Postgres, Transaction};
+use sqlx::{Acquire, Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -69,7 +69,7 @@ pub async fn handle_notion_webhook_event(
             .await
             .context("Failed to create new transaction while handling a Notion event")?;
 
-        if event.event_type == NotionWebhookEventType::PageContentUpdated {
+        let failures = if event.event_type == NotionWebhookEventType::PageContentUpdated {
             handle_notion_page_content_event(
                 &mut transaction,
                 &event,
@@ -77,7 +77,7 @@ pub async fn handle_notion_webhook_event(
                 (*integration_connection_service).clone(),
                 (*third_party_item_service).clone(),
             )
-            .await?;
+            .await?
         } else {
             handle_notion_comment_event(
                 &mut transaction,
@@ -86,17 +86,61 @@ pub async fn handle_notion_webhook_event(
                 (*integration_connection_service).clone(),
                 (*third_party_item_service).clone(),
             )
-            .await?;
-        }
+            .await?
+        };
 
+        // The connections that worked keep their notification, the job is
+        // then retried for the others
         transaction
             .commit()
             .await
             .context("Failed to commit while handling a Notion event")?;
-        Ok(())
+        failures.into_result()
     }
     .await;
     result.record_span_error()
+}
+
+/// The connections a Notion event could not be saved for, except those
+/// without access to it: they fail the job, once the others are saved, so
+/// that it is retried.
+#[derive(Debug, Default)]
+pub struct NotionEventFailures {
+    pub count: usize,
+    pub first: Option<UniversalInboxError>,
+}
+
+impl NotionEventFailures {
+    fn record(
+        &mut self,
+        connection_id: IntegrationConnectionId,
+        saved_object: &str,
+        error: UniversalInboxError,
+    ) {
+        if is_access_denied(&error) {
+            info!(
+                { attr::INTEGRATION_CONNECTION_ID } = connection_id.to_string(),
+                "Skipping Notion {saved_object}: {error}"
+            );
+            return;
+        }
+        warn!(
+            { attr::INTEGRATION_CONNECTION_ID } = connection_id.to_string(),
+            "Failed to save Notion {saved_object}: {error:?}"
+        );
+        self.count += 1;
+        self.first.get_or_insert(error);
+    }
+
+    pub fn into_result(self) -> Result<(), UniversalInboxError> {
+        match self.first {
+            None => Ok(()),
+            Some(first) => Err(UniversalInboxError::Unexpected(anyhow!(
+                "Failed to save the Notion event for {} connection(s): {first}",
+                self.count
+            ))),
+        }
+    }
 }
 
 /// What the triage read about the commented object with a workspace token.
@@ -119,10 +163,10 @@ pub async fn handle_notion_comment_event(
     notification_service: Arc<RwLock<NotificationService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
-) -> Result<(), UniversalInboxError> {
+) -> Result<NotionEventFailures, UniversalInboxError> {
     let (Some(page_id), Some(parent)) = (&event.data.page_id, &event.data.parent) else {
         debug!("Notion comment event without page or parent, ignoring it");
-        return Ok(());
+        return Ok(NotionEventFailures::default());
     };
     let notion_service = notification_service.read().await.notion_service.clone();
 
@@ -146,7 +190,7 @@ pub async fn handle_notion_comment_event(
         })
     }) else {
         debug!("Unable to find the discussion of Notion comment, ignoring it");
-        return Ok(());
+        return Ok(NotionEventFailures::default());
     };
 
     // Reasons to look at the discussion for a user: author of the comment
@@ -230,6 +274,7 @@ pub async fn handle_notion_comment_event(
     }
 
     let accessible_person_ids = event.accessible_person_ids();
+    let mut failures = NotionEventFailures::default();
     for connection in connections {
         if !is_concerned_connection(
             &connection,
@@ -240,8 +285,10 @@ pub async fn handle_notion_comment_event(
             continue;
         }
         let connection_id = connection.id;
-        if let Err(error) = save_discussion_for_connection(
-            executor,
+        // A failing connection must not leave half-saved rows
+        let mut savepoint = begin_savepoint(executor).await?;
+        let result = save_discussion_for_connection(
+            &mut savepoint,
             connection,
             page_id,
             &parent.id,
@@ -251,23 +298,14 @@ pub async fn handle_notion_comment_event(
             &integration_connection_service,
             &third_party_item_service,
         )
-        .await
-        {
-            if is_access_denied(&error) {
-                info!(
-                    { attr::INTEGRATION_CONNECTION_ID } = connection_id.to_string(),
-                    "Skipping Notion discussion: {error}"
-                );
-            } else {
-                warn!(
-                    { attr::INTEGRATION_CONNECTION_ID } = connection_id.to_string(),
-                    "Failed to save Notion discussion: {error:?}"
-                );
-            }
+        .await;
+        end_savepoint(savepoint, result.is_ok()).await?;
+        if let Err(error) = result {
+            failures.record(connection_id, "discussion", error);
         }
     }
 
-    Ok(())
+    Ok(failures)
 }
 
 /// Handle a `page.content_updated` event: find the users mentioned in the
@@ -288,7 +326,7 @@ pub async fn handle_notion_page_content_event(
     notification_service: Arc<RwLock<NotificationService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
-) -> Result<(), UniversalInboxError> {
+) -> Result<NotionEventFailures, UniversalInboxError> {
     let current_span = tracing::Span::current();
     // The same block can be listed several times
     let mut seen_block_ids = HashSet::new();
@@ -309,7 +347,7 @@ pub async fn handle_notion_page_content_event(
     }
     current_span.set_attribute(attr::NOTION_UPDATED_BLOCKS_COUNT, block_ids.len() as i64);
     if block_ids.is_empty() {
-        return Ok(());
+        return Ok(NotionEventFailures::default());
     }
     let notion_service = notification_service.read().await.notion_service.clone();
 
@@ -400,6 +438,7 @@ pub async fn handle_notion_page_content_event(
     }
 
     let accessible_person_ids = event.accessible_person_ids();
+    let mut failures = NotionEventFailures::default();
     for connection in connections {
         if !is_concerned_connection(
             &connection,
@@ -430,8 +469,9 @@ pub async fn handle_notion_page_content_event(
         }
 
         let connection_id = connection.id;
-        if let Err(error) = save_mentions_for_connection(
-            executor,
+        let mut savepoint = begin_savepoint(executor).await?;
+        let result = save_mentions_for_connection(
+            &mut savepoint,
             &connection,
             &provider_user_id,
             &connection_block_ids,
@@ -440,22 +480,36 @@ pub async fn handle_notion_page_content_event(
             &integration_connection_service,
             &third_party_item_service,
         )
-        .await
-        {
-            if is_access_denied(&error) {
-                info!(
-                    { attr::INTEGRATION_CONNECTION_ID } = connection_id.to_string(),
-                    "Skipping Notion mentions: {error}"
-                );
-            } else {
-                warn!(
-                    { attr::INTEGRATION_CONNECTION_ID } = connection_id.to_string(),
-                    "Failed to save Notion mentions: {error:?}"
-                );
-            }
+        .await;
+        end_savepoint(savepoint, result.is_ok()).await?;
+        if let Err(error) = result {
+            failures.record(connection_id, "mentions", error);
         }
     }
 
+    Ok(failures)
+}
+
+async fn begin_savepoint<'a>(
+    executor: &'a mut Transaction<'_, Postgres>,
+) -> Result<Transaction<'a, Postgres>, UniversalInboxError> {
+    Ok((&mut **executor)
+        .begin()
+        .await
+        .context("Failed to create a savepoint while handling a Notion event")?)
+}
+
+/// Keep the savepoint's writes when `keep`, roll them back otherwise.
+async fn end_savepoint(
+    savepoint: Transaction<'_, Postgres>,
+    keep: bool,
+) -> Result<(), UniversalInboxError> {
+    if keep {
+        savepoint.commit().await
+    } else {
+        savepoint.rollback().await
+    }
+    .context("Failed to end a savepoint while handling a Notion event")?;
     Ok(())
 }
 

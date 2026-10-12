@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use anyhow::Context;
+use apalis::prelude::Data;
 use rstest::*;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -16,7 +19,11 @@ use universal_inbox::{
 use universal_inbox_api::{
     configuration::Settings,
     integrations::notion::webhook::NotionWebhookEvent,
-    jobs::notion::{handle_notion_comment_event, handle_notion_page_content_event},
+    jobs::notion::{
+        NotionWebhookEventJob, handle_notion_comment_event, handle_notion_page_content_event,
+        handle_notion_webhook_event,
+    },
+    universal_inbox::UniversalInboxError,
 };
 
 use crate::helpers::{
@@ -25,9 +32,10 @@ use crate::helpers::{
     notion::{
         BLOCK_ID, DISCUSSION_ID, ME, MY_TOKEN, NotionTestConnection, PAGE_ID, SOMEONE, connect_me,
         create_notion_integration_connection, mock_my_discussion, mock_notion_blocks,
-        mock_notion_deleted_block, mock_notion_discussion, mock_notion_not_accessible,
-        notion_comment, notion_comment_event, notion_page_content_event, notion_paragraph_block,
-        post_signed_notion_event, pushed_jobs_count, text_segment, user_mention_segment,
+        mock_notion_deleted_block, mock_notion_discussion, mock_notion_failure_after_triage,
+        mock_notion_not_accessible, notion_comment, notion_comment_event,
+        notion_page_content_event, notion_paragraph_block, post_signed_notion_event,
+        pushed_jobs_count, text_segment, user_mention_segment,
     },
     rest::delete_resource,
     settings,
@@ -37,6 +45,72 @@ use crate::helpers::{
 /// test never answers for another.
 fn new_workspace_id() -> String {
     Uuid::new_v4().to_string()
+}
+
+const SOMEONE_TOKEN: &str = "notion-token-someone";
+
+/// Connect `ME` and `SOMEONE` (another Universal Inbox user, whose client
+/// is returned) to the same new workspace.
+async fn connect_me_and_someone(
+    app: &AuthenticatedApp,
+    settings: &Settings,
+) -> (String, reqwest::Client) {
+    let workspace_id = new_workspace_id();
+    let (other_client, other_user) = authenticate_user(
+        &app.app,
+        "other-user-auth-id",
+        "Other",
+        "User",
+        "other.user@example.com",
+    )
+    .await;
+    create_notion_integration_connection(
+        &app.app,
+        other_user.id,
+        settings,
+        SOMEONE,
+        SOMEONE_TOKEN,
+        &workspace_id,
+        NotionConfig::enabled(),
+    )
+    .await;
+    create_notion_integration_connection(
+        &app.app,
+        app.user.id,
+        settings,
+        ME,
+        MY_TOKEN,
+        &workspace_id,
+        NotionConfig::enabled(),
+    )
+    .await;
+    (workspace_id, other_client)
+}
+
+/// Run the job as the worker does: its transaction is committed even when
+/// a connection failed.
+async fn run_job(app: &AuthenticatedApp, event: Value) -> Result<(), UniversalInboxError> {
+    handle_notion_webhook_event(
+        NotionWebhookEventJob(serde_json::from_value(event).unwrap()),
+        Data::new(Arc::clone(&app.app.notification_service)),
+        Data::new(Arc::clone(&app.app.integration_connection_service)),
+        Data::new(Arc::clone(&app.app.third_party_item_service)),
+    )
+    .await
+}
+
+async fn notion_notifications_of(app: &AuthenticatedApp, client: &reqwest::Client) -> usize {
+    list_notifications(
+        client,
+        &app.app.api_address,
+        vec![],
+        false,
+        None,
+        Some(NotificationSourceKind::Notion),
+        false,
+    )
+    .await
+    .len()
 }
 
 mod route {
@@ -595,39 +669,78 @@ mod job {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let workspace_id = new_workspace_id();
-        let (_, other_user) = authenticate_user(
-            &app.app,
-            "other-user-auth-id",
-            "Other",
-            "User",
-            "other.user@example.com",
-        )
-        .await;
-        create_notion_integration_connection(
-            &app.app,
-            other_user.id,
-            &settings,
-            SOMEONE,
-            "notion-token-someone",
+        let (workspace_id, _) = connect_me_and_someone(&app, &settings).await;
+        mock_notion_not_accessible(&app.app.notion_mock_server, SOMEONE_TOKEN).await;
+        mock_discussion_mentioning_both(&app, MY_TOKEN).await;
+
+        handle(
+            &app,
             &workspace_id,
-            NotionConfig::enabled(),
+            "comment-1",
+            "a-colleague",
+            &[SOMEONE, ME],
         )
         .await;
-        create_notion_integration_connection(
-            &app.app,
-            app.user.id,
-            &settings,
-            ME,
-            MY_TOKEN,
+
+        let notifications = notion_notifications(&app, vec![]).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Unread);
+    }
+
+    /// A Notion failure other than no access fails the job once the other
+    /// connections are saved, so that the job is retried.
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_failing_connection_fails_the_job_after_saving_the_others(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let (workspace_id, someone_client) = connect_me_and_someone(&app, &settings).await;
+        mock_notion_failure_after_triage(
+            &app.app.notion_mock_server,
+            "/v1/comments",
+            SOMEONE_TOKEN,
+        )
+        .await;
+        mock_discussion_mentioning_both(&app, SOMEONE_TOKEN).await;
+        mock_discussion_mentioning_both(&app, MY_TOKEN).await;
+        let event = notion_comment_event(
             &workspace_id,
-            NotionConfig::enabled(),
-        )
-        .await;
-        mock_notion_not_accessible(&app.app.notion_mock_server, "notion-token-someone").await;
+            "comment.created",
+            "comment-1",
+            "a-colleague",
+            DISCUSSION_ID,
+            PAGE_ID,
+            BLOCK_ID,
+            &[SOMEONE, ME],
+        );
+
+        let result = run_job(&app, event.clone()).await;
+
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to save the Notion event for 1 connection(s)")
+        );
+        assert_eq!(notion_notifications_of(&app, &app.client).await, 1);
+        assert_eq!(notion_notifications_of(&app, &someone_client).await, 0);
+
+        // The retry, once Notion answers again
+        app.app.notion_mock_server.reset().await;
+        mock_discussion_mentioning_both(&app, SOMEONE_TOKEN).await;
+        mock_discussion_mentioning_both(&app, MY_TOKEN).await;
+        run_job(&app, event).await.unwrap();
+
+        assert_eq!(notion_notifications_of(&app, &app.client).await, 1);
+        assert_eq!(notion_notifications_of(&app, &someone_client).await, 1);
+    }
+
+    async fn mock_discussion_mentioning_both(app: &AuthenticatedApp, access_token: &str) {
         mock_notion_discussion(
             &app.app.notion_mock_server,
-            MY_TOKEN,
+            access_token,
             PAGE_ID,
             "page-owner",
             BLOCK_ID,
@@ -645,19 +758,6 @@ mod job {
             )],
         )
         .await;
-
-        handle(
-            &app,
-            &workspace_id,
-            "comment-1",
-            "a-colleague",
-            &[SOMEONE, ME],
-        )
-        .await;
-
-        let notifications = notion_notifications(&app, vec![]).await;
-        assert_eq!(notifications.len(), 1);
-        assert_eq!(notifications[0].status, NotificationStatus::Unread);
     }
 
     /// Notion may deliver an event more than once: the discussion stays one
@@ -822,6 +922,8 @@ mod job {
             app.app.third_party_item_service.clone(),
         )
         .await
+        .unwrap()
+        .into_result()
         .unwrap();
 
         transaction
@@ -888,6 +990,69 @@ mod mention {
             minute,
             vec![text_segment(text)],
         )
+    }
+
+    /// A Notion failure other than no access fails the job once the other
+    /// connections are saved, so that the job is retried.
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_failing_connection_fails_the_job_after_saving_the_others(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let (workspace_id, someone_client) = connect_me_and_someone(&app, &settings).await;
+        let block_path = format!("/v1/blocks/{BLOCK_ID}");
+        mock_notion_failure_after_triage(&app.app.notion_mock_server, &block_path, SOMEONE_TOKEN)
+            .await;
+        mock_block_mentioning_both(&app, SOMEONE_TOKEN).await;
+        mock_block_mentioning_both(&app, MY_TOKEN).await;
+        let event = notion_page_content_event(
+            &workspace_id,
+            "event-1",
+            PAGE_ID,
+            &[BLOCK_ID],
+            &[SOMEONE, ME],
+        );
+
+        let result = run_job(&app, event.clone()).await;
+
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to save the Notion event for 1 connection(s)")
+        );
+        assert_eq!(notion_notifications_of(&app, &app.client).await, 1);
+        assert_eq!(notion_notifications_of(&app, &someone_client).await, 0);
+
+        // The retry, once Notion answers again
+        app.app.notion_mock_server.reset().await;
+        mock_block_mentioning_both(&app, SOMEONE_TOKEN).await;
+        mock_block_mentioning_both(&app, MY_TOKEN).await;
+        run_job(&app, event).await.unwrap();
+
+        assert_eq!(notion_notifications_of(&app, &app.client).await, 1);
+        assert_eq!(notion_notifications_of(&app, &someone_client).await, 1);
+    }
+
+    async fn mock_block_mentioning_both(app: &AuthenticatedApp, access_token: &str) {
+        mock_notion_blocks(
+            &app.app.notion_mock_server,
+            access_token,
+            PAGE_ID,
+            vec![notion_paragraph_block(
+                BLOCK_ID,
+                in_page(),
+                "a-colleague",
+                5,
+                vec![
+                    user_mention_segment(SOMEONE, "Someone"),
+                    user_mention_segment(ME, "Me"),
+                ],
+            )],
+        )
+        .await;
     }
 
     /// Replace the mocked blocks with `blocks`.
@@ -1200,6 +1365,8 @@ mod mention {
             app.app.third_party_item_service.clone(),
         )
         .await
+        .unwrap()
+        .into_result()
         .unwrap();
 
         transaction

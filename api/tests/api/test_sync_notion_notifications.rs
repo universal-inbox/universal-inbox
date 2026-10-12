@@ -242,6 +242,8 @@ mod mentions {
             app.app.third_party_item_service.clone(),
         )
         .await
+        .unwrap()
+        .into_result()
         .unwrap();
         transaction.commit().await.unwrap();
     }
