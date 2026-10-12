@@ -137,7 +137,7 @@ Universal Inbox handles the OAuth2 authorization flow natively. For each integra
 
 1. Create a **public** integration at <https://www.notion.so/profile/integrations> with the redirect URI `{front_base_url}/api/oauth/callback` and these capabilities: *Read content*, *Read comments* and *Read user information including email addresses*. Set its client ID and secret as `UNIVERSAL_INBOX__INTEGRATIONS__NOTION__OAUTH_CLIENT_ID` / `UNIVERSAL_INBOX__INTEGRATIONS__NOTION__OAUTH_CLIENT_SECRET`.
 2. In the integration's **Webhooks** tab, create a subscription to `{front_base_url}/api/hooks/notion/events` with the events `comment.created`, `comment.updated`, `comment.deleted` and `page.content_updated`. The URL must be reachable from the internet.
-3. Notion sends a verification token once, and the API logs it. Set it as `UNIVERSAL_INBOX__INTEGRATIONS__NOTION__SIGNING_SECRET`, restart the API, then click **Verify** in Notion. Until it is set, every Notion event is rejected.
+3. Notion sends a verification token, and the API logs the first one it receives after it starts. Paste it in Notion's **Verify** dialog first: Notion accepts only the token it sent, so an accepted token is genuine (if Verify fails, restart the API and click **Resend token**). Then set it as `UNIVERSAL_INBOX__INTEGRATIONS__NOTION__SIGNING_SECRET` and restart the API. Until it is set, every Notion event is rejected. This token is the signing key of every event: treat the logs that hold it as secret.
 
 Capabilities are fixed when a workspace installs the integration: after changing them, remove the integration from the workspace connections and connect again.
 
