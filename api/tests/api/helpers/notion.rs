@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use redis_apalis::AsyncCommands;
 use reqwest::{Client, Response};
 use ring::hmac;
 use serde_json::{Value, json};
@@ -82,6 +83,17 @@ pub async fn mock_my_discussion(
         comments,
     )
     .await;
+}
+
+/// Counts the jobs pushed to the test's queue, whatever their state (see
+/// `test_slack_webhook_message.rs`).
+pub async fn pushed_jobs_count(app: &TestedApp) -> usize {
+    app.redis_storage
+        .get_connection()
+        .clone()
+        .hlen(app.redis_storage.get_config().job_data_hash())
+        .await
+        .expect("Failed to get jobs count")
 }
 
 /// Signing secret matching `api/config/test.toml::[integrations.notion].signing_secret`.

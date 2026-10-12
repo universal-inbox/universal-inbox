@@ -778,18 +778,14 @@ mod notion_provider {
     use wiremock::matchers::body_string_contains;
 
     use super::*;
-    use crate::helpers::settings;
+    use crate::helpers::{
+        notion::{notion_comment_event, post_signed_notion_event, pushed_jobs_count},
+        settings,
+    };
 
-    /// Notion's token response names the human who installed the integration
-    /// (`owner.user`) and the workspace: the callback pins that user and keeps
-    /// the workspace and bot ids the webhooks are routed with.
-    #[rstest]
-    #[tokio::test]
-    async fn test_oauth_callback_pins_notion_owner_and_stores_context(
-        settings: Settings,
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
-        let app = authenticated_app.await;
+    /// Mock Notion's token exchange, installed by `notion-user-id` in the
+    /// workspace `notion-workspace-id`.
+    async fn mock_notion_token_exchange(app: &AuthenticatedApp, settings: &Settings) {
         let notion_settings = &settings.integrations["notion"];
         Mock::given(method("POST"))
             .and(path("/v1/oauth/token"))
@@ -828,6 +824,56 @@ mod notion_provider {
             .expect(1)
             .mount(&app.app.notion_mock_server)
             .await;
+    }
+
+    /// An event of a workspace nobody had connected yet is dropped, and the
+    /// answer is cached: connecting the workspace must clear it, so its next
+    /// event is queued.
+    #[rstest]
+    #[tokio::test]
+    async fn test_notion_events_are_queued_once_the_workspace_is_connected(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        mock_notion_token_exchange(&app, &settings).await;
+        let event = notion_comment_event(
+            "notion-workspace-id",
+            "comment.created",
+            "comment-1",
+            "notion-user-someone",
+            "discussion-1",
+            "page-1",
+            "block-1",
+            &["notion-user-id"],
+        );
+        post_signed_notion_event(&app.client, &app.app.api_address, &event).await;
+        assert_eq!(pushed_jobs_count(&app.app).await, 0);
+
+        let (_, state) = start_oauth_flow_for(
+            &app,
+            IntegrationConnectionConfig::Notion(NotionConfig::default()),
+            None,
+        )
+        .await;
+        let response = owner_callback(&app, &state).await;
+        assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+        post_signed_notion_event(&app.client, &app.app.api_address, &event).await;
+
+        assert_eq!(pushed_jobs_count(&app.app).await, 1);
+    }
+
+    /// Notion's token response names the human who installed the integration
+    /// (`owner.user`) and the workspace: the callback pins that user and keeps
+    /// the workspace and bot ids the webhooks are routed with.
+    #[rstest]
+    #[tokio::test]
+    async fn test_oauth_callback_pins_notion_owner_and_stores_context(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        mock_notion_token_exchange(&app, &settings).await;
         let (integration_connection_id, state) = start_oauth_flow_for(
             &app,
             IntegrationConnectionConfig::Notion(NotionConfig::default()),

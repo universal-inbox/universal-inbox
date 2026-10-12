@@ -35,7 +35,9 @@ use crate::{
     },
     configuration::FreePlanSettings,
     repository::{Repository, user::UserRepository},
-    universal_inbox::UniversalInboxError,
+    universal_inbox::{
+        UniversalInboxError, integration_connection::service::invalidate_cached_provider_lookups,
+    },
 };
 
 /// Retention window for the Stripe webhook idempotency table (`stripe_event`).
@@ -1070,6 +1072,7 @@ impl BillingService {
                         Some(&snapshot),
                     )
                     .await?;
+                invalidate_cached_provider_lookups(&connection).await;
                 paused.push(connection_id);
             }
 
@@ -1132,6 +1135,7 @@ impl BillingService {
             self.repository
                 .set_integration_connection_plan_pause(executor, connection_id, None, None)
                 .await?;
+            invalidate_cached_provider_lookups(&connection).await;
             restored.push(connection_id);
         }
         Ok(restored)

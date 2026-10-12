@@ -1,11 +1,13 @@
 use anyhow::Context;
-use redis_apalis::AsyncCommands;
 use rstest::*;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 use universal_inbox::{
-    integration_connection::integrations::notion::NotionConfig,
+    integration_connection::{
+        IntegrationConnection, config::IntegrationConnectionConfig,
+        integrations::notion::NotionConfig,
+    },
     notification::{
         Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
     },
@@ -18,16 +20,16 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    TestedApp,
     auth::{AuthenticatedApp, authenticate_user, authenticated_app},
     notification::{list_notifications, update_notification},
     notion::{
-        BLOCK_ID, DISCUSSION_ID, ME, MY_TOKEN, PAGE_ID, SOMEONE, connect_me,
+        BLOCK_ID, DISCUSSION_ID, ME, MY_TOKEN, NotionTestConnection, PAGE_ID, SOMEONE, connect_me,
         create_notion_integration_connection, mock_my_discussion, mock_notion_blocks,
         mock_notion_deleted_block, mock_notion_discussion, mock_notion_not_accessible,
         notion_comment, notion_comment_event, notion_page_content_event, notion_paragraph_block,
-        post_signed_notion_event, text_segment, user_mention_segment,
+        post_signed_notion_event, pushed_jobs_count, text_segment, user_mention_segment,
     },
+    rest::delete_resource,
     settings,
 };
 
@@ -197,15 +199,39 @@ mod route {
         assert_eq!(pushed_jobs_count(&app.app).await, 0);
     }
 
-    /// Counts the jobs pushed to the test's queue, whatever their state (see
-    /// `test_slack_webhook_message.rs`).
-    async fn pushed_jobs_count(app: &TestedApp) -> usize {
-        app.redis_storage
-            .get_connection()
-            .clone()
-            .hlen(app.redis_storage.get_config().job_data_hash())
-            .await
-            .expect("Failed to get jobs count")
+    #[rstest]
+    #[tokio::test]
+    async fn test_events_of_a_disconnected_workspace_are_dropped(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = new_workspace_id();
+        let connection = create_notion_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings,
+            ME,
+            MY_TOKEN,
+            &workspace_id,
+            NotionConfig::enabled(),
+        )
+        .await;
+        let event = comment_event(&workspace_id, "comment.created", "comment-1");
+        post_signed_notion_event(&app.client, &app.app.api_address, &event).await;
+        assert_eq!(pushed_jobs_count(&app.app).await, 1);
+
+        let _: Box<IntegrationConnection> = delete_resource(
+            &app.client,
+            &app.app.api_address,
+            "integration-connections",
+            connection.id.into(),
+        )
+        .await;
+        let response = post_signed_notion_event(&app.client, &app.app.api_address, &event).await;
+
+        assert_eq!(response.status(), 200);
+        assert_eq!(pushed_jobs_count(&app.app).await, 1);
     }
 }
 
@@ -360,6 +386,45 @@ mod job {
         handle(&app, &workspace_id, "comment-1", SOMEONE, &[ME]).await;
 
         assert!(notion_notifications(&app, all_statuses()).await.is_empty());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_enabled_comment_sync_applies_to_the_next_comment(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let NotionTestConnection {
+            workspace_id,
+            connection,
+        } = connect_me(
+            &app,
+            &settings,
+            NotionConfig {
+                sync_comments_enabled: false,
+                sync_mentions_enabled: true,
+            },
+        )
+        .await;
+        mock_mentioning_discussion(&app, MY_TOKEN).await;
+        handle(&app, &workspace_id, "comment-1", SOMEONE, &[ME]).await;
+        assert!(notion_notifications(&app, all_statuses()).await.is_empty());
+
+        let response = app
+            .client
+            .put(format!(
+                "{}integration-connections/{}/config",
+                app.app.api_address, connection.id
+            ))
+            .json(&IntegrationConnectionConfig::Notion(NotionConfig::enabled()))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        handle(&app, &workspace_id, "comment-1", SOMEONE, &[ME]).await;
+
+        assert_eq!(notion_notifications(&app, all_statuses()).await.len(), 1);
     }
 
     #[rstest]
