@@ -1,7 +1,6 @@
 use chrono::{DateTime, TimeDelta, Utc};
 use rstest::*;
 use serde_json::{Value, json};
-use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{IntegrationConnection, integrations::notion::NotionConfig},
@@ -17,7 +16,11 @@ use universal_inbox::{
         item::ThirdPartyItemData,
     },
 };
-use universal_inbox_api::{configuration::Settings, integrations::notion::NotionService};
+use universal_inbox_api::{
+    configuration::Settings,
+    integrations::notion::{NotionService, webhook::NotionWebhookEvent},
+    jobs::notion::handle_notion_page_content_event,
+};
 
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
@@ -27,19 +30,13 @@ use crate::helpers::{
         update_notification,
     },
     notion::{
-        create_notion_integration_connection, mock_notion_block_children, mock_notion_discussion,
-        mock_notion_page_and_users, mock_notion_search, notion_search_page, text_segment,
+        BLOCK_ID, DISCUSSION_ID, ME, MY_TOKEN, PAGE_ID, SOMEONE, connect_me, mock_my_discussion,
+        mock_notion_block_children, mock_notion_blocks, mock_notion_page_and_users,
+        mock_notion_search, notion_page_content_event, notion_search_page, text_segment,
         user_mention_segment,
     },
     settings,
 };
-
-const ME: &str = "notion-user-me";
-const MY_TOKEN: &str = "notion-token-me";
-const SOMEONE: &str = "notion-user-someone";
-const PAGE_ID: &str = "3c612f56-fdd0-4a30-a4d6-bda7d7426309";
-const BLOCK_ID: &str = "b1b2b3b4-0000-4000-8000-0000000000bb";
-const DISCUSSION_ID: &str = "a2b6c3d4-0000-4000-8000-0000000000aa";
 
 fn minutes_ago(minutes: i64) -> DateTime<Utc> {
     Utc::now() - TimeDelta::minutes(minutes)
@@ -87,23 +84,6 @@ async fn mock_page(app: &AuthenticatedApp, page_edited: i64, blocks: Vec<Value>)
     .await;
     mock_notion_block_children(server, MY_TOKEN, PAGE_ID, blocks).await;
     mock_notion_page_and_users(server, MY_TOKEN, PAGE_ID).await;
-}
-
-async fn connect_me(
-    app: &AuthenticatedApp,
-    settings: &Settings,
-    config: NotionConfig,
-) -> Box<IntegrationConnection> {
-    create_notion_integration_connection(
-        &app.app,
-        app.user.id,
-        settings,
-        ME,
-        MY_TOKEN,
-        &Uuid::new_v4().to_string(),
-        config,
-    )
-    .await
 }
 
 fn mentions_only() -> NotionConfig {
@@ -183,7 +163,9 @@ mod mentions {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let connection = connect_me(&app, &settings, mentions_only()).await;
+        let connection = connect_me(&app, &settings, mentions_only())
+            .await
+            .connection;
         mock_page(&app, 1, vec![mentioning_paragraph(SOMEONE, minutes_ago(1))]).await;
 
         let synced = sync_notifications(
@@ -212,6 +194,56 @@ mod mentions {
             .await
             .unwrap();
         assert!(connection.last_notifications_sync_completed_at.is_some());
+    }
+
+    /// The webhook saw the mention first: the hourly sync finds the same
+    /// block and must not notify it a second time.
+    #[rstest]
+    #[tokio::test]
+    async fn test_webhook_mention_is_not_duplicated_by_the_sync(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let workspace_id = connect_me(&app, &settings, mentions_only())
+            .await
+            .workspace_id;
+        let block = mentioning_paragraph(SOMEONE, minutes_ago(1));
+        mock_page(&app, 1, vec![block.clone()]).await;
+        mock_notion_blocks(&app.app.notion_mock_server, MY_TOKEN, PAGE_ID, vec![block]).await;
+        handle_page_content_event(&app, &workspace_id).await;
+        let notifications = notion_notifications(&app).await;
+        assert_eq!(notifications.len(), 1);
+        mark_as_read(&app, &notifications[0]).await;
+
+        force_sync(&app).await;
+
+        let notifications = notion_notifications(&app).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Read);
+    }
+
+    async fn handle_page_content_event(app: &AuthenticatedApp, workspace_id: &str) {
+        let event: NotionWebhookEvent = serde_json::from_value(notion_page_content_event(
+            workspace_id,
+            "event-1",
+            PAGE_ID,
+            &[BLOCK_ID],
+            &[ME],
+        ))
+        .unwrap();
+        let service = app.app.notification_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+        handle_notion_page_content_event(
+            &mut transaction,
+            &event,
+            app.app.notification_service.clone(),
+            app.app.integration_connection_service.clone(),
+            app.app.third_party_item_service.clone(),
+        )
+        .await
+        .unwrap();
+        transaction.commit().await.unwrap();
     }
 
     #[rstest]
@@ -419,17 +451,7 @@ mod comments {
     }
 
     async fn mock_remote_discussion(app: &AuthenticatedApp, comments: Vec<Value>) {
-        app.app.notion_mock_server.reset().await;
-        mock_notion_discussion(
-            &app.app.notion_mock_server,
-            MY_TOKEN,
-            PAGE_ID,
-            SOMEONE,
-            BLOCK_ID,
-            ME,
-            comments,
-        )
-        .await;
+        mock_my_discussion(app, ME, comments).await;
     }
 
     #[rstest]
@@ -439,7 +461,9 @@ mod comments {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let connection = connect_me(&app, &settings, comments_only()).await;
+        let connection = connect_me(&app, &settings, comments_only())
+            .await
+            .connection;
         let first_comment_time = minutes_ago(120);
         track_discussion(&app, &connection, first_comment_time).await;
         mock_remote_discussion(
@@ -464,13 +488,72 @@ mod comments {
     }
 
     #[rstest]
+    #[case::reply(false, NotificationStatus::Unsubscribed)]
+    #[case::reply_mentioning_me(true, NotificationStatus::Unread)]
+    #[tokio::test]
+    async fn test_missed_reply_in_an_unsubscribed_discussion(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        #[case] reply_mentions_me: bool,
+        #[case] expected_status: NotificationStatus,
+    ) {
+        let app = authenticated_app.await;
+        let connection = connect_me(&app, &settings, comments_only())
+            .await
+            .connection;
+        let first_comment_time = minutes_ago(120);
+        track_discussion(&app, &connection, first_comment_time).await;
+        update_notification(
+            &app,
+            notion_notifications(&app).await[0].id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Unsubscribed),
+                ..Default::default()
+            },
+            app.user.id,
+        )
+        .await;
+        let mut reply = comment("comment-2", SOMEONE, minutes_ago(10), "Any news ");
+        if reply_mentions_me {
+            reply["rich_text"]
+                .as_array_mut()
+                .unwrap()
+                .push(user_mention_segment(ME, "Me"));
+        }
+        mock_remote_discussion(
+            &app,
+            vec![
+                comment("comment-1", SOMEONE, first_comment_time, "Looks good"),
+                reply,
+            ],
+        )
+        .await;
+
+        force_sync(&app).await;
+
+        let notifications = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![expected_status],
+            false,
+            None,
+            Some(NotificationSourceKind::Notion),
+            false,
+        )
+        .await;
+        assert_eq!(notifications.len(), 1);
+    }
+
+    #[rstest]
     #[tokio::test]
     async fn test_discussion_without_new_reply_is_untouched(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let connection = connect_me(&app, &settings, comments_only()).await;
+        let connection = connect_me(&app, &settings, comments_only())
+            .await
+            .connection;
         let first_comment_time = minutes_ago(120);
         track_discussion(&app, &connection, first_comment_time).await;
         mock_remote_discussion(
@@ -499,7 +582,9 @@ mod comments {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let connection = connect_me(&app, &settings, comments_only()).await;
+        let connection = connect_me(&app, &settings, comments_only())
+            .await
+            .connection;
         let first_comment_time = minutes_ago(120);
         track_discussion(&app, &connection, first_comment_time).await;
         mock_remote_discussion(
@@ -528,7 +613,9 @@ mod comments {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let connection = connect_me(&app, &settings, mentions_only()).await;
+        let connection = connect_me(&app, &settings, mentions_only())
+            .await
+            .connection;
         track_discussion(&app, &connection, minutes_ago(120)).await;
         mock_page(&app, 1, vec![]).await;
 
@@ -544,7 +631,9 @@ mod comments {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let connection = connect_me(&app, &settings, comments_only()).await;
+        let connection = connect_me(&app, &settings, comments_only())
+            .await
+            .connection;
         let old_time = Utc::now() - TimeDelta::days(15);
         track_discussion(&app, &connection, old_time).await;
         mock_remote_discussion(

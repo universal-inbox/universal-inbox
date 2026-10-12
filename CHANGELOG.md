@@ -23,6 +23,7 @@
 - Show every comment and reply of a GitHub discussion in its preview, collapsing the already read ones
 - Show a check mark on GitHub discussion notifications that have an accepted answer
 - Export all your data as a JSON file from the Profile page (`GET /users/me/export`, 2 exports per minute)
+- Add Notion integration: comments and page mentions as notifications (OAuth, webhooks with an hourly catch-up sync, thread and mention previews)
 
 ### Changed
 

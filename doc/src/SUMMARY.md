@@ -22,6 +22,7 @@
   - [TickTick](config/setup/ticktick.md)
   - [Google Calendar](config/setup/gcal.md)
   - [Google Drive](config/setup/gdrive.md)
+  - [Notion](config/setup/notion.md)
 
 # How does it work?
 
@@ -36,6 +37,7 @@
   - [TickTick](how/actions/ticktick.md)
   - [Google Calendar](how/actions/gcal.md)
   - [Google Drive](how/actions/gdrive.md)
+  - [Notion](how/actions/notion.md)
 
 # Misc
 

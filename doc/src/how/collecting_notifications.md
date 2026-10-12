@@ -27,6 +27,10 @@ Synchronization happens through two methods:
 
 Unlike other integrations, Slack uses a real-time webhook system that delivers events to Universal Inbox as they occur. This results in faster notification delivery compared to the scheduled synchronization used by other integrations.
 
+#### Notion
+
+Notion also delivers comments and page changes through webhooks, as they occur. A periodic synchronization catches up on missed replies and mentions (see [Notion](../config/setup/notion.md)).
+
 ## Notification Lifecycle
 
 After collection, notifications become part of the Universal Inbox workflow:

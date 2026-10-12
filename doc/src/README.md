@@ -13,6 +13,7 @@
   - Linear issue and project notifications
   - Google Mail threads (with specific tags)
   - Slack messages reacted with an emoji and direct mentions
+  - Notion comments and page mentions
 
 - [Efficient Notification Management](how/actions/): Take immediate action on notifications:
   - Delete notifications until next update

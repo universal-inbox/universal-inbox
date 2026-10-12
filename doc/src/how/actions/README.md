@@ -11,6 +11,7 @@ This section provides detailed information about the actions available for each 
 - [Google Mail](gmail.md)
 - [Google Calendar](gcal.md)
 - [Google Drive](gdrive.md)
+- [Notion](notion.md)
 - [Slack](slack.md)
 - [Todoist](todoist.md)
 

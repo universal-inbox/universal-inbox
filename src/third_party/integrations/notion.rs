@@ -185,6 +185,14 @@ impl NotionComment {
         self.latest_comment().author.id == notion_user_id
     }
 
+    /// A comment written or edited after `since` mentions the user: it
+    /// brings an unsubscribed discussion back.
+    pub fn mentions_user_since(&self, notion_user_id: &str, since: DateTime<Utc>) -> bool {
+        self.comments.iter().any(|comment| {
+            comment.last_edited_time > since && comment.mentions_user(notion_user_id)
+        })
+    }
+
     /// Split the replies (all comments but the first) into those already
     /// seen, last edited before `seen_before`, and the newer ones.
     pub fn split_seen_replies(
@@ -644,6 +652,27 @@ mod tests {
 
         assert!(notion_comment.is_last_comment_from_user(USER_ID));
         assert_eq!(notion_comment.latest_comment().id, "c4");
+    }
+
+    // The fixture mentions USER_ID once, in its first comment at 09:00
+    #[rstest]
+    #[case::mention_after_since(USER_ID, (8, 55), true)]
+    #[case::mention_before_since(USER_ID, (9, 5), false)]
+    #[case::other_user_not_mentioned(OTHER_USER_ID, (8, 55), false)]
+    fn test_mentions_user_since(
+        notion_comment: NotionComment,
+        #[case] notion_user_id: &str,
+        #[case] (since_hour, since_minute): (u32, u32),
+        #[case] expected: bool,
+    ) {
+        let since = Utc
+            .with_ymd_and_hms(2026, 10, 10, since_hour, since_minute, 0)
+            .unwrap();
+
+        assert_eq!(
+            notion_comment.mentions_user_since(notion_user_id, since),
+            expected
+        );
     }
 
     #[rstest]

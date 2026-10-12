@@ -131,7 +131,15 @@ You can the connect the development application on [http://localhost:8080](http:
 
 ### Configure third-party OAuth applications
 
-Universal Inbox handles the OAuth2 authorization flow natively. For each integration you want to enable (GitHub, Linear, Slack, Google Mail/Calendar/Drive, Todoist, TickTick), declare Universal Inbox as an OAuth2 application with the provider and copy the resulting `oauth_client_id` / `oauth_client_secret` into the matching `[integrations.<name>]` section in `api/config/local.toml` (or via `UNIVERSAL_INBOX__INTEGRATIONS__<NAME>__OAUTH_CLIENT_ID` environment variables). The OAuth redirect URI registered with each provider must be `{front_base_url}/api/oauth/callback`.
+Universal Inbox handles the OAuth2 authorization flow natively. For each integration you want to enable (GitHub, Linear, Slack, Notion, Google Mail/Calendar/Drive, Todoist, TickTick), declare Universal Inbox as an OAuth2 application with the provider and copy the resulting `oauth_client_id` / `oauth_client_secret` into the matching `[integrations.<name>]` section in `api/config/local.toml` (or via `UNIVERSAL_INBOX__INTEGRATIONS__<NAME>__OAUTH_CLIENT_ID` environment variables). The OAuth redirect URI registered with each provider must be `{front_base_url}/api/oauth/callback`.
+
+#### Notion
+
+1. Create a **public** integration at <https://www.notion.so/profile/integrations> with the redirect URI `{front_base_url}/api/oauth/callback` and these capabilities: *Read content*, *Read comments* and *Read user information including email addresses*. Set its client ID and secret as `UNIVERSAL_INBOX__INTEGRATIONS__NOTION__OAUTH_CLIENT_ID` / `UNIVERSAL_INBOX__INTEGRATIONS__NOTION__OAUTH_CLIENT_SECRET`.
+2. In the integration's **Webhooks** tab, create a subscription to `{front_base_url}/api/hooks/notion/events` with the events `comment.created`, `comment.updated`, `comment.deleted` and `page.content_updated`. The URL must be reachable from the internet.
+3. Notion sends a verification token once, and the API logs it. Set it as `UNIVERSAL_INBOX__INTEGRATIONS__NOTION__SIGNING_SECRET`, restart the API, then click **Verify** in Notion. Until it is set, every Notion event is rejected.
+
+Capabilities are fixed when a workspace installs the integration: after changing them, remove the integration from the workspace connections and connect again.
 
 ## License
 
