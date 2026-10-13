@@ -6,7 +6,7 @@ use tracing::info;
 
 use universal_inbox::{
     Page, PageToken,
-    audit::{AuditEvent, AuditEventFilter},
+    audit::{AuditEvent, AuditEventFilter, AuditEventGroup},
     user::UserId,
 };
 
@@ -60,6 +60,28 @@ impl AuditService {
             .clamp(1, MAX_AUDIT_EVENTS_PAGE_SIZE);
         self.repository
             .fetch_audit_events(executor, user_id, filter, page_token, per_page)
+            .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = %user_id),
+        err
+    )]
+    pub async fn fetch_audit_event_groups(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        filter: &AuditEventFilter,
+        page_token: Option<PageToken>,
+        per_page: Option<usize>,
+    ) -> Result<Page<AuditEventGroup>, UniversalInboxError> {
+        let per_page = per_page
+            .unwrap_or(DEFAULT_AUDIT_EVENTS_PAGE_SIZE)
+            .clamp(1, MAX_AUDIT_EVENTS_PAGE_SIZE);
+        self.repository
+            .fetch_audit_event_groups(executor, user_id, filter, page_token, per_page)
             .await
     }
 

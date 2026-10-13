@@ -189,6 +189,14 @@ pub struct AuditEvent {
     pub created_at: DateTime<Utc>,
 }
 
+/// One row of the audit log: a single event, or the events of one bulk action. `Updated` events
+/// sharing their transaction, entity kind, actor and changes form one group.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, JsonSchema)]
+pub struct AuditEventGroup {
+    /// All events of the group, newest first. Never empty.
+    pub events: Vec<AuditEvent>,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Default, JsonSchema)]
 pub struct AuditEventFilter {
     pub entity_kind: Option<AuditEntityKind>,

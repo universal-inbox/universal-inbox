@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     PageToken,
-    audit::{AuditAction, AuditActorKind, AuditChangeKind, AuditEntityKind, AuditEvent},
+    audit::{AuditActorKind, AuditChangeKind, AuditEntityKind, AuditEvent, AuditEventGroup},
 };
 
 use crate::{
@@ -26,7 +26,7 @@ use crate::{
     },
     config::APP_CONFIG,
     route::Route,
-    services::audit_service::{AuditEventsQuery, fetch_audit_events},
+    services::audit_service::{AuditEventsQuery, fetch_audit_event_groups},
     utils::markdown_to_plain_text,
 };
 
@@ -40,30 +40,21 @@ impl TimelineRow {
     }
 }
 
-/// Events of one bulk action share their transaction, actor and change.
-fn is_same_bulk_action(event: &AuditEvent, other: &AuditEvent) -> bool {
-    event.action == AuditAction::Updated
-        && other.action == AuditAction::Updated
-        && event.transaction_id == other.transaction_id
-        && event.entity_kind == other.entity_kind
-        && event.actor == other.actor
-        && event.changes == other.changes
-}
-
-fn group_by_day(events: &[AuditEvent]) -> Vec<(NaiveDate, Vec<TimelineRow>)> {
+/// Split the groups, newest first, by the local day of their newest event.
+fn group_by_day(groups: &[AuditEventGroup]) -> Vec<(NaiveDate, Vec<TimelineRow>)> {
     let mut days: Vec<(NaiveDate, Vec<TimelineRow>)> = vec![];
-    for event in events {
-        let day = event.created_at.with_timezone(&Local).date_naive();
+    for group in groups.iter().filter(|group| !group.events.is_empty()) {
+        let day = group.events[0]
+            .created_at
+            .with_timezone(&Local)
+            .date_naive();
         if days.last().is_none_or(|(last_day, _)| *last_day != day) {
             days.push((day, vec![]));
         }
-        let rows = &mut days.last_mut().unwrap().1;
-        match rows.last_mut() {
-            Some(TimelineRow(bulk)) if is_same_bulk_action(&bulk[0], event) => {
-                bulk.push(event.clone())
-            }
-            _ => rows.push(TimelineRow(vec![event.clone()])),
-        }
+        days.last_mut()
+            .unwrap()
+            .1
+            .push(TimelineRow(group.events.clone()));
     }
     days
 }
@@ -136,7 +127,7 @@ pub fn AuditLogPage(entity_id: String) -> Element {
     let navigator = use_navigator();
 
     let events = use_resource(move || async move {
-        fetch_audit_events(AuditEventsQuery {
+        fetch_audit_event_groups(AuditEventsQuery {
             entity_kind: entity_kind(),
             entity_id: entity_filter(),
             actor_kind: actor_kind(),
@@ -282,7 +273,7 @@ pub fn AuditLogPage(entity_id: String) -> Element {
                                 }
 
                                 div { class: "flex justify-between items-center px-3.5 py-2 border-t border-ui-border text-[length:var(--ui-text-sm)] text-ui-base-muted",
-                                    span { "{page.total} events" }
+                                    span { if page.total == 1 { "1 entry" } else { "{page.total} entries" } }
                                     ListPaginationButtons {
                                         current_page,
                                         page: page.clone(),
