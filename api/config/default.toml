@@ -315,7 +315,12 @@ api_max_retry_duration_worker_seconds = 600
 [integrations.google_calendar]
 name = "Google Calendar"
 kind = "GoogleCalendar"
-required_oauth_scopes = ["https://www.googleapis.com/auth/calendar.events"]
+# calendar.calendars.readonly lets the OAuth callback read the primary
+# calendar ID (the account email): calendar.events does not allow calendars.get.
+required_oauth_scopes = [
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar.calendars.readonly",
+]
 # OAuth client credentials from https://console.cloud.google.com/apis/credentials
 oauth_client_id = ""
 oauth_client_secret = ""

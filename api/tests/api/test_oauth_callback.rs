@@ -67,11 +67,11 @@ async fn start_oauth_flow_for(
 }
 
 /// Start the OAuth authorization of `integration_connection_id` and return
-/// the `state` carried by the provider authorize URL.
-async fn authorize_state(
+/// the provider authorize URL.
+async fn authorize_url(
     app: &AuthenticatedApp,
     integration_connection_id: IntegrationConnectionId,
-) -> String {
+) -> url::Url {
     let body: Value = app
         .client
         .get(format!(
@@ -84,13 +84,22 @@ async fn authorize_state(
         .json()
         .await
         .expect("Failed to parse authorize-url response");
-    let authorization_url = url::Url::parse(
+    url::Url::parse(
         body["authorization_url"]
             .as_str()
             .expect("authorization_url"),
     )
-    .expect("Invalid authorization URL");
-    authorization_url
+    .expect("Invalid authorization URL")
+}
+
+/// Start the OAuth authorization of `integration_connection_id` and return
+/// the `state` carried by the provider authorize URL.
+async fn authorize_state(
+    app: &AuthenticatedApp,
+    integration_connection_id: IntegrationConnectionId,
+) -> String {
+    authorize_url(app, integration_connection_id)
+        .await
         .query_pairs()
         .find(|(key, _)| key == "state")
         .expect("Missing state in authorization URL")
@@ -565,6 +574,48 @@ mod google_provider_user_id {
         assert_eq!(
             integration_connection.provider_user_id,
             Some(google_account_id("jane.doe@example.com"))
+        );
+    }
+
+    /// The callback reads the account email from `calendars.get` on the
+    /// primary calendar, which `calendar.events` alone does not allow: the
+    /// Google Calendar authorization must also ask for
+    /// `calendar.calendars.readonly`.
+    #[rstest]
+    #[tokio::test]
+    async fn test_google_calendar_authorize_url_requests_primary_calendar_read_scope(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let integration_connection = create_integration_connection(
+            &app.app,
+            app.user.id,
+            google_config(IntegrationProviderKind::GoogleCalendar),
+            IntegrationConnectionStatus::Created,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await;
+
+        let authorization_url = authorize_url(&app, integration_connection.id).await;
+
+        let scope = authorization_url
+            .query_pairs()
+            .find(|(key, _)| key == "scope")
+            .expect("Missing scope in authorization URL")
+            .1
+            .to_string();
+        let scopes: Vec<&str> = scope.split(' ').collect();
+        assert!(
+            scopes.contains(&"https://www.googleapis.com/auth/calendar.calendars.readonly"),
+            "Google Calendar authorization must request calendar.calendars.readonly, got {scopes:?}"
+        );
+        assert!(
+            scopes.contains(&"https://www.googleapis.com/auth/calendar.events"),
+            "Google Calendar authorization must request calendar.events, got {scopes:?}"
         );
     }
 

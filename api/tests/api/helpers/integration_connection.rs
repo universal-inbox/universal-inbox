@@ -306,6 +306,7 @@ pub fn google_calendar_oauth_credential() -> OAuthCredentialFixture {
         provider_user_id: None,
         registered_oauth_scopes: vec![
             "https://www.googleapis.com/auth/calendar.events".to_string(),
+            "https://www.googleapis.com/auth/calendar.calendars.readonly".to_string(),
         ],
     }
 }

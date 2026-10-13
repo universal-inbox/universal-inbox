@@ -96,7 +96,9 @@ fn default_api_base_url(provider_kind: IntegrationProviderKind) -> &'static str 
 /// The token response does not identify the Google account and the
 /// integrations do not request the `openid`/`email` scopes the userinfo
 /// endpoint needs, so each integration reads the account email from its own
-/// API, within the scopes it already has.
+/// API. Mail and Drive read it within the scopes they need anyway; Calendar
+/// requests `calendar.calendars.readonly` only for this, because
+/// `calendar.events` does not allow `calendars.get` on the primary calendar.
 fn build_provider_user_id_url(
     provider_kind: IntegrationProviderKind,
     api_base_url: &str,
