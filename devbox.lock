@@ -169,7 +169,7 @@
     },
     "caddy@latest": {
       "last_modified": "2026-08-27T07:16:00Z",
-      "plugin_version": "0.0.3",
+      "plugin_version": "0.0.4",
       "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#caddy",
       "source": "devbox-search",
       "version": "2.11.4",
@@ -1191,7 +1191,7 @@
     },
     "nodejs_22@latest": {
       "last_modified": "2026-08-27T07:16:00Z",
-      "plugin_version": "0.0.4",
+      "plugin_version": "0.0.5",
       "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#nodejs_22",
       "source": "devbox-search",
       "version": "22.23.2",
@@ -1577,7 +1577,7 @@
     },
     "redis@latest": {
       "last_modified": "2025-07-28T17:09:23Z",
-      "plugin_version": "0.0.2",
+      "plugin_version": "0.0.3",
       "resolved": "github:NixOS/nixpkgs/648f70160c03151bc2121d179291337ad6bc564b#redis",
       "source": "devbox-search",
       "version": "8.0.3",

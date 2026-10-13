@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     Page, PageToken,
-    audit::{AuditActorKind, AuditChangeKind, AuditEntityKind, AuditEvent},
+    audit::{AuditActorKind, AuditChangeKind, AuditEntityKind, AuditEvent, AuditEventGroup},
 };
 
 use crate::{config::APP_CONFIG, model::UI_MODEL, services::api::call_api};
@@ -47,6 +47,18 @@ impl AuditEventsQuery {
 }
 
 pub async fn fetch_audit_events(query: AuditEventsQuery) -> Result<Page<AuditEvent>> {
+    fetch_audit_page("audit-events", query).await
+}
+
+/// Rows of the audit log page: a bulk action is one group, so a page never splits it.
+pub async fn fetch_audit_event_groups(query: AuditEventsQuery) -> Result<Page<AuditEventGroup>> {
+    fetch_audit_page("audit-events/groups", query).await
+}
+
+async fn fetch_audit_page<T>(path: &str, query: AuditEventsQuery) -> Result<Page<T>>
+where
+    T: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     let api_base_url = APP_CONFIG
         .read()
         .as_ref()
@@ -55,7 +67,7 @@ pub async fn fetch_audit_events(query: AuditEventsQuery) -> Result<Page<AuditEve
     call_api(
         Method::GET,
         &api_base_url,
-        &format!("audit-events?{}", query.to_query_string()?),
+        &format!("{path}?{}", query.to_query_string()?),
         None::<i32>,
         Some(UI_MODEL.signal()),
     )

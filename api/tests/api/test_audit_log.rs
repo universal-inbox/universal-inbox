@@ -11,7 +11,9 @@ use wiremock::{
 
 use universal_inbox::{
     HasHtmlUrl, Page, PageToken,
-    audit::{AuditAction, AuditActor, AuditEntityKind, AuditEvent, AuditUserChannel},
+    audit::{
+        AuditAction, AuditActor, AuditEntityKind, AuditEvent, AuditEventGroup, AuditUserChannel,
+    },
     auth::auth_token::AuthenticationToken,
     integration_connection::{
         IntegrationConnectionId,
@@ -61,6 +63,21 @@ async fn list_audit_events(client: &Client, app: &TestedApp, query: &str) -> Pag
         .json()
         .await
         .expect("Failed to parse audit events")
+}
+
+async fn list_audit_event_groups(
+    client: &Client,
+    app: &TestedApp,
+    query: &str,
+) -> Page<AuditEventGroup> {
+    client
+        .get(format!("{}audit-events/groups?{query}", app.api_address))
+        .send()
+        .await
+        .expect("Failed to list audit event groups")
+        .json()
+        .await
+        .expect("Failed to parse audit event groups")
 }
 
 async fn create_api_key(app: &AuthenticatedApp) -> String {
@@ -593,6 +610,119 @@ mod listing {
         assert_eq!(matching.total, 4);
         let not_matching = list_audit_events(&app.client, &app.app, "query=no%25such_title").await;
         assert_eq!(not_matching.total, 0);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_groups_are_paged_without_splitting_a_bulk_action(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
+        github_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        let (notification, integration_connection_id) = github_notification_for(
+            &app,
+            &settings,
+            &github_notification,
+            github_oauth_credential,
+        )
+        .await;
+        for thread in ["2", "3"] {
+            let mut other_github_notification = *github_notification.clone();
+            other_github_notification.id = thread.to_string();
+            create_notification_from_github_notification(
+                &app.app,
+                &other_github_notification,
+                app.user.id,
+                integration_connection_id,
+            )
+            .await;
+        }
+        for day in 1..=3 {
+            let _: Box<Notification> = patch_resource(
+                &app.client,
+                &app.app.api_address,
+                "notifications",
+                notification.id.into(),
+                &NotificationPatch {
+                    snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, day, 9, 0, 0).unwrap()),
+                    ..Default::default()
+                },
+            )
+            .await;
+        }
+        for thread in [github_notification.id.as_str(), "2", "3"] {
+            Mock::given(method("DELETE"))
+                .and(path(format!("/notifications/threads/{thread}")))
+                .respond_with(ResponseTemplate::new(205))
+                .mount(&app.app.github_mock_server)
+                .await;
+        }
+        let _: Vec<Notification> = patch_resource_collection(
+            &app.client,
+            &app.app.api_address,
+            "notifications",
+            &PatchNotificationsRequest {
+                status: vec![NotificationStatus::Unread],
+                sources: vec![NotificationSourceKind::Github],
+                patch: NotificationPatch {
+                    status: Some(NotificationStatus::Deleted),
+                    ..Default::default()
+                },
+            },
+        )
+        .await;
+
+        // The web user made 6 changes: 3 snoozes, then 1 bulk deletion of 3 notifications
+        let events = list_audit_events(&app.client, &app.app, "actor_kinds=User").await;
+        assert_eq!(events.total, 6);
+
+        let first_page =
+            list_audit_event_groups(&app.client, &app.app, "actor_kinds=User&per_page=2").await;
+        assert_eq!(first_page.total, 4);
+        assert_eq!(first_page.pages_count, 2);
+        assert_eq!(first_page.content.len(), 2);
+        assert_eq!(first_page.next_page_token, Some(PageToken::Offset(2)));
+        let bulk_deletion = &first_page.content[0].events;
+        assert_eq!(bulk_deletion.len(), 3);
+        for event in bulk_deletion {
+            assert_eq!(event.transaction_id, bulk_deletion[0].transaction_id);
+            assert_eq!(
+                serde_json::to_value(&event.changes).unwrap(),
+                json!({ "status": { "from": "Unread", "to": "Deleted" } })
+            );
+        }
+        assert_eq!(first_page.content[1].events.len(), 1);
+
+        let second_page = list_audit_event_groups(
+            &app.client,
+            &app.app,
+            &format!(
+                "actor_kinds=User&per_page=2&page_token={}",
+                PageToken::Offset(2).to_url_parameter().unwrap()
+            ),
+        )
+        .await;
+        assert_eq!(second_page.content.len(), 2);
+        assert_eq!(second_page.next_page_token, None);
+        let snoozes: Vec<AuditEvent> = first_page.content[1..]
+            .iter()
+            .chain(&second_page.content)
+            .map(|group| {
+                assert_eq!(group.events.len(), 1);
+                group.events[0].clone()
+            })
+            .collect();
+        assert_eq!(
+            snoozes
+                .iter()
+                .map(|event| event.changes["snoozed_until"].to.clone())
+                .collect::<Vec<_>>(),
+            [3, 2, 1]
+                .map(|day| Some(json!(format!("2064-01-0{day}T09:00:00"))))
+                .to_vec()
+        );
     }
 }
 
