@@ -70,7 +70,9 @@ format_serde_error = { version = "0.3.0", default-features = false, features = [
   "graphemes_support",
 ] }
 futures = "0.3.0"
-governor = "0.10"
+# Without the default `quanta` feature: its `QuantaClock` calibrates the TSC (~200ms) once per
+# process, which every test pays since nextest runs one process per test.
+governor = { version = "0.10", default-features = false, features = ["std", "dashmap", "jitter"] }
 graphql_client = "0.16.0"
 hex = "0.4.3"
 http = { workspace = true }
