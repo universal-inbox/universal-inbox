@@ -141,6 +141,14 @@ rstest = { workspace = true }
 
 [profile]
 
+# Password hashing is far slower unoptimized: every local login, registration and password
+# check of the dev server and the tests runs it.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
 [profile.wasm-dev]
 inherits = "dev"
 opt-level = 0
