@@ -14,6 +14,9 @@ environment = "test"
 static_path = ""
 static_dir = "tests/api/statics"
 sync_failure_window_in_hours = 1
+# Each test starts its own API server, and its first request waits for every Actix worker to
+# build the application: the default (one worker per CPU) costs ~100ms per test.
+http_workers = 2
 
 # Enabled by default, disabled in tests: the vacuum is exercised by calling its
 # handler directly, a background worker would race with those assertions

@@ -47,6 +47,10 @@ pub struct ApplicationSettings {
     /// Falls back to `listen_port` when unset. Set distinctly in local dev so the
     /// worker process does not collide with the API on the same host.
     pub worker_listen_port: Option<u16>,
+    /// Number of HTTP worker threads of the API server. Falls back to Actix's default (one
+    /// per CPU) when unset. Tests set a low value: each test starts its own server, and the
+    /// first request waits for every worker to build the application.
+    pub http_workers: Option<usize>,
     pub front_base_url: Url,
     pub api_path: String,
     pub static_path: Option<String>,

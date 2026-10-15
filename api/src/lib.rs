@@ -131,6 +131,7 @@ pub async fn run_server(
     billing_service: Option<Arc<billing::service::BillingService>>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
+    let http_workers = settings.application.http_workers;
     let front_base_url = settings
         .application
         .front_base_url
@@ -614,7 +615,11 @@ pub async fn run_server(
     .keep_alive(http::KeepAlive::Timeout(
         Duration::seconds(60).try_into().unwrap(),
     ))
-    .shutdown_timeout(10)
+    .shutdown_timeout(10);
+    let server = match http_workers {
+        Some(workers) => server.workers(workers),
+        None => server,
+    }
     .listen(listener)
     .context(format!("Failed to listen on {listen_address}"))?;
 
