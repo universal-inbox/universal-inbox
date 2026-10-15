@@ -34,6 +34,7 @@ use universal_inbox::{
             google_calendar::{
                 EventMethod, GoogleCalendarEvent, GoogleCalendarEventAttendeeResponseStatus,
             },
+            linear::LinearNotification,
             notion::{NotionBlock, NotionComment},
             slack::{SlackReaction, SlackThread},
         },
@@ -1295,70 +1296,66 @@ impl NotificationService {
             )
             .await?;
 
-        let notification = *upsert_notification.value();
+        Ok(Some(*upsert_notification.value()))
+    }
 
-        // Path 2: Auto-delete notification if the Linear issue already has a synced task
-        if let ThirdPartyItemData::LinearNotification(ref linear_notification) =
-            third_party_item.data
-            && let Some(linear_issue_id) = linear_notification.get_issue_id()
-        {
-            let integration_connection = self
-                .integration_connection_service
-                .read()
-                .await
-                .get_validated_integration_connection_per_kind(
-                    executor,
-                    IntegrationProviderKind::Linear,
-                    user_id,
-                )
+    /// Path 2 of the Linear auto-delete: a notification about a Linear issue that already has
+    /// a synced task is always saved as Deleted. Deciding it before the upsert writes the
+    /// status once, so a re-sync does not bring the notification back as Unread and then
+    /// delete it again.
+    async fn is_linear_notification_issue_synced_as_task(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        linear_notification: &LinearNotification,
+        user_id: UserId,
+    ) -> Result<bool, UniversalInboxError> {
+        let Some(linear_issue_id) = linear_notification.get_issue_id() else {
+            return Ok(false);
+        };
+
+        let integration_connection = self
+            .integration_connection_service
+            .read()
+            .await
+            .get_validated_integration_connection_per_kind(
+                executor,
+                IntegrationProviderKind::Linear,
+                user_id,
+            )
+            .await?;
+        if !integration_connection.is_some_and(|integration_connection| {
+            integration_connection
+                .provider
+                .is_auto_delete_notifications_on_task_sync_enabled()
+        }) {
+            return Ok(false);
+        }
+
+        let linear_issue_items = self
+            .repository
+            .find_third_party_items_for_source_id(
+                executor,
+                ThirdPartyItemKind::LinearIssue,
+                &linear_issue_id.to_string(),
+                Some(user_id),
+            )
+            .await?;
+
+        for linear_issue_item in &linear_issue_items {
+            let task = self
+                .repository
+                .get_task_for_source_item_id(executor, linear_issue_item.id.0, user_id)
                 .await?;
 
-            if let Some(ref integration_connection) = integration_connection
-                && integration_connection
-                    .provider
-                    .is_auto_delete_notifications_on_task_sync_enabled()
-            {
-                let linear_issue_items = self
-                    .repository
-                    .find_third_party_items_for_source_id(
-                        executor,
-                        ThirdPartyItemKind::LinearIssue,
-                        &linear_issue_id.to_string(),
-                        Some(user_id),
-                    )
-                    .await?;
-
-                for linear_issue_item in &linear_issue_items {
-                    let task = self
-                        .repository
-                        .get_task_for_source_item_id(executor, linear_issue_item.id.0, user_id)
-                        .await?;
-
-                    if let Some(ref task) = task
-                        && task.status != TaskStatus::Deleted
-                    {
-                        debug!(
-                            "Auto-deleting Linear notification {} as issue {} already has a synced task",
-                            notification.id, linear_issue_id
-                        );
-                        let delete_patch = NotificationPatch {
-                            status: Some(NotificationStatus::Deleted),
-                            ..Default::default()
-                        };
-                        self.repository
-                            .update_notification(executor, notification.id, &delete_patch, user_id)
-                            .await?;
-
-                        return Ok(Some(Notification {
-                            status: NotificationStatus::Deleted,
-                            ..notification
-                        }));
-                    }
-                }
+            if task.is_some_and(|task| task.status != TaskStatus::Deleted) {
+                debug!(
+                    "Auto-deleting Linear notification for issue {linear_issue_id} as it already has a synced task"
+                );
+                return Ok(true);
             }
         }
 
-        Ok(Some(notification))
+        Ok(false)
     }
 
     /// Synchronize a source as a system job, triggered by the current audit actor: the
@@ -1669,6 +1666,14 @@ impl NotificationService {
                     user_id,
                 )
                 .await?;
+        }
+        if let ThirdPartyItemData::LinearNotification(ref linear_notification) =
+            third_party_item.data
+            && self
+                .is_linear_notification_issue_synced_as_task(executor, linear_notification, user_id)
+                .await?
+        {
+            notification.status = NotificationStatus::Deleted;
         }
         self.repository
             .create_or_update_notification(

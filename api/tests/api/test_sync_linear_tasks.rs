@@ -4,7 +4,8 @@ use rstest::*;
 use tokio::time::{Duration, sleep};
 
 use universal_inbox::{
-    HasHtmlUrl,
+    HasHtmlUrl, Page,
+    audit::AuditEvent,
     integration_connection::{
         IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
@@ -14,7 +15,7 @@ use universal_inbox::{
         },
         provider::IntegrationProviderKind,
     },
-    notification::NotificationStatus,
+    notification::{NotificationId, NotificationStatus},
     task::{
         DueDate, PresetDueDate, ProjectSummary, TaskCreationConfig, TaskCreationResult,
         TaskPriority, TaskSourceKind, TaskStatus, service::TaskPatch,
@@ -1337,6 +1338,25 @@ async fn test_sync_tasks_should_auto_delete_existing_linear_notification(
     );
 }
 
+async fn count_notification_status_changes(
+    app: &AuthenticatedApp,
+    notification_id: NotificationId,
+) -> usize {
+    let events: Page<AuditEvent> = app
+        .client
+        .get(format!(
+            "{}audit-events?entity_id={notification_id}&change=Status",
+            app.app.api_address
+        ))
+        .send()
+        .await
+        .expect("Failed to list audit events")
+        .json()
+        .await
+        .expect("Failed to parse audit events");
+    events.content.len()
+}
+
 /// Test Path 2: When creating a Linear notification for an issue that already has
 /// a synced task, the notification should be immediately marked as Deleted.
 #[rstest]
@@ -1424,6 +1444,268 @@ async fn test_create_notification_should_auto_delete_when_task_already_exists(
         NotificationStatus::Deleted,
         "Notification for a Linear issue that already has a synced task should be auto-deleted"
     );
+    // It is created as Deleted: no intermediate status change is recorded
+    assert_eq!(
+        count_notification_status_changes(&app, notification.id).await,
+        0
+    );
+}
+
+/// Path 2 re-sync regression tests: Linear keeps listing a notification auto-deleted by
+/// Universal Inbox (it is not archived in Linear). Re-syncing it must not bring it back as
+/// Unread/Read and delete it again (status flip recorded twice in the audit log).
+mod resync_of_notification_for_issue_synced_as_task {
+    use super::*;
+    use chrono::Utc;
+    use pretty_assertions::assert_eq;
+
+    use universal_inbox::{
+        notification::{Notification, NotificationSourceKind},
+        task::Task,
+    };
+
+    use crate::helpers::notification::{
+        linear::mock_linear_notifications_query, sync_notifications,
+    };
+
+    /// Create a task for the Linear issue of the 3rd fixture notification, then that
+    /// notification, which Path 2 saves as Deleted.
+    async fn create_deleted_notification_for_issue_synced_as_task(
+        app: &AuthenticatedApp,
+        settings: &Settings,
+        sync_linear_tasks_response: &Response<assigned_issues_query::ResponseData>,
+        sync_linear_notifications_response: &Response<notifications_query::ResponseData>,
+        linear_oauth_credential: OAuthCredentialFixture,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) -> (Task, Notification) {
+        let todoist_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            settings,
+            todoist_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        let project = ProjectSummary {
+            name: "Project2".to_string(),
+            source_id: "2222".into(),
+        };
+        let linear_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Linear(LinearConfig {
+                sync_notifications_enabled: true,
+                sync_task_config: LinearSyncTaskConfig {
+                    enabled: true,
+                    target_project: Some(project.clone()),
+                    default_due_at: Some(PresetDueDate::Today),
+                    ..Default::default()
+                },
+            }),
+            settings,
+            linear_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+
+        let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+            .data
+            .clone()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let task = create_linear_task(
+            &app.app,
+            &linear_issues[0],
+            project,
+            app.user.id,
+            linear_integration_connection.id,
+            todoist_integration_connection.id,
+            "todoist_source_id".to_string(),
+        )
+        .await;
+
+        let linear_notifications: Vec<LinearNotification> = sync_linear_notifications_response
+            .data
+            .clone()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let notification = create_notification_from_linear_notification(
+            &app.app,
+            &linear_notifications[2],
+            app.user.id,
+            linear_integration_connection.id,
+        )
+        .await;
+        assert_eq!(notification.status, NotificationStatus::Deleted);
+
+        (task, *notification)
+    }
+
+    async fn resync_linear_notifications(
+        app: &AuthenticatedApp,
+        sync_linear_notifications_response: &Response<notifications_query::ResponseData>,
+    ) {
+        mock_linear_notifications_query(
+            &app.app.linear_mock_server,
+            sync_linear_notifications_response,
+        )
+        .await;
+        let _: Vec<Notification> = sync_notifications(
+            &app.client,
+            &app.app.api_address,
+            Some(NotificationSourceKind::Linear),
+            false,
+        )
+        .await;
+    }
+
+    async fn get_notification_status(
+        app: &AuthenticatedApp,
+        notification: &Notification,
+    ) -> NotificationStatus {
+        let notifications = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![],
+            true,
+            None,
+            None,
+            false,
+        )
+        .await;
+        notifications
+            .iter()
+            .find(|n| n.id == notification.id)
+            .expect("Notification should still exist")
+            .status
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_resync_should_keep_notification_deleted_without_status_change(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+        sync_linear_notifications_response: Response<notifications_query::ResponseData>,
+        linear_oauth_credential: OAuthCredentialFixture,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        let (_, notification) = create_deleted_notification_for_issue_synced_as_task(
+            &app,
+            &settings,
+            &sync_linear_tasks_response,
+            &sync_linear_notifications_response,
+            linear_oauth_credential,
+            todoist_oauth_credential,
+        )
+        .await;
+
+        resync_linear_notifications(&app, &sync_linear_notifications_response).await;
+
+        assert_eq!(
+            get_notification_status(&app, &notification).await,
+            NotificationStatus::Deleted
+        );
+        assert_eq!(
+            count_notification_status_changes(&app, notification.id).await,
+            0
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_resync_with_new_activity_should_keep_notification_deleted(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+        mut sync_linear_notifications_response: Response<notifications_query::ResponseData>,
+        linear_oauth_credential: OAuthCredentialFixture,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        let (_, notification) = create_deleted_notification_for_issue_synced_as_task(
+            &app,
+            &settings,
+            &sync_linear_tasks_response,
+            &sync_linear_notifications_response,
+            linear_oauth_credential,
+            todoist_oauth_credential,
+        )
+        .await;
+
+        // New, unread activity on the Linear notification
+        let node = &mut sync_linear_notifications_response
+            .data
+            .as_mut()
+            .unwrap()
+            .notifications
+            .nodes[2];
+        node.read_at = None;
+        node.updated_at = Utc::now();
+
+        resync_linear_notifications(&app, &sync_linear_notifications_response).await;
+
+        assert_eq!(
+            get_notification_status(&app, &notification).await,
+            NotificationStatus::Deleted
+        );
+        assert_eq!(
+            count_notification_status_changes(&app, notification.id).await,
+            0
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_resync_after_task_deletion_should_use_linear_status(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+        sync_linear_notifications_response: Response<notifications_query::ResponseData>,
+        linear_oauth_credential: OAuthCredentialFixture,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        let (task, notification) = create_deleted_notification_for_issue_synced_as_task(
+            &app,
+            &settings,
+            &sync_linear_tasks_response,
+            &sync_linear_notifications_response,
+            linear_oauth_credential,
+            todoist_oauth_credential,
+        )
+        .await;
+
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        app.app
+            .repository
+            .update_task(
+                &mut transaction,
+                task.id,
+                &TaskPatch {
+                    status: Some(TaskStatus::Deleted),
+                    ..Default::default()
+                },
+                app.user.id,
+            )
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+
+        resync_linear_notifications(&app, &sync_linear_notifications_response).await;
+
+        // The fixture's Linear notification has been read
+        assert_eq!(
+            get_notification_status(&app, &notification).await,
+            NotificationStatus::Read
+        );
+    }
 }
 
 // --- Sink-provider resolution regression tests ---------------------------
