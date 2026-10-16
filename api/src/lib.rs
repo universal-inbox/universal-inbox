@@ -93,7 +93,7 @@ use crate::{
         oauth2::service::OAuth2Service,
         realtime::{
             EventPublisher, build_event_publisher, hub::EventHub, subscriber::run_event_subscriber,
-            with_event_scope_if,
+            sync_scheduler::run_connected_users_sync_scheduler, with_event_scope_if,
         },
         slack_bridge::service::SlackBridgeService,
         task::service::TaskService,
@@ -278,6 +278,20 @@ pub async fn run_server(
             settings.application.realtime.channel.clone(),
             event_hub.clone(),
         ));
+        // The web application no longer schedules the syncs by polling the lists
+        let sync_scheduling_interval_in_seconds = settings
+            .application
+            .realtime
+            .sync_scheduling_interval_in_seconds;
+        if sync_scheduling_interval_in_seconds > 0 {
+            tokio::spawn(run_connected_users_sync_scheduler(
+                event_hub.clone(),
+                integration_connection_service.clone(),
+                redis_storage.clone(),
+                event_publisher.clone(),
+                std::time::Duration::from_secs(sync_scheduling_interval_in_seconds),
+            ));
+        }
     }
     let realtime_events_path = format!(
         "{}{}",

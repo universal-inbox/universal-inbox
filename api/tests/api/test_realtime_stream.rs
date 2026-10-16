@@ -11,6 +11,7 @@ use tokio::time::timeout;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::github::GithubConfig,
+        provider::IntegrationProviderKind,
     },
     notification::service::NotificationPatch,
     realtime::{RealtimeEvent, RealtimeEventKind},
@@ -29,7 +30,8 @@ use crate::helpers::{
     auth::{AuthenticatedApp, authenticate_user, authenticated_app},
     db_connection,
     integration_connection::{
-        OAuthCredentialFixture, create_and_mock_integration_connection, github_oauth_credential,
+        OAuthCredentialFixture, create_and_mock_integration_connection,
+        get_integration_connection_per_provider, github_oauth_credential,
     },
     notification::github::{create_notification_from_github_notification, github_notification},
     redis_storage,
@@ -78,14 +80,18 @@ impl EventStreamReader {
         }
     }
 
-    /// The next message that is not a heartbeat.
+    /// The next message that is not a heartbeat. Panics when none comes in time.
     async fn next_event(&mut self) -> Option<String> {
-        loop {
-            match self.next_message().await {
-                Some(message) if message == ": heartbeat" => continue,
-                message => return message,
+        timeout(Duration::from_secs(10), async {
+            loop {
+                match self.next_message().await {
+                    Some(message) if message == ": heartbeat" => continue,
+                    message => return message,
+                }
             }
-        }
+        })
+        .await
+        .expect("No event stream event in time")
     }
 }
 
@@ -274,6 +280,23 @@ async fn test_event_stream_rejects_api_keys(#[future] authenticated_app: Authent
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
+/// App scheduling the syncs of the users with an open stream every second.
+#[fixture]
+async fn authenticated_app_with_sync_scheduling(
+    mut settings: Settings,
+    #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
+    #[future] db_connection: TestDb,
+    #[future] redis_storage: JobStorage,
+) -> AuthenticatedApp {
+    settings
+        .application
+        .realtime
+        .sync_scheduling_interval_in_seconds = 1;
+    let app = tested_app(settings, (), db_connection, redis_storage).await;
+    let (client, user) = authenticate_user(&app, "1234", "John", "Doe", "test@example.com").await;
+    AuthenticatedApp { client, app, user }
+}
+
 #[fixture]
 async fn authenticated_app_without_realtime(
     mut settings: Settings,
@@ -323,4 +346,91 @@ async fn test_event_stream_is_refused_above_the_streams_cap(
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_due_syncs_of_a_connected_user_are_scheduled(
+    settings: Settings,
+    #[future] authenticated_app_with_sync_scheduling: AuthenticatedApp,
+    github_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app_with_sync_scheduling.await;
+    let github_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings,
+        github_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(
+        github_integration_connection.last_notifications_sync_scheduled_at,
+        None
+    );
+
+    // No list request: the pod schedules the syncs of the users with an open stream (every
+    // second in this app)
+    let mut stream = open_stream(&app.client, &app.app.api_address).await;
+
+    assert_eq!(
+        stream.next_event().await,
+        Some(format!(
+            "event: integration_connection.changed\ndata: {}",
+            json!({ "ids": [github_integration_connection.id.0] })
+        ))
+    );
+    let integration_connection = get_integration_connection_per_provider(
+        &app,
+        app.user.id,
+        IntegrationProviderKind::Github,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(
+        integration_connection
+            .last_notifications_sync_scheduled_at
+            .is_some()
+    );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_due_syncs_of_a_disconnected_user_are_not_scheduled(
+    settings: Settings,
+    #[future] authenticated_app_with_sync_scheduling: AuthenticatedApp,
+    github_oauth_credential: OAuthCredentialFixture,
+) {
+    let app = authenticated_app_with_sync_scheduling.await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings,
+        github_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    // Two scheduling intervals
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    let integration_connection = get_integration_connection_per_provider(
+        &app,
+        app.user.id,
+        IntegrationProviderKind::Github,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        integration_connection.last_notifications_sync_scheduled_at,
+        None
+    );
 }

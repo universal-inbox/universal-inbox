@@ -87,6 +87,17 @@ impl EventHub {
         }
     }
 
+    /// The users with at least one stream open on this pod.
+    pub fn connected_users(&self) -> Vec<UserId> {
+        self.senders
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, sender)| sender.receiver_count() > 0)
+            .map(|(user_id, _)| *user_id)
+            .collect()
+    }
+
     /// Number of open streams of `user_id` on this pod.
     pub fn streams_count(&self, user_id: UserId) -> usize {
         self.senders
@@ -235,5 +246,20 @@ mod tests {
         timeout(Duration::from_millis(50), hub.wait_subscribed())
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_connected_users_are_the_users_with_an_open_stream() {
+        let hub = EventHub::new();
+        assert_eq!(hub.connected_users(), vec![]);
+
+        let first = hub.subscribe(user(1)).unwrap();
+        let second = hub.subscribe(user(1)).unwrap();
+        assert_eq!(hub.connected_users(), vec![user(1)]);
+
+        drop(first);
+        assert_eq!(hub.connected_users(), vec![user(1)]);
+        drop(second);
+        assert_eq!(hub.connected_users(), vec![]);
     }
 }

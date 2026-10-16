@@ -93,6 +93,8 @@ enabled = true
 channel = "universal-inbox:events"
 # Below the idle timeout of the proxies in front of the API
 heartbeat_interval_in_seconds = 20
+# The web application polled the lists, scheduling the due syncs, every minute
+sync_scheduling_interval_in_seconds = 60
 
 # Optional: without an [application.email] section, no email is sent (see
 # api/config/dev.toml for an example). Once any email setting is set, all of

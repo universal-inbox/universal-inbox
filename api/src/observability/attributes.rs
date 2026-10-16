@@ -124,6 +124,7 @@ pub const NOTIFICATION_STATUS: &str = "notification.status";
 pub const NOTIFICATION_COUNT: &str = "notification.count";
 pub const REALTIME_EVENTS_COUNT: &str = "realtime.events.count";
 pub const REALTIME_STREAMS_COUNT: &str = "realtime.streams.count";
+pub const REALTIME_CONNECTED_USERS_COUNT: &str = "realtime.connected_users.count";
 pub const REALTIME_STREAM_DURATION_MS: &str = "realtime.stream.duration_ms";
 pub const REALTIME_STREAM_CLOSE_REASON: &str = "realtime.stream.close_reason";
 pub const REALTIME_STREAM_DELIVERED_EVENTS: &str = "realtime.stream.delivered_events";
