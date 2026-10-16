@@ -57,8 +57,8 @@ pub fn LoginPage() -> Element {
             title: "Welcome back".to_string(),
             subtitle: Some("Log in to your inbox.".to_string()),
         }
-        // Signing up needs local auth: without it the signup page offers nothing.
-        if is_local_auth_enabled {
+        // Only link to the signup page when it offers at least one way to sign up.
+        if is_local_auth_enabled || is_google_auth_enabled || is_passkey_auth_enabled {
             p { class: "text-sm text-ui-base-muted leading-normal mb-7",
                 "New here? "
                 Link {
@@ -127,34 +127,34 @@ pub fn LoginPage() -> Element {
 
                 PrimaryBtn { button_type: "submit".to_string(), "Log in" }
             }
-
-            if is_google_auth_enabled || is_passkey_auth_enabled {
-                AuthDivider { label: "or continue with".to_string() }
-            }
-
-            div { class: "grid grid-cols-1 gap-2.5",
-                if is_google_auth_enabled {
-                    GoogleBtn {
-                        onclick: move |_| {
-                            spawn({
-                                async move {
-                                    if let Err(auth_error) =
-                                        authenticate_authorization_code_flow(&api_base_url()).await
-                                    {
-                                        error!("An error occured while authenticating: {:?}", auth_error);
-                                    }
-                                }
-                            });
-                        },
-                        "Continue with Google"
-                    }
-                }
-                if is_passkey_auth_enabled {
-                    PasskeyBtn { to: Route::PasskeyLoginPage {}, "Sign in with a passkey" }
-                }
-            }
-
-            LegalFooter {}
         }
+
+        if is_local_auth_enabled && (is_google_auth_enabled || is_passkey_auth_enabled) {
+            AuthDivider { label: "or continue with".to_string() }
+        }
+
+        div { class: "grid grid-cols-1 gap-2.5",
+            if is_google_auth_enabled {
+                GoogleBtn {
+                    onclick: move |_| {
+                        spawn({
+                            async move {
+                                if let Err(auth_error) =
+                                    authenticate_authorization_code_flow(&api_base_url()).await
+                                {
+                                    error!("An error occured while authenticating: {:?}", auth_error);
+                                }
+                            }
+                        });
+                    },
+                    "Continue with Google"
+                }
+            }
+            if is_passkey_auth_enabled {
+                PasskeyBtn { to: Route::PasskeyLoginPage {}, "Sign in with a passkey" }
+            }
+        }
+
+        LegalFooter {}
     }
 }
