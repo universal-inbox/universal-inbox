@@ -2837,3 +2837,145 @@ mod without_email {
         assert_eq!(fetched_user.email, user.email);
     }
 }
+
+/// On an instance without `AuthenticationSettings::Local` (the default test
+/// config is OIDC only), every local-auth endpoint answers 403, never 500.
+mod local_auth_disabled {
+    use super::*;
+    use crate::helpers::{
+        tested_app,
+        user::{add_local_auth_response, front_origin_header},
+    };
+    use pretty_assertions::assert_eq;
+    use secrecy::SecretBox;
+    use universal_inbox::user::PasswordChange;
+
+    const PASSWORD: &str = "Very-harD-pasSword-5";
+
+    async fn assert_local_auth_disabled(response: reqwest::Response) {
+        assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+        let body: HashMap<String, String> = response.json().await.unwrap();
+        assert_eq!(
+            body.get("message").unwrap(),
+            "Forbidden access: Local authentication is disabled"
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_register_user(#[future] tested_app: TestedApp) {
+        let app = tested_app.await;
+
+        let response = register_user_response(
+            &reqwest::Client::new(),
+            &app,
+            "john@doe.name".parse().unwrap(),
+            PASSWORD,
+        )
+        .await;
+
+        assert_local_auth_disabled(response).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_login_user(#[future] tested_app: TestedApp) {
+        let app = tested_app.await;
+
+        let response = login_user_response(
+            &reqwest::Client::new(),
+            &app,
+            "john@doe.name".parse().unwrap(),
+            PASSWORD,
+        )
+        .await;
+
+        assert_local_auth_disabled(response).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_send_password_reset_email(#[future] tested_app: TestedApp) {
+        let app = tested_app.await;
+        let email: Pii<EmailAddress> = "john@doe.name".parse().unwrap();
+
+        let response = reqwest::Client::new()
+            .post(format!("{}users/password-reset", app.api_address))
+            .json(&email)
+            .send()
+            .await
+            .unwrap();
+
+        assert_local_auth_disabled(response).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_reset_password(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+
+        let response = reset_password_response(
+            &reqwest::Client::new(),
+            &app.app,
+            app.user.id,
+            PasswordResetToken(Uuid::new_v4()),
+            PASSWORD,
+        )
+        .await;
+
+        assert_local_auth_disabled(response).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_add_local_auth_method(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+
+        let response = add_local_auth_response(&app.client, &app.app, PASSWORD).await;
+
+        assert_local_auth_disabled(response).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_change_password(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+
+        let response = app
+            .client
+            .patch(format!(
+                "{}users/me/auth-methods/local",
+                app.app.api_address
+            ))
+            .header(reqwest::header::ORIGIN, front_origin_header(&app.app))
+            .json(&PasswordChange {
+                current_password: SecretBox::new(Box::new(Password(PASSWORD.to_string()))),
+                new_password: SecretBox::new(Box::new(Password(format!("New-{PASSWORD}")))),
+            })
+            .send()
+            .await
+            .unwrap();
+
+        assert_local_auth_disabled(response).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_reauthenticate_with_password(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+
+        let response = app
+            .client
+            .post(format!(
+                "{}users/me/reauthentication/password",
+                app.app.api_address
+            ))
+            .header(reqwest::header::ORIGIN, front_origin_header(&app.app))
+            .json(&SecretBox::new(Box::new(Password(PASSWORD.to_string()))))
+            .send()
+            .await
+            .unwrap();
+
+        assert_local_auth_disabled(response).await;
+    }
+}

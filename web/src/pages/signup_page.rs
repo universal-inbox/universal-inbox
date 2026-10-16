@@ -43,10 +43,7 @@ pub fn SignupPage() -> Element {
     let Some(app_config) = app_config.as_ref() else {
         return rsx! { Loading { label: "Loading Universal Inbox settings..." } };
     };
-    let is_local_auth_enabled = app_config
-        .authentication_configs
-        .iter()
-        .any(|auth_config| matches!(auth_config, FrontAuthenticationConfig::Local));
+    let is_local_auth_enabled = app_config.is_local_auth_enabled();
     let is_google_auth_enabled = app_config.authentication_configs.iter().any(|auth_config| {
         matches!(
             auth_config,

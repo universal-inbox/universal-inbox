@@ -40,10 +40,7 @@ pub fn LoginPage() -> Element {
         return rsx! { Loading { label: "Loading Universal Inbox settings..." } };
     };
     let email_enabled = app_config.email_enabled;
-    let is_local_auth_enabled = app_config
-        .authentication_configs
-        .iter()
-        .any(|auth_config| matches!(auth_config, FrontAuthenticationConfig::Local));
+    let is_local_auth_enabled = app_config.is_local_auth_enabled();
     let is_google_auth_enabled = app_config.authentication_configs.iter().any(|auth_config| {
         matches!(
             auth_config,
@@ -60,14 +57,17 @@ pub fn LoginPage() -> Element {
             title: "Welcome back".to_string(),
             subtitle: Some("Log in to your inbox.".to_string()),
         }
-        p { class: "text-sm text-ui-base-muted leading-normal mb-7",
-            "New here? "
-            Link {
-                class: "text-ui-primary font-semibold no-underline hover:text-ui-primary-hover hover:underline",
-                to: Route::SignupPage {},
-                "Create an account"
+        // Signing up needs local auth: without it the signup page offers nothing.
+        if is_local_auth_enabled {
+            p { class: "text-sm text-ui-base-muted leading-normal mb-7",
+                "New here? "
+                Link {
+                    class: "text-ui-primary font-semibold no-underline hover:text-ui-primary-hover hover:underline",
+                    to: Route::SignupPage {},
+                    "Create an account"
+                }
+                "."
             }
-            "."
         }
 
         if is_local_auth_enabled {
@@ -155,15 +155,6 @@ pub fn LoginPage() -> Element {
             }
 
             LegalFooter {}
-        } else {
-            div { class: "mt-auto pt-6 text-center text-xs text-ui-base-muted",
-                "New here? "
-                Link {
-                    class: "text-ui-primary font-semibold no-underline hover:text-ui-primary-hover hover:underline",
-                    to: Route::SignupPage {},
-                    "Create an account"
-                }
-            }
         }
     }
 }
