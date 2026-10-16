@@ -14,6 +14,9 @@ sync_failure_window_in_hours = 1
 version = "dev"
 front_base_url = "https://dev.universal-inbox.com"
 
+[application.realtime]
+enabled = true
+
 [application.observability.logging]
 log_directive = "info,universal_inbox_api=debug,sqlx=debug,lettre=info,slack_morphism=debug,mockito=debug,wiremock=debug"
 dependencies_log_level = "debug"

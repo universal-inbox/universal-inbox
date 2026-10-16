@@ -89,7 +89,9 @@ retention_days = 7
 
 # Realtime events (Redis pub/sub) telling the web app what to refetch
 [application.realtime]
-enabled = true
+# Enable once the proxies in front of the API are checked (idle timeout above the heartbeat
+# interval, no buffering of text/event-stream responses)
+enabled = false
 channel = "universal-inbox:events"
 # Below the idle timeout of the proxies in front of the API
 heartbeat_interval_in_seconds = 20

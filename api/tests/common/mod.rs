@@ -291,7 +291,10 @@ pub async fn spawn_test_worker(
     services: &TestServices,
 ) {
     let event_publisher = universal_inbox_api::universal_inbox::realtime::build_event_publisher(
-        &RealtimeSettings::default(),
+        &RealtimeSettings {
+            enabled: true,
+            ..RealtimeSettings::default()
+        },
         &cache,
     );
     let worker = universal_inbox_api::run_worker(

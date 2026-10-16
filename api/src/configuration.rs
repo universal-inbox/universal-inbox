@@ -131,8 +131,10 @@ fn default_audit_log_retention_days() -> u32 {
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct RealtimeSettings {
-    /// When disabled, no realtime event is published and the web app keeps polling.
-    #[serde(default = "yes")]
+    /// When disabled (the default), no realtime event is published, the event stream answers
+    /// 404 and the web app keeps polling. Enable it once the proxies in front of the API keep
+    /// an idle stream open and do not buffer it.
+    #[serde(default)]
     pub enabled: bool,
     /// Redis pub/sub channel the events are published on.
     #[serde(default = "default_realtime_channel")]
@@ -150,7 +152,7 @@ pub struct RealtimeSettings {
 impl Default for RealtimeSettings {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             channel: default_realtime_channel(),
             heartbeat_interval_in_seconds: default_realtime_heartbeat_interval_in_seconds(),
             sync_scheduling_interval_in_seconds:
