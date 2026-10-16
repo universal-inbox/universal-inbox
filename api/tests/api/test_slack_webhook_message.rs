@@ -18,7 +18,12 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::{
-    configuration::Settings, jobs::slack::slack_message::handle_slack_message_push_event,
+    configuration::Settings,
+    integrations::slack::edited_slack_message_event,
+    jobs::{
+        UniversalInboxJob, envelope::JobEnvelope, slack::SlackPushEventCallbackJob,
+        slack::slack_message::handle_slack_message_push_event,
+    },
 };
 
 use universal_inbox_api::integrations::oauth2::AccessToken;
@@ -36,6 +41,7 @@ use crate::helpers::{
         OAuthCredentialFixture, create_and_mock_integration_connection,
         create_integration_connection, slack_context, slack_oauth_credential,
     },
+    load_json_fixture_file,
     notification::{
         list_notifications,
         slack::{
@@ -51,6 +57,13 @@ use crate::helpers::{
     tested_app_with_local_auth,
     user::create_user_and_login,
 };
+
+/// A `message_changed` event adding a mention of `U01` to a thread's root message, kept as
+/// raw JSON: slack-morphism drops the edited message's `thread_ts` when (de)serializing it.
+#[fixture]
+fn slack_push_message_changed_event() -> serde_json::Value {
+    load_json_fixture_file("slack_push_message_changed_event.json")
+}
 
 /// The job handlers called directly by these tests run, in production, as the Slack webhook
 fn slack_webhook_actor() -> AuditActor {
@@ -239,6 +252,236 @@ mod webhook {
 
         assert_eq!(response.status(), 200);
         assert_message_processed(&mut app).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_receive_slack_message_edited_to_add_a_reference(
+        #[future] authenticated_app: AuthenticatedApp,
+        slack_push_message_changed_event: serde_json::Value,
+    ) {
+        let mut app = authenticated_app.await;
+
+        let response = post_signed_slack_event(
+            &app.client,
+            &app.app.api_address,
+            &slack_push_message_changed_event,
+        )
+        .await;
+
+        assert_eq!(response.status(), 200);
+        assert_message_processed(&mut app.app).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_receive_slack_message_edited_without_reference_in_an_unknown_thread(
+        #[future] authenticated_app: AuthenticatedApp,
+        mut slack_push_message_changed_event: serde_json::Value,
+    ) {
+        let mut app = authenticated_app.await;
+        edit_without_references(&mut slack_push_message_changed_event);
+
+        let response = post_signed_slack_event(
+            &app.client,
+            &app.app.api_address,
+            &slack_push_message_changed_event,
+        )
+        .await;
+
+        assert_eq!(response.status(), 200);
+        assert_message_ignored(&mut app.app).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_receive_slack_message_edited_without_reference_in_known_thread(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        slack_oauth_credential: OAuthCredentialFixture,
+        mut slack_push_message_changed_event: serde_json::Value,
+        slack_thread: Box<SlackThread>,
+    ) {
+        let mut app = authenticated_app.await;
+        let slack_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+            &settings,
+            slack_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        edit_without_references(&mut slack_push_message_changed_event);
+        // The thread is only known through the `thread_ts` nested in the edited message
+        let thread_ts = slack_thread.messages.first().origin.ts.to_string();
+        slack_push_message_changed_event["event"]["message"]["thread_ts"] =
+            serde_json::Value::String(thread_ts);
+
+        create_notification_from_slack_thread(
+            &app.app,
+            &slack_thread,
+            app.user.id,
+            slack_integration_connection.id,
+        )
+        .await;
+
+        let response = post_signed_slack_event(
+            &app.client,
+            &app.app.api_address,
+            &slack_push_message_changed_event,
+        )
+        .await;
+
+        assert_eq!(response.status(), 200);
+        assert_message_processed(&mut app.app).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_receive_slack_thread_reply_edited_to_add_a_reference(
+        #[future] authenticated_app: AuthenticatedApp,
+        mut slack_push_message_changed_event: serde_json::Value,
+    ) {
+        let mut app = authenticated_app.await;
+        let reply_ts = "1732535350.000100";
+        let thread_ts = "1732535291.911209";
+        for message in ["message", "previous_message"] {
+            slack_push_message_changed_event["event"][message]["ts"] = reply_ts.into();
+            slack_push_message_changed_event["event"][message]["thread_ts"] = thread_ts.into();
+        }
+
+        let response = post_signed_slack_event(
+            &app.client,
+            &app.app.api_address,
+            &slack_push_message_changed_event,
+        )
+        .await;
+
+        assert_eq!(response.status(), 200);
+        assert_message_processed(&mut app.app).await;
+        let jobs = pushed_jobs(&app.app).await;
+        let [
+            JobEnvelope {
+                job:
+                    UniversalInboxJob::SlackPushEventCallback(SlackPushEventCallbackJob(
+                        SlackPushEventCallback {
+                            event: SlackEventCallbackBody::Message(message),
+                            ..
+                        },
+                    )),
+                ..
+            },
+        ] = jobs.as_slice()
+        else {
+            panic!("Expected a single Slack message job, got {jobs:?}");
+        };
+        // The edited reply's own ts and its thread root, not the edit event's ts
+        assert_eq!(message.origin.ts.to_string(), reply_ts);
+        assert_eq!(
+            message.origin.thread_ts.as_ref().map(|ts| ts.to_string()),
+            Some(thread_ts.to_string())
+        );
+        assert_eq!(message.subtype, None);
+        assert!(has_user_reference(message, "U01"));
+    }
+
+    /// Slack sends `message_changed` without a text change when it unfurls a link or when
+    /// a thread root gets a reply: such an event must not re-sync the thread.
+    #[rstest]
+    #[tokio::test]
+    async fn test_receive_slack_message_changed_without_content_change(
+        #[future] authenticated_app: AuthenticatedApp,
+        mut slack_push_message_changed_event: serde_json::Value,
+    ) {
+        let mut app = authenticated_app.await;
+        let event = &mut slack_push_message_changed_event["event"];
+        event["previous_message"]["text"] = event["message"]["text"].clone();
+        event["previous_message"]["blocks"] = event["message"]["blocks"].clone();
+        event["message"]["attachments"] = serde_json::json!([{
+            "id": 1,
+            "title": "Example",
+            "title_link": "https://example.com",
+            "from_url": "https://example.com"
+        }]);
+
+        let response = post_signed_slack_event(
+            &app.client,
+            &app.app.api_address,
+            &slack_push_message_changed_event,
+        )
+        .await;
+
+        assert_eq!(response.status(), 200);
+        assert_message_ignored(&mut app.app).await;
+    }
+
+    /// A nested `thread_ts` that cannot be read must not be taken as "not in a thread": the
+    /// job would key the reply as its own thread root.
+    #[rstest]
+    #[tokio::test]
+    async fn test_receive_slack_message_edited_with_invalid_thread_ts(
+        #[future] authenticated_app: AuthenticatedApp,
+        mut slack_push_message_changed_event: serde_json::Value,
+    ) {
+        let mut app = authenticated_app.await;
+        slack_push_message_changed_event["event"]["message"]["thread_ts"] = 42.into();
+
+        let response = post_signed_slack_event(
+            &app.client,
+            &app.app.api_address,
+            &slack_push_message_changed_event,
+        )
+        .await;
+
+        assert_eq!(response.status(), 200);
+        assert_message_ignored(&mut app.app).await;
+    }
+
+    /// Edit the message to a new text that mentions no one.
+    fn edit_without_references(event: &mut serde_json::Value) {
+        event["event"]["message"]["text"] = "Hello world".into();
+        event["event"]["message"]["blocks"] = serde_json::json!([{
+            "type": "rich_text",
+            "block_id": "3333",
+            "elements": [{
+                "type": "rich_text_section",
+                "elements": [{ "type": "text", "text": "Hello world" }]
+            }]
+        }]);
+    }
+
+    fn has_user_reference(message: &SlackMessageEvent, user_id: &str) -> bool {
+        message
+            .content
+            .as_ref()
+            .map(|content| {
+                universal_inbox_api::integrations::slack::find_slack_references_in_message(content)
+                    .users
+                    .contains_key(&SlackUserId(user_id.to_string()))
+            })
+            .unwrap_or(false)
+    }
+
+    /// The jobs pushed to the test's queue, whatever their state (see `pushed_jobs_count`).
+    async fn pushed_jobs(app: &TestedApp) -> Vec<JobEnvelope> {
+        let payloads: Vec<Vec<u8>> = app
+            .redis_storage
+            .get_connection()
+            .clone()
+            .hvals(app.redis_storage.get_config().job_data_hash())
+            .await
+            .expect("Failed to get jobs");
+        payloads
+            .iter()
+            .map(|payload| {
+                // apalis stores the job arguments next to its own metadata
+                let mut request: serde_json::Value =
+                    serde_json::from_slice(payload).expect("Failed to parse job request");
+                serde_json::from_value(request["args"].take()).expect("Failed to parse job payload")
+            })
+            .collect()
     }
 
     async fn assert_message_ignored(app: &mut TestedApp) {
@@ -790,6 +1033,135 @@ mod job {
         assert!(slack_thread.sender_profiles.contains_key("U01"));
         assert!(slack_thread.sender_profiles.contains_key("U02"));
         assert!(slack_thread.subscribed);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_handle_slack_message_edited_to_add_a_ping_to_known_user(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        mut slack_oauth_credential: OAuthCredentialFixture,
+        slack_push_message_changed_event: serde_json::Value,
+    ) {
+        let app = authenticated_app.await;
+        let message_changed_event: SlackPushEventCallback =
+            serde_json::from_value(slack_push_message_changed_event.clone()).unwrap();
+        let SlackEventCallbackBody::Message(message_changed) = &message_changed_event.event else {
+            unreachable!("Unexpected event type");
+        };
+        let edited_message =
+            edited_slack_message_event(message_changed, &slack_push_message_changed_event)
+                .expect("message_changed event should carry an edited message");
+        let slack_message_id = "1732535291.911209";
+        let origin = &edited_message.origin;
+        // The edited message's own ts and thread_ts, not the edit event's ts
+        assert_eq!(origin.ts.to_string(), slack_message_id);
+        assert_eq!(
+            origin.thread_ts.as_ref().map(|ts| ts.to_string()),
+            Some(slack_message_id.to_string())
+        );
+        let message_event = SlackPushEventCallback {
+            event: SlackEventCallbackBody::Message(edited_message),
+            ..message_changed_event
+        };
+
+        let service = app.app.notification_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
+        slack_oauth_credential.provider_user_id = Some("U01".to_string());
+        slack_oauth_credential.access_token =
+            AccessToken("slack_test_user_access_token".to_string());
+        create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+            &settings,
+            slack_oauth_credential,
+            None,
+            Some(slack_context("T01")),
+        )
+        .await;
+
+        mock_slack_get_chat_permalink(
+            &app.app.slack_mock_server,
+            "C05XXX",
+            slack_message_id,
+            "slack_get_chat_permalink_response.json",
+        )
+        .await;
+        mock_slack_fetch_user(
+            &app.app.slack_mock_server,
+            "U01",
+            "slack_fetch_user_response.json",
+        )
+        .await;
+        mock_slack_fetch_user(
+            &app.app.slack_mock_server,
+            "U02",
+            "slack_fetch_user_response.json",
+        )
+        .await;
+        let _slack_fetch_thread_mock = mock_slack_fetch_thread(
+            &app.app.slack_mock_server,
+            "C05XXX",
+            slack_message_id,
+            slack_message_id,
+            "slack_fetch_thread_response.json",
+            true,
+            None,
+            "slack_test_user_access_token",
+        )
+        .await;
+        let _slack_fetch_channel_mock = mock_slack_fetch_channel(
+            &app.app.slack_mock_server,
+            "C05XXX",
+            "slack_fetch_channel_response.json",
+        )
+        .await;
+        let _slack_fetch_team_mock = mock_slack_fetch_team(
+            &app.app.slack_mock_server,
+            "T01",
+            "slack_fetch_team_response.json",
+        )
+        .await;
+
+        handle_slack_message_push_event(
+            &mut transaction,
+            &message_event,
+            app.app.notification_service.clone(),
+            app.app.integration_connection_service.clone(),
+            app.app.third_party_item_service.clone(),
+            app.app.slack_service.clone(),
+        )
+        .await
+        .unwrap();
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction")
+            .unwrap();
+
+        let notifications = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].source_item.source_id, slack_message_id);
+        assert_eq!(notifications[0].status, NotificationStatus::Unread);
+        assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
+        let ThirdPartyItemData::SlackThread(slack_thread) = &notifications[0].source_item.data
+        else {
+            unreachable!("Unexpected item data");
+        };
+        assert_eq!(&slack_thread.channel.id.to_string(), "C05XXX");
     }
 
     /// Slack answers `bot_not_found` for bots it will never resolve for the connected token

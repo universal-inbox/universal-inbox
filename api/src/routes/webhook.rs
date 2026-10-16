@@ -26,13 +26,15 @@ use universal_inbox::{
         integrations::slack::{SlackConfig, SlackReactionConfig},
         provider::IntegrationProviderKind,
     },
-    third_party::item::ThirdPartyItemKind,
 };
 
 use crate::observability::attr;
 use crate::{
     configuration::WebhookSigningSecret,
-    integrations::{notion::webhook::NotionWebhookEvent, slack::has_slack_references_in_message},
+    integrations::{
+        notion::webhook::NotionWebhookEvent,
+        slack::{SlackMessageEventGate, edited_slack_message_event, gate_slack_message_event},
+    },
     jobs::{
         JobStorage, UniversalInboxJob, notion::NotionWebhookEventJob, push_job,
         slack::SlackPushEventCallbackJob,
@@ -360,75 +362,52 @@ pub async fn push_slack_event(
         SlackPushEvent::EventCallback(
             ref event @ SlackPushEventCallback {
                 event:
-                    SlackEventCallbackBody::Message(SlackMessageEvent {
-                        origin:
-                            SlackMessageOrigin {
-                                ref thread_ts,
-                                ref ts,
-                                ref channel,
-                                ..
-                            },
-                        content: Some(ref content),
-                        sender: SlackMessageSender { ref user, .. },
-                        ..
-                    }),
+                    SlackEventCallbackBody::Message(
+                        ref message @ SlackMessageEvent {
+                            subtype: Some(SlackMessageEventType::MessageChanged),
+                            ..
+                        },
+                    ),
                 ..
             },
         ) => {
-            current_span.set_attribute(attr::SLACK_EVENT_TYPE, "message");
-            current_span.set_attribute(attr::SLACK_TEAM_ID, event.team_id.to_string());
-            current_span.set_attribute(attr::SLACK_EVENT_ID, event.event_id.to_string());
-            current_span.set_attribute(attr::SLACK_MESSAGE_TS, ts.to_string());
-            if let Some(thread_ts) = thread_ts {
-                current_span.set_attribute(attr::SLACK_MESSAGE_THREAD_TS, thread_ts.to_string());
-            }
-            if let Some(channel) = channel {
-                current_span.set_attribute(attr::SLACK_CHANNEL_ID, channel.to_string());
-            }
-            if let Some(user) = user {
-                current_span.set_attribute(attr::SLACK_USER_ID, user.to_string());
-            }
-
-            // Cheap, DB-free check first: this endpoint receives every message of every
-            // channel the app is in, so most events must not cost a pool connection.
-            if has_slack_references_in_message(content) {
-                current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "queued");
-                current_span.set_attribute(attr::SLACK_EVENT_QUEUE_REASON, "has_references");
-                send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
-                return Ok(HttpResponse::Ok().finish());
-            }
-
-            // Only thread replies can belong to a known thread
-            let is_known_thread = match thread_ts {
-                Some(thread_ts) => {
-                    let service = third_party_item_service.read().await;
-                    // A single read: use a plain connection (no BEGIN/ROLLBACK), returned to
-                    // the pool before the Redis job push below. Pool exhaustion surfaces as
-                    // `DatabaseUnavailable` (503) so Slack retries the event.
-                    let mut connection = service.connect().await?;
-                    service
-                        .has_third_party_item_for_source_id(
-                            &mut connection,
-                            ThirdPartyItemKind::SlackThread,
-                            &thread_ts.0,
-                        )
-                        .await?
+            set_slack_event_span_attributes(event, "message_changed");
+            let raw_payload: serde_json::Value = serde_json::from_slice(&body)
+                .context("Failed to deserialize Slack message_changed event")?;
+            match edited_slack_message_event(message, &raw_payload) {
+                Ok(edited_message) => {
+                    let edited_event = SlackPushEventCallback {
+                        event: SlackEventCallbackBody::Message(edited_message.clone()),
+                        ..event.clone()
+                    };
+                    queue_slack_message_event_if_relevant(
+                        &edited_event,
+                        &edited_message,
+                        third_party_item_service.as_ref(),
+                        storage.as_ref(),
+                    )
+                    .await?;
                 }
-                None => false,
-            };
-
-            if is_known_thread {
-                current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "queued");
-                current_span.set_attribute(attr::SLACK_EVENT_QUEUE_REASON, "known_thread");
-                send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
-                return Ok(HttpResponse::Ok().finish());
+                Err(discard_reason) => {
+                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
+                    current_span.set_attribute(attr::SLACK_EVENT_DISCARD_REASON, discard_reason);
+                }
             }
-
-            current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
-            current_span.set_attribute(
-                attr::SLACK_EVENT_DISCARD_REASON,
-                "no_references_no_known_thread",
-            );
+        }
+        SlackPushEvent::EventCallback(
+            ref event @ SlackPushEventCallback {
+                event: SlackEventCallbackBody::Message(ref message),
+                ..
+            },
+        ) => {
+            set_slack_event_span_attributes(event, "message");
+            queue_slack_message_event_if_relevant(
+                event,
+                message,
+                third_party_item_service.as_ref(),
+                storage.as_ref(),
+            )
+            .await?;
         }
         SlackPushEvent::AppRateLimited(SlackAppRateLimitedEvent {
             team_id,
@@ -563,6 +542,57 @@ async fn revoke_slack_access(
     current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "access_revoked");
     current_span.set_attribute(attr::SLACK_REVOKED_CONNECTIONS_COUNT, revoked as i64);
     Ok(())
+}
+
+fn set_slack_event_span_attributes(event: &SlackPushEventCallback, event_type: &'static str) {
+    let current_span = tracing::Span::current();
+    current_span.set_attribute(attr::SLACK_EVENT_TYPE, event_type);
+    current_span.set_attribute(attr::SLACK_TEAM_ID, event.team_id.to_string());
+    current_span.set_attribute(attr::SLACK_EVENT_ID, event.event_id.to_string());
+}
+
+/// Push `event`, whose body is `message`, to the job queue when the gate lets it through.
+async fn queue_slack_message_event_if_relevant(
+    event: &SlackPushEventCallback,
+    message: &SlackMessageEvent,
+    third_party_item_service: &RwLock<ThirdPartyItemService>,
+    storage: &JobStorage,
+) -> Result<(), UniversalInboxError> {
+    let current_span = tracing::Span::current();
+    let SlackMessageEvent {
+        origin:
+            SlackMessageOrigin {
+                thread_ts,
+                ts,
+                channel,
+                ..
+            },
+        sender: SlackMessageSender { user, .. },
+        ..
+    } = message;
+    current_span.set_attribute(attr::SLACK_MESSAGE_TS, ts.to_string());
+    if let Some(thread_ts) = thread_ts {
+        current_span.set_attribute(attr::SLACK_MESSAGE_THREAD_TS, thread_ts.to_string());
+    }
+    if let Some(channel) = channel {
+        current_span.set_attribute(attr::SLACK_CHANNEL_ID, channel.to_string());
+    }
+    if let Some(user) = user {
+        current_span.set_attribute(attr::SLACK_USER_ID, user.to_string());
+    }
+
+    match gate_slack_message_event(message, third_party_item_service).await? {
+        SlackMessageEventGate::Queue(queue_reason) => {
+            current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "queued");
+            current_span.set_attribute(attr::SLACK_EVENT_QUEUE_REASON, queue_reason);
+            send_slack_push_event_callback_job(storage, event.clone()).await
+        }
+        SlackMessageEventGate::Discard(discard_reason) => {
+            current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
+            current_span.set_attribute(attr::SLACK_EVENT_DISCARD_REASON, discard_reason);
+            Ok(())
+        }
+    }
 }
 
 async fn send_slack_push_event_callback_job(
