@@ -117,43 +117,34 @@ pub fn SignupPage() -> Element {
 
                 PrimaryBtn { button_type: "submit".to_string(), "Create account" }
             }
+        }
 
-            if is_google_auth_enabled || is_passkey_auth_enabled {
-                AuthDivider { label: "or sign up with".to_string() }
-            }
+        if is_local_auth_enabled && (is_google_auth_enabled || is_passkey_auth_enabled) {
+            AuthDivider { label: "or sign up with".to_string() }
+        }
 
-            div { class: "grid grid-cols-1 gap-2.5",
-                if is_google_auth_enabled {
-                    GoogleBtn {
-                        onclick: move |_| {
-                            spawn({
-                                async move {
-                                    if let Err(auth_error) =
-                                        authenticate_authorization_code_flow(&api_base_url()).await
-                                    {
-                                        error!("An error occured while authenticating: {:?}", auth_error);
-                                    }
+        div { class: "grid grid-cols-1 gap-2.5",
+            if is_google_auth_enabled {
+                GoogleBtn {
+                    onclick: move |_| {
+                        spawn({
+                            async move {
+                                if let Err(auth_error) =
+                                    authenticate_authorization_code_flow(&api_base_url()).await
+                                {
+                                    error!("An error occured while authenticating: {:?}", auth_error);
                                 }
-                            });
-                        },
-                        "Sign up with Google"
-                    }
-                }
-                if is_passkey_auth_enabled {
-                    PasskeyBtn { to: Route::PasskeySignupPage {}, "Sign up with a passkey" }
+                            }
+                        });
+                    },
+                    "Sign up with Google"
                 }
             }
-
-            LegalFooter {}
-        } else {
-            div { class: "mt-auto pt-6 text-center text-xs text-ui-base-muted",
-                "Already have an account? "
-                Link {
-                    class: "text-ui-primary font-semibold no-underline hover:text-ui-primary-hover hover:underline",
-                    to: Route::LoginPage {},
-                    "Log in"
-                }
+            if is_passkey_auth_enabled {
+                PasskeyBtn { to: Route::PasskeySignupPage {}, "Sign up with a passkey" }
             }
         }
+
+        LegalFooter {}
     }
 }
