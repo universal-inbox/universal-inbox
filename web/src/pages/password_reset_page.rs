@@ -10,6 +10,7 @@ use crate::{
         floating_label_inputs::FloatingLabelInputText,
         ui::PageHeader,
     },
+    config::APP_CONFIG,
     form::FormValues,
     route::Route,
     services::user_service::UserCommand,
@@ -19,6 +20,18 @@ pub fn PasswordResetPage() -> Element {
     let user_service = use_coroutine_handle::<UserCommand>();
     let email = use_signal(|| "".to_string());
     let mut force_validation = use_signal(|| false);
+    let nav = use_navigator();
+
+    // Without local auth on the server there is no password to reset: the
+    // page is only reachable by URL or an old email link, send it to login.
+    if APP_CONFIG
+        .read()
+        .as_ref()
+        .is_some_and(|config| !config.is_local_auth_enabled())
+    {
+        nav.replace(Route::LoginPage {});
+        return rsx! {};
+    }
 
     rsx! {
         Backlink { to: Route::LoginPage {}, "Back to login" }

@@ -41,8 +41,8 @@ use crate::{
     billing::repository::BillingRepository,
     billing::service::BillingService,
     configuration::{
-        ApplicationSettings, AuthenticationSettings, OIDCAuthorizationCodePKCEFlowSettings,
-        OIDCFlowSettings, OpenIDConnectSettings,
+        ApplicationSettings, AuthenticationSettings, LocalAuthenticationSettings,
+        OIDCAuthorizationCodePKCEFlowSettings, OIDCFlowSettings, OpenIDConnectSettings,
     },
     mailer::{EmailTemplate, Mailer},
     middlewares::jwt_auth::SessionTokenChecker,
@@ -365,6 +365,7 @@ impl UserService {
         password: SecretBox<Password>,
         session_authentication: Option<&SessionAuthentication>,
     ) -> Result<UserAuthMethod, UniversalInboxError> {
+        self.ensure_local_auth_enabled()?;
         self.ensure_recently_authenticated(user_id, session_authentication)?;
         self.create_local_auth_method(executor, user_id, password)
             .await
@@ -1475,6 +1476,7 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         credentials: Credentials,
     ) -> Result<(), UniversalInboxError> {
+        self.ensure_local_auth_enabled()?;
         let email_domain = credentials.email.expose().domain().to_lowercase();
         if let Some(rejection_message) = self
             .application_settings
@@ -1548,6 +1550,7 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         credentials: Credentials,
     ) -> Result<User, UniversalInboxError> {
+        self.ensure_local_auth_enabled()?;
         let email = credentials.email.clone();
 
         if let Some(retry_after_seconds) = self
@@ -1681,10 +1684,32 @@ impl UserService {
             .ok_or_else(|| UniversalInboxError::Unauthorized(anyhow!("Unknown user")))
     }
 
+    /// The local authentication settings, or a 403 when this instance does
+    /// not offer password authentication (e.g. OIDC only): every local-auth
+    /// endpoint checks this first, so the 403 comes before any other check
+    /// (domain blacklist, re-authentication, rate limits), even when it calls
+    /// [`Self::get_new_password_hash`] again later for the settings.
+    fn ensure_local_auth_enabled(
+        &self,
+    ) -> Result<&LocalAuthenticationSettings, UniversalInboxError> {
+        self.application_settings
+            .security
+            .authentication
+            .iter()
+            .find_map(|auth_settings| match auth_settings {
+                AuthenticationSettings::Local(local_auth_settings) => Some(local_auth_settings),
+                _ => None,
+            })
+            .ok_or_else(|| {
+                UniversalInboxError::Forbidden("Local authentication is disabled".to_string())
+            })
+    }
+
     pub fn get_new_password_hash(
         &self,
         password: SecretBox<Password>,
     ) -> Result<SecretBox<PasswordHash>, UniversalInboxError> {
+        let local_auth_settings = self.ensure_local_auth_enabled()?;
         // Every new password (registration, reset, adding or changing a local
         // auth method) goes through here: enforce the policy server-side, the
         // SPA's check is only a convenience.
@@ -1700,17 +1725,6 @@ impl UserService {
                 user_error: "This password is too common, please choose another one".to_string(),
             });
         }
-        let Some(AuthenticationSettings::Local(local_auth_settings)) = &self
-            .application_settings
-            .security
-            .authentication
-            .iter()
-            .find(|auth_settings| matches!(auth_settings, AuthenticationSettings::Local(_)))
-        else {
-            return Err(anyhow!(
-                "Cannot hash password without local authentication settings"
-            ))?;
-        };
 
         Ok(Argon2::new(
             local_auth_settings.argon2_algorithm,
@@ -1928,6 +1942,7 @@ impl UserService {
         email_address: Pii<EmailAddress>,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
+        self.ensure_local_auth_enabled()?;
         if !self.is_email_enabled().await {
             return Err(UniversalInboxError::EmailDisabled);
         }
@@ -2242,6 +2257,7 @@ impl UserService {
         user_id: UserId,
         unsupported_message: &str,
     ) -> Result<(User, Pii<EmailAddress>), UniversalInboxError> {
+        self.ensure_local_auth_enabled()?;
         let user = self
             .repository
             .get_user(executor, user_id)

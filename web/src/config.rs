@@ -28,6 +28,16 @@ pub struct AppConfig {
     pub audit_log_retention_days: u32,
 }
 
+impl AppConfig {
+    /// Whether the server offers password authentication: without it, the
+    /// signup, password reset and password management endpoints answer 403.
+    pub fn is_local_auth_enabled(&self) -> bool {
+        self.authentication_configs
+            .iter()
+            .any(|auth_config| matches!(auth_config, FrontAuthenticationConfig::Local))
+    }
+}
+
 pub static APP_CONFIG: GlobalSignal<Option<AppConfig>> = Signal::global(|| None);
 
 pub fn get_api_base_url() -> Result<Url> {

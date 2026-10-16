@@ -21,7 +21,7 @@ use crate::{
             Badge, BadgeTone, BadgeVariant, Button, ButtonVariant, Card, CardHeader, CardVariant,
         },
     },
-    config::APP_CONFIG,
+    config::{APP_CONFIG, AppConfig},
     form::FormValues,
     icons::GOOGLE_LOGO,
     services::user_service::{AUTH_METHODS, UserCommand},
@@ -71,6 +71,13 @@ pub fn AuthMethodsCard() -> Element {
             })
         })
         .unwrap_or(false);
+    // Without local auth on the server, the password endpoints answer 403:
+    // offer neither adding nor changing a password.
+    let is_local_auth_enabled = APP_CONFIG
+        .read()
+        .as_ref()
+        .map(AppConfig::is_local_auth_enabled)
+        .unwrap_or(false);
 
     rsx! {
         section {
@@ -98,81 +105,83 @@ pub fn AuthMethodsCard() -> Element {
                 div {
                     class: "flex flex-wrap gap-2 px-4 pt-2 pb-4",
 
-                    if has_local {
-                        ChangePasswordForm {}
-                    } else {
-                        if show_add_password() {
-                            form {
-                                class: "flex flex-col gap-4 w-full",
-                                onsubmit: move |evt| {
-                                    evt.prevent_default();
-                                    let result: Result<SecretBox<Password>, _> =
-                                        FormValues(evt.values()).try_into();
-                                    match result {
-                                        Ok(new_password) => {
-                                            user_service.send(
-                                                UserCommand::AddLocalAuth(new_password),
-                                            );
-                                            show_add_password.set(false);
-                                            force_password_validation.set(false);
+                    if is_local_auth_enabled {
+                        if has_local {
+                            ChangePasswordForm {}
+                        } else {
+                            if show_add_password() {
+                                form {
+                                    class: "flex flex-col gap-4 w-full",
+                                    onsubmit: move |evt| {
+                                        evt.prevent_default();
+                                        let result: Result<SecretBox<Password>, _> =
+                                            FormValues(evt.values()).try_into();
+                                        match result {
+                                            Ok(new_password) => {
+                                                user_service.send(
+                                                    UserCommand::AddLocalAuth(new_password),
+                                                );
+                                                show_add_password.set(false);
+                                                force_password_validation.set(false);
+                                            }
+                                            Err(err) => {
+                                                *force_password_validation.write() = true;
+                                                error!(
+                                                    "Failed to parse form values as Password: {err}"
+                                                );
+                                            }
                                         }
-                                        Err(err) => {
-                                            *force_password_validation.write() = true;
-                                            error!(
-                                                "Failed to parse form values as Password: {err}"
-                                            );
+                                    },
+
+                                    FloatingLabelInputText::<NewPassword> {
+                                        name: "password".to_string(),
+                                        label: Some("Password".to_string()),
+                                        required: true,
+                                        value: password,
+                                        autofocus: true,
+                                        force_validation: force_password_validation(),
+                                        r#type: "password".to_string(),
+                                    }
+
+                                    PasswordStrengthMeter { value: password }
+
+                                    div {
+                                        class: "flex gap-2 mt-1",
+                                        Button {
+                                            variant: ButtonVariant::Ghost,
+                                            onclick: move |_| {
+                                                show_add_password.set(false);
+                                                force_password_validation.set(false);
+                                            },
+                                            "Cancel"
+                                        }
+                                        Button {
+                                            variant: ButtonVariant::Primary,
+                                            button_type: "submit".to_string(),
+                                            "Add password"
                                         }
                                     }
-                                },
-
-                                FloatingLabelInputText::<NewPassword> {
-                                    name: "password".to_string(),
-                                    label: Some("Password".to_string()),
-                                    required: true,
-                                    value: password,
-                                    autofocus: true,
-                                    force_validation: force_password_validation(),
-                                    r#type: "password".to_string(),
                                 }
-
-                                PasswordStrengthMeter { value: password }
-
-                                div {
-                                    class: "flex gap-2 mt-1",
-                                    Button {
-                                        variant: ButtonVariant::Ghost,
-                                        onclick: move |_| {
-                                            show_add_password.set(false);
-                                            force_password_validation.set(false);
-                                        },
-                                        "Cancel"
+                            } else {
+                                button {
+                                    class: "group flex flex-1 min-w-[120px] flex-col items-center gap-2 \
+                                            px-3 py-3 bg-ui-surface border border-ui-border rounded-ui-md \
+                                            hover:border-ui-primary hover:bg-ui-surface-hover \
+                                            focus-visible:outline-2 focus-visible:outline-ui-primary focus-visible:outline-offset-2 \
+                                            transition-colors cursor-pointer",
+                                    r#type: "button",
+                                    onclick: move |_| show_add_password.set(true),
+                                    div {
+                                        class: "flex items-center justify-center size-7 rounded-ui-sm bg-ui-surface-alt",
+                                        span {
+                                            class: "icon-[lucide--key-round] size-4 \
+                                                    text-ui-base-muted group-hover:text-ui-primary transition-colors",
+                                        }
                                     }
-                                    Button {
-                                        variant: ButtonVariant::Primary,
-                                        button_type: "submit".to_string(),
+                                    span {
+                                        class: "text-[12.5px] font-medium text-ui-base-content",
                                         "Add password"
                                     }
-                                }
-                            }
-                        } else {
-                            button {
-                                class: "group flex flex-1 min-w-[120px] flex-col items-center gap-2 \
-                                        px-3 py-3 bg-ui-surface border border-ui-border rounded-ui-md \
-                                        hover:border-ui-primary hover:bg-ui-surface-hover \
-                                        focus-visible:outline-2 focus-visible:outline-ui-primary focus-visible:outline-offset-2 \
-                                        transition-colors cursor-pointer",
-                                r#type: "button",
-                                onclick: move |_| show_add_password.set(true),
-                                div {
-                                    class: "flex items-center justify-center size-7 rounded-ui-sm bg-ui-surface-alt",
-                                    span {
-                                        class: "icon-[lucide--key-round] size-4 \
-                                                text-ui-base-muted group-hover:text-ui-primary transition-colors",
-                                    }
-                                }
-                                span {
-                                    class: "text-[12.5px] font-medium text-ui-base-content",
-                                    "Add password"
                                 }
                             }
                         }
