@@ -140,6 +140,11 @@ pub struct RealtimeSettings {
     /// Interval of the heartbeats of an event stream, which also re-check its session.
     #[serde(default = "default_realtime_heartbeat_interval_in_seconds")]
     pub heartbeat_interval_in_seconds: u64,
+    /// Interval at which each API pod schedules the due syncs of the users with an event
+    /// stream open on it, as the web application no longer does it by polling. `0` disables
+    /// it: syncs are then only scheduled by the lists polling and the MCP tools.
+    #[serde(default = "default_realtime_sync_scheduling_interval_in_seconds")]
+    pub sync_scheduling_interval_in_seconds: u64,
 }
 
 impl Default for RealtimeSettings {
@@ -148,6 +153,8 @@ impl Default for RealtimeSettings {
             enabled: true,
             channel: default_realtime_channel(),
             heartbeat_interval_in_seconds: default_realtime_heartbeat_interval_in_seconds(),
+            sync_scheduling_interval_in_seconds:
+                default_realtime_sync_scheduling_interval_in_seconds(),
         }
     }
 }
@@ -158,6 +165,10 @@ fn default_realtime_channel() -> String {
 
 fn default_realtime_heartbeat_interval_in_seconds() -> u64 {
     20
+}
+
+fn default_realtime_sync_scheduling_interval_in_seconds() -> u64 {
+    60
 }
 
 /// Configuration for the `purge-audit-events` cron, deleting the audit events older than

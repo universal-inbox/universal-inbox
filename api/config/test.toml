@@ -82,3 +82,6 @@ reply_to_header = "support <support@example.com>"
 # Event streams re-check their session on each heartbeat: fast enough to test a revocation
 [application.realtime]
 heartbeat_interval_in_seconds = 1
+# Disabled: a scheduled sync would add events to the streams of the other tests. The
+# scheduling tests enable it.
+sync_scheduling_interval_in_seconds = 0
