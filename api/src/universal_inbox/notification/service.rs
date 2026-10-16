@@ -1265,15 +1265,9 @@ impl NotificationService {
         Ok(None)
     }
 
-    #[tracing::instrument(
-        level = "info",
-        skip_all,
-        fields(
-            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
-            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
-            { attr::USER_ID } = user_id.to_string()
-        )
-    )]
+    /// No span of its own: [`Self::upsert_notification_from_third_party_item`] records the
+    /// `create_notification_from_third_party_item` span, named after this fn so the span name
+    /// stays stable for existing dashboards and queries.
     pub async fn create_notification_from_third_party_item<T, U>(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1287,16 +1281,51 @@ impl NotificationService {
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
         let upsert_notification = self
-            .save_third_party_item_as_notification(
+            .upsert_notification_from_third_party_item(
                 executor,
-                &third_party_item,
-                third_party_notification_service.clone(),
-                None,
+                third_party_item,
+                third_party_notification_service,
                 user_id,
             )
             .await?;
 
         Ok(Some(*upsert_notification.value()))
+    }
+
+    /// Like [`Self::create_notification_from_third_party_item`], telling whether the
+    /// notification was created, updated or left untouched. Its span keeps the
+    /// `create_notification_from_third_party_item` name (see that fn): both paths are one
+    /// per-item boundary.
+    #[tracing::instrument(
+        name = "create_notification_from_third_party_item",
+        level = "info",
+        skip_all,
+        fields(
+            { attr::THIRD_PARTY_ITEM_ID } = third_party_item.id.to_string(),
+            { attr::THIRD_PARTY_ITEM_SOURCE_ID } = third_party_item.source_id,
+            { attr::USER_ID } = user_id.to_string()
+        )
+    )]
+    pub async fn upsert_notification_from_third_party_item<T, U>(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        third_party_item: ThirdPartyItem,
+        third_party_notification_service: Arc<U>,
+        user_id: UserId,
+    ) -> Result<UpsertStatus<Box<Notification>>, UniversalInboxError>
+    where
+        T: TryFrom<ThirdPartyItem> + Debug,
+        U: ThirdPartyNotificationSourceService<T> + NotificationSource + Send + Sync,
+        <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+    {
+        self.save_third_party_item_as_notification(
+            executor,
+            &third_party_item,
+            third_party_notification_service,
+            None,
+            user_id,
+        )
+        .await
     }
 
     /// Path 2 of the Linear auto-delete: a notification about a Linear issue that already has

@@ -15,7 +15,7 @@ use universal_inbox::{
 
 use crate::observability::attr;
 use crate::{
-    integrations::slack::SlackService,
+    integrations::slack::{SlackFetchResult, SlackService},
     universal_inbox::{
         UniversalInboxError,
         task::{TaskEventService, service::TaskService},
@@ -38,7 +38,7 @@ impl TaskEventService<SlackPushEventCallback> for TaskService {
         event: &SlackPushEventCallback,
         user_id: UserId,
     ) -> Result<Option<Task>, UniversalInboxError> {
-        let Some(third_party_item) = self
+        let SlackFetchResult::Fetched(third_party_item) = self
             .slack_service
             .fetch_item_from_event(executor, event, user_id)
             .await?

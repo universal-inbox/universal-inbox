@@ -23,6 +23,8 @@ use crate::{
     },
 };
 
+pub mod event_trace;
+pub mod gate;
 pub mod slack_message;
 pub mod slack_reaction;
 
@@ -98,7 +100,7 @@ pub async fn handle_slack_push_event(
                     (*third_party_item_service).clone(),
                     (*slack_service).clone(),
                 )
-                .await?
+                .await?;
             }
             event => {
                 return Err(UniversalInboxError::UnsupportedAction(format!(

@@ -186,6 +186,10 @@ pub const SLACK_USER_ID: &str = "slack.user.id";
 pub const SLACK_CHANNEL_ID: &str = "slack.channel.id";
 pub const SLACK_MESSAGE_TS: &str = "slack.message.ts";
 pub const SLACK_MESSAGE_THREAD_TS: &str = "slack.message.thread_ts";
+/// `message` event subtype (`message_changed`, `bot_message`, ...)
+pub const SLACK_MESSAGE_SUBTYPE: &str = "slack.message.subtype";
+/// `subtype` of a non-message event, eg. one slack-morphism does not model
+pub const SLACK_EVENT_SUBTYPE: &str = "slack.event.subtype";
 pub const SLACK_REACTION_NAME: &str = "slack.reaction.name";
 pub const SLACK_SYNC_TYPE: &str = "slack.sync_type";
 pub const SLACK_MESSAGE_SYNC_ENABLED: &str = "slack.message_sync_enabled";

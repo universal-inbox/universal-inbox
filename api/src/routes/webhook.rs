@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -20,24 +21,22 @@ use tokio_retry::{
 use tracing::{debug, warn};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use universal_inbox::{
-    audit::AuditActor,
-    integration_connection::{
-        config::IntegrationConnectionConfig,
-        integrations::slack::{SlackConfig, SlackReactionConfig},
-        provider::IntegrationProviderKind,
-    },
+    audit::AuditActor, integration_connection::provider::IntegrationProviderKind,
 };
 
 use crate::observability::attr;
 use crate::{
     configuration::WebhookSigningSecret,
-    integrations::{
-        notion::webhook::NotionWebhookEvent,
-        slack::{SlackMessageEventGate, edited_slack_message_event, gate_slack_message_event},
-    },
+    integrations::notion::webhook::NotionWebhookEvent,
     jobs::{
-        JobStorage, UniversalInboxJob, notion::NotionWebhookEventJob, push_job,
-        slack::SlackPushEventCallbackJob,
+        JobStorage, UniversalInboxJob,
+        notion::NotionWebhookEventJob,
+        push_job,
+        slack::{
+            SlackPushEventCallbackJob,
+            event_trace::SlackEventTrace,
+            gate::{SlackGateDecision, decide_slack_event_gate},
+        },
     },
     universal_inbox::{
         UniversalInboxError, audit::actor_context::with_actor,
@@ -246,6 +245,14 @@ fn verify_notion_signature_parts(
     }
 }
 
+/// Slack Events API webhook: the gate deciding which events become a job.
+///
+/// This span is DEBUG. While every subscriber layer filters DEBUG out (the prod default:
+/// `otel_trace_directive` and `log_directive` are `info`), it is never created, so the
+/// `slack.event.*` attributes set on `Span::current()` land on the HTTP root span
+/// (`POST /webhooks/slack/events`). If a layer enables DEBUG (eg. `RUST_LOG=debug`), they land
+/// on this span instead, which the OTel layer still does not export. Each gate decision is also
+/// logged (see [`SlackEventTrace::record_gate_decision`]): spans are sampled, logs are not.
 #[tracing::instrument(level = "debug", skip_all)]
 pub async fn push_slack_event(
     req: HttpRequest,
@@ -277,137 +284,6 @@ pub async fn push_slack_event(
             return Ok(HttpResponse::Ok()
                 .content_type("application/json")
                 .body(json!({ "challenge": challenge }).to_string()));
-        }
-        SlackPushEvent::EventCallback(
-            ref event @ SlackPushEventCallback {
-                event:
-                    SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent {
-                        ref user,
-                        ref reaction,
-                        ..
-                    }),
-                ..
-            },
-        )
-        | SlackPushEvent::EventCallback(
-            ref event @ SlackPushEventCallback {
-                event:
-                    SlackEventCallbackBody::ReactionRemoved(SlackReactionRemovedEvent {
-                        ref user,
-                        ref reaction,
-                        ..
-                    }),
-                ..
-            },
-        ) => {
-            let event_type = match &event.event {
-                SlackEventCallbackBody::ReactionAdded(_) => "reaction_added",
-                SlackEventCallbackBody::ReactionRemoved(_) => "reaction_removed",
-                _ => unreachable!(),
-            };
-            current_span.set_attribute(attr::SLACK_EVENT_TYPE, event_type);
-            current_span.set_attribute(attr::SLACK_TEAM_ID, event.team_id.to_string());
-            current_span.set_attribute(attr::SLACK_EVENT_ID, event.event_id.to_string());
-            current_span.set_attribute(attr::SLACK_USER_ID, user.to_string());
-            current_span.set_attribute(attr::SLACK_REACTION_NAME, reaction.to_string());
-
-            let service = integration_connection_service.read().await;
-            // No `.context()`: keep a pool timeout as `DatabaseUnavailable` (503).
-            let mut transaction = service.begin().await?;
-
-            let config = service
-                .get_integration_connection_config_for_provider_user_id(
-                    &mut transaction,
-                    IntegrationProviderKind::Slack,
-                    user.to_string(),
-                )
-                .await?;
-
-            match config {
-                Some(IntegrationConnectionConfig::Slack(SlackConfig {
-                    reaction_config:
-                        SlackReactionConfig {
-                            sync_enabled: true,
-                            reaction_name,
-                            ..
-                        },
-                    ..
-                })) if reaction_name == *reaction => {
-                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "queued");
-                    send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
-                }
-                Some(IntegrationConnectionConfig::Slack(SlackConfig {
-                    reaction_config:
-                        SlackReactionConfig {
-                            sync_enabled: false,
-                            ..
-                        },
-                    ..
-                })) => {
-                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
-                    current_span
-                        .set_attribute(attr::SLACK_EVENT_DISCARD_REASON, "reaction_sync_disabled");
-                }
-                Some(IntegrationConnectionConfig::Slack(_)) => {
-                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
-                    current_span
-                        .set_attribute(attr::SLACK_EVENT_DISCARD_REASON, "reaction_name_mismatch");
-                }
-                _ => {
-                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
-                    current_span.set_attribute(attr::SLACK_EVENT_DISCARD_REASON, "no_slack_config");
-                }
-            }
-        }
-        SlackPushEvent::EventCallback(
-            ref event @ SlackPushEventCallback {
-                event:
-                    SlackEventCallbackBody::Message(
-                        ref message @ SlackMessageEvent {
-                            subtype: Some(SlackMessageEventType::MessageChanged),
-                            ..
-                        },
-                    ),
-                ..
-            },
-        ) => {
-            set_slack_event_span_attributes(event, "message_changed");
-            let raw_payload: serde_json::Value = serde_json::from_slice(&body)
-                .context("Failed to deserialize Slack message_changed event")?;
-            match edited_slack_message_event(message, &raw_payload) {
-                Ok(edited_message) => {
-                    let edited_event = SlackPushEventCallback {
-                        event: SlackEventCallbackBody::Message(edited_message.clone()),
-                        ..event.clone()
-                    };
-                    queue_slack_message_event_if_relevant(
-                        &edited_event,
-                        &edited_message,
-                        third_party_item_service.as_ref(),
-                        storage.as_ref(),
-                    )
-                    .await?;
-                }
-                Err(discard_reason) => {
-                    current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
-                    current_span.set_attribute(attr::SLACK_EVENT_DISCARD_REASON, discard_reason);
-                }
-            }
-        }
-        SlackPushEvent::EventCallback(
-            ref event @ SlackPushEventCallback {
-                event: SlackEventCallbackBody::Message(ref message),
-                ..
-            },
-        ) => {
-            set_slack_event_span_attributes(event, "message");
-            queue_slack_message_event_if_relevant(
-                event,
-                message,
-                third_party_item_service.as_ref(),
-                storage.as_ref(),
-            )
-            .await?;
         }
         SlackPushEvent::AppRateLimited(SlackAppRateLimitedEvent {
             team_id,
@@ -480,23 +356,35 @@ pub async fn push_slack_event(
                 }
             }
         }
-        SlackPushEvent::EventCallback(SlackPushEventCallback {
-            team_id,
-            api_app_id,
-            event_id,
-            ..
-        }) => {
-            current_span.set_attribute(attr::SLACK_EVENT_TYPE, "unknown");
-            current_span.set_attribute(attr::SLACK_TEAM_ID, team_id.to_string());
-            current_span.set_attribute(attr::SLACK_EVENT_ID, event_id.to_string());
-            current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
-            current_span.set_attribute(attr::SLACK_EVENT_DISCARD_REASON, "unknown_event_type");
-            warn!(
-                ?team_id,
-                ?api_app_id,
-                ?event_id,
-                "Received an unknown push event from Slack"
-            );
+        SlackPushEvent::EventCallback(ref event) => {
+            let trace = SlackEventTrace::from_event(event);
+            trace.record_on(&current_span);
+            let mut trace = trace;
+            let result = async {
+                let gated = decide_slack_event_gate(
+                    event,
+                    &body,
+                    integration_connection_service.as_ref(),
+                    third_party_item_service.as_ref(),
+                )
+                .await?;
+                if let Cow::Owned(edited_event) = &gated.event {
+                    // An edit is traced as the edited message: its own ts, channel, thread
+                    trace = trace.for_edited_event(edited_event);
+                    trace.record_on(&current_span);
+                }
+                trace.record_gate_decision(&current_span, gated.decision);
+                if let SlackGateDecision::Queued(_) = gated.decision {
+                    send_slack_push_event_callback_job(storage.as_ref(), gated.event.into_owned())
+                        .await?;
+                }
+                Ok::<_, UniversalInboxError>(())
+            }
+            .await;
+            if let Err(error) = &result {
+                trace.log_gate_failure(error);
+            }
+            result?;
         }
     }
 
@@ -542,57 +430,6 @@ async fn revoke_slack_access(
     current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "access_revoked");
     current_span.set_attribute(attr::SLACK_REVOKED_CONNECTIONS_COUNT, revoked as i64);
     Ok(())
-}
-
-fn set_slack_event_span_attributes(event: &SlackPushEventCallback, event_type: &'static str) {
-    let current_span = tracing::Span::current();
-    current_span.set_attribute(attr::SLACK_EVENT_TYPE, event_type);
-    current_span.set_attribute(attr::SLACK_TEAM_ID, event.team_id.to_string());
-    current_span.set_attribute(attr::SLACK_EVENT_ID, event.event_id.to_string());
-}
-
-/// Push `event`, whose body is `message`, to the job queue when the gate lets it through.
-async fn queue_slack_message_event_if_relevant(
-    event: &SlackPushEventCallback,
-    message: &SlackMessageEvent,
-    third_party_item_service: &RwLock<ThirdPartyItemService>,
-    storage: &JobStorage,
-) -> Result<(), UniversalInboxError> {
-    let current_span = tracing::Span::current();
-    let SlackMessageEvent {
-        origin:
-            SlackMessageOrigin {
-                thread_ts,
-                ts,
-                channel,
-                ..
-            },
-        sender: SlackMessageSender { user, .. },
-        ..
-    } = message;
-    current_span.set_attribute(attr::SLACK_MESSAGE_TS, ts.to_string());
-    if let Some(thread_ts) = thread_ts {
-        current_span.set_attribute(attr::SLACK_MESSAGE_THREAD_TS, thread_ts.to_string());
-    }
-    if let Some(channel) = channel {
-        current_span.set_attribute(attr::SLACK_CHANNEL_ID, channel.to_string());
-    }
-    if let Some(user) = user {
-        current_span.set_attribute(attr::SLACK_USER_ID, user.to_string());
-    }
-
-    match gate_slack_message_event(message, third_party_item_service).await? {
-        SlackMessageEventGate::Queue(queue_reason) => {
-            current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "queued");
-            current_span.set_attribute(attr::SLACK_EVENT_QUEUE_REASON, queue_reason);
-            send_slack_push_event_callback_job(storage, event.clone()).await
-        }
-        SlackMessageEventGate::Discard(discard_reason) => {
-            current_span.set_attribute(attr::SLACK_EVENT_OUTCOME, "discarded");
-            current_span.set_attribute(attr::SLACK_EVENT_DISCARD_REASON, discard_reason);
-            Ok(())
-        }
-    }
 }
 
 async fn send_slack_push_event_callback_job(

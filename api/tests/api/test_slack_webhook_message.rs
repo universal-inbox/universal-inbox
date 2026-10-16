@@ -21,8 +21,10 @@ use universal_inbox_api::{
     configuration::Settings,
     integrations::slack::edited_slack_message_event,
     jobs::{
-        UniversalInboxJob, envelope::JobEnvelope, slack::SlackPushEventCallbackJob,
-        slack::slack_message::handle_slack_message_push_event,
+        UniversalInboxJob,
+        envelope::JobEnvelope,
+        slack::SlackPushEventCallbackJob,
+        slack::slack_message::{SlackMessageDecision, handle_slack_message_push_event},
     },
 };
 
@@ -515,6 +517,14 @@ mod job {
     use super::*;
     use pretty_assertions::assert_eq;
 
+    /// The per-user decision outcomes, as logged (`slack.message.outcome`).
+    fn outcomes<U>(decisions: &[(U, SlackMessageDecision)]) -> Vec<&'static str> {
+        decisions
+            .iter()
+            .map(|(_, decision)| decision.as_str())
+            .collect()
+    }
+
     #[fixture]
     fn message_event(slack_push_message_event: Box<SlackPushEvent>) -> Box<SlackPushEventCallback> {
         match *slack_push_message_event {
@@ -544,7 +554,7 @@ mod job {
         let mut transaction = service.begin().await.unwrap();
         set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_event,
             app.app.notification_service.clone(),
@@ -554,6 +564,7 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(outcomes(&decisions), Vec::<&str>::new());
 
         transaction
             .commit()
@@ -598,7 +609,7 @@ mod job {
         .await;
         add_user_ref_in_message(&mut message_event, "U01");
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_event,
             app.app.notification_service.clone(),
@@ -608,6 +619,7 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(outcomes(&decisions), vec!["sync_disabled"]);
 
         transaction
             .commit()
@@ -652,7 +664,7 @@ mod job {
         .await;
         add_user_ref_in_message(&mut message_event, "U02");
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_event,
             app.app.notification_service.clone(),
@@ -662,6 +674,7 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(outcomes(&decisions), Vec::<&str>::new());
 
         transaction
             .commit()
@@ -820,7 +833,7 @@ mod job {
         )
         .await;
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_event,
             app.notification_service.clone(),
@@ -830,6 +843,10 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(
+            outcomes(&decisions),
+            vec!["deleted_last_from_user", "created"]
+        );
 
         transaction
             .commit()
@@ -989,7 +1006,7 @@ mod job {
         )
         .await;
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_event,
             app.app.notification_service.clone(),
@@ -999,6 +1016,20 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(outcomes(&decisions), vec!["created"]);
+
+        // Slack retries an event it did not see acknowledged: the replay changes nothing
+        let replayed_decisions = handle_slack_message_push_event(
+            &mut transaction,
+            &message_event,
+            app.app.notification_service.clone(),
+            app.app.integration_connection_service.clone(),
+            app.app.third_party_item_service.clone(),
+            app.app.slack_service.clone(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(outcomes(&replayed_decisions), vec!["unchanged"]);
 
         transaction
             .commit()
@@ -1242,7 +1273,7 @@ mod job {
         )
         .await;
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_event,
             app.app.notification_service.clone(),
@@ -1252,6 +1283,7 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(outcomes(&decisions), vec!["created"]);
 
         transaction
             .commit()
@@ -1534,7 +1566,7 @@ mod job {
         .await;
         create_slack_integration_connection_for_u01(&app, &settings, slack_oauth_credential).await;
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_event,
             app.app.notification_service.clone(),
@@ -1544,6 +1576,7 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(outcomes(&decisions), Vec::<&str>::new());
 
         transaction
             .commit()
@@ -1589,7 +1622,7 @@ mod job {
         )
         .await;
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_event,
             app.app.notification_service.clone(),
@@ -1599,6 +1632,7 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(outcomes(&decisions), vec!["created"]);
 
         transaction
             .commit()
@@ -1661,7 +1695,7 @@ mod job {
             .mount(&app.app.slack_mock_server)
             .await;
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_event,
             app.app.notification_service.clone(),
@@ -1671,6 +1705,7 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(outcomes(&decisions), vec!["thread_not_accessible"]);
 
         transaction
             .commit()
@@ -1735,7 +1770,7 @@ mod job {
         .await;
         mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json").await;
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_event,
             app.app.notification_service.clone(),
@@ -1745,6 +1780,7 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(outcomes(&decisions), vec!["created"]);
 
         transaction
             .commit()
@@ -1816,7 +1852,7 @@ mod job {
         .await;
         mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json").await;
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_event,
             app.app.notification_service.clone(),
@@ -1826,6 +1862,7 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(outcomes(&decisions), vec!["created"]);
 
         transaction
             .commit()
@@ -1875,7 +1912,7 @@ mod job {
         let mut transaction = service.begin().await.unwrap();
         set_audit_actor(&mut transaction, &slack_webhook_actor()).await;
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_in_thread_event,
             app.app.notification_service.clone(),
@@ -1885,6 +1922,7 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(outcomes(&decisions), Vec::<&str>::new());
 
         transaction
             .commit()
@@ -2032,7 +2070,7 @@ mod job {
             }
         );
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_in_thread_event,
             app.app.notification_service.clone(),
@@ -2042,6 +2080,26 @@ mod job {
         )
         .await
         .unwrap();
+        let expected_status = if is_2way_sync {
+            if subscribed {
+                NotificationStatus::Unread
+            } else {
+                NotificationStatus::Unsubscribed
+            }
+        } else if (!was_subscribed && !pinged) || !subscribed {
+            NotificationStatus::Unsubscribed
+        } else {
+            NotificationStatus::Unread
+        };
+        assert_eq!(
+            outcomes(&decisions),
+            vec![match (expected_status, was_subscribed) {
+                // Already Unsubscribed: the notification row is left untouched
+                (NotificationStatus::Unsubscribed, false) => "unchanged",
+                (NotificationStatus::Unsubscribed, true) => "unsubscribed",
+                _ => "updated",
+            }]
+        );
 
         transaction
             .commit()
@@ -2063,20 +2121,7 @@ mod job {
         assert_eq!(notifications.len(), 1);
         assert_eq!(notifications[0].source_item.source_id, "1732535291.911209");
         assert_eq!(notifications[0].title, "World");
-        assert_eq!(
-            notifications[0].status,
-            if is_2way_sync {
-                if subscribed {
-                    NotificationStatus::Unread
-                } else {
-                    NotificationStatus::Unsubscribed
-                }
-            } else if (!was_subscribed && !pinged) || !subscribed {
-                NotificationStatus::Unsubscribed
-            } else {
-                NotificationStatus::Unread
-            }
-        );
+        assert_eq!(notifications[0].status, expected_status);
         assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
         let ThirdPartyItemData::SlackThread(updated_slack_thread) =
             &notifications[0].source_item.data
@@ -2259,7 +2304,7 @@ mod job {
         .await;
         assert_eq!(existing_notification_u02.status, NotificationStatus::Unread);
 
-        handle_slack_message_push_event(
+        let decisions = handle_slack_message_push_event(
             &mut transaction,
             &message_in_thread_event,
             app.notification_service.clone(),
@@ -2269,6 +2314,10 @@ mod job {
         )
         .await
         .unwrap();
+        assert_eq!(
+            outcomes(&decisions),
+            vec!["updated", "deleted_last_from_user"]
+        );
 
         transaction
             .commit()
