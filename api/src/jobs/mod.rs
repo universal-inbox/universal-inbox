@@ -23,6 +23,7 @@ use crate::{
             GrantRevocationRetryPolicy, IntegrationConnectionService,
         },
         notification::service::NotificationService,
+        realtime::{EventPublisher, with_event_scope},
         task::service::TaskService,
         third_party::service::ThirdPartyItemService,
     },
@@ -99,19 +100,23 @@ pub async fn handle_universal_inbox_job(
     third_party_item_service: Data<Arc<RwLock<ThirdPartyItemService>>>,
     slack_service: Data<Arc<SlackService>>,
     audit_service: Data<Arc<AuditService>>,
+    event_publisher: Data<Arc<dyn EventPublisher>>,
 ) -> Result<(), UniversalInboxError> {
     let actor = job_audit_actor(&job, audit_actor);
-    with_actor(
-        actor,
-        run_universal_inbox_job(
-            job,
-            task_id,
-            notification_service,
-            task_service,
-            integration_connection_service,
-            third_party_item_service,
-            slack_service,
-            audit_service,
+    with_event_scope(
+        Arc::clone(&event_publisher),
+        with_actor(
+            actor,
+            run_universal_inbox_job(
+                job,
+                task_id,
+                notification_service,
+                task_service,
+                integration_connection_service,
+                third_party_item_service,
+                slack_service,
+                audit_service,
+            ),
         ),
     )
     .await

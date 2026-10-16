@@ -17,6 +17,7 @@ use universal_inbox::{
     notification::{
         Notification, NotificationSource, NotificationStatus, service::NotificationPatch,
     },
+    realtime::RealtimeEventKind,
     task::{
         CreateOrUpdateTaskRequest, ProjectSummary, Task, TaskCreation, TaskCreationConfig,
         TaskCreationResult, TaskId, TaskSource, TaskSourceKind, TaskStatus, TaskSummary,
@@ -51,6 +52,7 @@ use crate::{
             IntegrationConnectionService, IntegrationConnectionSyncType,
         },
         notification::service::NotificationService,
+        realtime::{flush_events, record_event},
         third_party::service::ThirdPartyItemService,
         user::service::UserService,
     },
@@ -472,6 +474,7 @@ impl TaskService {
         }
 
         let task = self.repository.create_task(executor, task).await?;
+        record_tasks_changed([&*task]);
         Ok(Box::new(TaskCreationResult {
             task: *task,
             notifications: vec![], // notification.into_iter().map(|n| *n).collect(),
@@ -890,6 +893,8 @@ impl TaskService {
         claim_transaction.commit().await.context(format!(
             "Failed to commit while claiming {integration_provider_kind} tasks sync start for user {user_id}"
         ))?;
+        // Tell the web app now rather than once the whole job is done
+        flush_events().await;
 
         if !claimed {
             debug!(
@@ -919,6 +924,7 @@ impl TaskService {
         sync_transaction.commit().await.context(format!(
             "Failed to commit while syncing {integration_provider_kind} tasks for user {user_id}"
         ))?;
+        flush_events().await;
 
         // Phase 3 — short transaction to record the outcome.
         let mut status_transaction = self.begin().await.context(format!(
@@ -937,6 +943,7 @@ impl TaskService {
                 status_transaction.commit().await.context(format!(
                     "Failed to commit while recording {integration_provider_kind} tasks sync status for user {user_id}"
                 ))?;
+                flush_events().await;
                 return Err(UniversalInboxError::Recoverable(e.into()));
             }
             Ok(task_creation_results) => {
@@ -950,6 +957,7 @@ impl TaskService {
                 status_transaction.commit().await.context(format!(
                     "Failed to commit while recording {integration_provider_kind} tasks sync status for user {user_id}"
                 ))?;
+                flush_events().await;
                 task_creation_results
             }
         };
@@ -1077,9 +1085,12 @@ impl TaskService {
                 user_id,
             )
             .await?;
-        self.repository
+        let upsert_task = self
+            .repository
             .create_or_update_task(executor, task_request)
-            .await
+            .await?;
+        record_tasks_changed(upsert_task.changed_value().map(|task| &**task));
+        Ok(upsert_task)
     }
 
     pub async fn create_or_update_task(
@@ -1087,9 +1098,12 @@ impl TaskService {
         executor: &mut Transaction<'_, Postgres>,
         task_request: Box<CreateOrUpdateTaskRequest>,
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError> {
-        self.repository
+        let upsert_task = self
+            .repository
             .create_or_update_task(executor, task_request)
-            .await
+            .await?;
+        record_tasks_changed(upsert_task.changed_value().map(|task| &**task));
+        Ok(upsert_task)
     }
 
     #[tracing::instrument(
@@ -1262,6 +1276,7 @@ impl TaskService {
             .repository
             .update_task(executor, task_id, patch, for_user_id)
             .await?;
+        record_tasks_changed(updated_task.changed_value().map(|task| &**task));
 
         if let UpdateStatus {
             updated: _,
@@ -1505,5 +1520,16 @@ impl TaskService {
                 "Cannot apply task side effect for third party item source kind {kind}"
             ))),
         }
+    }
+}
+
+/// Record a realtime event for the users of the changed `tasks`.
+fn record_tasks_changed<'a>(tasks: impl IntoIterator<Item = &'a Task>) {
+    for task in tasks {
+        record_event(
+            task.user_id,
+            RealtimeEventKind::TasksChanged,
+            Some(task.id.0),
+        );
     }
 }

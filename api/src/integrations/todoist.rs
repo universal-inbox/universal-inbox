@@ -33,6 +33,7 @@ use universal_inbox::{
         },
     },
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
+    realtime::RealtimeEventKind,
     task::{
         CreateOrUpdateTaskRequest, DueDate, ProjectSummary, TaskCreation, TaskCreationConfig,
         TaskSource, TaskSourceKind, TaskStatus,
@@ -62,6 +63,7 @@ use crate::{
     repository::{Repository, task::TaskRepository, third_party::ThirdPartyItemRepository},
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+        realtime::record_event,
     },
     utils::api::{ApiClient, ApiClientError},
 };
@@ -657,6 +659,11 @@ impl TodoistService {
                         third_party_item.user_id,
                     )
                     .await?;
+                record_event(
+                    task.user_id,
+                    RealtimeEventKind::TasksChanged,
+                    Some(task.id.0),
+                );
             }
             return Ok(LegacyIdMigrationStatus::Duplicate);
         }

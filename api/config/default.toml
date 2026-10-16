@@ -87,6 +87,11 @@ lock_ttl_seconds = 300
 [application.audit_log]
 retention_days = 7
 
+# Realtime events (Redis pub/sub) telling the web app what to refetch
+[application.realtime]
+enabled = true
+channel = "universal-inbox:events"
+
 # Optional: without an [application.email] section, no email is sent (see
 # api/config/dev.toml for an example). Once any email setting is set, all of
 # them are required except `smtp_port` (defaults to 465).

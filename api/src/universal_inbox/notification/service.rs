@@ -28,6 +28,7 @@ use universal_inbox::{
         NotificationWithTask,
         service::{InvitationPatch, NotificationPatch},
     },
+    realtime::RealtimeEventKind,
     task::{DueDate, Task, TaskCreation, TaskId, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::{
@@ -63,6 +64,7 @@ use crate::{
         integration_connection::service::{
             IntegrationConnectionService, IntegrationConnectionSyncType,
         },
+        realtime::{flush_events, record_event},
         task::service::TaskService,
         third_party::service::ThirdPartyItemService,
         user::service::UserService,
@@ -563,9 +565,12 @@ impl NotificationService {
             )));
         }
 
-        self.repository
+        let notification = self
+            .repository
             .create_notification(executor, notification)
-            .await
+            .await?;
+        record_notifications_changed([&*notification]);
+        Ok(notification)
     }
 
     #[tracing::instrument(
@@ -584,14 +589,17 @@ impl NotificationService {
         notification_source_kind: NotificationSourceKind,
         update_snoozed_until: bool,
     ) -> Result<UpsertStatus<Box<Notification>>, UniversalInboxError> {
-        self.repository
+        let upsert_notification = self
+            .repository
             .create_or_update_notification(
                 executor,
                 notification,
                 notification_source_kind,
                 update_snoozed_until,
             )
-            .await
+            .await?;
+        record_notifications_changed(upsert_notification.changed_value().map(|n| &**n));
+        Ok(upsert_notification)
     }
 
     #[tracing::instrument(
@@ -620,6 +628,7 @@ impl NotificationService {
                 user_id,
             )
             .await?;
+        record_notifications_changed(&deleted_notifications);
         tracing::Span::current()
             .record(attr::SYNC_DELETED_ITEMS_COUNT, deleted_notifications.len());
         info!(
@@ -905,6 +914,7 @@ impl NotificationService {
             .repository
             .update_notification(executor, notification_id, patch, for_user_id)
             .await?;
+        record_notifications_changed(updated_notification.changed_value().map(|n| &**n));
 
         if !apply_notification_side_effects {
             return Ok(updated_notification);
@@ -962,9 +972,16 @@ impl NotificationService {
         notification_kind: Option<NotificationSourceKind>,
         patch: &NotificationPatch,
     ) -> Result<Vec<UpdateStatus<Notification>>, UniversalInboxError> {
-        self.repository
+        let updated_notifications = self
+            .repository
             .update_notifications_for_task(executor, task_id, notification_kind, patch)
-            .await
+            .await?;
+        record_notifications_changed(
+            updated_notifications
+                .iter()
+                .filter_map(UpdateStatus::changed_value),
+        );
+        Ok(updated_notifications)
     }
 
     #[tracing::instrument(
@@ -981,9 +998,12 @@ impl NotificationService {
         linear_issue_id: &str,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
-        self.repository
+        let deleted_notifications = self
+            .repository
             .delete_notifications_for_linear_issue_id(executor, linear_issue_id, user_id)
-            .await
+            .await?;
+        record_notifications_changed(&deleted_notifications);
+        Ok(deleted_notifications)
     }
 
     #[tracing::instrument(
@@ -1008,6 +1028,7 @@ impl NotificationService {
             .repository
             .update_notifications(executor, status, from_sources, patch, user_id)
             .await?;
+        record_notifications_changed(&updated_notifications);
 
         self.enqueue_notification_side_effects(&updated_notifications, patch, user_id, job_storage)
             .await?;
@@ -1056,6 +1077,7 @@ impl NotificationService {
                 .repository
                 .update_notifications_by_ids(executor, notification_ids, &patch, user_id)
                 .await?;
+            record_notifications_changed(&updated);
 
             self.enqueue_notification_side_effects(&updated, &patch, user_id, job_storage)
                 .await?;
@@ -1582,6 +1604,8 @@ impl NotificationService {
         claim_transaction.commit().await.context(format!(
             "Failed to commit while claiming {integration_provider_kind} notifications sync start for user {user_id}"
         ))?;
+        // Tell the web app now rather than once the whole job is done
+        flush_events().await;
 
         if !claimed {
             debug!(
@@ -1613,6 +1637,7 @@ impl NotificationService {
         sync_transaction.commit().await.context(format!(
             "Failed to commit while syncing {integration_provider_kind} notifications for user {user_id}"
         ))?;
+        flush_events().await;
 
         // Phase 3 — short transaction to record the outcome.
         let mut status_transaction = self.begin().await.context(format!(
@@ -1631,6 +1656,7 @@ impl NotificationService {
                 status_transaction.commit().await.context(format!(
                     "Failed to commit while recording {integration_provider_kind} notifications sync status for user {user_id}"
                 ))?;
+                flush_events().await;
                 return Err(UniversalInboxError::Recoverable(e.into()));
             }
             Ok(notification_creation_results) => {
@@ -1644,6 +1670,7 @@ impl NotificationService {
                 status_transaction.commit().await.context(format!(
                     "Failed to commit while recording {integration_provider_kind} notifications sync status for user {user_id}"
                 ))?;
+                flush_events().await;
                 notification_creation_results
             }
         };
@@ -1704,14 +1731,17 @@ impl NotificationService {
         {
             notification.status = NotificationStatus::Deleted;
         }
-        self.repository
+        let upsert_notification = self
+            .repository
             .create_or_update_notification(
                 executor,
                 notification,
                 third_party_notification_service.get_notification_source_kind(),
                 third_party_notification_service.is_supporting_snoozed_notifications(),
             )
-            .await
+            .await?;
+        record_notifications_changed(upsert_notification.changed_value().map(|n| &**n));
+        Ok(upsert_notification)
     }
 
     /// A cancelled event replaces its invitation when the invitation is still waiting for
@@ -1929,5 +1959,16 @@ impl NotificationService {
             .await?;
 
         Ok(updated_notification)
+    }
+}
+
+/// Record a realtime event for the users of the changed `notifications`.
+fn record_notifications_changed<'a>(notifications: impl IntoIterator<Item = &'a Notification>) {
+    for notification in notifications {
+        record_event(
+            notification.user_id,
+            RealtimeEventKind::NotificationsChanged,
+            Some(notification.id.0),
+        );
     }
 }

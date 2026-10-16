@@ -28,6 +28,7 @@ use universal_inbox::{
         provider::{IntegrationConnectionContext, IntegrationProviderKind},
     },
     notification::NotificationSyncSourceKind,
+    realtime::RealtimeEventKind,
     task::TaskSyncSourceKind,
     user::{User, UserId},
 };
@@ -59,7 +60,10 @@ use crate::{
         },
         user::UserRepository,
     },
-    universal_inbox::{UniversalInboxError, UpdateStatus, retry_on_transient_database_error},
+    universal_inbox::{
+        UniversalInboxError, UpdateStatus, realtime::record_event,
+        retry_on_transient_database_error,
+    },
     utils::{
         cache::{Cache, TracedRedisCache, build_redis_cache},
         crypto::{DataKeyring, decrypt_token, encrypt_token},
@@ -366,6 +370,11 @@ impl IntegrationConnectionService {
                     .commit()
                     .await
                     .context("Failed to commit while claiming due syncs")?;
+                for (integration_connection_id, _) in
+                    claimed_notification_syncs.iter().chain(&claimed_task_syncs)
+                {
+                    record_integration_connection_changed(for_user_id, *integration_connection_id);
+                }
                 Ok((claimed_notification_syncs, claimed_task_syncs))
             })
             .await?;
@@ -591,9 +600,15 @@ impl IntegrationConnectionService {
             status,
         ));
 
-        self.repository
+        let integration_connection = self
+            .repository
             .create_integration_connection(executor, integration_connection)
-            .await
+            .await?;
+        record_integration_connection_changed(
+            integration_connection.user_id,
+            integration_connection.id,
+        );
+        Ok(integration_connection)
     }
 
     #[tracing::instrument(
@@ -691,6 +706,9 @@ impl IntegrationConnectionService {
                 for_user_id,
             )
             .await?;
+        if updated_integration_connection_config.updated {
+            record_integration_connection_changed(for_user_id, integration_connection_id);
+        }
 
         if updated_integration_connection_config
             == (UpdateStatus {
@@ -751,13 +769,22 @@ impl IntegrationConnectionService {
             return Ok(0);
         };
 
-        self.repository
+        let count = self
+            .repository
             .set_aside_notifications(
                 executor,
                 notification_source_kind,
                 integration_connection.user_id,
             )
-            .await
+            .await?;
+        if count > 0 {
+            record_event(
+                integration_connection.user_id,
+                RealtimeEventKind::NotificationsChanged,
+                None,
+            );
+        }
+        Ok(count)
     }
 
     /// Bring back the notifications of an integration that feeds the inbox
@@ -789,13 +816,22 @@ impl IntegrationConnectionService {
             return Ok(0);
         };
 
-        self.repository
+        let count = self
+            .repository
             .restore_set_aside_notifications(
                 executor,
                 notification_source_kind,
                 integration_connection.user_id,
             )
-            .await
+            .await?;
+        if count > 0 {
+            record_event(
+                integration_connection.user_id,
+                RealtimeEventKind::NotificationsChanged,
+                None,
+            );
+        }
+        Ok(count)
     }
 
     /// Null out every sync timestamp on the given integration connection so the
@@ -879,7 +915,8 @@ impl IntegrationConnectionService {
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
         let result: Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> =
             async move {
-                self.repository
+                let updated_integration_connection = self
+                    .repository
                     .update_integration_connection_status(
                         executor,
                         integration_connection_id,
@@ -888,7 +925,9 @@ impl IntegrationConnectionService {
                         registered_oauth_scopes,
                         for_user_id,
                     )
-                    .await
+                    .await?;
+                record_integration_connection_update(&updated_integration_connection);
+                Ok(updated_integration_connection)
             }
             .await;
         result.record_span_error()
@@ -1056,6 +1095,7 @@ impl IntegrationConnectionService {
                     integration_connection.user_id,
                 )
                 .await?;
+            record_integration_connection_update(&update);
             if credential.is_some() || update.updated {
                 info!(
                     "Slack access of integration connection {} was revoked, marked as Failing",
@@ -1435,6 +1475,7 @@ impl IntegrationConnectionService {
                     for_user_id,
                 )
                 .await?;
+            record_integration_connection_update(&disconnected_integration_connection);
             invalidate_cached_provider_lookups(&integration_connection).await;
 
             // Disconnecting stops feeding the inbox just as muting does, so it
@@ -1985,6 +2026,12 @@ impl IntegrationConnectionService {
                 paused_reason,
             )
             .await?;
+        if let Some(paused_integration_connection) = &paused_integration_connection {
+            record_integration_connection_changed(
+                paused_integration_connection.user_id,
+                paused_integration_connection.id,
+            );
+        }
         invalidate_cached_provider_lookups(&integration_connection).await;
 
         // Pausing stops feeding the inbox just as disconnecting does.
@@ -2194,7 +2241,8 @@ impl IntegrationConnectionService {
             && expires_at < Utc::now()
         {
             if credential.encrypted_refresh_token.is_none() {
-                self.repository
+                let updated_integration_connection = self
+                    .repository
                     .update_integration_connection_status(
                         executor,
                         integration_connection.id,
@@ -2204,6 +2252,7 @@ impl IntegrationConnectionService {
                         integration_connection.user_id,
                     )
                     .await?;
+                record_integration_connection_update(&updated_integration_connection);
 
                 return Err(UniversalInboxError::Recoverable(anyhow!(
                     "Access token expired for integration connection {} and no refresh token is stored. Marked connection as Failing; user must reconnect.",
@@ -2241,13 +2290,16 @@ impl IntegrationConnectionService {
         integration_connection_id: IntegrationConnectionId,
         context: IntegrationConnectionContext,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        self.repository
+        let updated_integration_connection = self
+            .repository
             .update_integration_connection_context(
                 executor,
                 integration_connection_id,
                 Some(context),
             )
-            .await
+            .await?;
+        record_integration_connection_update(&updated_integration_connection);
+        Ok(updated_integration_connection)
     }
 
     pub async fn find_slack_integration_connections_without_context(
@@ -2318,7 +2370,8 @@ impl IntegrationConnectionService {
         integration_provider_kind: Option<IntegrationProviderKind>,
         for_user_id: Option<UserId>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        self.repository
+        let updated_integration_connection = self
+            .repository
             .update_integration_connection_sync_status(
                 executor,
                 for_user_id,
@@ -2326,7 +2379,9 @@ impl IntegrationConnectionService {
                 IntegrationConnectionSyncStatusUpdate::NotificationsSyncScheduled,
                 self.sync_failure_window_in_hours,
             )
-            .await
+            .await?;
+        record_integration_connection_update(&updated_integration_connection);
+        Ok(updated_integration_connection)
     }
 
     /// Atomically claims the start of a notifications sync for `integration_connection_id`:
@@ -2349,15 +2404,19 @@ impl IntegrationConnectionService {
         for_user_id: UserId,
         synced_before: Option<DateTime<Utc>>,
     ) -> Result<bool, UniversalInboxError> {
-        let _ = for_user_id; // carried for the tracing field only; claim is by connection id
-        self.repository
+        let claimed = self
+            .repository
             .claim_notification_sync_start(
                 executor,
                 integration_connection_id,
                 Utc::now(),
                 synced_before,
             )
-            .await
+            .await?;
+        if claimed {
+            record_integration_connection_changed(for_user_id, integration_connection_id);
+        }
+        Ok(claimed)
     }
 
     /// Tasks counterpart of [`Self::claim_notification_sync_start`].
@@ -2376,15 +2435,19 @@ impl IntegrationConnectionService {
         for_user_id: UserId,
         synced_before: Option<DateTime<Utc>>,
     ) -> Result<bool, UniversalInboxError> {
-        let _ = for_user_id; // carried for the tracing field only; claim is by connection id
-        self.repository
+        let claimed = self
+            .repository
             .claim_task_sync_start(
                 executor,
                 integration_connection_id,
                 Utc::now(),
                 synced_before,
             )
-            .await
+            .await?;
+        if claimed {
+            record_integration_connection_changed(for_user_id, integration_connection_id);
+        }
+        Ok(claimed)
     }
 
     #[tracing::instrument(
@@ -2411,6 +2474,7 @@ impl IntegrationConnectionService {
                 self.sync_failure_window_in_hours,
             )
             .await?;
+        record_integration_connection_update(&updated_integration_connection);
 
         // The integration is feeding the inbox again and this sync has
         // reconciled it, so whatever was set aside comes back as it was.
@@ -2458,7 +2522,8 @@ impl IntegrationConnectionService {
         failure_message: String,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        self.repository
+        let updated_integration_connection = self
+            .repository
             .update_integration_connection_sync_status(
                 executor,
                 Some(for_user_id),
@@ -2466,7 +2531,9 @@ impl IntegrationConnectionService {
                 IntegrationConnectionSyncStatusUpdate::NotificationsSyncFailed(failure_message),
                 self.sync_failure_window_in_hours,
             )
-            .await
+            .await?;
+        record_integration_connection_update(&updated_integration_connection);
+        Ok(updated_integration_connection)
     }
 
     #[tracing::instrument(
@@ -2483,7 +2550,8 @@ impl IntegrationConnectionService {
         integration_provider_kind: Option<IntegrationProviderKind>,
         for_user_id: Option<UserId>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        self.repository
+        let updated_integration_connection = self
+            .repository
             .update_integration_connection_sync_status(
                 executor,
                 for_user_id,
@@ -2491,7 +2559,9 @@ impl IntegrationConnectionService {
                 IntegrationConnectionSyncStatusUpdate::TasksSyncScheduled,
                 self.sync_failure_window_in_hours,
             )
-            .await
+            .await?;
+        record_integration_connection_update(&updated_integration_connection);
+        Ok(updated_integration_connection)
     }
 
     #[tracing::instrument(
@@ -2518,6 +2588,7 @@ impl IntegrationConnectionService {
                 self.sync_failure_window_in_hours,
             )
             .await?;
+        record_integration_connection_update(&updated_integration_connection);
 
         // Todoist and TickTick notifications are a byproduct of their task sync,
         // which never reaches `complete_notifications_sync_status` — so this is
@@ -2551,7 +2622,8 @@ impl IntegrationConnectionService {
         failure_message: String,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        self.repository
+        let updated_integration_connection = self
+            .repository
             .update_integration_connection_sync_status(
                 executor,
                 Some(for_user_id),
@@ -2559,7 +2631,9 @@ impl IntegrationConnectionService {
                 IntegrationConnectionSyncStatusUpdate::TasksSyncFailed(failure_message),
                 self.sync_failure_window_in_hours,
             )
-            .await
+            .await?;
+        record_integration_connection_update(&updated_integration_connection);
+        Ok(updated_integration_connection)
     }
 
     #[tracing::instrument(
@@ -2659,7 +2733,8 @@ impl IntegrationConnectionService {
                 .await?;
         }
 
-        self.repository
+        let updated_integration_connection = self
+            .repository
             .update_integration_connection_status(
                 executor,
                 integration_connection_id,
@@ -2668,7 +2743,9 @@ impl IntegrationConnectionService {
                 Some(registered_oauth_scopes),
                 user_id,
             )
-            .await
+            .await?;
+        record_integration_connection_update(&updated_integration_connection);
+        Ok(updated_integration_connection)
     }
 
     /// Refresh all OAuth credentials expiring within `minutes_before_expiry` minutes.
@@ -2758,7 +2835,7 @@ impl IntegrationConnectionService {
                         "Refresh token for connection {conn_id} ({pk:?}) is no longer valid \
                          (invalid_grant): {detail}. Marking connection as Failing."
                     );
-                    if let Err(update_err) = self
+                    match self
                         .repository
                         .update_integration_connection_status(
                             executor,
@@ -2770,11 +2847,16 @@ impl IntegrationConnectionService {
                         )
                         .await
                     {
-                        error!(
-                            { attr::INTEGRATION_CONNECTION_ID } = %conn_id,
-                            { attr::INTEGRATION_PROVIDER_KIND } = %pk,
-                            "Failed to mark connection {conn_id} as Failing after invalid_grant: {update_err:?}"
-                        );
+                        Ok(updated_integration_connection) => {
+                            record_integration_connection_update(&updated_integration_connection)
+                        }
+                        Err(update_err) => {
+                            error!(
+                                { attr::INTEGRATION_CONNECTION_ID } = %conn_id,
+                                { attr::INTEGRATION_PROVIDER_KIND } = %pk,
+                                "Failed to mark connection {conn_id} as Failing after invalid_grant: {update_err:?}"
+                            );
+                        }
                     }
                     failed += 1;
                     continue;
@@ -3342,6 +3424,28 @@ fn group_by_user(
         }
     }
     groups
+}
+
+/// Record a realtime event telling the web app of `user_id` that the integration connection
+/// changed.
+pub(crate) fn record_integration_connection_changed(
+    user_id: UserId,
+    integration_connection_id: IntegrationConnectionId,
+) {
+    record_event(
+        user_id,
+        RealtimeEventKind::IntegrationConnectionChanged,
+        Some(integration_connection_id.0),
+    );
+}
+
+fn record_integration_connection_update(update: &UpdateStatus<Box<IntegrationConnection>>) {
+    if let Some(integration_connection) = update.changed_value() {
+        record_integration_connection_changed(
+            integration_connection.user_id,
+            integration_connection.id,
+        );
+    }
 }
 
 #[cfg(test)]

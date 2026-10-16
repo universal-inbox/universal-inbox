@@ -6,7 +6,7 @@ use email_address::EmailAddress;
 use futures::future;
 use std::{net::TcpListener, sync::Arc};
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 use universal_inbox::pii::Pii;
 
 use universal_inbox::{
@@ -28,6 +28,7 @@ use crate::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService,
         oauth2::service::OAuth2Service,
+        realtime::{EventPublisher, NoopEventPublisher, build_event_publisher, with_event_scope},
         slack_bridge::service::SlackBridgeService,
         task::service::TaskService,
         third_party::service::ThirdPartyItemService,
@@ -35,6 +36,18 @@ use crate::{
     },
     utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
 };
+
+/// Publisher of the realtime events of a CLI command. Without Redis, the command still runs
+/// and publishes nothing: open web apps catch up when they next poll.
+async fn cli_event_publisher(settings: &Settings) -> Arc<dyn EventPublisher> {
+    match Cache::new(&settings.redis).await {
+        Ok(cache) => build_event_publisher(&settings.application.realtime, &cache),
+        Err(err) => {
+            warn!("Failed to connect to Redis, realtime events will not be published: {err}");
+            Arc::new(NoopEventPublisher)
+        }
+    }
+}
 
 pub mod anonymize;
 pub mod data_encryption;
@@ -408,6 +421,12 @@ impl Cli {
         audit_service: Arc<AuditService>,
         billing_service: Option<Arc<crate::billing::service::BillingService>>,
     ) -> Result<(), UniversalInboxError> {
+        // The server and the workers set the actor and the realtime event scope of each
+        // request and job
+        let cli_scope = match self.audit_command_name() {
+            Some(command) => Some((command, cli_event_publisher(&settings).await)),
+            None => None,
+        };
         let execution = self.execute_command(
             settings,
             notification_service,
@@ -422,9 +441,14 @@ impl Cli {
             audit_service,
             billing_service,
         );
-        match self.audit_command_name() {
-            Some(command) => with_actor(AuditActor::Cli { command }, execution).await,
-            // The server and the workers set the actor of each request and job
+        match cli_scope {
+            Some((command, event_publisher)) => {
+                with_event_scope(
+                    event_publisher,
+                    with_actor(AuditActor::Cli { command }, execution),
+                )
+                .await
+            }
             None => execution.await,
         }
     }
@@ -521,6 +545,7 @@ impl Cli {
 
                 let cron_settings = settings.application.cron.clone();
                 let redis_settings = settings.redis.clone();
+                let realtime_settings = settings.application.realtime.clone();
                 let server = run_server(
                     listener,
                     redis_storage.clone(),
@@ -543,11 +568,13 @@ impl Cli {
                     let cache = Cache::new(&redis_settings)
                         .await
                         .expect("Failed to create cache");
+                    let event_publisher = build_event_publisher(&realtime_settings, &cache);
                     let worker = run_worker(
                         *async_workers_count,
                         redis_storage,
                         cron_settings,
                         cache,
+                        event_publisher,
                         notification_service,
                         task_service,
                         integration_connection_service,
@@ -607,11 +634,13 @@ impl Cli {
                 .await
                 .expect("Failed to start worker health-check server");
 
+                let event_publisher = build_event_publisher(&settings.application.realtime, &cache);
                 let worker = run_worker(
                     *count,
                     redis_storage,
                     settings.application.cron.clone(),
                     cache,
+                    event_publisher,
                     notification_service,
                     task_service,
                     integration_connection_service,

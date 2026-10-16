@@ -85,12 +85,17 @@ use crate::{
     observability::AuthenticatedRootSpanBuilder,
     repository::Repository,
     universal_inbox::{
-        UniversalInboxError, audit::service::AuditService,
+        UniversalInboxError,
+        audit::service::AuditService,
         auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, oauth2::service::OAuth2Service,
-        slack_bridge::service::SlackBridgeService, task::service::TaskService,
-        third_party::service::ThirdPartyItemService, user::service::UserService,
+        notification::service::NotificationService,
+        oauth2::service::OAuth2Service,
+        realtime::{EventPublisher, build_event_publisher, with_event_scope_if},
+        slack_bridge::service::SlackBridgeService,
+        task::service::TaskService,
+        third_party::service::ThirdPartyItemService,
+        user::service::UserService,
     },
     utils::{
         crypto::install_data_keyring,
@@ -261,6 +266,7 @@ pub async fn run_server(
         cache.connection_manager.clone(),
         settings.application.mcp_session_store.ttl_seconds,
     );
+    let event_publisher = build_event_publisher(&settings.application.realtime, &cache);
     let cache_data = web::Data::new(cache);
     let mcp_extra_allowed_origins = settings
         .application
@@ -290,6 +296,7 @@ pub async fn run_server(
         user_rate_limiters.clone(),
         mcp_session_store,
         mcp_allowed_hosts,
+        event_publisher.clone(),
     );
     let oauth2_rate_limiter = routes::oauth2::build_rate_limiter();
     let mcp_rate_limiter = mcp::build_rate_limiter();
@@ -442,6 +449,20 @@ pub async fn run_server(
             .wrap(middleware::from_fn(
                 middlewares::audit_actor::audit_actor_middleware,
             ))
+            // Publish the realtime events recorded by the request once it is handled, ie. after
+            // its transactions are committed
+            .wrap_fn({
+                let event_publisher = event_publisher.clone();
+                move |req, srv| {
+                    // An error response rolled back its changes
+                    with_event_scope_if(event_publisher.clone(), srv.call(req), |response| {
+                        response.as_ref().is_ok_and(|response| {
+                            !response.status().is_client_error()
+                                && !response.status().is_server_error()
+                        })
+                    })
+                }
+            })
             .wrap(middlewares::user_activity::RecordUserActivity::new(
                 user_service.clone(),
             ))
@@ -703,6 +724,7 @@ pub async fn run_worker(
     redis_storage: JobStorage,
     cron_settings: CronSettings,
     cache: Cache,
+    event_publisher: Arc<dyn EventPublisher>,
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -726,6 +748,7 @@ pub async fn run_worker(
             .data(third_party_item_service)
             .data(slack_service)
             .data(audit_service)
+            .data(event_publisher)
             .backend(redis_storage.clone())
             .build_fn(handle_universal_inbox_job),
     );

@@ -26,7 +26,7 @@ use universal_inbox_api::{
             StripeEvent, StripeEventKind,
         },
     },
-    configuration::{CronSettings, FreePlanSettings, Settings},
+    configuration::{CronSettings, FreePlanSettings, RealtimeSettings, Settings},
     integrations::slack::SlackService,
     jobs::JobStorage,
     observability::{get_subscriber, init_subscriber},
@@ -290,11 +290,16 @@ pub async fn spawn_test_worker(
     cache: Cache,
     services: &TestServices,
 ) {
+    let event_publisher = universal_inbox_api::universal_inbox::realtime::build_event_publisher(
+        &RealtimeSettings::default(),
+        &cache,
+    );
     let worker = universal_inbox_api::run_worker(
         Some(1),
         redis_storage,
         cron_settings,
         cache,
+        event_publisher,
         services.notification_service.clone(),
         services.task_service.clone(),
         services.integration_connection_service.clone(),

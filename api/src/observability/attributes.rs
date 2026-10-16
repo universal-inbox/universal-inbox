@@ -122,6 +122,7 @@ pub const NOTIFICATION_IDS: &str = "notification.ids";
 pub const NOTIFICATION_KIND: &str = "notification.kind";
 pub const NOTIFICATION_STATUS: &str = "notification.status";
 pub const NOTIFICATION_COUNT: &str = "notification.count";
+pub const REALTIME_EVENTS_COUNT: &str = "realtime.events.count";
 pub const NOTIFICATION_LIST_SOURCES: &str = "notification.list.sources";
 pub const NOTIFICATION_LIST_ORDER_BY: &str = "notification.list.order_by";
 pub const NOTIFICATION_LIST_INCLUDE_SNOOZED: &str = "notification.list.include_snoozed";
