@@ -518,11 +518,15 @@ mod job {
     use pretty_assertions::assert_eq;
 
     /// The per-user decision outcomes, as logged (`slack.message.outcome`).
+    /// The outcomes of the decisions, sorted: the users of an event are handled in no
+    /// particular order (the connections are looked up by provider user ids).
     fn outcomes<U>(decisions: &[(U, SlackMessageDecision)]) -> Vec<&'static str> {
-        decisions
+        let mut outcomes: Vec<&'static str> = decisions
             .iter()
             .map(|(_, decision)| decision.as_str())
-            .collect()
+            .collect();
+        outcomes.sort_unstable();
+        outcomes
     }
 
     #[fixture]
@@ -845,7 +849,7 @@ mod job {
         .unwrap();
         assert_eq!(
             outcomes(&decisions),
-            vec!["deleted_last_from_user", "created"]
+            vec!["created", "deleted_last_from_user"]
         );
 
         transaction
@@ -2316,7 +2320,7 @@ mod job {
         .unwrap();
         assert_eq!(
             outcomes(&decisions),
-            vec!["updated", "deleted_last_from_user"]
+            vec!["deleted_last_from_user", "updated"]
         );
 
         transaction
