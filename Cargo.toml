@@ -141,6 +141,14 @@ rstest = { workspace = true }
 
 [profile]
 
+# Line tables only (file:line in backtraces and panics, no variable/type info) instead of
+# full debuginfo. Measured on the api: clean build -24%, incremental build -36%, test
+# binaries -42% clean and -52% incremental, target dir 16G -> 12G. The wasm-dev profile
+# inherits it: -40% clean, -48% incremental. Export CARGO_PROFILE_DEV_DEBUG=true to get
+# full debuginfo back for a debugger.
+[profile.dev]
+debug = "line-tables-only"
+
 # Password hashing is far slower unoptimized: every local login, registration and password
 # check of the dev server and the tests runs it.
 [profile.dev.package.argon2]
