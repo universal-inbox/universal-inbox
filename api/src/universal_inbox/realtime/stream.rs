@@ -17,7 +17,10 @@ use tokio::{
 };
 use tracing::{info, warn};
 
-use universal_inbox::{realtime::RealtimeEvent, user::UserId};
+use universal_inbox::{
+    realtime::{RESYNC_EVENT, RealtimeEvent},
+    user::UserId,
+};
 
 use crate::{
     observability::attr,
@@ -174,7 +177,7 @@ impl EventStream {
     fn resync(&mut self, lagged_events: u64) -> Bytes {
         self.stats.resyncs += 1;
         self.stats.lagged_events += lagged_events;
-        Bytes::from_static(b"event: resync\ndata: {}\n\n")
+        Bytes::from(format!("event: {RESYNC_EVENT}\ndata: {{}}\n\n"))
     }
 
     /// Fails closed with the reason to close the stream. The client then reconnects, and the

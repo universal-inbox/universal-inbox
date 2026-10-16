@@ -9315,6 +9315,7 @@ dependencies = [
  "dioxus",
  "email_address",
  "emojis",
+ "futures-channel",
  "futures-util",
  "getrandom 0.4.3",
  "gloo-timers 0.4.0",

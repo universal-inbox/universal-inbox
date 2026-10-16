@@ -24,6 +24,7 @@ use services::{
     integration_connection_service::{INTEGRATION_CONNECTIONS, integration_connnection_service},
     notification_service::{NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, notification_service},
     oauth2_client_service::{OAUTH2_AUTHORIZED_CLIENTS, oauth2_client_service},
+    realtime_service::realtime_service,
     task_service::task_service,
     toast_service::{TOASTS, VIEWPORT_WIDTH, toast_service},
     user_preferences_service::{
@@ -98,7 +99,7 @@ pub fn App() -> Element {
             UI_MODEL.signal(),
         )
     });
-    let _integration_connection_service_handle = use_coroutine(move |rx| {
+    let integration_connection_service_handle = use_coroutine(move |rx| {
         integration_connnection_service(
             rx,
             APP_CONFIG.signal().into(),
@@ -108,6 +109,17 @@ pub fn App() -> Element {
             toast_service_handle,
             notification_service_handle,
             task_service_handle,
+        )
+    });
+
+    let _realtime_service_handle = use_coroutine(move |rx| {
+        realtime_service(
+            rx,
+            api_base_url(),
+            UI_MODEL.signal(),
+            notification_service_handle,
+            task_service_handle,
+            integration_connection_service_handle,
         )
     });
 

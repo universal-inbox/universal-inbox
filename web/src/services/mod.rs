@@ -10,6 +10,7 @@ pub mod local_storage;
 pub mod notification_service;
 pub mod oauth2_client_service;
 pub mod oauth2_consent_service;
+pub mod realtime_service;
 pub mod task_service;
 pub mod toast_service;
 pub mod user_preferences_service;

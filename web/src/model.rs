@@ -25,6 +25,8 @@ pub struct UniversalInboxUIModel {
     pub confirmation_message: Option<String>,
     pub is_syncing_notifications: bool,
     pub is_syncing_tasks: bool,
+    /// Whether the realtime event stream is open: polling then slows down
+    pub is_realtime_connected: bool,
     pub preview_cards_expanded: bool,
     /// History drawer next to the notification or task detail, toggled with `i`
     pub is_history_open: bool,
@@ -56,6 +58,7 @@ impl UniversalInboxUIModel {
             confirmation_message: None,
             is_syncing_notifications: false,
             is_syncing_tasks: false,
+            is_realtime_connected: false,
             preview_cards_expanded: false,
             is_history_open: false,
             details_panel_width: settings.ui.details_panel_width,
