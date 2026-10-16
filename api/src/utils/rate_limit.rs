@@ -50,6 +50,8 @@ const BULK_PATCH_RATE_LIMIT_PER_MINUTE: u32 = 30;
 /// Data exports a user may request per minute: an export loads every
 /// notification and task of the user.
 const EXPORT_RATE_LIMIT_PER_MINUTE: u32 = 2;
+/// Realtime event streams opened per minute: a browser reconnects every 5s at most.
+const EVENTS_RATE_LIMIT_PER_MINUTE: u32 = 30;
 
 /// A keyed governor rate limiter scoped on the authenticated user.
 pub type UserRateLimiter = RateLimiter<UserId, DefaultKeyedStateStore<UserId>, DefaultClock>;
@@ -62,6 +64,7 @@ pub struct UserRateLimiters {
     pub sync: Arc<UserRateLimiter>,
     pub bulk_patch: Arc<UserRateLimiter>,
     pub export: Arc<UserRateLimiter>,
+    pub events: Arc<UserRateLimiter>,
 }
 
 impl UserRateLimiters {
@@ -75,6 +78,7 @@ impl UserRateLimiters {
             sync: per_minute(SYNC_RATE_LIMIT_PER_MINUTE),
             bulk_patch: per_minute(BULK_PATCH_RATE_LIMIT_PER_MINUTE),
             export: per_minute(EXPORT_RATE_LIMIT_PER_MINUTE),
+            events: per_minute(EVENTS_RATE_LIMIT_PER_MINUTE),
         }
     }
 }

@@ -137,6 +137,9 @@ pub struct RealtimeSettings {
     /// Redis pub/sub channel the events are published on.
     #[serde(default = "default_realtime_channel")]
     pub channel: String,
+    /// Interval of the heartbeats of an event stream, which also re-check its session.
+    #[serde(default = "default_realtime_heartbeat_interval_in_seconds")]
+    pub heartbeat_interval_in_seconds: u64,
 }
 
 impl Default for RealtimeSettings {
@@ -144,12 +147,17 @@ impl Default for RealtimeSettings {
         Self {
             enabled: true,
             channel: default_realtime_channel(),
+            heartbeat_interval_in_seconds: default_realtime_heartbeat_interval_in_seconds(),
         }
     }
 }
 
 fn default_realtime_channel() -> String {
     "universal-inbox:events".to_string()
+}
+
+fn default_realtime_heartbeat_interval_in_seconds() -> u64 {
+    20
 }
 
 /// Configuration for the `purge-audit-events` cron, deleting the audit events older than

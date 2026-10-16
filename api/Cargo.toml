@@ -169,7 +169,7 @@ sqlx = { version = "0.9", default-features = false, features = [
 ] }
 tabled = "0.22"
 thiserror = { workspace = true }
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal"] }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 tonic = { version = "0.14.0", features = ["gzip", "tls-native-roots"] }
 tracing = { workspace = true }
 tracing-actix-web = { version = "0.7.0", features = [

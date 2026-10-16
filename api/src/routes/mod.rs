@@ -6,6 +6,7 @@ pub mod integration_connection;
 pub mod notification;
 pub mod oauth;
 pub mod oauth2;
+pub mod realtime;
 pub mod slack_bridge;
 pub mod static_files;
 pub mod task;
