@@ -64,7 +64,7 @@ use crate::{
     repository::{Repository, third_party::ThirdPartyItemRepository},
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
-        slack_bridge::service::SlackBridgeService,
+        slack_bridge::service::SlackBridgeService, third_party::service::ThirdPartyItemService,
     },
     utils::cache::build_redis_cache,
 };
@@ -2199,6 +2199,115 @@ pub fn find_slack_references_in_message(message_content: &SlackMessageContent) -
 
 pub fn has_slack_references_in_message(message_content: &SlackMessageContent) -> bool {
     !find_slack_references_in_message(message_content).is_empty()
+}
+
+/// Whether the Slack webhook queues a message event, with the reason recorded on its span.
+#[derive(Debug, PartialEq)]
+pub enum SlackMessageEventGate {
+    Queue(&'static str),
+    Discard(&'static str),
+}
+
+/// Queue a Slack message event when it mentions someone or replies in a known thread.
+pub async fn gate_slack_message_event(
+    message: &SlackMessageEvent,
+    third_party_item_service: &RwLock<ThirdPartyItemService>,
+) -> Result<SlackMessageEventGate, UniversalInboxError> {
+    let Some(content) = &message.content else {
+        return Ok(SlackMessageEventGate::Discard("no_message_content"));
+    };
+
+    // Cheap, DB-free check first: the webhook receives every message of every
+    // channel the app is in, so most events must not cost a pool connection.
+    if has_slack_references_in_message(content) {
+        return Ok(SlackMessageEventGate::Queue("has_references"));
+    }
+
+    // Only thread replies can belong to a known thread
+    let Some(thread_ts) = &message.origin.thread_ts else {
+        return Ok(SlackMessageEventGate::Discard(
+            "no_references_no_known_thread",
+        ));
+    };
+    let service = third_party_item_service.read().await;
+    // A single read: use a plain connection (no BEGIN/ROLLBACK), returned to
+    // the pool before the Redis job push. Pool exhaustion surfaces as
+    // `DatabaseUnavailable` (503) so Slack retries the event.
+    let mut connection = service.connect().await?;
+    let is_known_thread = service
+        .has_third_party_item_for_source_id(
+            &mut connection,
+            ThirdPartyItemKind::SlackThread,
+            &thread_ts.0,
+        )
+        .await?;
+
+    Ok(if is_known_thread {
+        SlackMessageEventGate::Queue("known_thread")
+    } else {
+        SlackMessageEventGate::Discard("no_references_no_known_thread")
+    })
+}
+
+/// The message event of the message edited by a `message_changed` event, so an edit goes
+/// through the same gate and job as a new message. Slack nests the edited message under
+/// `message`, and the top-level `ts` is the edit's, not the message's.
+///
+/// `raw_payload` is the whole webhook payload: slack-morphism's `SlackMessageEventEdited`
+/// drops the edited message's `thread_ts`, which is read from it.
+///
+/// Like new messages, edits by bots and hidden edits are not filtered out here.
+/// `Err` holds the reason to discard the event.
+pub fn edited_slack_message_event(
+    message_changed: &SlackMessageEvent,
+    raw_payload: &serde_json::Value,
+) -> Result<SlackMessageEvent, &'static str> {
+    let Some(SlackMessageEventEdited {
+        content: Some(content),
+        sender,
+        ts,
+        ..
+    }) = &message_changed.message
+    else {
+        return Err("no_edited_content");
+    };
+
+    // Slack also sends `message_changed` when it unfurls a link or when a thread root
+    // gets a reply: the text did not change, and re-syncing the thread could mark
+    // a notification the user already handled as unread again.
+    if let Some(SlackMessageEventEdited {
+        content: Some(previous_content),
+        ..
+    }) = &message_changed.previous_message
+        && previous_content.text == content.text
+        && previous_content.blocks == content.blocks
+    {
+        return Err("message_content_unchanged");
+    }
+
+    let thread_ts = match raw_payload.pointer("/event/message/thread_ts") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(thread_ts)) => Some(SlackTs(thread_ts.clone())),
+        Some(_) => return Err("invalid_thread_ts"),
+    };
+
+    Ok(SlackMessageEvent {
+        origin: SlackMessageOrigin {
+            ts: ts.clone(),
+            thread_ts,
+            // The top-level ids are the edit's: the edited message's `client_msg_id` is
+            // only in the nested message, where slack-morphism does not model it.
+            client_msg_id: None,
+            ..message_changed.origin.clone()
+        },
+        content: Some(content.clone()),
+        sender: sender.clone(),
+        subtype: None,
+        hidden: None,
+        message: None,
+        previous_message: None,
+        deleted_ts: None,
+    })
 }
 
 #[cfg(test)]

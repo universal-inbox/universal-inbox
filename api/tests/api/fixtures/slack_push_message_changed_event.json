@@ -1,0 +1,86 @@
+{
+  "type": "event_callback",
+  "team_id": "T01",
+  "api_app_id": "A01",
+  "event": {
+    "type": "message",
+    "subtype": "message_changed",
+    "hidden": true,
+    "message": {
+      "type": "message",
+      "user": "U02",
+      "text": "Hello <@U01>",
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "3333",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Hello "
+                },
+                {
+                  "type": "user",
+                  "user_id": "U01"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "edited": {
+        "user": "U02",
+        "ts": "1732535400.000000"
+      },
+      "client_msg_id": "f1b2c3d4-66c0-47b7-b47c-9c1b329ee986",
+      "ts": "1732535291.911209",
+      "thread_ts": "1732535291.911209",
+      "reply_count": 1,
+      "latest_reply": "1732535350.000100"
+    },
+    "previous_message": {
+      "type": "message",
+      "user": "U02",
+      "text": "Hello",
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "3333",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "client_msg_id": "f1b2c3d4-66c0-47b7-b47c-9c1b329ee986",
+      "ts": "1732535291.911209",
+      "thread_ts": "1732535291.911209",
+      "reply_count": 1,
+      "latest_reply": "1732535350.000100"
+    },
+    "channel": "C05XXX",
+    "channel_type": "channel",
+    "ts": "1732535400.000200",
+    "event_ts": "1732535400.000200"
+  },
+  "event_id": "Ev082B9YH299",
+  "event_time": 1732535400,
+  "event_context": "4-XXX",
+  "authorizations": [
+    {
+      "team_id": "T01",
+      "user_id": "U01",
+      "is_bot": false
+    }
+  ]
+}
