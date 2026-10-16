@@ -91,7 +91,10 @@ use crate::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService,
         oauth2::service::OAuth2Service,
-        realtime::{EventPublisher, build_event_publisher, with_event_scope_if},
+        realtime::{
+            EventPublisher, build_event_publisher, hub::EventHub, subscriber::run_event_subscriber,
+            with_event_scope_if,
+        },
         slack_bridge::service::SlackBridgeService,
         task::service::TaskService,
         third_party::service::ThirdPartyItemService,
@@ -267,6 +270,20 @@ pub async fn run_server(
         settings.application.mcp_session_store.ttl_seconds,
     );
     let event_publisher = build_event_publisher(&settings.application.realtime, &cache);
+    // One subscriber per API pod feeds the event streams opened on it
+    let event_hub = EventHub::new();
+    if settings.application.realtime.enabled {
+        tokio::spawn(run_event_subscriber(
+            settings.redis.clone(),
+            settings.application.realtime.channel.clone(),
+            event_hub.clone(),
+        ));
+    }
+    let realtime_events_path = format!(
+        "{}{}",
+        api_path.trim_end_matches('/'),
+        routes::realtime::EVENTS_PATH
+    );
     let cache_data = web::Data::new(cache);
     let mcp_extra_allowed_origins = settings
         .application
@@ -344,6 +361,7 @@ pub async fn run_server(
             .service(routes::third_party::scope())
             .service(routes::slack_bridge::scope())
             .service(routes::audit_event::scope())
+            .service(routes::realtime::scope())
             .service(mcp::scope(
                 mcp_http_service.clone(),
                 mcp_session_owners.clone(),
@@ -352,6 +370,7 @@ pub async fn run_server(
                 mcp_extra_allowed_origins.clone(),
             ))
             .app_data(web::Data::new(user_rate_limiters.clone()))
+            .app_data(web::Data::new(event_hub.clone()))
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
@@ -467,6 +486,17 @@ pub async fn run_server(
                 user_service.clone(),
             ))
             .wrap(TracingLogger::<AuthenticatedRootSpanBuilder>::new())
+            // Declared after the `TracingLogger` so that it runs before it
+            .wrap_fn({
+                let realtime_events_path = realtime_events_path.clone();
+                move |req, srv| {
+                    if req.path() == realtime_events_path {
+                        actix_web::HttpMessage::extensions_mut(&req)
+                            .insert(observability::UntracedRequest);
+                    }
+                    srv.call(req)
+                }
+            })
             .wrap(auth_middleware_factory.clone())
             .wrap(
                 SessionMiddleware::builder(

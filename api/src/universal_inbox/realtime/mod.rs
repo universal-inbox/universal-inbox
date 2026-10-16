@@ -24,7 +24,10 @@ use crate::{
     utils::cache::Cache,
 };
 
+pub mod hub;
 pub mod scope;
+pub mod stream;
+pub mod subscriber;
 
 pub use scope::{flush_events, record_event, with_event_scope, with_event_scope_if};
 

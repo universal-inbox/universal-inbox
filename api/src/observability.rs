@@ -452,10 +452,16 @@ fn record_forwarded_for(span: &Span, request: &ServiceRequest) {
 /// root spans with nothing to debug in them.
 const UNTRACED_PATH: &str = "/ping";
 
+/// Marker of a request not to trace, inserted by a middleware running before the
+/// `TracingLogger`, eg. on the realtime event stream: its root span would stay open as long as
+/// the stream (hours), which logs its opening and closing itself.
+#[derive(Clone, Copy)]
+pub struct UntracedRequest;
+
 /// Whether `request` gets a root span. Matched on the path only, so every
 /// method (GET and HEAD probes alike) is skipped.
 fn is_traced(request: &ServiceRequest) -> bool {
-    request.path() != UNTRACED_PATH
+    request.path() != UNTRACED_PATH && request.extensions().get::<UntracedRequest>().is_none()
 }
 
 impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
