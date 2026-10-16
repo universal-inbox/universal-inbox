@@ -11,7 +11,7 @@ lcov.info
 lcov.info
 docker/cache
 .env
-docs
+/docs
 .process-compose-override.yaml
 .justfile.local
 
