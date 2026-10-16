@@ -21,6 +21,7 @@ pub mod billing;
 pub mod integration_connection;
 pub mod notification;
 pub mod pii;
+pub mod realtime;
 pub mod slack_bridge;
 pub mod task;
 pub mod third_party;

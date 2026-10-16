@@ -10,6 +10,7 @@ pub mod data_encryption;
 pub mod integration_connection;
 pub mod notification;
 pub mod oauth2;
+pub mod realtime;
 pub mod slack_bridge;
 pub mod task;
 pub mod third_party;
@@ -275,6 +276,13 @@ pub struct UpdateStatus<T> {
     pub result: Option<T>,
 }
 
+impl<T> UpdateStatus<T> {
+    /// The value, when the update changed it.
+    pub fn changed_value(&self) -> Option<&T> {
+        self.result.as_ref().filter(|_| self.updated)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum UpsertStatus<T: Clone> {
     Created(T),
@@ -283,6 +291,14 @@ pub enum UpsertStatus<T: Clone> {
 }
 
 impl<T: Clone> UpsertStatus<T> {
+    /// The value, when the upsert created or updated it.
+    pub fn changed_value(&self) -> Option<&T> {
+        match self {
+            UpsertStatus::Created(inner) | UpsertStatus::Updated { new: inner, .. } => Some(inner),
+            UpsertStatus::Untouched(_) => None,
+        }
+    }
+
     pub fn value(self: UpsertStatus<T>) -> T {
         match self {
             UpsertStatus::Created(inner)

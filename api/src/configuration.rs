@@ -81,6 +81,9 @@ pub struct ApplicationSettings {
     /// Audit log of notification and task changes.
     #[serde(default)]
     pub audit_log: AuditLogSettings,
+    /// Realtime events pushed to the web app.
+    #[serde(default)]
+    pub realtime: RealtimeSettings,
     /// Optional Stripe billing configuration. When absent, no billing code runs,
     /// no billing UI is rendered, and every user has unlimited access (default for
     /// self-hosted instances). When present, billing enforcement is active.
@@ -124,6 +127,29 @@ impl Default for AuditLogSettings {
 
 fn default_audit_log_retention_days() -> u32 {
     7
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct RealtimeSettings {
+    /// When disabled, no realtime event is published and the web app keeps polling.
+    #[serde(default = "yes")]
+    pub enabled: bool,
+    /// Redis pub/sub channel the events are published on.
+    #[serde(default = "default_realtime_channel")]
+    pub channel: String,
+}
+
+impl Default for RealtimeSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            channel: default_realtime_channel(),
+        }
+    }
+}
+
+fn default_realtime_channel() -> String {
+    "universal-inbox:events".to_string()
 }
 
 /// Configuration for the `purge-audit-events` cron, deleting the audit events older than

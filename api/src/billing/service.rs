@@ -36,7 +36,10 @@ use crate::{
     configuration::FreePlanSettings,
     repository::{Repository, user::UserRepository},
     universal_inbox::{
-        UniversalInboxError, integration_connection::service::invalidate_cached_provider_lookups,
+        UniversalInboxError,
+        integration_connection::service::{
+            invalidate_cached_provider_lookups, record_integration_connection_changed,
+        },
     },
 };
 
@@ -1072,6 +1075,7 @@ impl BillingService {
                         Some(&snapshot),
                     )
                     .await?;
+                record_integration_connection_changed(user_id, connection_id);
                 invalidate_cached_provider_lookups(&connection).await;
                 paused.push(connection_id);
             }
@@ -1135,6 +1139,7 @@ impl BillingService {
             self.repository
                 .set_integration_connection_plan_pause(executor, connection_id, None, None)
                 .await?;
+            record_integration_connection_changed(user_id, connection_id);
             invalidate_cached_provider_lookups(&connection).await;
             restored.push(connection_id);
         }

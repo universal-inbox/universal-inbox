@@ -35,6 +35,7 @@ use crate::{
         audit::service::{AuditService, MAX_AUDIT_EVENTS_PAGE_SIZE},
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService,
+        realtime::EventPublisher,
         task::service::TaskService,
     },
     utils::rate_limit::{UserRateLimiters, check_user_rate_limit},
@@ -48,6 +49,7 @@ pub struct McpServices {
     pub audit_service: Arc<AuditService>,
     pub job_storage: JobStorage,
     pub user_rate_limiters: UserRateLimiters,
+    pub event_publisher: Arc<dyn EventPublisher>,
 }
 
 pub enum ToolCallError {

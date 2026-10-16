@@ -53,6 +53,7 @@ use crate::{
         audit::{actor_context::with_actor, service::AuditService},
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService,
+        realtime::{EventPublisher, with_event_scope},
         task::service::TaskService,
     },
     utils::jwt::Claims,
@@ -93,6 +94,7 @@ pub fn build_http_service(
     user_rate_limiters: UserRateLimiters,
     session_store: Arc<dyn SessionStore>,
     allowed_hosts: Vec<String>,
+    event_publisher: Arc<dyn EventPublisher>,
 ) -> StreamableHttpService<UniversalInboxMcpServer, LocalSessionManager> {
     // An empty list would disable rmcp's Host validation entirely.
     assert!(
@@ -106,6 +108,7 @@ pub fn build_http_service(
         audit_service,
         job_storage,
         user_rate_limiters,
+        event_publisher,
     };
 
     StreamableHttpService::builder()
@@ -542,11 +545,14 @@ impl UniversalInboxMcpServer {
             ErrorData::invalid_params(format!("Failed to serialize tool arguments: {err}"), None)
         })?;
 
-        // rmcp may serve the call on another task than the HTTP request: the actor set by the
-        // HTTP middleware does not reach it.
-        match with_actor(
-            actor,
-            execute_tool(tool_name, arguments, &self.services, user_id),
+        // rmcp may serve the call on another task than the HTTP request: the actor and the
+        // realtime event scope set by the HTTP middlewares do not reach it.
+        match with_event_scope(
+            self.services.event_publisher.clone(),
+            with_actor(
+                actor,
+                execute_tool(tool_name, arguments, &self.services, user_id),
+            ),
         )
         .await
         {

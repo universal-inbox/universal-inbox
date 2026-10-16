@@ -27,6 +27,7 @@ use universal_inbox::{
         NotificationStatus, service::NotificationPatch,
     },
     pii::Pii,
+    realtime::RealtimeEventKind,
     third_party::{
         integrations::notion::{
             MentionChange, MentionedBlock, NotionBlock, NotionComment, NotionCommentMessage,
@@ -50,6 +51,7 @@ use crate::{
     },
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+        realtime::record_event,
     },
     utils::api::{ApiClient, ApiClientError},
 };
@@ -818,6 +820,11 @@ impl NotionService {
                 connection.user_id,
             )
             .await?;
+        record_event(
+            connection.user_id,
+            RealtimeEventKind::NotificationsChanged,
+            Some(notification.id.0),
+        );
         Ok(())
     }
 
