@@ -9,6 +9,9 @@ use uuid::Uuid;
 
 use crate::user::UserId;
 
+/// Name of the stream event telling a client that events were lost: it refetches everything.
+pub const RESYNC_EVENT: &str = "resync";
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct RealtimeEvent {
     pub user_id: UserId,
