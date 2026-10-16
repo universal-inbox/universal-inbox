@@ -5,7 +5,6 @@ use sqlx::{Postgres, Transaction};
 use tracing::debug;
 
 use universal_inbox::{
-    notification::Notification,
     third_party::{
         integrations::slack::{SlackReaction, SlackThread},
         item::{
@@ -17,15 +16,21 @@ use universal_inbox::{
 
 use crate::observability::attr;
 use crate::{
-    integrations::slack::SlackService,
+    integrations::slack::{SlackFetchResult, SlackService},
     universal_inbox::{
         UniversalInboxError,
-        notification::{NotificationEventService, service::NotificationService},
+        notification::{
+            NotificationEventOutcome, NotificationEventService, service::NotificationService,
+        },
     },
 };
 
 #[async_trait]
 impl NotificationEventService<SlackPushEventCallback> for NotificationService {
+    // DEBUG on purpose (span rules: internals are DEBUG, so not exported at the default
+    // `otel_trace_directive = "info"`). The INFO per-user spans of the callers
+    // (`handle_slack_message_push_event_if_enabled`, `handle_slack_reaction_push_event`) carry
+    // the Slack event attributes and the outcome this returns.
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
@@ -42,13 +47,16 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
         event: &SlackPushEventCallback,
         existing_third_party_item: Option<&ThirdPartyItem>,
         user_id: UserId,
-    ) -> Result<Option<Notification>, UniversalInboxError> {
-        let Some(mut third_party_item) = self
+    ) -> Result<NotificationEventOutcome, UniversalInboxError> {
+        let mut third_party_item = match self
             .slack_service
             .fetch_item_from_event(executor, event, user_id)
             .await?
-        else {
-            return Ok(None);
+        {
+            SlackFetchResult::Fetched(third_party_item) => third_party_item,
+            SlackFetchResult::Skipped(reason) => {
+                return Ok(NotificationEventOutcome::Skipped(reason));
+            }
         };
 
         // When given a third party item of a SlackThread, we want to ensure that we keep the subscribed status
@@ -80,27 +88,30 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
         let third_party_item_id = upsert_item.value_ref().id;
         let Some(third_party_item) = upsert_item.modified_value() else {
             debug!("Third party item {third_party_item_id} is already up to date");
-            return Ok(None);
+            return Ok(NotificationEventOutcome::ItemUnchanged);
         };
 
-        match (*third_party_item).get_third_party_item_source_kind() {
-            ThirdPartyItemSourceKind::SlackReaction => Ok(self
-                .create_notification_from_third_party_item::<SlackReaction, SlackService>(
+        let upsert_notification = match (*third_party_item).get_third_party_item_source_kind() {
+            ThirdPartyItemSourceKind::SlackReaction => {
+                self.upsert_notification_from_third_party_item::<SlackReaction, SlackService>(
                     executor,
                     *third_party_item,
                     self.slack_service.clone(),
                     user_id,
                 )
-                .await?),
-            ThirdPartyItemSourceKind::SlackThread => Ok(self
-                .create_notification_from_third_party_item::<SlackThread, SlackService>(
+                .await?
+            }
+            ThirdPartyItemSourceKind::SlackThread => {
+                self.upsert_notification_from_third_party_item::<SlackThread, SlackService>(
                     executor,
                     *third_party_item,
                     self.slack_service.clone(),
                     user_id,
                 )
-                .await?),
-            _ => Ok(None),
-        }
+                .await?
+            }
+            _ => return Ok(NotificationEventOutcome::Skipped("unsupported_item_kind")),
+        };
+        Ok(NotificationEventOutcome::Saved(upsert_notification))
     }
 }

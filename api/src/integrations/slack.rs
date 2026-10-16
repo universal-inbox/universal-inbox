@@ -64,12 +64,28 @@ use crate::{
     repository::{Repository, third_party::ThirdPartyItemRepository},
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
-        slack_bridge::service::SlackBridgeService, third_party::service::ThirdPartyItemService,
+        slack_bridge::service::SlackBridgeService,
     },
     utils::cache::build_redis_cache,
 };
 
 static SLACK_BASE_URL: &str = "https://api.slack.com/api";
+
+/// The item a Slack push event is about, or why it was skipped (a low-cardinality reason, also
+/// recorded as `slack.fetch.skip_reason`), so callers can report the decision.
+#[derive(Debug)]
+pub enum SlackFetchResult {
+    Fetched(ThirdPartyItem),
+    Skipped(&'static str),
+}
+
+impl SlackFetchResult {
+    fn skipped(span: &tracing::Span, reason: &'static str) -> Self {
+        span.set_attribute(attr::SLACK_FETCH_OUTCOME, "skipped");
+        span.set_attribute(attr::SLACK_FETCH_SKIP_REASON, reason);
+        SlackFetchResult::Skipped(reason)
+    }
+}
 
 #[derive(Clone)]
 pub struct SlackService {
@@ -608,7 +624,7 @@ impl SlackService {
         executor: &mut Transaction<'_, Postgres>,
         slack_push_event_callback: &SlackPushEventCallback,
         user_id: UserId,
-    ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
+    ) -> Result<SlackFetchResult, UniversalInboxError> {
         let current_span = tracing::Span::current();
         current_span.set_attribute(attr::USER_ID, user_id.to_string());
 
@@ -664,11 +680,10 @@ impl SlackService {
                 .await
             }
             // Not yet implemented resource type
-            _ => {
-                current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "skipped");
-                current_span.set_attribute(attr::SLACK_FETCH_SKIP_REASON, "unsupported_event_type");
-                Ok(None)
-            }
+            _ => Ok(SlackFetchResult::skipped(
+                &current_span,
+                "unsupported_event_type",
+            )),
         }
     }
 
@@ -761,7 +776,7 @@ impl SlackService {
         slack_reaction_item_user_id: &SlackUserId,
         slack_reaction_name: &SlackReactionName,
         user_id: UserId,
-    ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
+    ) -> Result<SlackFetchResult, UniversalInboxError> {
         let current_span = tracing::Span::current();
         current_span.set_attribute(attr::USER_ID, user_id.to_string());
         current_span.set_attribute(attr::SLACK_REACTION_NAME, slack_reaction_name.to_string());
@@ -845,19 +860,15 @@ impl SlackService {
                 origin: SlackMessageOrigin { channel: None, .. },
                 ..
             }) => {
-                current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "skipped");
-                current_span.set_attribute(attr::SLACK_FETCH_SKIP_REASON, "no_channel");
-                return Ok(None);
+                return Ok(SlackFetchResult::skipped(&current_span, "no_channel"));
             }
             SlackReactionsItem::File(_) => {
-                current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "skipped");
-                current_span.set_attribute(attr::SLACK_FETCH_SKIP_REASON, "file_reaction");
-                return Ok(None);
+                return Ok(SlackFetchResult::skipped(&current_span, "file_reaction"));
             }
         };
 
         current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "fetched");
-        Ok(Some(
+        Ok(SlackFetchResult::Fetched(
             slack_reaction.into_third_party_item(user_id, integration_connection.id),
         ))
     }
@@ -870,7 +881,7 @@ impl SlackService {
         slack_push_event_callback: &SlackPushEventCallback,
         origin: &SlackMessageOrigin,
         user_id: UserId,
-    ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
+    ) -> Result<SlackFetchResult, UniversalInboxError> {
         let current_span = tracing::Span::current();
         current_span.set_attribute(attr::USER_ID, user_id.to_string());
 
@@ -889,9 +900,7 @@ impl SlackService {
                 .with_team_id(slack_push_event_callback.team_id.clone());
 
         let Some(channel_id) = &origin.channel else {
-            current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "skipped");
-            current_span.set_attribute(attr::SLACK_FETCH_SKIP_REASON, "no_channel_id");
-            return Ok(None);
+            return Ok(SlackFetchResult::skipped(&current_span, "no_channel_id"));
         };
         current_span.set_attribute(attr::SLACK_CHANNEL_ID, channel_id.to_string());
         let root_ts = origin.thread_ts.as_ref().unwrap_or(&origin.ts);
@@ -917,9 +926,10 @@ impl SlackService {
                 warn!(
                     "Slack thread {root_ts} in channel {channel_id} is not accessible to user {user_id}, skipping it"
                 );
-                current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "skipped");
-                current_span.set_attribute(attr::SLACK_FETCH_SKIP_REASON, "thread_not_accessible");
-                return Ok(None);
+                return Ok(SlackFetchResult::skipped(
+                    &current_span,
+                    "thread_not_accessible",
+                ));
             }
             Err(error) => return Err(error),
         };
@@ -973,7 +983,7 @@ impl SlackService {
         };
 
         current_span.set_attribute(attr::SLACK_FETCH_OUTCOME, "fetched");
-        Ok(Some(
+        Ok(SlackFetchResult::Fetched(
             slack_thread.into_third_party_item(user_id, integration_connection.id),
         ))
     }
@@ -2199,54 +2209,6 @@ pub fn find_slack_references_in_message(message_content: &SlackMessageContent) -
 
 pub fn has_slack_references_in_message(message_content: &SlackMessageContent) -> bool {
     !find_slack_references_in_message(message_content).is_empty()
-}
-
-/// Whether the Slack webhook queues a message event, with the reason recorded on its span.
-#[derive(Debug, PartialEq)]
-pub enum SlackMessageEventGate {
-    Queue(&'static str),
-    Discard(&'static str),
-}
-
-/// Queue a Slack message event when it mentions someone or replies in a known thread.
-pub async fn gate_slack_message_event(
-    message: &SlackMessageEvent,
-    third_party_item_service: &RwLock<ThirdPartyItemService>,
-) -> Result<SlackMessageEventGate, UniversalInboxError> {
-    let Some(content) = &message.content else {
-        return Ok(SlackMessageEventGate::Discard("no_message_content"));
-    };
-
-    // Cheap, DB-free check first: the webhook receives every message of every
-    // channel the app is in, so most events must not cost a pool connection.
-    if has_slack_references_in_message(content) {
-        return Ok(SlackMessageEventGate::Queue("has_references"));
-    }
-
-    // Only thread replies can belong to a known thread
-    let Some(thread_ts) = &message.origin.thread_ts else {
-        return Ok(SlackMessageEventGate::Discard(
-            "no_references_no_known_thread",
-        ));
-    };
-    let service = third_party_item_service.read().await;
-    // A single read: use a plain connection (no BEGIN/ROLLBACK), returned to
-    // the pool before the Redis job push. Pool exhaustion surfaces as
-    // `DatabaseUnavailable` (503) so Slack retries the event.
-    let mut connection = service.connect().await?;
-    let is_known_thread = service
-        .has_third_party_item_for_source_id(
-            &mut connection,
-            ThirdPartyItemKind::SlackThread,
-            &thread_ts.0,
-        )
-        .await?;
-
-    Ok(if is_known_thread {
-        SlackMessageEventGate::Queue("known_thread")
-    } else {
-        SlackMessageEventGate::Discard("no_references_no_known_thread")
-    })
 }
 
 /// The message event of the message edited by a `message_changed` event, so an edit goes
