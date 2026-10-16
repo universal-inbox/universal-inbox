@@ -15,6 +15,10 @@ cd api && just test        # API tests   |   cd web && just test   # web tests
 just check-all | just test-all   # whole workspace
 ```
 
+mbx builds workspace crates without Cargo incremental state: put `export MBX_INCREMENTAL=1`
+in `.local_envrc` (main checkout, copied into new worktrees) to rebuild the api test
+binaries in ~15s instead of ~45s after an edit.
+
 macOS: random API test failures with `Can't assign requested address` (os error 49) mean the
 ephemeral ports ran out. Each API test leaves ~22 sockets in TIME_WAIT (Postgres, Redis, one
 readiness probe per wiremock server); macOS has 16k ephemeral ports (49152–65535) and keeps
