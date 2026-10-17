@@ -87,6 +87,8 @@ pub async fn front_config(
         authentication_configs,
         integration_providers,
         support_href: settings.application.support_href.clone(),
+        privacy_policy_href: settings.application.privacy_policy_href.clone(),
+        terms_href: settings.application.terms_href.clone(),
         show_changelog: settings.application.show_changelog,
         chat_support_website_id: settings
             .application
@@ -110,4 +112,57 @@ pub async fn front_config(
             CacheDirective::MaxAge(5u32),
         ]))
         .body(serde_json::to_string(&config).context("Cannot serialize front configuration")?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use actix_web::body::to_bytes;
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+    use universal_inbox::FrontConfig;
+
+    #[fixture]
+    fn settings() -> Settings {
+        Settings::new_from_file(Some("config/test".to_string()))
+            .expect("Cannot load test configuration")
+    }
+
+    async fn get_front_config(settings: Settings) -> FrontConfig {
+        let response = front_config(web::Data::new(settings))
+            .await
+            .expect("front_config failed");
+        let body = to_bytes(response.into_body())
+            .await
+            .expect("Cannot read the front_config body");
+        serde_json::from_slice(&body).expect("Cannot deserialize the front configuration")
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_front_config_has_no_legal_links_by_default(settings: Settings) {
+        let config = get_front_config(settings).await;
+
+        assert_eq!(config.privacy_policy_href, None);
+        assert_eq!(config.terms_href, None);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_front_config_exposes_the_configured_legal_links(mut settings: Settings) {
+        settings.application.privacy_policy_href = Some("https://example.com/privacy".to_string());
+        settings.application.terms_href = Some("https://example.com/terms".to_string());
+
+        let config = get_front_config(settings).await;
+
+        assert_eq!(
+            config.privacy_policy_href,
+            Some("https://example.com/privacy".to_string())
+        );
+        assert_eq!(
+            config.terms_href,
+            Some("https://example.com/terms".to_string())
+        );
+    }
 }

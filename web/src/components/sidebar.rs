@@ -107,6 +107,10 @@ pub fn Sidebar() -> Element {
         .read()
         .as_ref()
         .is_some_and(|config| config.chat_support_website_id.is_some());
+    let privacy_policy_href = APP_CONFIG
+        .read()
+        .as_ref()
+        .and_then(|config| config.privacy_policy_href.clone());
 
     // Init the Headway changelog widget and record the Crisp chat identity inside
     // the authenticated shell. `configure_crisp` makes no network call: Crisp is
@@ -346,6 +350,24 @@ pub fn Sidebar() -> Element {
                             target: "_blank",
                             rel: "noopener noreferrer",
                             span { class: "icon-[lucide--github] size-4" }
+                        }
+                    }
+                    // Privacy policy of this instance, when it configured one.
+                    // Google OAuth verification requires the policy to be
+                    // reachable from inside the app, not only from the login
+                    // and signup pages.
+                    if let Some(privacy_policy_href) = privacy_policy_href.as_ref() {
+                        Tooltip {
+                            text: "Privacy Policy",
+                            placement: TooltipPlacement::Top,
+                            a {
+                                class: "flex items-center justify-center w-8 h-8 rounded-ui-md text-sidebar-text-muted hover:bg-sidebar-hover-bg hover:text-sidebar-text-bright transition-colors duration-[120ms]",
+                                href: "{privacy_policy_href}",
+                                title: "Privacy Policy",
+                                target: "_blank",
+                                rel: "noopener noreferrer",
+                                span { class: "icon-[lucide--shield-check] size-4" }
+                            }
                         }
                     }
                     if show_changelog {
