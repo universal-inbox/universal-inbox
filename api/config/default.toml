@@ -239,6 +239,21 @@ format = "Pretty"
 # [application.observability.tracing.otlp_exporter_headers]
 # api-key = "12345"
 
+# Optional Sentry error reporting, disabled when this block is absent. ERROR
+# events and panics become Sentry events, WARN events breadcrumbs. Emails and
+# JWTs are redacted before sending (observability/redaction.rs), and the
+# FORCED_OFF_TARGETS never reach Sentry. No performance traces are sent.
+# Never commit the DSN: set it in api/config/local.toml (gitignored) or with
+# UNIVERSAL_INBOX__APPLICATION__OBSERVABILITY__SENTRY__DSN.
+# [application.observability.sentry]
+# dsn = "https://<key>@<org>.ingest.sentry.io/<project>"
+# Defaults to application.environment:
+# environment = "production"
+# Share of error events sent:
+# sample_rate = 1.0
+# Let the SDK attach personal data (eg. the client IP) to events:
+# send_default_pii = false
+
 # [application.chat_support]
 # website_id = "CRISP_WEBSITE_ID"
 # identity_verification_secret_key = "CRISP_SECRET_KEY"

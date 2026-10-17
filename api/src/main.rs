@@ -16,8 +16,8 @@ use universal_inbox_api::{
     },
     mailer::{DisabledMailer, Mailer, SmtpMailer},
     observability::{
-        get_subscriber, get_subscriber_with_telemetry, init_subscriber, install_panic_hook,
-        shutdown_telemetry,
+        get_subscriber, get_subscriber_with_telemetry, init_sentry, init_subscriber,
+        install_panic_hook, shutdown_telemetry,
     },
     utils::{cache::Cache, passkey::build_webauthn},
 };
@@ -33,6 +33,15 @@ async fn main() -> std::io::Result<()> {
     let cli = commands::Cli::parse();
 
     let settings = Settings::new().expect("Cannot load Universal Inbox configuration");
+
+    // Held until the end of `main`: dropping it flushes the pending events.
+    // Installed after `color_backtrace` and before `install_panic_hook`, so a
+    // panic is logged, then reported to Sentry, then printed.
+    let sentry_guard = init_sentry(
+        settings.application.observability.sentry.as_ref(),
+        &settings.application.environment,
+    );
+    let sentry_enabled = sentry_guard.is_some();
 
     // Determine execution context based on the command
     let execution_context = match &cli.command {
@@ -50,11 +59,12 @@ async fn main() -> std::io::Result<()> {
                 &cli.service_name(),
                 settings.application.version.clone(),
                 log_format,
+                sentry_enabled,
             ),
             dep_log_level_filter,
         );
     } else {
-        let subscriber = get_subscriber(&log_env_filter, log_format);
+        let subscriber = get_subscriber(&log_env_filter, log_format, sentry_enabled);
         init_subscriber(subscriber, dep_log_level_filter);
     };
     install_panic_hook();

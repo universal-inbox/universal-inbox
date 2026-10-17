@@ -76,6 +76,20 @@ pub fn redact(text: &str) -> Cow<'_, str> {
     }
 }
 
+/// Redact email addresses and JWTs from every string of `value`, recursively.
+pub fn redact_json(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(text) => {
+            if let Cow::Owned(redacted) = redact(text) {
+                *text = redacted;
+            }
+        }
+        serde_json::Value::Array(items) => items.iter_mut().for_each(redact_json),
+        serde_json::Value::Object(fields) => fields.values_mut().for_each(redact_json),
+        _ => {}
+    }
+}
+
 fn redact_owned(text: Cow<'static, str>) -> Cow<'static, str> {
     match redact(&text) {
         Cow::Borrowed(_) => text,

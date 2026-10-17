@@ -63,6 +63,7 @@ pub fn tracing_setup(settings: Settings) {
     let subscriber = get_subscriber(
         &settings.application.observability.logging.log_directive,
         settings.application.observability.logging.format,
+        false,
     );
     init_subscriber(
         subscriber,
