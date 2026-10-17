@@ -72,6 +72,8 @@ fn refreshes_for(kind: RealtimeEventKind) -> &'static [Refresh] {
         RealtimeEventKind::TasksChanged => &[Refresh::Tasks],
         RealtimeEventKind::IntegrationConnectionChanged => &[Refresh::IntegrationConnections],
         RealtimeEventKind::UserChanged => &[],
+        // For the browser extension only
+        RealtimeEventKind::SlackBridgePendingActionsChanged => &[],
     }
 }
 
@@ -398,6 +400,10 @@ mod tests {
         );
         assert_eq!(
             refreshes_for(RealtimeEventKind::UserChanged),
+            &[] as &[Refresh]
+        );
+        assert_eq!(
+            refreshes_for(RealtimeEventKind::SlackBridgePendingActionsChanged),
             &[] as &[Refresh]
         );
     }

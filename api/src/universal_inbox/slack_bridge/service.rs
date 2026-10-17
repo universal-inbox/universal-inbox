@@ -11,6 +11,7 @@ use universal_inbox::{
         provider::{IntegrationConnectionContext, IntegrationProviderKind},
     },
     notification::NotificationId,
+    realtime::RealtimeEventKind,
     slack_bridge::{
         SlackBridgeActionStatus, SlackBridgeActionType, SlackBridgePendingAction,
         SlackBridgePendingActionId, SlackBridgeStatus,
@@ -26,7 +27,7 @@ use crate::{
         Repository, integration_connection::IntegrationConnectionRepository,
         slack_bridge::SlackBridgeRepository,
     },
-    universal_inbox::UniversalInboxError,
+    universal_inbox::{UniversalInboxError, realtime::record_event},
 };
 
 const EXTENSION_HEARTBEAT_TIMEOUT_SECONDS: i64 = 120;
@@ -81,9 +82,18 @@ impl SlackBridgeService {
             completed_at: None,
         };
 
-        self.repository
+        let action = self
+            .repository
             .create_pending_action(executor, &action)
-            .await
+            .await?;
+        // Tells the browser extension to poll the new action right away
+        record_event(
+            user_id,
+            RealtimeEventKind::SlackBridgePendingActionsChanged,
+            Some(action.id.0),
+        );
+
+        Ok(action)
     }
 
     #[tracing::instrument(

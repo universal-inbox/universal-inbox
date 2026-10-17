@@ -35,6 +35,10 @@ pub enum RealtimeEventKind {
     #[serde(rename = "user.changed")]
     #[strum(serialize = "user.changed")]
     UserChanged,
+    /// A Slack bridge action was queued for the browser extension, which polls for it.
+    #[serde(rename = "slack_bridge.pending_actions.changed")]
+    #[strum(serialize = "slack_bridge.pending_actions.changed")]
+    SlackBridgePendingActionsChanged,
 }
 
 #[cfg(test)]
@@ -67,6 +71,14 @@ mod tests {
         assert_eq!(
             RealtimeEventKind::NotificationsChanged.to_string(),
             "notifications.changed"
+        );
+        assert_eq!(
+            serde_json::to_value(RealtimeEventKind::SlackBridgePendingActionsChanged).unwrap(),
+            json!("slack_bridge.pending_actions.changed")
+        );
+        assert_eq!(
+            RealtimeEventKind::SlackBridgePendingActionsChanged.to_string(),
+            "slack_bridge.pending_actions.changed"
         );
     }
 }
