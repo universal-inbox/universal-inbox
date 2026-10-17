@@ -6,7 +6,6 @@ use sqlx::PgPool;
 use tokio::sync::{OnceCell, RwLock};
 use tracing::info;
 use universal_inbox::pii::Pii;
-use wiremock::MockServer;
 
 use playwright_rs::{Browser, BrowserContext, LaunchOptions, Locator, Page, Playwright, expect};
 
@@ -31,7 +30,7 @@ use universal_inbox_api::{
     utils::cache::Cache,
 };
 
-use crate::common::{build_and_spawn, setup_test_env};
+use crate::common::{LazyMockServer, build_and_spawn, setup_test_env};
 
 // Re-export shared fixtures so rstest can resolve them by name in this module's fixtures
 pub use crate::common::test_db::TestDb;
@@ -50,13 +49,13 @@ pub struct BrowserTestedApp {
     pub settings: Settings,
     pub _cache: Cache,
     // Keep mock servers alive for the duration of the test
-    pub _github_mock_server: MockServer,
-    pub _linear_mock_server: MockServer,
-    pub _google_calendar_mock_server: MockServer,
-    pub _google_mail_mock_server: MockServer,
-    pub _google_drive_mock_server: MockServer,
-    pub _slack_mock_server: MockServer,
-    pub _todoist_mock_server: MockServer,
+    pub _github_mock_server: LazyMockServer,
+    pub _linear_mock_server: LazyMockServer,
+    pub _google_calendar_mock_server: LazyMockServer,
+    pub _google_mail_mock_server: LazyMockServer,
+    pub _google_drive_mock_server: LazyMockServer,
+    pub _slack_mock_server: LazyMockServer,
+    pub _todoist_mock_server: LazyMockServer,
     /// Holds the test database slot for the lifetime of the app.
     pub _test_db: TestDb,
 }
@@ -119,6 +118,7 @@ pub async fn browser_tested_app(
         listener,
         pool,
         settings.clone(),
+        cache.clone(),
         &mock_servers,
         redis_storage,
     )
@@ -202,6 +202,7 @@ pub async fn browser_tested_app_with_billing(
         listener,
         pool,
         settings.clone(),
+        cache.clone(),
         &mock_servers,
         redis_storage,
         billing_service,

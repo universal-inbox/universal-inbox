@@ -73,6 +73,7 @@ pub async fn create_integration_connection(
     first_notifications_sync_failed_at: Option<DateTime<Utc>>,
     registered_oauth_scopes: Option<Vec<String>>,
 ) -> Box<IntegrationConnection> {
+    app.start_mock_server(config.kind());
     let mut transaction = app.repository.begin().await.unwrap();
     let mut new_integration_connection =
         IntegrationConnection::new(user_id, config, IntegrationConnectionStatus::Created);

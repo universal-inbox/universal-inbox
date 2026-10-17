@@ -5,7 +5,6 @@ use rstest::*;
 use sqlx::{PgPool, Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::info;
-use wiremock::MockServer;
 
 use url::Url;
 
@@ -26,10 +25,12 @@ use universal_inbox_api::{
     utils::cache::Cache,
 };
 
-use universal_inbox::audit::AuditActor;
+use universal_inbox::{
+    audit::AuditActor, integration_connection::provider::IntegrationProviderKind,
+};
 
 use crate::common::mailer::MailerStub;
-use crate::common::{build_and_spawn, setup_test_env};
+use crate::common::{LazyMockServer, build_and_spawn, setup_test_env};
 
 // Re-export shared fixtures so rstest can resolve them by name in this module's fixtures
 pub use crate::common::test_db::TestDb;
@@ -59,17 +60,17 @@ pub struct TestedApp {
     pub slack_service: Arc<SlackService>,
     pub oauth2_service: Arc<OAuth2Service>,
     pub audit_service: Arc<AuditService>,
-    pub github_mock_server: MockServer,
-    pub linear_mock_server: MockServer,
-    pub google_calendar_mock_server: MockServer,
-    pub google_mail_mock_server: MockServer,
-    pub google_drive_mock_server: MockServer,
-    pub notion_mock_server: MockServer,
-    pub slack_mock_server: MockServer,
-    pub todoist_mock_server: MockServer,
+    pub github_mock_server: LazyMockServer,
+    pub linear_mock_server: LazyMockServer,
+    pub google_calendar_mock_server: LazyMockServer,
+    pub google_mail_mock_server: LazyMockServer,
+    pub google_drive_mock_server: LazyMockServer,
+    pub notion_mock_server: LazyMockServer,
+    pub slack_mock_server: LazyMockServer,
+    pub todoist_mock_server: LazyMockServer,
     #[allow(dead_code)] // Will be used in Phase 5 TickTick integration tests
-    pub ticktick_mock_server: MockServer,
-    pub oidc_issuer_mock_server: Option<MockServer>,
+    pub ticktick_mock_server: LazyMockServer,
+    pub oidc_issuer_mock_server: Option<LazyMockServer>,
     pub mailer_stub: Arc<RwLock<MailerStub>>,
     pub redis_storage: JobStorage,
     pub cache: Cache,
@@ -87,6 +88,26 @@ impl TestedApp {
             .and_then(|url| url.port())
             .expect("test app_address must carry a port");
         universal_inbox_api::session_cookie_name(&self.front_base_url, port)
+    }
+
+    /// Starts the mock server of a provider (see [`LazyMockServer`]). Once a test connects a
+    /// provider, the code under test may call it even where the test mounts no mock (side
+    /// effects, OAuth revocation...): an unmatched call must get wiremock's 404, not hang.
+    pub fn start_mock_server(&self, kind: IntegrationProviderKind) {
+        // tag: New notification integration
+        let mock_server = match kind {
+            IntegrationProviderKind::Github => &self.github_mock_server,
+            IntegrationProviderKind::Linear => &self.linear_mock_server,
+            IntegrationProviderKind::GoogleCalendar => &self.google_calendar_mock_server,
+            IntegrationProviderKind::GoogleDrive => &self.google_drive_mock_server,
+            IntegrationProviderKind::GoogleMail => &self.google_mail_mock_server,
+            IntegrationProviderKind::Notion => &self.notion_mock_server,
+            IntegrationProviderKind::Slack => &self.slack_mock_server,
+            IntegrationProviderKind::Todoist => &self.todoist_mock_server,
+            IntegrationProviderKind::TickTick => &self.ticktick_mock_server,
+            IntegrationProviderKind::API => return,
+        };
+        let _ = &**mock_server;
     }
 }
 
@@ -110,7 +131,7 @@ pub async fn tested_app(
 
     let (listener, port, cache, mock_servers) = setup_test_env(&settings).await;
 
-    let oidc_issuer_mock_server = MockServer::start().await;
+    let oidc_issuer_mock_server = LazyMockServer::new();
     let oidc_issuer_mock_server_url = &oidc_issuer_mock_server.uri();
 
     if let AuthenticationSettings::OpenIDConnect(oidc_settings) =
@@ -135,6 +156,7 @@ pub async fn tested_app(
         listener,
         pool.clone(),
         settings.clone(),
+        cache.clone(),
         &mock_servers,
         redis_storage,
     )
@@ -301,6 +323,7 @@ async fn setup_tested_app_with_local_auth(
         listener,
         pool.clone(),
         settings.clone(),
+        cache.clone(),
         &mock_servers,
         redis_storage,
     )
@@ -352,7 +375,7 @@ pub async fn tested_app_with_domain_blacklist(
 
     let (listener, port, cache, mock_servers) = setup_test_env(&settings).await;
 
-    let oidc_issuer_mock_server = MockServer::start().await;
+    let oidc_issuer_mock_server = LazyMockServer::new();
     let oidc_issuer_mock_server_url = &oidc_issuer_mock_server.uri();
 
     // Set up OIDC authentication settings pointing to mock server
@@ -388,6 +411,7 @@ pub async fn tested_app_with_domain_blacklist(
         listener,
         pool.clone(),
         settings.clone(),
+        cache.clone(),
         &mock_servers,
         redis_storage,
     )

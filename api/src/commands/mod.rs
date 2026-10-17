@@ -6,7 +6,7 @@ use email_address::EmailAddress;
 use futures::future;
 use std::{net::TcpListener, sync::Arc};
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::info;
 use universal_inbox::pii::Pii;
 
 use universal_inbox::{
@@ -28,7 +28,7 @@ use crate::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService,
         oauth2::service::OAuth2Service,
-        realtime::{EventPublisher, NoopEventPublisher, build_event_publisher, with_event_scope},
+        realtime::{build_event_publisher, with_event_scope},
         slack_bridge::service::SlackBridgeService,
         task::service::TaskService,
         third_party::service::ThirdPartyItemService,
@@ -36,18 +36,6 @@ use crate::{
     },
     utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
 };
-
-/// Publisher of the realtime events of a CLI command. Without Redis, the command still runs
-/// and publishes nothing: open web apps catch up when they next poll.
-async fn cli_event_publisher(settings: &Settings) -> Arc<dyn EventPublisher> {
-    match Cache::new(&settings.redis).await {
-        Ok(cache) => build_event_publisher(&settings.application.realtime, &cache),
-        Err(err) => {
-            warn!("Failed to connect to Redis, realtime events will not be published: {err}");
-            Arc::new(NoopEventPublisher)
-        }
-    }
-}
 
 pub mod anonymize;
 pub mod data_encryption;
@@ -409,6 +397,7 @@ impl Cli {
     pub async fn execute(
         &self,
         settings: Settings,
+        cache: Cache,
         notification_service: Arc<RwLock<NotificationService>>,
         task_service: Arc<RwLock<TaskService>>,
         user_service: Arc<UserService>,
@@ -424,11 +413,15 @@ impl Cli {
         // The server and the workers set the actor and the realtime event scope of each
         // request and job
         let cli_scope = match self.audit_command_name() {
-            Some(command) => Some((command, cli_event_publisher(&settings).await)),
+            Some(command) => Some((
+                command,
+                build_event_publisher(&settings.application.realtime, &cache),
+            )),
             None => None,
         };
         let execution = self.execute_command(
             settings,
+            cache,
             notification_service,
             task_service,
             user_service,
@@ -472,6 +465,7 @@ impl Cli {
     async fn execute_command(
         &self,
         settings: Settings,
+        cache: Cache,
         notification_service: Arc<RwLock<NotificationService>>,
         task_service: Arc<RwLock<TaskService>>,
         user_service: Arc<UserService>,
@@ -544,12 +538,12 @@ impl Cli {
                 .expect("Failed to bind port");
 
                 let cron_settings = settings.application.cron.clone();
-                let redis_settings = settings.redis.clone();
                 let realtime_settings = settings.application.realtime.clone();
                 let server = run_server(
                     listener,
                     redis_storage.clone(),
                     settings,
+                    cache.clone(),
                     notification_service.clone(),
                     task_service.clone(),
                     user_service,
@@ -565,9 +559,6 @@ impl Cli {
                 .expect("Failed to start HTTP server");
 
                 if async_workers_count.is_some() || *embed_async_workers {
-                    let cache = Cache::new(&redis_settings)
-                        .await
-                        .expect("Failed to create cache");
                     let event_publisher = build_event_publisher(&realtime_settings, &cache);
                     let worker = run_worker(
                         *async_workers_count,
@@ -623,9 +614,6 @@ impl Cli {
                 ))
                 .expect("Failed to bind worker health-check port");
 
-                let cache = Cache::new(&settings.redis)
-                    .await
-                    .expect("Failed to create cache");
                 let ping_server = run_ping_server(
                     listener,
                     cache.clone(),
@@ -661,9 +649,6 @@ impl Cli {
 
             Commands::Cache { command } => match command {
                 CacheCommands::Clear { prefix } => {
-                    let cache = Cache::new(&settings.redis)
-                        .await
-                        .expect("Failed to create cache");
                     cache.clear(prefix).await.expect("Failed to clear cache");
                     Ok(())
                 }
