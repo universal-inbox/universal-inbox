@@ -51,9 +51,12 @@ pub struct TestDb {
 /// built by the same [`DatabaseSettings::connect_pool`] the server uses in production.
 pub async fn acquire(settings: &mut DatabaseSettings) -> TestDb {
     let template = template_name();
-    ensure_template(settings, &template).await;
+    // One maintenance connection does both jobs, so a test opens one socket fewer: it builds
+    // the template if needed, then becomes the lease.
+    let mut connection = maintenance_connection(settings).await;
+    ensure_template(settings, &mut connection, &template).await;
 
-    let (index, mut lease) = lease_slot(settings).await;
+    let (index, mut lease) = lease_slot(connection).await;
     let database_name = format!("{DB_PREFIX}_slot_{index}");
 
     // Escape hatch: `UI_TEST_DB_RESET=recreate` forces a fresh clone per test instead of a
@@ -101,29 +104,34 @@ fn template_name() -> String {
     format!("{DB_PREFIX}_tmpl_{}", &hex::encode(hasher.finalize())[..12])
 }
 
-async fn ensure_template(settings: &DatabaseSettings, template: &str) {
-    let mut connection = maintenance_connection(settings).await;
-    if database_exists(&mut connection, template).await {
+/// Builds the template unless it exists. `connection` goes on to hold the slot lease, so the
+/// template lock must not outlive this call: it is released before returning.
+async fn ensure_template(
+    settings: &DatabaseSettings,
+    connection: &mut PgConnection,
+    template: &str,
+) {
+    if database_exists(connection, template).await {
         return;
     }
 
     sqlx::query("SELECT pg_advisory_lock($1)")
         .bind(TEMPLATE_LOCK_KEY)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await
         .expect("Failed to take the template advisory lock");
 
     // Re-check under the lock: a concurrent process may have built it while we waited.
-    if !database_exists(&mut connection, template).await {
-        build_template(settings, &mut connection, template).await;
+    if !database_exists(connection, template).await {
+        build_template(settings, connection, template).await;
     }
-    sweep_stale_templates(&mut connection, template).await;
+    sweep_stale_templates(connection, template).await;
 
-    let _ = sqlx::query("SELECT pg_advisory_unlock($1)")
+    sqlx::query("SELECT pg_advisory_unlock($1)")
         .bind(TEMPLATE_LOCK_KEY)
-        .execute(&mut connection)
-        .await;
-    let _ = connection.close().await;
+        .execute(&mut *connection)
+        .await
+        .expect("Failed to release the template advisory lock");
 }
 
 /// Builds into a scratch name and renames on success, so a process killed mid-build leaves a
@@ -231,18 +239,17 @@ fn slot_count() -> i32 {
         .unwrap_or(16)
 }
 
-/// Leases a slot, returning its index and the connection holding the lock.
+/// Leases a slot on `connection`, returning its index and the connection, now holding the lock.
 ///
 /// `NEXTEST_TEST_GLOBAL_SLOT` is unique among concurrently running tests, so it is used as the
 /// starting probe to spread contention — but correctness rests on the advisory lock, which also
 /// covers plain `cargo test` and two simultaneous runs.
-async fn lease_slot(settings: &DatabaseSettings) -> (i32, PgConnection) {
+async fn lease_slot(mut connection: PgConnection) -> (i32, PgConnection) {
     let count = slot_count();
     let start = env_i32("NEXTEST_TEST_GLOBAL_SLOT")
         .map(|slot| slot.rem_euclid(count))
         .unwrap_or(0);
 
-    let mut connection = maintenance_connection(settings).await;
     for offset in 0..count {
         let index = (start + offset) % count;
         let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1, $2)")

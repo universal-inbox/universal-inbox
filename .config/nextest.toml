@@ -7,6 +7,12 @@
 filter = 'binary(browser)'
 slow-timeout = { period = "120s" }
 leak-timeout = "2s"
+# API tests: the wiremock servers start lazily (`LazyMockServer`, api/tests/common/mod.rs) and
+# an unstarted one accepts connections without ever answering. Kill a test that calls one
+# rather than hang the run; the slowest API test takes ~6s.
+[[profile.default.overrides]]
+filter = 'not binary(browser)'
+slow-timeout = { period = "30s", terminate-after = 4 }
 
 [profile.ci]
 junit.path = "junit.xml"

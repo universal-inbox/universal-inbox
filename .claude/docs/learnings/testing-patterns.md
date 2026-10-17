@@ -28,9 +28,15 @@ async fn test_health_check_works(#[future] tested_app: TestedApp) {
 ## TestedApp fixture
 
 `tested_app` (`api/tests/api/helpers/mod.rs`) boots a full app against an **isolated test
-database** and exposes `app_address`, the services/repository, and one wiremock `MockServer` per
+database** and exposes `app_address`, the services/repository, and one wiremock mock server per
 integration (`github_mock_server`, `notion_mock_server`, `slack_mock_server`, ...). It is the single
 entry point for API tests — don't hand-roll a server or use a shared DB.
+
+- The mock servers are `LazyMockServer`s (`api/tests/common/mod.rs`): `uri()` is known up front but
+  the server only starts on first use (`mount`, `&*app.x_mock_server`...), which saves a TCP
+  connection per unused server. A call to a server nobody started hangs instead of getting a 404.
+  `create_integration_connection` starts the connected provider's server
+  (`TestedApp::start_mock_server`); for any other call, touch the server in the test setup.
 
 - Variants exist for special setups: `tested_app_with_local_auth`, `..._with_domain_blacklist`,
   `..._with_short_reauthentication_window`, `..._with_account_rate_limits`.
@@ -77,7 +83,9 @@ API tests need Postgres + Redis up (`direnv exec . just run-detached`; prefix `d
 - One process per test means once-per-process init is paid per test. `api/config/test.toml` caps
   `application.http_workers = 2` and `database.max_connections = 5`, and `governor` is built without
   default features (skips ~200 ms quanta calibration). Don't undo these.
-- Near 30 s wall on macOS you can exhaust ephemeral ports ("Can't assign requested address").
+- Near 30 s wall on macOS you can exhaust ephemeral ports ("Can't assign requested address"). A test
+  leaves ~5 sockets in TIME_WAIT (Postgres, Redis), plus one per mock server it uses and one per HTTP connection it
+  opens. `api/scripts/count-time-wait.sh '<filterset>'` measures it.
 - Browser tests are reserved for the most important flows; prefer API tests. Never navigate a browser
   page to `/api/*` (the middleware forces `Content-Disposition: attachment`).
 
@@ -88,4 +96,4 @@ API tests need Postgres + Redis up (`direnv exec . just run-detached`; prefix `d
 
 See also: [integrations](integrations.md), [database patterns](database-patterns.md), [common pitfalls](common-pitfalls.md).
 
-_Last updated: 2026-10-15_
+_Last updated: 2026-10-17_

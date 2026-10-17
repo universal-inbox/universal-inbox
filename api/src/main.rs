@@ -19,7 +19,7 @@ use universal_inbox_api::{
         get_subscriber, get_subscriber_with_telemetry, init_subscriber, install_panic_hook,
         shutdown_telemetry,
     },
-    utils::passkey::build_webauthn,
+    utils::{cache::Cache, passkey::build_webauthn},
 };
 
 #[tokio::main]
@@ -70,6 +70,16 @@ async fn main() -> std::io::Result<()> {
             .await
             .expect("Failed to connect to Postgresql"),
     );
+
+    // One multiplexed Redis connection, shared by the services, the HTTP server and the
+    // workers of this process.
+    info!(
+        "Connecting to Redis on {}",
+        &settings.redis.safe_connection_string()
+    );
+    let cache = Cache::new(&settings.redis)
+        .await
+        .expect("Failed to connect to Redis");
 
     let mailer: Arc<RwLock<dyn Mailer + Send + Sync>> = match &settings.application.email {
         Some(email) => {
@@ -133,6 +143,7 @@ async fn main() -> std::io::Result<()> {
     ) = build_services(
         pool,
         &settings,
+        cache.clone(),
         github_mock_server.map(|mock| mock.uri()),
         linear_graphql_mock_server.map(|mock| mock.uri()),
         google_mail_mock_server.map(|mock| mock.uri()),
@@ -151,6 +162,7 @@ async fn main() -> std::io::Result<()> {
     let result = cli
         .execute(
             settings,
+            cache,
             notification_service,
             task_service,
             user_service,

@@ -4,7 +4,12 @@
 // a shared `common` module.
 #![allow(dead_code)]
 
-use std::{net::TcpListener, str::FromStr, sync::Arc};
+use std::{
+    net::{SocketAddr, TcpListener},
+    ops::Deref,
+    str::FromStr,
+    sync::{Arc, Mutex, OnceLock},
+};
 
 use apalis_redis::RedisStorage;
 use rstest::*;
@@ -100,43 +105,93 @@ pub fn settings() -> Settings {
 // Mock servers
 // ---------------------------------------------------------------------------
 
-pub struct MockServers {
-    pub github: MockServer,
-    pub linear: MockServer,
-    pub google_calendar: MockServer,
-    pub google_mail: MockServer,
-    pub google_drive: MockServer,
-    pub notion: MockServer,
-    pub slack: MockServer,
-    pub todoist: MockServer,
-    pub ticktick: MockServer,
+/// A wiremock server that only starts when a test first uses it.
+///
+/// Starting a `MockServer` costs a TCP connection: wiremock probes the new server until it
+/// accepts, and that probe leaves a socket in TIME_WAIT on an ephemeral port. A test gets a
+/// server per integration but talks to one or two, so the others are never started.
+///
+/// The port is bound up front, so [`LazyMockServer::uri`] is known (and can be put in the
+/// settings) without starting anything. Any other use goes through `Deref` and starts the
+/// server. Code under test that calls a server the test never started waits on a connection
+/// nobody answers, until nextest kills the test (`slow-timeout` in `.config/nextest.toml`): start
+/// it in the test setup with `TestedApp::start_mock_server`.
+pub struct LazyMockServer {
+    address: SocketAddr,
+    listener: Mutex<Option<TcpListener>>,
+    server: OnceLock<MockServer>,
 }
 
-impl MockServers {
-    pub async fn start() -> Self {
-        // tag: New notification integration
-        let github = MockServer::start().await;
-        let linear = MockServer::start().await;
-        let google_calendar = MockServer::start().await;
-        let google_mail = MockServer::start().await;
-        let google_drive = MockServer::start().await;
-        let notion = MockServer::start().await;
-        let slack = MockServer::start().await;
-        let todoist = MockServer::start().await;
-        let ticktick = MockServer::start().await;
-
+impl LazyMockServer {
+    pub fn new() -> Self {
+        let listener =
+            TcpListener::bind("127.0.0.1:0").expect("Failed to bind a port for a mock server");
         Self {
-            github,
-            linear,
-            google_calendar,
-            google_mail,
-            google_drive,
-            notion,
-            slack,
-            todoist,
-            ticktick,
+            address: listener
+                .local_addr()
+                .expect("Failed to get the mock server address"),
+            listener: Mutex::new(Some(listener)),
+            server: OnceLock::new(),
         }
     }
+
+    /// Same as [`MockServer::uri`], without starting the server.
+    pub fn uri(&self) -> String {
+        format!("http://{}", self.address)
+    }
+
+    /// Same as [`MockServer::address`], without starting the server.
+    pub fn address(&self) -> &SocketAddr {
+        &self.address
+    }
+}
+
+impl Default for LazyMockServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Deref for LazyMockServer {
+    type Target = MockServer;
+
+    fn deref(&self) -> &MockServer {
+        self.server.get_or_init(|| {
+            let listener = self
+                .listener
+                .lock()
+                .unwrap()
+                .take()
+                .expect("A previous start of this mock server failed");
+            // `deref` is sync and tests mostly run on a `current_thread` runtime, which cannot
+            // block on a future of its own: start the server from a thread with its own runtime.
+            // The server itself runs on a thread wiremock spawns, so it outlives this runtime.
+            std::thread::spawn(move || {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("Failed to build a runtime to start a mock server")
+                    .block_on(MockServer::builder().listener(listener).start())
+            })
+            .join()
+            // Re-raise the start failure itself, not a generic "thread panicked"
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+        })
+    }
+}
+
+// tag: New notification integration
+#[derive(Default)]
+pub struct MockServers {
+    pub github: LazyMockServer,
+    pub linear: LazyMockServer,
+    pub google_calendar: LazyMockServer,
+    pub google_mail: LazyMockServer,
+    pub google_drive: LazyMockServer,
+    pub notion: LazyMockServer,
+    pub slack: LazyMockServer,
+    pub todoist: LazyMockServer,
+    pub ticktick: LazyMockServer,
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +254,7 @@ pub fn with_mocked_oauth_urls(settings: &Settings, mock_servers: &MockServers) -
 pub async fn build_test_services(
     pool: Arc<PgPool>,
     settings: &Settings,
+    cache: Cache,
     mock_servers: &MockServers,
     mailer: Arc<RwLock<dyn universal_inbox_api::mailer::Mailer + Send + Sync>>,
 ) -> (TestServices, Arc<RwLock<AuthenticationTokenService>>) {
@@ -222,6 +278,7 @@ pub async fn build_test_services(
     ) = universal_inbox_api::build_services(
         pool,
         &with_mocked_oauth_urls(settings, mock_servers),
+        cache,
         Some(mock_servers.github.uri()),
         Some(mock_servers.linear.uri()),
         Some(mock_servers.google_mail.uri()),
@@ -260,6 +317,7 @@ pub async fn spawn_test_server(
     listener: TcpListener,
     redis_storage: JobStorage,
     settings: Settings,
+    cache: Cache,
     services: &TestServices,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
 ) {
@@ -267,6 +325,7 @@ pub async fn spawn_test_server(
         listener,
         redis_storage,
         settings,
+        cache,
         services.notification_service.clone(),
         services.task_service.clone(),
         services.user_service.clone(),
@@ -334,33 +393,40 @@ pub async fn setup_test_env(settings: &Settings) -> (TcpListener, u16, Cache, Mo
         .expect("Failed to create cache");
     Cache::set_namespace(Uuid::new_v4().to_string()).await;
 
-    let mock_servers = MockServers::start().await;
+    let mock_servers = MockServers::default();
 
     (listener, port, cache, mock_servers)
 }
 
-/// Builds services, spawns server and worker. Returns (TestServices, mailer_stub, redis_storage).
+/// Builds services, spawns server and worker, all sharing `cache` (the one from
+/// [`setup_test_env`]) so a test opens a single Redis connection for them.
+/// Returns (TestServices, mailer_stub, redis_storage).
 pub async fn build_and_spawn(
     listener: TcpListener,
     pool: Arc<PgPool>,
     settings: Settings,
+    cache: Cache,
     mock_servers: &MockServers,
     redis_storage: JobStorage,
 ) -> (TestServices, Arc<RwLock<MailerStub>>, JobStorage) {
     let mailer_stub = Arc::new(RwLock::new(MailerStub::new(
         settings.application.email.is_some(),
     )));
-    let (services, auth_token_service) =
-        build_test_services(pool, &settings, mock_servers, mailer_stub.clone()).await;
+    let (services, auth_token_service) = build_test_services(
+        pool,
+        &settings,
+        cache.clone(),
+        mock_servers,
+        mailer_stub.clone(),
+    )
+    .await;
 
     let cron_settings = settings.application.cron.clone();
-    let cache = Cache::new(&settings.redis)
-        .await
-        .expect("Failed to create cache");
     spawn_test_server(
         listener,
         redis_storage.clone(),
         settings,
+        cache.clone(),
         &services,
         auth_token_service,
     )
@@ -559,6 +625,7 @@ pub async fn spawn_test_server_with_billing(
     listener: TcpListener,
     redis_storage: JobStorage,
     settings: Settings,
+    cache: Cache,
     services: &TestServices,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
     billing_service: Option<Arc<BillingService>>,
@@ -567,6 +634,7 @@ pub async fn spawn_test_server_with_billing(
         listener,
         redis_storage,
         settings,
+        cache,
         services.notification_service.clone(),
         services.task_service.clone(),
         services.user_service.clone(),
@@ -589,6 +657,7 @@ pub async fn build_and_spawn_with_billing(
     listener: TcpListener,
     pool: Arc<PgPool>,
     settings: Settings,
+    cache: Cache,
     mock_servers: &MockServers,
     redis_storage: JobStorage,
     billing_service: Option<Arc<BillingService>>,
@@ -596,18 +665,22 @@ pub async fn build_and_spawn_with_billing(
     let mailer_stub = Arc::new(RwLock::new(MailerStub::new(
         settings.application.email.is_some(),
     )));
-    let (services, auth_token_service) =
-        build_test_services(pool, &settings, mock_servers, mailer_stub.clone()).await;
+    let (services, auth_token_service) = build_test_services(
+        pool,
+        &settings,
+        cache.clone(),
+        mock_servers,
+        mailer_stub.clone(),
+    )
+    .await;
 
     let cron_settings = settings.application.cron.clone();
-    let cache = Cache::new(&settings.redis)
-        .await
-        .expect("Failed to create cache");
 
     spawn_test_server_with_billing(
         listener,
         redis_storage.clone(),
         settings,
+        cache.clone(),
         &services,
         auth_token_service,
         billing_service,

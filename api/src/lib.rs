@@ -127,6 +127,7 @@ pub async fn run_server(
     listener: TcpListener,
     redis_storage: JobStorage,
     settings: Settings,
+    cache: Cache,
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
     user_service: Arc<UserService>,
@@ -257,9 +258,6 @@ pub async fn run_server(
     };
 
     let storage_data = web::Data::new(redis_storage.clone());
-    let cache = Cache::new(&settings.redis)
-        .await
-        .expect("Failed to create cache");
     let mcp_session_store: Arc<dyn rmcp::transport::streamable_http_server::session::SessionStore> =
         Arc::new(mcp::RedisSessionStore::new(
             cache.connection_manager.clone(),
@@ -934,6 +932,7 @@ fn with_revocation_url_override<P>(
 pub async fn build_services(
     pool: Arc<PgPool>,
     settings: &Settings,
+    cache: Cache,
     github_address: Option<String>,
     linear_graphql_url: Option<String>,
     google_mail_base_url: Option<String>,
@@ -994,9 +993,6 @@ pub async fn build_services(
     // Redis connection. Session checks fail closed, so the API refuses to start
     // without Redis rather than run with revocation disabled. See
     // utils::session_revocation.
-    let cache = Cache::new(&settings.redis)
-        .await
-        .expect("Failed to connect to Redis for session revocation");
     let session_revocation = SessionRevocation::new(
         cache.connection_manager.clone(),
         (settings
