@@ -25,11 +25,13 @@ use crate::{
 };
 
 pub mod hub;
+pub mod metrics;
 pub mod scope;
 pub mod stream;
 pub mod subscriber;
 pub mod sync_scheduler;
 
+use metrics::realtime_metrics;
 pub use scope::{flush_events, record_event, with_event_scope, with_event_scope_if};
 
 /// Bound on a publish, so that a slow or unreachable Redis does not stall the writes.
@@ -68,8 +70,10 @@ impl EventPublisher for RedisEventPublisher {
             return;
         }
 
+        let metrics = realtime_metrics();
         let span = redis_client_span("PUBLISH", &self.channel);
         let mut pipeline = redis::pipe();
+        let mut pipelined_kinds = Vec::with_capacity(events.len());
         for event in &events {
             match serde_json::to_string(event) {
                 Ok(payload) => {
@@ -78,9 +82,11 @@ impl EventPublisher for RedisEventPublisher {
                         .arg(&self.channel)
                         .arg(payload)
                         .ignore();
+                    pipelined_kinds.push(event.kind);
                 }
                 Err(err) => {
                     record_span_error(&span, "serialization");
+                    metrics.publish_failed(1, "serialization");
                     warn!(
                         { attr::MESSAGING_DESTINATION_NAME } = %self.channel,
                         { attr::USER_ID } = %event.user_id,
@@ -100,14 +106,19 @@ impl EventPublisher for RedisEventPublisher {
                 Err(_) => Err(("timeout", format!("timed out after {PUBLISH_TIMEOUT:?}"))),
             }
         };
-        if let Err((_, err)) =
-            instrument_client_call(span, publish, |(error_type, _)| error_type.to_string()).await
-        {
+        let result =
+            instrument_client_call(span, publish, |(error_type, _)| error_type.to_string()).await;
+        if let Err((error_type, err)) = result {
+            metrics.publish_failed(pipelined_kinds.len() as u64, error_type);
             warn!(
                 { attr::MESSAGING_DESTINATION_NAME } = %self.channel,
                 { attr::REALTIME_EVENTS_COUNT } = events.len(),
                 "Failed to publish realtime events: {err}"
             );
+        } else {
+            for kind in pipelined_kinds {
+                metrics.event_published(kind);
+            }
         }
     }
 }

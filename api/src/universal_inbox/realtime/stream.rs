@@ -26,7 +26,10 @@ use crate::{
     observability::attr,
     universal_inbox::{
         UniversalInboxError,
-        realtime::hub::{EventHub, HubMessage, Subscription},
+        realtime::{
+            hub::{EventHub, HubMessage, Subscription},
+            metrics::ResyncReason,
+        },
         user::service::UserService,
     },
 };
@@ -153,6 +156,7 @@ impl EventStream {
             message = self.subscription.recv() => match message {
                 Ok(HubMessage::Event(event)) => {
                     self.stats.delivered_events += 1;
+                    self.subscription.hub().metrics().events_delivered(1);
                     format_event(&event)
                 }
                 // Events were lost: the client refetches everything
@@ -177,6 +181,12 @@ impl EventStream {
     fn resync(&mut self, lagged_events: u64) -> Bytes {
         self.stats.resyncs += 1;
         self.stats.lagged_events += lagged_events;
+        if lagged_events > 0 {
+            // Resyncs of all the streams of the pod are counted by the hub
+            let metrics = self.subscription.hub().metrics();
+            metrics.events_dropped(lagged_events);
+            metrics.resynced(1, ResyncReason::Lagged);
+        }
         Bytes::from(format!("event: {RESYNC_EVENT}\ndata: {{}}\n\n"))
     }
 
@@ -394,5 +404,52 @@ mod tests {
 
         assert_eq!(next_chunk(&mut stream).await, None);
         assert_eq!(hub.streams_count(user()), 0);
+    }
+
+    #[tokio::test]
+    async fn test_stream_records_delivered_and_dropped_events() {
+        use crate::{
+            observability::attr,
+            universal_inbox::realtime::metrics::test_support::{TestMetrics, attribute},
+        };
+
+        let test_metrics = TestMetrics::new();
+        let hub = EventHub::with_metrics(test_metrics.metrics);
+        hub.set_subscribed(true);
+        let mut stream =
+            Box::pin(open_event_stream(&hub, session(vec![]), Duration::from_secs(60)).unwrap());
+        next_chunk(&mut stream).await;
+
+        hub.dispatch(RealtimeEvent {
+            user_id: user(),
+            kind: RealtimeEventKind::TasksChanged,
+            ids: None,
+        });
+        next_chunk(&mut stream).await;
+        // One more than the channel holds: the oldest is lost
+        for _ in 0..=STREAM_CHANNEL_CAPACITY {
+            hub.dispatch(RealtimeEvent {
+                user_id: user(),
+                kind: RealtimeEventKind::TasksChanged,
+                ids: None,
+            });
+        }
+        assert_eq!(
+            next_chunk(&mut stream).await.as_deref(),
+            Some("event: resync\ndata: {}\n\n")
+        );
+
+        assert_eq!(
+            test_metrics.sum("realtime.events.delivered"),
+            vec![(vec![], 1)]
+        );
+        assert_eq!(
+            test_metrics.sum("realtime.events.dropped"),
+            vec![(vec![], 1)]
+        );
+        assert_eq!(
+            test_metrics.sum("realtime.streams.resyncs"),
+            vec![(attribute(attr::REALTIME_RESYNC_REASON, "lagged"), 1)]
+        );
     }
 }

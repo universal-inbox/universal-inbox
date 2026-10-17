@@ -13,6 +13,8 @@ use tokio::sync::{
 
 use universal_inbox::{realtime::RealtimeEvent, user::UserId};
 
+use super::metrics::{RealtimeMetrics, ResyncReason, realtime_metrics};
+
 /// Events buffered per user before a slow stream lags and is told to resync.
 pub const STREAM_CHANNEL_CAPACITY: usize = 64;
 /// Open streams allowed per user on one pod.
@@ -30,14 +32,25 @@ pub struct EventHub {
     senders: Mutex<HashMap<UserId, broadcast::Sender<HubMessage>>>,
     /// Whether the pod's subscriber currently receives the published events
     subscribed: watch::Sender<bool>,
+    metrics: &'static RealtimeMetrics,
 }
 
 impl EventHub {
     pub fn new() -> Arc<Self> {
+        Self::with_metrics(realtime_metrics())
+    }
+
+    /// A hub recording its metrics, and those of its streams, with `metrics`.
+    pub fn with_metrics(metrics: &'static RealtimeMetrics) -> Arc<Self> {
         Arc::new(Self {
             senders: Mutex::default(),
             subscribed: watch::Sender::new(false),
+            metrics,
         })
+    }
+
+    pub fn metrics(&self) -> &'static RealtimeMetrics {
+        self.metrics
     }
 
     /// Record whether the pod's subscriber is subscribed to the published events.
@@ -64,6 +77,7 @@ impl EventHub {
         if sender.receiver_count() >= MAX_STREAMS_PER_USER {
             return None;
         }
+        self.metrics.stream_opened();
         Some(Subscription {
             receiver: Some(sender.subscribe()),
             user_id,
@@ -76,14 +90,17 @@ impl EventHub {
         let senders = self.senders.lock().unwrap();
         if let Some(sender) = senders.get(&event.user_id) {
             // No receiver left is not an error: the entry is removed with the last subscription
+            // Counted as delivered once written to a stream: a slow one may lose it
             let _ = sender.send(HubMessage::Event(Arc::new(event)));
         }
     }
 
-    /// Tell every open stream to refetch everything, eg. after events may have been lost.
-    pub fn resync_all(&self) {
+    /// Tell every open stream to refetch everything, as events may have been lost.
+    pub fn resync_all(&self, reason: ResyncReason) {
         for sender in self.senders.lock().unwrap().values() {
-            let _ = sender.send(HubMessage::Resync);
+            if let Ok(streams_count) = sender.send(HubMessage::Resync) {
+                self.metrics.resynced(streams_count as u64, reason);
+            }
         }
     }
 
@@ -144,6 +161,7 @@ impl Drop for Subscription {
         // Drop the receiver first so that it is not counted any more
         self.receiver.take();
         self.hub.unsubscribe(self.user_id);
+        self.hub.metrics.stream_closed();
     }
 }
 
@@ -229,7 +247,7 @@ mod tests {
         assert_eq!(subscription.recv().await, Err(RecvError::Lagged(1)));
 
         let mut subscription = hub.subscribe(user(2)).unwrap();
-        hub.resync_all();
+        hub.resync_all(ResyncReason::Resubscribed);
         assert_eq!(subscription.recv().await, Ok(HubMessage::Resync));
     }
 
@@ -261,5 +279,25 @@ mod tests {
         assert_eq!(hub.connected_users(), vec![user(1)]);
         drop(second);
         assert_eq!(hub.connected_users(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn test_open_streams_metric_stays_balanced() {
+        let test_metrics =
+            crate::universal_inbox::realtime::metrics::test_support::TestMetrics::new();
+        let hub = EventHub::with_metrics(test_metrics.metrics);
+
+        let subscriptions: Vec<_> = (0..MAX_STREAMS_PER_USER)
+            .map(|_| hub.subscribe(user(1)).unwrap())
+            .collect();
+        // Refused above the cap: not counted
+        assert!(hub.subscribe(user(1)).is_none());
+        assert_eq!(
+            test_metrics.sum("realtime.streams.open"),
+            vec![(vec![], MAX_STREAMS_PER_USER as i64)]
+        );
+
+        drop(subscriptions);
+        assert_eq!(test_metrics.sum("realtime.streams.open"), vec![(vec![], 0)]);
     }
 }

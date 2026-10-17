@@ -22,11 +22,12 @@ use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
 use opentelemetry_otlp::tonic_types::transport::ClientTlsConfig;
 use opentelemetry_otlp::{
-    LogExporter, SpanExporter, WithExportConfig, WithHttpConfig, WithTonicConfig,
+    LogExporter, MetricExporter, SpanExporter, WithExportConfig, WithHttpConfig, WithTonicConfig,
 };
 use opentelemetry_sdk::{
     Resource,
     logs::{BatchLogProcessor, SdkLoggerProvider},
+    metrics::{PeriodicReader, SdkMeterProvider, Temporality},
     propagation::TraceContextPropagator,
     trace::{BatchSpanProcessor, RandomIdGenerator, Sampler, SdkTracerProvider},
 };
@@ -96,7 +97,11 @@ const OTEL_QUIET_DIRECTIVES: [&str; 3] = [
 /// Kept so the panic hook and [`shutdown_telemetry`] can flush buffered spans
 /// and logs before the process exits: batch processors would otherwise drop
 /// them.
-static TELEMETRY_PROVIDERS: OnceLock<(SdkTracerProvider, SdkLoggerProvider)> = OnceLock::new();
+static TELEMETRY_PROVIDERS: OnceLock<(SdkTracerProvider, SdkLoggerProvider, SdkMeterProvider)> =
+    OnceLock::new();
+
+/// Interval at which the metrics are exported.
+const METRICS_EXPORT_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Filter for the stdout layer: `RUST_LOG` when set, else the configured
 /// directive.
@@ -157,6 +162,22 @@ pub fn get_subscriber_with_telemetry(
     let tracer = tracer_provider.tracer("universal-inbox");
     let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
+    // Metrics are recorded through `opentelemetry::global::meter`: without this provider (no
+    // tracing settings, eg. in tests) the instruments are no-ops
+    let meter_provider = SdkMeterProvider::builder()
+        .with_resource(resource.clone())
+        .with_reader(
+            PeriodicReader::builder(build_metric_exporter(
+                config.otlp_exporter_protocol,
+                config.otlp_exporter_endpoint.to_string(),
+                config.otlp_exporter_headers.clone(),
+            ))
+            .with_interval(METRICS_EXPORT_INTERVAL)
+            .build(),
+        )
+        .build();
+    opentelemetry::global::set_meter_provider(meter_provider.clone());
+
     let logger = SdkLoggerProvider::builder()
         .with_resource(resource)
         .with_log_processor(RedactingLogProcessor::new(
@@ -173,7 +194,7 @@ pub fn get_subscriber_with_telemetry(
     // See https://github.com/open-telemetry/opentelemetry-rust/pull/1394
     let logging = OpenTelemetryTracingBridge::new(&logger);
     // Already set only if the subscriber is built twice: the first providers stay.
-    let _ = TELEMETRY_PROVIDERS.set((tracer_provider, logger));
+    let _ = TELEMETRY_PROVIDERS.set((tracer_provider, logger, meter_provider));
 
     let stdout_layer = config
         .is_stdout_logging_enabled
@@ -279,23 +300,25 @@ pub fn install_panic_hook() {
             .unwrap_or_default();
         tracing::error!({ attr::PANIC_LOCATION } = %location, "The application panicked: {message}");
 
-        if let Some((tracer_provider, logger_provider)) = TELEMETRY_PROVIDERS.get() {
+        if let Some((tracer_provider, logger_provider, meter_provider)) = TELEMETRY_PROVIDERS.get()
+        {
             // Best effort: the process is going down and there is nowhere
             // left to report a failed export.
             let _ = tracer_provider.force_flush();
             let _ = logger_provider.force_flush();
+            let _ = meter_provider.force_flush();
         }
 
         previous_hook(panic_info);
     }));
 }
 
-/// Flush and shut down the OTLP tracer and logger providers, so the last
-/// batch of spans and logs is exported. Call it once, right before a normal
+/// Flush and shut down the OTLP tracer, logger and meter providers, so the
+/// last batch of spans, logs and metrics is exported. Call it once, right before a normal
 /// exit (including after a SIGTERM-triggered graceful stop). Blocks until the
 /// exporters are done or time out. A no-op when telemetry is not set up.
 pub fn shutdown_telemetry() {
-    let Some((tracer_provider, logger_provider)) = TELEMETRY_PROVIDERS.get() else {
+    let Some((tracer_provider, logger_provider, meter_provider)) = TELEMETRY_PROVIDERS.get() else {
         return;
     };
     // Reported on stderr: the exporters being shut down are where an error
@@ -306,11 +329,17 @@ pub fn shutdown_telemetry() {
     if let Err(error) = logger_provider.force_flush() {
         eprintln!("Failed to flush the logger provider: {error}");
     }
+    if let Err(error) = meter_provider.force_flush() {
+        eprintln!("Failed to flush the meter provider: {error}");
+    }
     if let Err(error) = tracer_provider.shutdown() {
         eprintln!("Failed to shut the tracer provider down: {error}");
     }
     if let Err(error) = logger_provider.shutdown() {
         eprintln!("Failed to shut the logger provider down: {error}");
+    }
+    if let Err(error) = meter_provider.shutdown() {
+        eprintln!("Failed to shut the meter provider down: {error}");
     }
 }
 
@@ -570,43 +599,23 @@ fn build_span_exporter(
     let builder = SpanExporter::builder();
 
     if otlp_exporter_protocol == OtlpExporterProtocol::Http {
-        let mut headers = HashMap::with_capacity(2);
-        for (header_name, header_value) in &otlp_exporter_headers {
-            if !header_value.is_empty() {
-                headers.insert(
-                    // header names usually use dashes instead of underscores but env vars don't allow dashes
-                    header_name.replace('_', "-"),
-                    header_value.parse().unwrap(),
-                );
-            }
-        }
-
+        let headers = otlp_http_headers(&otlp_exporter_headers);
         builder
             .with_http()
             .with_http_client(reqwest::Client::new())
             .with_endpoint(otlp_exporter_endpoint)
             .with_timeout(Duration::from_secs(3))
-            .with_headers(headers.clone())
+            .with_headers(headers)
             .build()
             .unwrap()
     } else {
-        let mut headers = MetadataMap::with_capacity(otlp_exporter_headers.len());
-        for (header_name, header_value) in &otlp_exporter_headers {
-            if !header_value.is_empty() {
-                headers.insert(
-                    // header names usually use dashes instead of underscores but env vars don't allow dashes
-                    AsciiMetadataKey::from_str(header_name.replace('_', "-").as_str()).unwrap(),
-                    header_value.parse().unwrap(),
-                );
-            }
-        }
-
+        let headers = otlp_tonic_metadata(&otlp_exporter_headers);
         builder
             .with_tonic()
             .with_endpoint(otlp_exporter_endpoint)
             .with_tls_config(ClientTlsConfig::new().with_native_roots())
             .with_timeout(Duration::from_secs(3))
-            .with_metadata(headers.clone())
+            .with_metadata(headers)
             .build()
             .unwrap()
     }
@@ -622,43 +631,76 @@ where
     let builder = LogExporter::builder();
 
     if otlp_exporter_protocol == OtlpExporterProtocol::Http {
-        let mut headers = HashMap::with_capacity(2);
-        for (header_name, header_value) in &otlp_exporter_headers {
-            if !header_value.is_empty() {
-                headers.insert(
-                    // header names usually use dashes instead of underscores but env vars don't allow dashes
-                    header_name.replace('_', "-"),
-                    header_value.parse().unwrap(),
-                );
-            }
-        }
-
+        let headers = otlp_http_headers(&otlp_exporter_headers);
         builder
             .with_http()
             .with_http_client(reqwest::Client::new())
             .with_endpoint(otlp_exporter_endpoint)
             .with_timeout(Duration::from_secs(3))
-            .with_headers(headers.clone())
+            .with_headers(headers)
             .build()
             .unwrap()
     } else {
-        let mut headers = MetadataMap::with_capacity(otlp_exporter_headers.len());
-        for (header_name, header_value) in &otlp_exporter_headers {
-            if !header_value.is_empty() {
-                headers.insert(
-                    // header names usually use dashes instead of underscores but env vars don't allow dashes
-                    AsciiMetadataKey::from_str(header_name.replace('_', "-").as_str()).unwrap(),
-                    header_value.parse().unwrap(),
-                );
-            }
-        }
-
+        let headers = otlp_tonic_metadata(&otlp_exporter_headers);
         builder
             .with_tonic()
             .with_endpoint(otlp_exporter_endpoint)
             .with_tls_config(ClientTlsConfig::new().with_native_roots())
             .with_timeout(Duration::from_secs(3))
-            .with_metadata(headers.clone())
+            .with_metadata(headers)
+            .build()
+            .unwrap()
+    }
+}
+
+/// The OTLP exporter headers for HTTP. Header names usually use dashes, but env vars do not
+/// allow them: underscores become dashes. Empty values are skipped.
+fn otlp_http_headers(otlp_exporter_headers: &HashMap<String, String>) -> HashMap<String, String> {
+    otlp_exporter_headers
+        .iter()
+        .filter(|(_, header_value)| !header_value.is_empty())
+        .map(|(header_name, header_value)| (header_name.replace('_', "-"), header_value.clone()))
+        .collect()
+}
+
+/// The OTLP exporter headers for gRPC, see [`otlp_http_headers`].
+fn otlp_tonic_metadata(otlp_exporter_headers: &HashMap<String, String>) -> MetadataMap {
+    let mut metadata = MetadataMap::with_capacity(otlp_exporter_headers.len());
+    for (header_name, header_value) in otlp_http_headers(otlp_exporter_headers) {
+        metadata.insert(
+            AsciiMetadataKey::from_str(&header_name).unwrap(),
+            header_value.parse().unwrap(),
+        );
+    }
+    metadata
+}
+
+/// Delta temporality: what Datadog's OTLP intake expects, and accepted by Honeycomb.
+fn build_metric_exporter(
+    otlp_exporter_protocol: OtlpExporterProtocol,
+    otlp_exporter_endpoint: String,
+    otlp_exporter_headers: HashMap<String, String>,
+) -> MetricExporter {
+    let builder = MetricExporter::builder().with_temporality(Temporality::Delta);
+
+    if otlp_exporter_protocol == OtlpExporterProtocol::Http {
+        let headers = otlp_http_headers(&otlp_exporter_headers);
+        builder
+            .with_http()
+            .with_http_client(reqwest::Client::new())
+            .with_endpoint(otlp_exporter_endpoint)
+            .with_timeout(Duration::from_secs(3))
+            .with_headers(headers)
+            .build()
+            .unwrap()
+    } else {
+        let headers = otlp_tonic_metadata(&otlp_exporter_headers);
+        builder
+            .with_tonic()
+            .with_endpoint(otlp_exporter_endpoint)
+            .with_tls_config(ClientTlsConfig::new().with_native_roots())
+            .with_timeout(Duration::from_secs(3))
+            .with_metadata(headers)
             .build()
             .unwrap()
     }

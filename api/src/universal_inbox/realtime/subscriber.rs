@@ -13,7 +13,9 @@ use tracing::{info, warn};
 use universal_inbox::realtime::RealtimeEvent;
 
 use crate::{
-    configuration::RedisSettings, observability::attr, universal_inbox::realtime::hub::EventHub,
+    configuration::RedisSettings,
+    observability::attr,
+    universal_inbox::realtime::{hub::EventHub, metrics::ResyncReason},
 };
 
 const MIN_RECONNECT_DELAY: Duration = Duration::from_secs(1);
@@ -45,7 +47,7 @@ pub async fn run_event_subscriber(
                 );
                 hub.set_subscribed(true);
                 if was_connected {
-                    hub.resync_all();
+                    hub.resync_all(ResyncReason::Resubscribed);
                 }
                 was_connected = true;
 
