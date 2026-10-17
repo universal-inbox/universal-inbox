@@ -64,6 +64,15 @@ pub struct ApplicationSettings {
     pub observability: ObservabilitySettings,
     pub security: SecuritySettings,
     pub support_href: Option<String>,
+    /// Link to the instance's privacy policy. `None` by default: a self-hosted
+    /// instance must not advertise universal-inbox.com's policy as its own.
+    /// When set, the link is shown on the login and signup pages and in the
+    /// authenticated app (Google OAuth verification requires the privacy policy
+    /// to be reachable from the app interface).
+    pub privacy_policy_href: Option<String>,
+    /// Link to the instance's terms of service, shown next to the privacy
+    /// policy. `None` by default, for the same reason.
+    pub terms_href: Option<String>,
     /// Optional SMTP configuration. When absent, emails are disabled: the
     /// notification emails are skipped and the flows that cannot work without
     /// email degrade (see `mailer::DisabledMailer`).

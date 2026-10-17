@@ -34,6 +34,10 @@ pub struct FrontConfig {
     pub authentication_configs: Vec<FrontAuthenticationConfig>,
     pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
     pub support_href: Option<String>,
+    /// Privacy policy and terms of service links. `None` when the instance did
+    /// not configure them: the corresponding links are then not rendered.
+    pub privacy_policy_href: Option<String>,
+    pub terms_href: Option<String>,
     pub show_changelog: bool,
     pub chat_support_website_id: Option<String>,
     pub version: Option<String>,

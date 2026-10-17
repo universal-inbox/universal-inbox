@@ -24,6 +24,7 @@
 - Show a check mark on GitHub discussion notifications that have an accepted answer
 - Export all your data as a JSON file from the Profile page (`GET /users/me/export`, 2 exports per minute)
 - Add Notion integration: comments and page mentions as notifications (OAuth, webhooks with an hourly catch-up sync, thread and mention previews)
+- Configurable `application.privacy_policy_href` and `application.terms_href` links, unset by default: when set, they show on the login and signup pages and the privacy policy also shows in the sidebar of the authenticated app
 
 ### Changed
 

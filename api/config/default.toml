@@ -16,6 +16,11 @@ sync_backoff_max_delay_in_seconds = 3600
 sync_failure_window_in_hours = 48
 # Disabled by default
 # support_href = "mailto:support@universal-inbox.com"
+# Legal links shown on the login/signup pages and in the authenticated app.
+# Disabled by default: a self-hosted instance must point at its own documents,
+# not at universal-inbox.com's. Each link is hidden while its URL is unset.
+# privacy_policy_href = "https://www.universal-inbox.com/privacy"
+# terms_href = "https://www.universal-inbox.com/terms"
 show_changelog = false
 dry_run = false
 
