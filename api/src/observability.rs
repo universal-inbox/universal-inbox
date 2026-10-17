@@ -47,9 +47,11 @@ use crate::{
 
 pub mod attributes;
 pub mod redaction;
+pub mod sentry;
 pub mod spans;
 
 pub use attributes as attr;
+pub use sentry::init_sentry;
 pub use spans::{
     RecordSpanError, http_client_span, instrument_client_call, instrument_client_call_expecting,
     redis_client_span,
@@ -127,7 +129,8 @@ fn build_otel_filter(directive: &str) -> EnvFilter {
 /// `RUST_LOG`), the trace layer `config.otel_trace_directive` and the log
 /// bridge `config.otel_log_directive`. Keeping the OTel filters tighter than
 /// the stdout one avoids exporting every event twice (as a span event and as
-/// an OTel log).
+/// an OTel log). With `sentry_enabled`, warnings and errors also go to Sentry
+/// (see [`sentry`]).
 pub fn get_subscriber_with_telemetry(
     environment: &str,
     stdout_filter_str: &str,
@@ -135,6 +138,7 @@ pub fn get_subscriber_with_telemetry(
     service_name: &str,
     version: Option<String>,
     log_format: LogFormat,
+    sentry_enabled: bool,
 ) -> impl Subscriber + Send + Sync {
     // `traceparent` on inbound requests is read through the global propagator
     // (tracing-actix-web). Outbound third-party calls opt out with
@@ -204,17 +208,19 @@ pub fn get_subscriber_with_telemetry(
         .with(telemetry.with_filter(build_otel_filter(&config.otel_trace_directive)))
         .with(logging.with_filter(build_otel_filter(&config.otel_log_directive)))
         .with(stdout_layer)
+        .with(sentry_enabled.then(sentry::build_sentry_layer))
 }
 
+/// Build a subscriber writing logs to stdout and, with `sentry_enabled`,
+/// sending warnings and errors to Sentry (see [`sentry`]).
 pub fn get_subscriber(
     env_filter_str: &str,
     log_format: LogFormat,
+    sentry_enabled: bool,
 ) -> impl Subscriber + Send + Sync {
-    let env_filter = build_env_filter(env_filter_str);
-
     Registry::default()
-        .with(env_filter)
-        .with(build_fmt_layer(log_format))
+        .with(build_fmt_layer(log_format).with_filter(build_env_filter(env_filter_str)))
+        .with(sentry_enabled.then(sentry::build_sentry_layer))
 }
 
 fn build_fmt_layer<S>(log_format: LogFormat) -> Box<dyn Layer<S> + Send + Sync>
@@ -284,7 +290,8 @@ impl<W: io::Write> io::Write for RedactingWriter<W> {
 
 /// Report panics as `error` events so they reach the configured log output
 /// and the OTLP backend, then run the previously installed hook (the colored
-/// backtrace). Install it after the tracing subscriber.
+/// backtrace, or Sentry's panic hook chaining to it). Install it after the
+/// tracing subscriber and the Sentry client.
 pub fn install_panic_hook() {
     let previous_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
@@ -298,7 +305,12 @@ pub fn install_panic_hook() {
             .location()
             .map(ToString::to_string)
             .unwrap_or_default();
-        tracing::error!({ attr::PANIC_LOCATION } = %location, "The application panicked: {message}");
+        tracing::error!(
+            target: sentry::PANIC_TARGET,
+            // After `target:`, a leading `{ .. }` is read as the field list.
+            { { attr::PANIC_LOCATION } = %location },
+            "The application panicked: {message}"
+        );
 
         if let Some((tracer_provider, logger_provider, meter_provider)) = TELEMETRY_PROVIDERS.get()
         {

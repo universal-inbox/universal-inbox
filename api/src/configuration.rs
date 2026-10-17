@@ -7,7 +7,7 @@ use config::{Config, ConfigError, Environment, File};
 use hex;
 use openidconnect::{ClientId, ClientSecret as OidcClientSecret, IntrospectionUrl, IssuerUrl};
 use ring::hmac;
-use secrecy::{CloneableSecret, ExposeSecret, SecretBox, zeroize::Zeroize};
+use secrecy::{CloneableSecret, ExposeSecret, SecretBox, SecretString, zeroize::Zeroize};
 use serde::{
     Deserialize, Deserializer,
     de::{self, SeqAccess, Visitor},
@@ -540,10 +540,35 @@ fn default_trusted_proxy_hops() -> usize {
 pub struct ObservabilitySettings {
     pub tracing: Option<TracingSettings>,
     pub logging: LoggingSettings,
+    /// Sentry error reporting, disabled (no client, no network) when absent.
+    pub sentry: Option<SentrySettings>,
 }
 
 fn yes() -> bool {
     true
+}
+
+/// Sentry error reporting: `ERROR` events and panics are reported, `WARN`
+/// events become breadcrumbs. No performance traces: they would duplicate the
+/// OTLP ones and ship span attributes to a second vendor.
+#[derive(Deserialize, Clone, Debug)]
+pub struct SentrySettings {
+    /// Never committed: set it in `api/config/local.toml` or through
+    /// `UNIVERSAL_INBOX__APPLICATION__OBSERVABILITY__SENTRY__DSN`.
+    pub dsn: SecretString,
+    /// Defaults to `application.environment`.
+    pub environment: Option<String>,
+    /// Share of error events sent, from `0.0` to `1.0`. The Sentry SDK panics
+    /// at startup on a value outside that range.
+    #[serde(default = "default_sentry_sample_rate")]
+    pub sample_rate: f32,
+    /// Let the Sentry SDK attach personal data (eg. the client IP) to events.
+    #[serde(default)]
+    pub send_default_pii: bool,
+}
+
+fn default_sentry_sample_rate() -> f32 {
+    1.0
 }
 
 #[derive(Deserialize, Clone, Debug)]

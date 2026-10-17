@@ -151,6 +151,15 @@ rmcp-actix-web = { version = "0.13.0", default-features = false, features = [
 rustls = { version = "0.23.0" } # Used to initialize lettre
 schemars = { workspace = true }
 secrecy = { workspace = true }
+# rustls instead of the default native-tls, like the rest of the workspace.
+sentry = { version = "0.49", default-features = false, features = [
+  "backtrace",
+  "contexts",
+  "panic",
+  "reqwest",
+  "rustls",
+  "tracing",
+] }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["unbounded_depth"] }
 serde_path_to_error = "0.1.20"
@@ -212,6 +221,8 @@ playwright-rs = "0.18.0"
 pretty_assertions = { workspace = true }
 rrule = { workspace = true }
 rstest = { workspace = true }
+# Captures events in memory in tests.
+sentry = { version = "0.49", default-features = false, features = ["test"] }
 serde_urlencoded = { workspace = true }
 sha2 = "0.11"
 webauthn-authenticator-rs = { version = "0.5.4", features = ["softpasskey"] }
