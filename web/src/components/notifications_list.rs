@@ -150,11 +150,11 @@ pub fn NotificationsList(
                         notification_source_kind_filters: notification_filters().notification_source_kind_filters,
                         on_select: move |filter| {
                             notification_filters.write().select(filter);
-                            notification_service.send(NotificationCommand::Refresh);
+                            notification_service.send(NotificationCommand::RefreshList);
                         },
                         on_clear: move |_| {
                             notification_filters.write().reset();
-                            notification_service.send(NotificationCommand::Refresh);
+                            notification_service.send(NotificationCommand::RefreshList);
                         },
                     }
 
@@ -166,7 +166,7 @@ pub fn NotificationsList(
                                 page: notifications,
                                 on_select: move |selected_page_token| {
                                     notification_filters.write().current_page_token = selected_page_token;
-                                    notification_service.send(NotificationCommand::Refresh);
+                                    notification_service.send(NotificationCommand::RefreshList);
                                 }
                             }
                         }
@@ -176,7 +176,7 @@ pub fn NotificationsList(
                         notification_list_order: notification_filters().sort_by,
                         on_change: move |new_order| {
                             notification_filters.write().sort_by = new_order;
-                            notification_service.send(NotificationCommand::Refresh);
+                            notification_service.send(NotificationCommand::RefreshList);
                         }
                     }
                 }

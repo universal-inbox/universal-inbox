@@ -11,11 +11,16 @@ use futures_util::{
 };
 use gloo_timers::future::TimeoutFuture;
 use log::{debug, warn};
+use serde::Deserialize;
 use url::Url;
+use uuid::Uuid;
 use wasm_bindgen::{JsCast, prelude::Closure};
-use web_sys::{Event, EventSource};
+use web_sys::{Event, EventSource, MessageEvent};
 
-use universal_inbox::realtime::{RESYNC_EVENT, RealtimeEventKind};
+use universal_inbox::{
+    notification::NotificationId,
+    realtime::{RESYNC_EVENT, RealtimeEventKind},
+};
 
 use crate::{
     model::UniversalInboxUIModel,
@@ -77,13 +82,47 @@ fn refreshes_for(kind: RealtimeEventKind) -> &'static [Refresh] {
     }
 }
 
+/// Ids of the changed items of a pending refresh once an event with `ids` is added to it: the
+/// union of both, `None` (refetch everything) as soon as either is unknown.
+fn merge_event_ids<T: PartialEq>(pending: Option<Vec<T>>, ids: Option<Vec<T>>) -> Option<Vec<T>> {
+    let (mut pending, ids) = (pending?, ids?);
+    for id in ids {
+        if !pending.contains(&id) {
+            pending.push(id);
+        }
+    }
+    Some(pending)
+}
+
+/// The data of a stream event (`RealtimeEvent::ids` only, see the API `realtime::stream`).
+#[derive(Deserialize)]
+struct EventData {
+    #[serde(default)]
+    ids: Option<Vec<Uuid>>,
+}
+
+/// Ids of the changed items an event carries: `None` when unknown or unreadable.
+fn event_ids(data: &str) -> Option<Vec<Uuid>> {
+    serde_json::from_str::<EventData>(data).ok()?.ids
+}
+
+fn message_event_ids(event: &Event) -> Option<Vec<Uuid>> {
+    event_ids(&event.dyn_ref::<MessageEvent>()?.data().as_string()?)
+}
+
 /// What an event source, tagged with the generation of the connection that opened it, and the
 /// page tell the service.
 enum StreamSignal {
     Opened(u64),
-    Refreshes(u64, &'static [Refresh]),
-    Errored { generation: u64, closed: bool },
-    VisibilityChanged { hidden: bool },
+    /// `ids`: the changed items of the event, `None` when unknown
+    Refreshes(u64, &'static [Refresh], Option<Vec<Uuid>>),
+    Errored {
+        generation: u64,
+        closed: bool,
+    },
+    VisibilityChanged {
+        hidden: bool,
+    },
 }
 
 /// An open event source, closed when dropped.
@@ -131,12 +170,17 @@ fn open_connection(
 
     let events = LISTENED_EVENT_KINDS
         .iter()
-        .map(|kind| (kind.to_string(), refreshes_for(*kind)))
-        .chain([(RESYNC_EVENT.to_string(), &ALL_REFRESHES[..])]);
-    for (name, refreshes) in events {
+        .map(|kind| (kind.to_string(), refreshes_for(*kind), true))
+        .chain([(RESYNC_EVENT.to_string(), &ALL_REFRESHES[..], false)]);
+    for (name, refreshes, has_ids) in events {
         let sender = signals.clone();
-        let on_event = Closure::<dyn FnMut(Event)>::new(move |_| {
-            let _ = sender.unbounded_send(StreamSignal::Refreshes(generation, refreshes));
+        let on_event = Closure::<dyn FnMut(Event)>::new(move |event: Event| {
+            let ids = if has_ids {
+                message_event_ids(&event)
+            } else {
+                None
+            };
+            let _ = sender.unbounded_send(StreamSignal::Refreshes(generation, refreshes, ids));
         });
         if let Err(err) =
             source.add_event_listener_with_callback(&name, on_event.as_ref().unchecked_ref())
@@ -195,10 +239,15 @@ struct RealtimeState {
     wanted: bool,
     /// Whether the stream was closed because the tab stayed hidden
     suspended: bool,
+    /// Whether the next opening of the stream is the first one after `Connect`: the
+    /// application has just loaded every list, there is nothing to catch up with
+    is_first_open: bool,
     connection: Option<Connection>,
     /// Generation of the current connection: signals of a previous one are stale
     generation: u64,
     pending_refreshes: Vec<Refresh>,
+    /// Changed notifications of the pending notifications refresh, `None` when unknown
+    pending_notification_ids: Option<Vec<NotificationId>>,
     reconnect_delay_ms: u32,
     debounce_timer: Fuse<TimeoutFuture>,
     reconnect_timer: Fuse<TimeoutFuture>,
@@ -228,7 +277,17 @@ impl RealtimeState {
         }
     }
 
-    fn add_refreshes(&mut self, refreshes: &[Refresh]) {
+    /// Add `refreshes` to the pending ones, `ids` being the changed items, `None` when unknown.
+    fn add_refreshes(&mut self, refreshes: &[Refresh], ids: Option<Vec<Uuid>>) {
+        if refreshes.contains(&Refresh::Notifications) {
+            let ids = ids.map(|ids| ids.into_iter().map(NotificationId).collect());
+            self.pending_notification_ids =
+                if self.pending_refreshes.contains(&Refresh::Notifications) {
+                    merge_event_ids(self.pending_notification_ids.take(), ids)
+                } else {
+                    ids
+                };
+        }
         for refresh in refreshes {
             if !self.pending_refreshes.contains(refresh) {
                 self.pending_refreshes.push(*refresh);
@@ -243,6 +302,7 @@ impl RealtimeState {
         match command {
             RealtimeCommand::Connect => {
                 self.wanted = true;
+                self.is_first_open = self.connection.is_none();
                 self.connect_if_wanted();
             }
             RealtimeCommand::Disconnect => {
@@ -260,13 +320,19 @@ impl RealtimeState {
                 self.set_connected(true);
                 self.reconnect_delay_ms = MIN_RECONNECT_DELAY_MS;
                 // Catch up with what changed while the stream was not open
-                self.add_refreshes(&ALL_REFRESHES);
+                if !std::mem::take(&mut self.is_first_open) {
+                    self.add_refreshes(&ALL_REFRESHES, None);
+                }
             }
-            StreamSignal::Refreshes(generation, refreshes) if generation == self.generation => {
-                self.add_refreshes(refreshes);
+            StreamSignal::Refreshes(generation, refreshes, ids)
+                if generation == self.generation =>
+            {
+                self.add_refreshes(refreshes, ids);
             }
             StreamSignal::Errored { generation, closed } if generation == self.generation => {
                 self.set_connected(false);
+                // Changes may be missed until the stream opens: it catches up then
+                self.is_first_open = false;
                 if closed {
                     debug!(
                         "Realtime event stream refused, retrying in {}ms",
@@ -293,7 +359,7 @@ impl RealtimeState {
                     self.connect_if_wanted();
                 } else if self.wanted && !self.ui_model.peek().is_realtime_connected {
                     // Polling skipped the hidden tab and no event refreshed it
-                    self.add_refreshes(&ALL_REFRESHES);
+                    self.add_refreshes(&ALL_REFRESHES, None);
                 }
             }
             // A signal of a previous connection
@@ -326,13 +392,16 @@ pub async fn realtime_service(
     let (signals, mut signals_rx) = unbounded::<StreamSignal>();
     listen_to_visibility(&signals);
 
-    let send_refresh = |refresh: Refresh| match refresh {
-        Refresh::Notifications => notification_service.send(NotificationCommand::Refresh),
-        Refresh::Tasks => task_service.send(TaskCommand::RefreshSyncedTasks),
-        Refresh::IntegrationConnections => {
-            integration_connection_service.send(IntegrationConnectionCommand::Refresh)
-        }
-    };
+    let send_refresh =
+        |refresh: Refresh, notification_ids: Option<Vec<NotificationId>>| match refresh {
+            Refresh::Notifications => {
+                notification_service.send(NotificationCommand::RefreshFromEvent(notification_ids))
+            }
+            Refresh::Tasks => task_service.send(TaskCommand::RefreshSyncedTasks),
+            Refresh::IntegrationConnections => {
+                integration_connection_service.send(IntegrationConnectionCommand::Refresh)
+            }
+        };
 
     let mut state = RealtimeState {
         url,
@@ -340,9 +409,11 @@ pub async fn realtime_service(
         ui_model,
         wanted: false,
         suspended: false,
+        is_first_open: false,
         connection: None,
         generation: 0,
         pending_refreshes: vec![],
+        pending_notification_ids: None,
         reconnect_delay_ms: MIN_RECONNECT_DELAY_MS,
         debounce_timer: Fuse::terminated(),
         reconnect_timer: Fuse::terminated(),
@@ -363,14 +434,20 @@ pub async fn realtime_service(
             signal = signals_rx.next() => match signal {
                 Some(signal) => {
                     if let Some(refresh) = state.handle_signal(signal) {
-                        send_refresh(refresh);
+                        send_refresh(refresh, None);
                     }
                 }
                 None => break,
             },
             _ = &mut state.debounce_timer => {
+                let mut notification_ids = state.pending_notification_ids.take();
                 for refresh in std::mem::take(&mut state.pending_refreshes) {
-                    send_refresh(refresh);
+                    let ids = if refresh == Refresh::Notifications {
+                        notification_ids.take()
+                    } else {
+                        None
+                    };
+                    send_refresh(refresh, ids);
                 }
             },
             _ = &mut state.reconnect_timer => state.connect_if_wanted(),
@@ -406,5 +483,30 @@ mod tests {
             refreshes_for(RealtimeEventKind::SlackBridgePendingActionsChanged),
             &[] as &[Refresh]
         );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_event_ids_reads_the_stream_event_data() {
+        assert_eq!(
+            event_ids(&format!(r#"{{"ids":["{}"]}}"#, Uuid::nil())),
+            Some(vec![Uuid::nil()])
+        );
+        assert_eq!(event_ids("{}"), None);
+        assert_eq!(event_ids("not json"), None);
+    }
+
+    #[wasm_bindgen_test]
+    fn test_merge_event_ids_unions_known_ids() {
+        assert_eq!(
+            merge_event_ids(Some(vec![1, 2]), Some(vec![2, 3])),
+            Some(vec![1, 2, 3])
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_merge_event_ids_is_unknown_once_any_is_unknown() {
+        assert_eq!(merge_event_ids(Some(vec![1]), None), None);
+        assert_eq!(merge_event_ids(None, Some(vec![1])), None);
+        assert_eq!(merge_event_ids::<i32>(None, None), None);
     }
 }

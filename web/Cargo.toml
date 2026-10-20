@@ -83,6 +83,7 @@ features = [
   "KeyboardEvent",
   "Location",
   "MediaQueryList",
+  "MessageEvent",
   "MouseEvent",
   "MouseEventInit",
   "Navigator",

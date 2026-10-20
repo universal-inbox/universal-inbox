@@ -52,7 +52,7 @@ fn enter_notification_section(section: NotificationSection) {
         if *CURRENT_NOTIFICATION_SECTION.peek() != section {
             *CURRENT_NOTIFICATION_SECTION.write() = section;
             UI_MODEL.write().selected_notification_index = None;
-            notification_service.send(NotificationCommand::Refresh);
+            notification_service.send(NotificationCommand::RefreshList);
         }
     });
 }

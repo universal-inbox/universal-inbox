@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 use chrono::{DateTime, Local, TimeDelta, TimeZone, Timelike, Utc};
 use dioxus::prelude::*;
 use futures_util::StreamExt;
+use js_sys::Date;
 use reqwest::Method;
 use strum::IntoEnumIterator;
 use url::Url;
@@ -34,7 +37,14 @@ use crate::{
 
 #[derive(Debug, PartialEq)]
 pub enum NotificationCommand {
+    /// Refetch the displayed list and the sidebar badge counts
     Refresh,
+    /// Refetch the displayed list only, when the counts cannot have changed (another
+    /// section, filter, page or order)
+    RefreshList,
+    /// A realtime event says notifications changed: `ids` of the changed ones, `None` when
+    /// unknown. Refreshes like `Refresh` unless the change is this tab's own.
+    RefreshFromEvent(Option<Vec<NotificationId>>),
     Sync(Option<NotificationSyncSourceKind>),
     DeleteFromNotification(NotificationWithTask),
     DeleteAll,
@@ -107,6 +117,67 @@ pub static CURRENT_NOTIFICATION_SECTION: GlobalSignal<NotificationSection> =
 pub static INBOX_COUNT: GlobalSignal<usize> = Signal::global(|| 0);
 pub static SNOOZED_COUNT: GlobalSignal<usize> = Signal::global(|| 0);
 
+/// How long the realtime event of a change made by this tab can take to come back.
+const LOCAL_CHANGE_TTL_MS: f64 = 10_000.0;
+/// Above this many changed notifications, a realtime event carries no ids (the API
+/// `realtime::scope::MAX_EVENT_IDS`).
+const MAX_EVENT_IDS: usize = 50;
+
+/// The changes this tab made recently: the API echoes their realtime events back to it, and
+/// the list is already up to date. Times are in milliseconds since the epoch.
+#[derive(Debug, Default)]
+struct LocalChanges {
+    /// Expiry time of each recently changed notification
+    notifications: HashMap<NotificationId, f64>,
+    /// Expiry time of a change of too many notifications for its event to carry their ids
+    bulk_change: Option<f64>,
+}
+
+impl LocalChanges {
+    fn prune(&mut self, now: f64) {
+        self.notifications.retain(|_, expires_at| *expires_at > now);
+        self.bulk_change = self.bulk_change.filter(|expires_at| *expires_at > now);
+    }
+
+    /// Record the notifications this tab just changed on the server.
+    fn record(&mut self, ids: &[NotificationId], now: f64) {
+        self.prune(now);
+        for id in ids {
+            self.notifications.insert(*id, now + LOCAL_CHANGE_TTL_MS);
+        }
+        if ids.len() > MAX_EVENT_IDS {
+            self.bulk_change = Some(now + LOCAL_CHANGE_TTL_MS);
+        }
+    }
+
+    /// Whether an event about `ids` (`None`: unknown) is the echo of this tab's own changes.
+    /// An event without ids is the echo of the pending bulk change, which it consumes.
+    fn is_own_change(&mut self, ids: Option<&[NotificationId]>, now: f64) -> bool {
+        self.prune(now);
+        match ids {
+            Some(ids) => {
+                !ids.is_empty() && ids.iter().all(|id| self.notifications.contains_key(id))
+            }
+            None => self.bulk_change.take().is_some(),
+        }
+    }
+}
+
+/// A displayed list fetched from the API, with the section and filters it was fetched for.
+struct FetchedList {
+    section: NotificationSection,
+    is_filtered: bool,
+    total: usize,
+}
+
+impl FetchedList {
+    /// The badge count the list gives (its `total`): its section's, when no source filter
+    /// narrows it.
+    fn section_count(&self) -> Option<(NotificationSection, usize)> {
+        (!self.is_filtered).then_some((self.section, self.total))
+    }
+}
+
 pub async fn notification_service(
     mut rx: UnboundedReceiver<NotificationCommand>,
     api_base_url: Url,
@@ -116,20 +187,36 @@ pub async fn notification_service(
     task_service: Coroutine<TaskCommand>,
     toast_service: Coroutine<ToastCommand>,
 ) {
+    let mut local_changes = LocalChanges::default();
     loop {
         let msg = rx.next().await;
         // Most commands change the inbox/snoozed badge counts: explicit refreshes (initial
         // load + periodic tick), syncs, and any action moving a notification between
-        // sections. Pure navigation (LoadAndSelect) and read-state (MarkAsRead, which keeps
-        // the notification in the inbox) do not.
-        let refresh_counts = !matches!(
+        // sections. Pure navigation (LoadAndSelect, RefreshList) and read-state (MarkAsRead,
+        // which keeps the notification in the inbox) do not.
+        // The list and the counts already reflect this tab's own changes
+        let is_own_change_event = matches!(
             msg,
-            None | Some(NotificationCommand::LoadAndSelect(_))
-                | Some(NotificationCommand::MarkAsRead(_))
+            Some(NotificationCommand::RefreshFromEvent(ref ids))
+                if local_changes.is_own_change(ids.as_deref(), Date::now())
         );
+        let refresh_counts = !is_own_change_event
+            && !matches!(
+                msg,
+                None | Some(NotificationCommand::LoadAndSelect(_))
+                    | Some(NotificationCommand::MarkAsRead(_))
+                    | Some(NotificationCommand::RefreshList)
+            );
+        // The displayed list, when refetched: its total is up to date
+        let mut fetched_list = None;
+        // The notifications the command changed on the server
+        let mut changed_ids: Vec<NotificationId> = vec![];
         match msg {
-            Some(NotificationCommand::Refresh) => {
-                refresh_notifications(
+            Some(NotificationCommand::RefreshFromEvent(_)) if is_own_change_event => {}
+            Some(NotificationCommand::Refresh)
+            | Some(NotificationCommand::RefreshList)
+            | Some(NotificationCommand::RefreshFromEvent(_)) => {
+                fetched_list = refresh_notifications(
                     &api_base_url,
                     notifications_page,
                     notification_filters,
@@ -152,8 +239,9 @@ pub async fn notification_service(
                     "Successfully synced notifications",
                 )
                 .await;
-                if result.is_ok() {
-                    refresh_notifications(
+                if let Ok(notifications) = result {
+                    changed_ids = notifications.iter().map(|notif| notif.id).collect();
+                    fetched_list = refresh_notifications(
                         &api_base_url,
                         notifications_page,
                         notification_filters,
@@ -163,33 +251,26 @@ pub async fn notification_service(
                 }
             }
             Some(NotificationCommand::DeleteFromNotification(ref notification)) => {
-                if let Some(ref task) = notification.task {
-                    if notification.is_built_from_task() {
-                        delete_task(notification.id, task.id, notifications_page, &task_service)
-                            .await;
-                    } else {
-                        delete_notification(
-                            &api_base_url,
-                            notification.id,
-                            notifications_page,
-                            ui_model,
-                            &toast_service,
-                        )
-                        .await;
-                    }
-                } else {
-                    delete_notification(
-                        &api_base_url,
-                        notification.id,
-                        notifications_page,
-                        ui_model,
-                        &toast_service,
-                    )
-                    .await;
+                if let Some(ref task) = notification.task
+                    && notification.is_built_from_task()
+                {
+                    delete_task(notification.id, task.id, notifications_page, &task_service).await;
+                    // The task service deletes it: assume it succeeds
+                    changed_ids.push(notification.id);
+                } else if delete_notification(
+                    &api_base_url,
+                    notification.id,
+                    notifications_page,
+                    ui_model,
+                    &toast_service,
+                )
+                .await
+                {
+                    changed_ids.push(notification.id);
                 }
             }
             Some(NotificationCommand::DeleteAll) => {
-                delete_all_notifications(
+                (changed_ids, fetched_list) = delete_all_notifications(
                     &api_base_url,
                     notifications_page,
                     notification_filters,
@@ -203,7 +284,7 @@ pub async fn notification_service(
                     .write()
                     .remove_element(|notif| notif.id != notification_id);
 
-                let _result: Result<Option<Notification>> = call_api_and_notify(
+                let result: Result<Option<Notification>> = call_api_and_notify(
                     Method::PATCH,
                     &api_base_url,
                     &format!("notifications/{notification_id}"),
@@ -217,6 +298,9 @@ pub async fn notification_service(
                     "Successfully unsubscribed from notification",
                 )
                 .await;
+                if result.is_ok() {
+                    changed_ids.push(notification_id);
+                }
             }
             Some(NotificationCommand::Snooze(notification_id)) => {
                 let snoozed_time = compute_snoozed_until(Local::now(), 1, 6);
@@ -225,7 +309,7 @@ pub async fn notification_service(
                     .write()
                     .remove_element(|notif| notif.id != notification_id);
 
-                let _result: Result<Option<Notification>> = call_api_and_notify(
+                let result: Result<Option<Notification>> = call_api_and_notify(
                     Method::PATCH,
                     &api_base_url,
                     &format!("notifications/{notification_id}"),
@@ -239,6 +323,9 @@ pub async fn notification_service(
                     "Successfully snoozed notification",
                 )
                 .await;
+                if result.is_ok() {
+                    changed_ids.push(notification_id);
+                }
             }
             Some(NotificationCommand::Unsnooze(notification_id)) => {
                 notifications_page
@@ -248,7 +335,7 @@ pub async fn notification_service(
                 // Setting `snoozed_until` to the past brings the notification back into
                 // the inbox (the inbox filter keeps `snoozed_until <= now`) and out of
                 // the snoozed list (which keeps `snoozed_until > now`).
-                let _result: Result<Option<Notification>> = call_api_and_notify(
+                let result: Result<Option<Notification>> = call_api_and_notify(
                     Method::PATCH,
                     &api_base_url,
                     &format!("notifications/{notification_id}"),
@@ -262,13 +349,16 @@ pub async fn notification_service(
                     "Successfully unsnoozed notification",
                 )
                 .await;
+                if result.is_ok() {
+                    changed_ids.push(notification_id);
+                }
             }
             Some(NotificationCommand::Undelete(notification_id)) => {
                 notifications_page
                     .write()
                     .remove_element(|notif| notif.id != notification_id);
 
-                let _result: Result<Option<Notification>> = call_api_and_notify(
+                let result: Result<Option<Notification>> = call_api_and_notify(
                     Method::PATCH,
                     &api_base_url,
                     &format!("notifications/{notification_id}"),
@@ -282,6 +372,9 @@ pub async fn notification_service(
                     "Successfully restored notification",
                 )
                 .await;
+                if result.is_ok() {
+                    changed_ids.push(notification_id);
+                }
             }
             Some(NotificationCommand::LoadAndSelect(notification_id)) => {
                 load_and_select_notification(
@@ -306,6 +399,7 @@ pub async fn notification_service(
                 )
                 .await;
                 if result.is_ok() {
+                    changed_ids.push(notification_id);
                     let mut page = notifications_page.write();
                     if let Some(notif) = page.content.iter_mut().find(|n| n.id == notification_id) {
                         notif.status = NotificationStatus::Read;
@@ -322,6 +416,8 @@ pub async fn notification_service(
                         .remove_element(|notif| notif.id != notification.id);
 
                     task_service.send(TaskCommand::Complete(task.id));
+                    // The task service completes it: assume it succeeds
+                    changed_ids.push(notification.id);
                 }
             }
             Some(NotificationCommand::PlanTask(ref notification, task_id, parameters)) => {
@@ -330,13 +426,15 @@ pub async fn notification_service(
                     .remove_element(|notif| notif.id != notification.id);
 
                 task_service.send(TaskCommand::Plan(task_id, parameters));
+                // The task service plans it: assume it succeeds
+                changed_ids.push(notification.id);
             }
             Some(NotificationCommand::CreateTaskWithDetaultsFromNotification(ref notification)) => {
                 notifications_page
                     .write()
                     .remove_element(|notif| notif.id != notification.id);
 
-                let _result: Result<Option<NotificationWithTask>> = call_api_and_notify(
+                let result: Result<Option<NotificationWithTask>> = call_api_and_notify(
                     Method::POST,
                     &api_base_url,
                     &format!("notifications/{}/task", notification.id),
@@ -347,13 +445,16 @@ pub async fn notification_service(
                     "Task successfully created",
                 )
                 .await;
+                if result.is_ok() {
+                    changed_ids.push(notification.id);
+                }
             }
             Some(NotificationCommand::CreateTaskFromNotification(ref notification, parameters)) => {
                 notifications_page
                     .write()
                     .remove_element(|notif| notif.id != notification.id);
 
-                let _result: Result<Option<NotificationWithTask>> = call_api_and_notify(
+                let result: Result<Option<NotificationWithTask>> = call_api_and_notify(
                     Method::POST,
                     &api_base_url,
                     &format!("notifications/{}/task", notification.id),
@@ -364,13 +465,16 @@ pub async fn notification_service(
                     "Task successfully created",
                 )
                 .await;
+                if result.is_ok() {
+                    changed_ids.push(notification.id);
+                }
             }
             Some(NotificationCommand::LinkNotificationWithTask(notification_id, task_id)) => {
                 notifications_page
                     .write()
                     .remove_element(|notif| notif.id != notification_id);
 
-                let _result: Result<Option<NotificationWithTask>> = call_api_and_notify(
+                let result: Result<Option<NotificationWithTask>> = call_api_and_notify(
                     Method::PATCH,
                     &api_base_url,
                     &format!("notifications/{notification_id}"),
@@ -385,9 +489,12 @@ pub async fn notification_service(
                     "Notification successfully linked",
                 )
                 .await;
+                if result.is_ok() {
+                    changed_ids.push(notification_id);
+                }
             }
             Some(NotificationCommand::AcceptInvitation(notification_id)) => {
-                patch_invitation(
+                let answered = patch_invitation(
                     notifications_page,
                     notification_id,
                     &api_base_url,
@@ -396,9 +503,10 @@ pub async fn notification_service(
                     toast_service,
                 )
                 .await;
+                changed_ids.extend(answered.then_some(notification_id));
             }
             Some(NotificationCommand::DeclineInvitation(notification_id)) => {
-                patch_invitation(
+                let answered = patch_invitation(
                     notifications_page,
                     notification_id,
                     &api_base_url,
@@ -407,9 +515,10 @@ pub async fn notification_service(
                     toast_service,
                 )
                 .await;
+                changed_ids.extend(answered.then_some(notification_id));
             }
             Some(NotificationCommand::TentativelyAcceptInvitation(notification_id)) => {
-                patch_invitation(
+                let answered = patch_invitation(
                     notifications_page,
                     notification_id,
                     &api_base_url,
@@ -418,19 +527,25 @@ pub async fn notification_service(
                     toast_service,
                 )
                 .await;
+                changed_ids.extend(answered.then_some(notification_id));
             }
             None => {}
         }
+        local_changes.record(&changed_ids, Date::now());
 
         if refresh_counts {
-            maybe_refill_current_page(
+            if let Some(refilled_list) = maybe_refill_current_page(
                 &api_base_url,
                 notifications_page,
                 notification_filters,
                 ui_model,
             )
-            .await;
-            refresh_notification_counts(&api_base_url, ui_model).await;
+            .await
+            {
+                fetched_list = Some(refilled_list);
+            }
+            let section_count = fetched_list.as_ref().and_then(FetchedList::section_count);
+            refresh_notification_counts(&api_base_url, ui_model, section_count).await;
         }
     }
 }
@@ -438,19 +553,19 @@ pub async fn notification_service(
 /// When more than half of the current page's notifications have been removed (deleted,
 /// snoozed, ...) and there are further pages to pull from, refetch the current page to
 /// refill the list. Skips the last page (nothing to pull up) and keeps the currently
-/// selected notification selected across the refetch.
+/// selected notification selected across the refetch. Returns the list it refetched.
 async fn maybe_refill_current_page(
     api_base_url: &Url,
     notifications_page: Signal<Page<NotificationWithTask>>,
     notification_filters: Signal<NotificationFilters>,
     mut ui_model: Signal<UniversalInboxUIModel>,
-) {
+) -> Option<FetchedList> {
     let (per_page, pages_count, len) = {
         let page = notifications_page.read();
         (page.per_page, page.pages_count, page.content.len())
     };
     if per_page == 0 || pages_count <= 1 {
-        return;
+        return None;
     }
 
     let offset = match notification_filters.read().current_page_token {
@@ -464,7 +579,7 @@ async fn maybe_refill_current_page(
     let more_than_half_removed = len * 2 < per_page;
 
     if is_last_page || !more_than_half_removed {
-        return;
+        return None;
     }
 
     // Preserve the selected notification across the refetch by remembering its id.
@@ -473,7 +588,7 @@ async fn maybe_refill_current_page(
         .selected_notification_index
         .and_then(|index| notifications_page.read().content.get(index).map(|n| n.id));
 
-    refresh_notifications(
+    let fetched_list = refresh_notifications(
         api_base_url,
         notifications_page,
         notification_filters,
@@ -490,6 +605,7 @@ async fn maybe_refill_current_page(
     {
         ui_model.write().selected_notification_index = Some(index);
     }
+    fetched_list
 }
 
 /// Build the status / snooze query parameters for a section's notification list.
@@ -510,12 +626,15 @@ fn section_list_parameters(section: NotificationSection) -> Vec<(&'static str, S
     }
 }
 
+/// Fetch the displayed list, returning it when it succeeded.
 async fn refresh_notifications(
     api_base_url: &Url,
     mut notifications_page: Signal<Page<NotificationWithTask>>,
     notification_filters: Signal<NotificationFilters>,
     ui_model: Signal<UniversalInboxUIModel>,
-) {
+) -> Option<FetchedList> {
+    let section = CURRENT_NOTIFICATION_SECTION();
+    let is_filtered = notification_filters().is_filtered();
     let source_filters: Vec<String> = notification_filters()
         .notification_source_kind_filters
         .iter()
@@ -523,7 +642,7 @@ async fn refresh_notifications(
         .map(|f| f.kind.to_string())
         .collect();
 
-    let mut parameters = section_list_parameters(CURRENT_NOTIFICATION_SECTION());
+    let mut parameters = section_list_parameters(section);
     parameters.push(("with_tasks", "true".to_string()));
     parameters.push(("order_by", notification_filters().sort_by.to_string()));
     parameters.push(("sources", source_filters.join(",")));
@@ -542,18 +661,34 @@ async fn refresh_notifications(
     )
     .await;
 
-    if let Ok(new_notifications_page) = result {
-        *notifications_page.write() = new_notifications_page;
-    }
+    let new_notifications_page = result.ok()?;
+    let total = new_notifications_page.total;
+    *notifications_page.write() = new_notifications_page;
+    Some(FetchedList {
+        section,
+        is_filtered,
+        total,
+    })
 }
 
 /// Refresh the inbox and snoozed sidebar badge counts independently of the currently
-/// displayed list, so both badges stay correct on any section.
-async fn refresh_notification_counts(api_base_url: &Url, ui_model: Signal<UniversalInboxUIModel>) {
+/// displayed list, so both badges stay correct on any section. `section_count`: a section
+/// whose count is already known, from the list just fetched, and is not fetched again.
+async fn refresh_notification_counts(
+    api_base_url: &Url,
+    ui_model: Signal<UniversalInboxUIModel>,
+    section_count: Option<(NotificationSection, usize)>,
+) {
     for (section, mut count_signal) in [
         (NotificationSection::Inbox, INBOX_COUNT.signal()),
         (NotificationSection::Snoozed, SNOOZED_COUNT.signal()),
     ] {
+        if let Some((counted_section, count)) = section_count
+            && counted_section == section
+        {
+            *count_signal.write() = count;
+            continue;
+        }
         let mut parameters = section_list_parameters(section);
         parameters.push(("trigger_sync", "false".to_string()));
         let filters = serde_urlencoded::to_string(&parameters).unwrap_or_default();
@@ -628,18 +763,19 @@ async fn load_and_select_notification(
     }
 }
 
+/// Delete a notification, returning whether it succeeded.
 async fn delete_notification(
     api_base_url: &Url,
     notification_id: NotificationId,
     mut notifications_page: Signal<Page<NotificationWithTask>>,
     ui_model: Signal<UniversalInboxUIModel>,
     toast_service: &Coroutine<ToastCommand>,
-) {
+) -> bool {
     notifications_page
         .write()
         .remove_element(|notif| notif.id != notification_id);
 
-    let _result: Result<Option<Notification>, anyhow::Error> = call_api_and_notify(
+    let result: Result<Option<Notification>, anyhow::Error> = call_api_and_notify(
         Method::PATCH,
         api_base_url,
         &format!("notifications/{notification_id}"),
@@ -653,6 +789,7 @@ async fn delete_notification(
         "Successfully deleted notification",
     )
     .await;
+    result.is_ok()
 }
 
 async fn delete_task(
@@ -693,13 +830,14 @@ where
         .into()
 }
 
+/// Delete the inbox notifications, returning the deleted ones and the list refetched after.
 async fn delete_all_notifications(
     api_base_url: &Url,
     mut notifications_page: Signal<Page<NotificationWithTask>>,
     notification_filters: Signal<NotificationFilters>,
     ui_model: Signal<UniversalInboxUIModel>,
     toast_service: &Coroutine<ToastCommand>,
-) {
+) -> (Vec<NotificationId>, Option<FetchedList>) {
     // Get current filter parameters to match what's currently visible
     let source_filters = notification_filters().selected();
 
@@ -716,7 +854,7 @@ async fn delete_all_notifications(
     // Clear the UI immediately for better UX
     notifications_page.write().content.clear();
 
-    let result: Result<serde_json::Value> = call_api_and_notify(
+    let result: Result<Vec<Notification>> = call_api_and_notify(
         Method::PATCH,
         api_base_url,
         "notifications",
@@ -728,18 +866,25 @@ async fn delete_all_notifications(
     )
     .await;
 
-    if result.is_ok() {
-        // Refresh to make sure UI is in sync
-        refresh_notifications(
-            api_base_url,
-            notifications_page,
-            notification_filters,
-            ui_model,
-        )
-        .await;
-    }
+    let Ok(deleted_notifications) = result else {
+        return (vec![], None);
+    };
+    let deleted_ids = deleted_notifications
+        .into_iter()
+        .map(|notification| notification.id)
+        .collect();
+    // Refresh to make sure UI is in sync
+    let fetched_list = refresh_notifications(
+        api_base_url,
+        notifications_page,
+        notification_filters,
+        ui_model,
+    )
+    .await;
+    (deleted_ids, fetched_list)
 }
 
+/// Answer an invitation, returning whether it succeeded.
 async fn patch_invitation(
     mut notifications_page: Signal<Page<NotificationWithTask>>,
     notification_id: NotificationId,
@@ -747,7 +892,7 @@ async fn patch_invitation(
     response_status: GoogleCalendarEventAttendeeResponseStatus,
     ui_model: Signal<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
-) {
+) -> bool {
     // An attendee reply (METHOD:REPLY) is not an invitation to answer
     let has_invitation = notifications_page.read().content.iter().any(|notif| {
         notif.id == notification_id
@@ -757,7 +902,7 @@ async fn patch_invitation(
             )
     });
     if !has_invitation {
-        return;
+        return false;
     }
 
     notifications_page
@@ -782,7 +927,7 @@ async fn patch_invitation(
         }
     };
 
-    let _result: Result<Option<Notification>> = call_api_and_notify(
+    let result: Result<Option<Notification>> = call_api_and_notify(
         Method::PATCH,
         api_base_url,
         &format!("notifications/{notification_id}/invitation"),
@@ -793,6 +938,7 @@ async fn patch_invitation(
         success_message,
     )
     .await;
+    result.is_ok()
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -963,6 +1109,94 @@ mod tests {
                 ("status", "Unread,Read".to_string()),
                 ("only_snoozed_notifications", "true".to_string()),
             ]
+        );
+    }
+
+    fn notification_id(n: u128) -> NotificationId {
+        NotificationId(uuid::Uuid::from_u128(n))
+    }
+
+    #[wasm_bindgen_test]
+    fn test_local_changes_skip_echo_of_own_changes() {
+        let mut local_changes = LocalChanges::default();
+        local_changes.record(&[notification_id(1)], 0.0);
+        local_changes.record(&[notification_id(2)], 0.0);
+
+        assert!(local_changes.is_own_change(Some(&[notification_id(1)]), 1_000.0));
+        assert!(
+            local_changes.is_own_change(Some(&[notification_id(1), notification_id(2)]), 1_000.0)
+        );
+        // A change made elsewhere
+        assert!(
+            !local_changes.is_own_change(Some(&[notification_id(1), notification_id(3)]), 1_000.0)
+        );
+        assert!(!local_changes.is_own_change(None, 1_000.0));
+        assert!(!local_changes.is_own_change(Some(&[]), 1_000.0));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_local_changes_expire() {
+        let mut local_changes = LocalChanges::default();
+        local_changes.record(&[notification_id(1)], 0.0);
+
+        assert!(!local_changes.is_own_change(Some(&[notification_id(1)]), LOCAL_CHANGE_TTL_MS));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_local_changes_are_pruned_when_recording() {
+        let mut local_changes = LocalChanges::default();
+        local_changes.record(&[notification_id(1)], 0.0);
+        local_changes.record(&[], LOCAL_CHANGE_TTL_MS);
+
+        assert!(local_changes.notifications.is_empty());
+    }
+
+    #[wasm_bindgen_test]
+    fn test_local_changes_of_too_many_notifications_skip_the_next_event_without_ids_once() {
+        let ids: Vec<NotificationId> = (0..=MAX_EVENT_IDS as u128).map(notification_id).collect();
+        let mut local_changes = LocalChanges::default();
+        local_changes.record(&ids, 0.0);
+
+        assert!(local_changes.is_own_change(None, 1_000.0));
+        assert!(!local_changes.is_own_change(None, 1_000.0));
+        // An event with ids is judged by its ids only
+        assert!(!local_changes.is_own_change(Some(&[notification_id(1_000)]), 1_000.0));
+
+        local_changes.record(&ids, 0.0);
+        assert!(!local_changes.is_own_change(None, LOCAL_CHANGE_TTL_MS));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_local_changes_of_few_notifications_do_not_skip_events_without_ids() {
+        let ids: Vec<NotificationId> = (0..MAX_EVENT_IDS as u128).map(notification_id).collect();
+        let mut local_changes = LocalChanges::default();
+        local_changes.record(&ids, 0.0);
+        // A sync or a delete all changing nothing
+        local_changes.record(&[], 0.0);
+
+        assert!(local_changes.is_own_change(Some(&ids), 1_000.0));
+        assert!(!local_changes.is_own_change(None, 1_000.0));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_fetched_list_section_count() {
+        let list = FetchedList {
+            section: NotificationSection::Snoozed,
+            is_filtered: false,
+            total: 3,
+        };
+        assert_eq!(
+            list.section_count(),
+            Some((NotificationSection::Snoozed, 3))
+        );
+        // A filtered list counts only some sources
+        assert_eq!(
+            FetchedList {
+                is_filtered: true,
+                ..list
+            }
+            .section_count(),
+            None
         );
     }
 
