@@ -13,7 +13,7 @@ use universal_inbox::{
     user::UserId,
 };
 
-use crate::observability::attr;
+use crate::observability::{ErrorChain, attr};
 use crate::{
     integrations::slack::SlackService,
     universal_inbox::{
@@ -249,7 +249,9 @@ async fn run_universal_inbox_job(
             current_span.record(attr::ERROR_TYPE, err.error_type());
             error!(
                 { attr::JOB_ID } = task_id.to_string(),
-                "Failed to execute job: {err:?}"
+                error = &err as &dyn std::error::Error,
+                { attr::ERROR_CHAIN } = %ErrorChain(&err),
+                "Failed to execute job"
             );
             Err(err)
         }

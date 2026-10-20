@@ -27,7 +27,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use universal_inbox::user::REAUTHENTICATION_REQUIRED_CODE;
 
 use crate::{
-    observability::attr,
+    observability::{ErrorChain, attr},
     universal_inbox::{UniversalInboxError, UpstreamErrorKind},
 };
 
@@ -120,7 +120,8 @@ impl ResponseError for UniversalInboxError {
         let correlation_id = if self.status_code().is_server_error() {
             let correlation_id = correlation_id();
             tracing::error!(
-                error = ?self,
+                error = self as &dyn std::error::Error,
+                { attr::ERROR_CHAIN } = %ErrorChain(self),
                 { attr::CORRELATION_ID } = correlation_id.as_deref(),
                 "Request failed with a server error"
             );

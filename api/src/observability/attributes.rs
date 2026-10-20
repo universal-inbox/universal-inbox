@@ -18,6 +18,9 @@
 pub const USER_ID: &str = "user.id";
 pub const ERROR_TYPE: &str = "error.type";
 pub const ERROR_MESSAGE: &str = "error.message";
+/// Message and causes of an error logged as an `error` value: the JSON logs and
+/// the OTLP log bridge only print the `error` value's own message.
+pub const ERROR_CHAIN: &str = "error.chain";
 // Trace id handed to clients on server errors to match a report with logs
 pub const CORRELATION_ID: &str = "correlation.id";
 pub const HTTP_REQUEST_METHOD: &str = "http.request.method";

@@ -53,8 +53,8 @@ pub mod spans;
 pub use attributes as attr;
 pub use sentry::init_sentry;
 pub use spans::{
-    RecordSpanError, http_client_span, instrument_client_call, instrument_client_call_expecting,
-    redis_client_span,
+    ErrorChain, RecordSpanError, http_client_span, instrument_client_call,
+    instrument_client_call_expecting, redis_client_span,
 };
 
 use redaction::{RedactingLogProcessor, RedactingSpanProcessor};
@@ -922,6 +922,32 @@ mod redaction_tests {
         assert!(output.contains(redaction::REDACTED_JWT), "{output}");
         assert!(!output.contains("john.doe@example.com"), "{output}");
         assert!(!output.contains("eyJhbGciOiJIUzI1NiJ9"), "{output}");
+    }
+
+    #[test]
+    fn test_json_log_line_of_a_boundary_error_has_its_cause_chain() {
+        let buffer = SharedBuffer::default();
+        let subscriber =
+            Registry::default().with(build_fmt_layer_with_writer(LogFormat::Json, buffer.clone()));
+
+        tracing::subscriber::with_default(subscriber, || {
+            let span =
+                tracing::info_span!("boundary", { attr::ERROR_TYPE } = tracing::field::Empty);
+            let _guard = span.enter();
+            let error = anyhow::Error::new(io::Error::other("disk full"))
+                .context("Failed to sync notifications");
+            let _ = Err::<(), _>(error).record_span_error();
+        });
+
+        let output = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+        let line: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+        // `error` alone only has the top-level message.
+        assert_eq!(line["error"], "Failed to sync notifications", "{output}");
+        assert_eq!(
+            line[attr::ERROR_CHAIN],
+            "Failed to sync notifications: disk full",
+            "{output}"
+        );
     }
 
     #[rstest]

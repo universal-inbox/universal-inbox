@@ -8,7 +8,7 @@ use universal_inbox::{
 };
 
 use crate::observability::RecordSpanError;
-use crate::observability::attr;
+use crate::observability::{ErrorChain, attr};
 use crate::universal_inbox::{
     UniversalInboxError, notification::service::NotificationService, task::service::TaskService,
 };
@@ -46,7 +46,11 @@ pub async fn sync_notifications_for_all_users(
         match &result {
             Ok(_) => info!("{source_kind_string} notifications successfully synced"),
             Err(err) => {
-                error!("Failed to sync {source_kind_string} notifications: {err:?}")
+                error!(
+                    error = err as &dyn std::error::Error,
+                    { attr::ERROR_CHAIN } = %ErrorChain(err),
+                    "Failed to sync {source_kind_string} notifications"
+                )
             }
         };
 
@@ -87,7 +91,11 @@ pub async fn sync_tasks_for_all_users(
         match &result {
             Ok(_) => info!("{source_kind_string} tasks successfully synced"),
             Err(err) => {
-                error!("Failed to sync {source_kind_string} tasks: {err:?}")
+                error!(
+                    error = err as &dyn std::error::Error,
+                    { attr::ERROR_CHAIN } = %ErrorChain(err),
+                    "Failed to sync {source_kind_string} tasks"
+                )
             }
         };
 

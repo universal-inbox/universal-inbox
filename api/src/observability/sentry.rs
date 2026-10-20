@@ -4,8 +4,9 @@
 //! It composes with the OTLP and stdout layers: `ERROR` events become Sentry
 //! events, `WARN` events breadcrumbs attached to the next event, and lower
 //! levels (which may carry content) are never sent. Panics are reported by the
-//! Sentry panic integration, with their stack trace. No performance traces:
-//! the OTLP backend already has them.
+//! Sentry panic integration, with their stack trace; other events carry the
+//! stack trace of the code that logged them. No performance traces: the OTLP
+//! backend already has them.
 //!
 //! Same safety net as the OTLP export (see [`redaction`]): every string of an
 //! event or breadcrumb has its email addresses and JWTs redacted before it is
@@ -42,20 +43,31 @@ pub fn init_sentry(
         .expose_secret()
         .parse::<sentry::types::Dsn>()
         .expect("Failed to parse the Sentry DSN `application.observability.sentry.dsn`");
+
+    let mut options = client_options(settings, default_environment);
+    options.dsn = Some(dsn);
+    Some(sentry::init(options))
+}
+
+/// The client options of [`init_sentry`], DSN aside.
+///
+/// `attach_stacktrace` adds the current stack trace to every event that has
+/// none: `error!` events then show the frames (with file:line, see the release
+/// profile) of the code that logged them.
+fn client_options(settings: &SentrySettings, default_environment: &str) -> sentry::ClientOptions {
     let environment = settings
         .environment
         .clone()
         .unwrap_or_else(|| default_environment.to_string());
 
-    let mut options = sentry::ClientOptions::new()
+    sentry::ClientOptions::new()
         .maybe_release(sentry::release_name!())
         .environment(environment)
         .sample_rate(settings.sample_rate)
         .send_default_pii(settings.send_default_pii)
-        .before_send(redact_event)
-        .before_breadcrumb(redact_breadcrumb);
-    options.dsn = Some(dsn);
-    Some(sentry::init(options))
+        .attach_stacktrace(true)
+        .before_send(before_send)
+        .before_breadcrumb(redact_breadcrumb)
 }
 
 /// The layer sending `tracing` events to Sentry (see [`event_filter`]). It
@@ -87,6 +99,31 @@ fn event_filter(metadata: &Metadata<'_>) -> EventFilter {
         Level::WARN => EventFilter::Breadcrumb,
         _ => EventFilter::Ignore,
     }
+}
+
+fn before_send(
+    mut event: sentry::protocol::Event<'static>,
+) -> Option<sentry::protocol::Event<'static>> {
+    group_telemetry_export_errors(&mut event);
+    redact_event(event)
+}
+
+/// Target prefix of the OpenTelemetry crates (`opentelemetry_sdk`,
+/// `opentelemetry_otlp`...), the event's `logger` in Sentry.
+const OPENTELEMETRY_TARGET_PREFIX: &str = "opentelemetry";
+
+/// OpenTelemetry export failures are telemetry pipeline failures whose
+/// message varies with the gRPC code or transport detail: group them into one
+/// issue per exporter (the event's target) instead of one per message.
+fn group_telemetry_export_errors(event: &mut sentry::protocol::Event<'static>) {
+    let Some(logger) = event
+        .logger
+        .clone()
+        .filter(|logger| logger.starts_with(OPENTELEMETRY_TARGET_PREFIX))
+    else {
+        return;
+    };
+    event.fingerprint = vec!["opentelemetry-export".into(), logger.into()].into();
 }
 
 fn redact_event(
@@ -125,6 +162,7 @@ mod tests {
     use tracing_subscriber::{Registry, layer::SubscriberExt};
 
     use super::*;
+    use crate::observability::{ErrorChain, attr};
 
     const EMAIL: &str = "john.doe@example.com";
     const JWT: &str = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl";
@@ -168,39 +206,175 @@ mod tests {
         assert_eq!(redacted.extra["detail"], expected);
     }
 
+    fn test_settings() -> SentrySettings {
+        SentrySettings {
+            dsn: "".into(),
+            environment: Some("test".to_string()),
+            sample_rate: 1.0,
+            send_default_pii: false,
+        }
+    }
+
     /// Events built by the SDK itself (default integrations: contexts,
-    /// stack traces, panic) and by the tracing layer, captured before
-    /// `before_send`.
-    fn sdk_events() -> Vec<sentry::protocol::Event<'static>> {
-        let options = sentry::apply_defaults(
-            sentry::ClientOptions::new()
-                .release("universal-inbox-api@0.1.0")
-                .environment("test"),
-        );
+    /// stack traces, panic) and by the tracing layer, with the production
+    /// [`client_options`], captured before `before_send`.
+    fn sdk_events(emit: impl FnOnce()) -> Vec<sentry::protocol::Event<'static>> {
+        let mut options = sentry::apply_defaults(client_options(&test_settings(), "unused"));
+        options.before_send = None;
+        options.before_breadcrumb = None;
         sentry::test::with_captured_events_options(
             || {
                 let subscriber = Registry::default().with(build_sentry_layer());
-                tracing::subscriber::with_default(subscriber, || {
-                    tracing::warn!(target: "universal_inbox_api", "a warning");
-                    let error = std::io::Error::other("disk full");
-                    tracing::error!(
-                        target: "universal_inbox_api",
-                        error = &error as &dyn std::error::Error,
-                        "sync failed"
-                    );
-                });
-                // The panic integration's hook reports to the current hub.
-                let _ = std::panic::catch_unwind(|| panic!("boom"));
+                tracing::subscriber::with_default(subscriber, emit);
             },
             options,
         )
     }
 
+    /// A warning, an error logged as an error value, an error logged as a
+    /// message, then a panic.
+    fn app_events() -> Vec<sentry::protocol::Event<'static>> {
+        sdk_events(|| {
+            tracing::warn!(target: "universal_inbox_api", "a warning");
+            let error = std::io::Error::other("disk full");
+            tracing::error!(
+                target: "universal_inbox_api",
+                error = &error as &dyn std::error::Error,
+                "sync failed"
+            );
+            tracing::error!(target: "universal_inbox_api", "Database unavailable");
+            // The panic integration's hook reports to the current hub.
+            let _ = std::panic::catch_unwind(|| panic!("boom"));
+        })
+    }
+
+    fn panic_exception<'a>(
+        event: &'a sentry::protocol::Event<'static>,
+    ) -> Option<&'a sentry::protocol::Exception> {
+        event
+            .exception
+            .iter()
+            .find(|e| e.mechanism.as_ref().is_some_and(|m| m.ty == "panic"))
+    }
+
+    /// Whether `stacktrace` has a frame of this crate's code.
+    fn has_app_frame(stacktrace: Option<&sentry::protocol::Stacktrace>) -> bool {
+        stacktrace.is_some_and(|stacktrace| {
+            stacktrace.frames.iter().any(|frame| {
+                frame
+                    .function
+                    .as_deref()
+                    .is_some_and(|function| function.contains("universal_inbox_api"))
+            })
+        })
+    }
+
+    #[test]
+    fn test_error_events_carry_the_stack_trace_of_the_caller() {
+        let events = app_events();
+
+        assert_eq!(events.len(), 3, "{events:#?}");
+        // The panic integration attaches its own stack trace.
+        for event in events
+            .iter()
+            .filter(|event| panic_exception(event).is_none())
+        {
+            let stack_traces = event
+                .exception
+                .iter()
+                .map(|exception| exception.stacktrace.as_ref())
+                .chain(
+                    event
+                        .threads
+                        .iter()
+                        .map(|thread| thread.stacktrace.as_ref()),
+                );
+            assert!(stack_traces.into_iter().any(has_app_frame), "{event:#?}");
+        }
+    }
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("Failed to sync notifications")]
+    struct SyncError(#[source] std::io::Error);
+
+    #[test]
+    fn test_error_value_becomes_an_exception_with_its_type_and_cause_chain() {
+        let events = sdk_events(|| {
+            let error = SyncError(std::io::Error::other("disk full"));
+            tracing::error!(
+                target: "universal_inbox_api",
+                error = &error as &dyn std::error::Error,
+                { attr::ERROR_CHAIN } = %ErrorChain(&error),
+                "Job failed"
+            );
+        });
+
+        assert_eq!(events.len(), 1, "{events:#?}");
+        // The chain is a plain field, not another exception.
+        let contexts = serde_json::to_string(&events[0].contexts).unwrap();
+        assert!(
+            contexts.contains("Failed to sync notifications: disk full"),
+            "{contexts}"
+        );
+        let exceptions: Vec<_> = events[0]
+            .exception
+            .iter()
+            .map(|exception| (exception.ty.as_str(), exception.value.as_deref()))
+            .collect();
+        // Innermost cause first (`io::Error`'s type is its `Debug` variant),
+        // the logged message as a synthetic wrapper last.
+        assert_eq!(
+            exceptions,
+            vec![
+                ("Custom", Some("disk full")),
+                ("SyncError", Some("Failed to sync notifications")),
+                ("tracing::error!", Some("Job failed")),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_before_send_groups_opentelemetry_errors_by_exporter() {
+        let events = sdk_events(|| {
+            tracing::error!(
+                target: "opentelemetry_sdk",
+                "BatchSpanProcessor.ExportError: status: Unavailable"
+            );
+            tracing::error!(
+                target: "opentelemetry_sdk",
+                "BatchSpanProcessor.ExportError: transport error"
+            );
+            tracing::error!(target: "opentelemetry_otlp", "Export failed");
+            tracing::error!(target: "universal_inbox_api", "Database unavailable");
+        });
+
+        let fingerprints: Vec<Vec<String>> = events
+            .into_iter()
+            .map(|event| before_send(event).expect("the event is kept"))
+            .map(|event| {
+                event
+                    .fingerprint
+                    .iter()
+                    .map(|part| part.to_string())
+                    .collect()
+            })
+            .collect();
+        assert_eq!(
+            fingerprints,
+            vec![
+                vec!["opentelemetry-export", "opentelemetry_sdk"],
+                vec!["opentelemetry-export", "opentelemetry_sdk"],
+                vec!["opentelemetry-export", "opentelemetry_otlp"],
+                vec!["{{ default }}"],
+            ]
+        );
+    }
+
     #[test]
     fn test_redact_event_round_trips_sdk_events_losslessly() {
-        let events = sdk_events();
+        let events = app_events();
 
-        assert_eq!(events.len(), 2, "{events:#?}");
+        assert_eq!(events.len(), 3, "{events:#?}");
         assert!(
             events[0]
                 .breadcrumbs
@@ -216,16 +390,15 @@ mod tests {
                 .any(|e| e.value.as_deref() == Some("disk full")),
             "{events:#?}"
         );
-        let panic = events[1]
-            .exception
-            .values
+        let panic = events
             .iter()
-            .find(|e| e.mechanism.as_ref().is_some_and(|m| m.ty == "panic"))
+            .find_map(panic_exception)
             .expect("a panic exception");
         assert!(panic.stacktrace.is_some(), "{events:#?}");
         for event in &events {
             assert!(event.contexts.contains_key("os"), "{event:#?}");
-            assert_eq!(event.release.as_deref(), Some("universal-inbox-api@0.1.0"));
+            assert_eq!(event.release, sentry::release_name!());
+            assert_eq!(event.environment.as_deref(), Some("test"));
         }
         for event in events {
             let original = serde_json::to_value(&event).unwrap();

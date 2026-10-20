@@ -9,7 +9,7 @@
 //!   failure once.
 //! - No span on per-item lookups, pure helpers and conversions.
 
-use std::{fmt::Display, future::Future};
+use std::{error::Error, fmt, future::Future};
 
 use tracing::{Instrument, Span, field::Empty};
 
@@ -19,7 +19,10 @@ use crate::{observability::attr, universal_inbox::UniversalInboxError};
 pub const OTHER_ERROR_TYPE: &str = "_OTHER";
 
 /// An error that can be recorded on a boundary span.
-pub trait SpanError: Display {
+pub trait SpanError {
+    /// The error logged as an error value: its type and cause chain reach
+    /// Sentry as an exception.
+    fn as_error(&self) -> &(dyn Error + 'static);
     /// Low-cardinality class, recorded as `error.type`.
     fn error_type(&self) -> &'static str;
     /// The caller's fault (4xx): an expected outcome, logged at `warn` and not
@@ -28,6 +31,10 @@ pub trait SpanError: Display {
 }
 
 impl SpanError for UniversalInboxError {
+    fn as_error(&self) -> &(dyn Error + 'static) {
+        self
+    }
+
     fn error_type(&self) -> &'static str {
         UniversalInboxError::error_type(self)
     }
@@ -38,6 +45,10 @@ impl SpanError for UniversalInboxError {
 }
 
 impl SpanError for anyhow::Error {
+    fn as_error(&self) -> &(dyn Error + 'static) {
+        self.as_ref()
+    }
+
     fn error_type(&self) -> &'static str {
         self.downcast_ref::<UniversalInboxError>()
             .map(UniversalInboxError::error_type)
@@ -47,6 +58,23 @@ impl SpanError for anyhow::Error {
     fn is_client_error(&self) -> bool {
         self.downcast_ref::<UniversalInboxError>()
             .is_some_and(UniversalInboxError::is_client_error)
+    }
+}
+
+/// Displays an error and its causes on one line (`error: cause: cause`), like
+/// `anyhow`'s `{:#}`. Log it as [`attr::ERROR_CHAIN`] next to the `error`
+/// value.
+pub struct ErrorChain<'a>(pub &'a (dyn Error + 'static));
+
+impl fmt::Display for ErrorChain<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)?;
+        let mut current = self.0.source();
+        while let Some(cause) = current {
+            write!(f, ": {cause}")?;
+            current = cause.source();
+        }
+        Ok(())
     }
 }
 
@@ -63,9 +91,15 @@ impl<T, E: SpanError> RecordSpanError for Result<T, E> {
         if let Err(err) = &self {
             Span::current().record(attr::ERROR_TYPE, err.error_type());
             if err.is_client_error() {
-                tracing::warn!(error = %format!("{err:#}"));
+                tracing::warn!(
+                    error = err.as_error(),
+                    { attr::ERROR_CHAIN } = %ErrorChain(err.as_error())
+                );
             } else {
-                tracing::error!(error = %format!("{err:#}"));
+                tracing::error!(
+                    error = err.as_error(),
+                    { attr::ERROR_CHAIN } = %ErrorChain(err.as_error())
+                );
             }
         }
         self

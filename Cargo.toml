@@ -149,6 +149,11 @@ rstest = { workspace = true }
 [profile.dev]
 debug = "line-tables-only"
 
+# Line tables only, so the stack traces of Sentry events (symbolicated in-process, no
+# debug files upload) show file:line. Without it, Cargo strips the release debuginfo.
+[profile.release]
+debug = "line-tables-only"
+
 # Password hashing is far slower unoptimized: every local login, registration and password
 # check of the dev server and the tests runs it.
 [profile.dev.package.argon2]
