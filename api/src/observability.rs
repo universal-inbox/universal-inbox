@@ -167,10 +167,11 @@ pub fn get_subscriber_with_telemetry(
     let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
     // Metrics are recorded through `opentelemetry::global::meter`: without this provider (no
-    // tracing settings, eg. in tests) the instruments are no-ops
-    let meter_provider = SdkMeterProvider::builder()
-        .with_resource(resource.clone())
-        .with_reader(
+    // tracing settings, eg. in tests) the instruments are no-ops. Without a reader (metrics export
+    // disabled), recorded metrics are dropped.
+    let mut meter_provider_builder = SdkMeterProvider::builder().with_resource(resource.clone());
+    if config.is_metrics_export_enabled {
+        meter_provider_builder = meter_provider_builder.with_reader(
             PeriodicReader::builder(build_metric_exporter(
                 config.otlp_exporter_protocol,
                 config.otlp_exporter_endpoint.to_string(),
@@ -178,8 +179,9 @@ pub fn get_subscriber_with_telemetry(
             ))
             .with_interval(METRICS_EXPORT_INTERVAL)
             .build(),
-        )
-        .build();
+        );
+    }
+    let meter_provider = meter_provider_builder.build();
     opentelemetry::global::set_meter_provider(meter_provider.clone());
 
     let logger = SdkLoggerProvider::builder()
@@ -614,8 +616,10 @@ fn build_span_exporter(
         let headers = otlp_http_headers(&otlp_exporter_headers);
         builder
             .with_http()
-            .with_http_client(reqwest::Client::new())
-            .with_endpoint(otlp_exporter_endpoint)
+            .with_endpoint(otlp_http_signal_endpoint(
+                &otlp_exporter_endpoint,
+                "/v1/traces",
+            ))
             .with_timeout(Duration::from_secs(3))
             .with_headers(headers)
             .build()
@@ -646,8 +650,10 @@ where
         let headers = otlp_http_headers(&otlp_exporter_headers);
         builder
             .with_http()
-            .with_http_client(reqwest::Client::new())
-            .with_endpoint(otlp_exporter_endpoint)
+            .with_endpoint(otlp_http_signal_endpoint(
+                &otlp_exporter_endpoint,
+                "/v1/logs",
+            ))
             .with_timeout(Duration::from_secs(3))
             .with_headers(headers)
             .build()
@@ -663,6 +669,17 @@ where
             .build()
             .unwrap()
     }
+}
+
+/// The OTLP HTTP endpoint of one signal: the exporter posts to the configured endpoint as is, so
+/// the signal path (eg. `/v1/traces`) is appended to the base endpoint, as the
+/// `OTEL_EXPORTER_OTLP_ENDPOINT` env var would. The HTTP client is the default blocking one: the
+/// batch processors export from their own thread, outside of any Tokio runtime.
+fn otlp_http_signal_endpoint(otlp_exporter_endpoint: &str, signal_path: &str) -> String {
+    format!(
+        "{}{signal_path}",
+        otlp_exporter_endpoint.trim_end_matches('/')
+    )
 }
 
 /// The OTLP exporter headers for HTTP. Header names usually use dashes, but env vars do not
@@ -699,8 +716,10 @@ fn build_metric_exporter(
         let headers = otlp_http_headers(&otlp_exporter_headers);
         builder
             .with_http()
-            .with_http_client(reqwest::Client::new())
-            .with_endpoint(otlp_exporter_endpoint)
+            .with_endpoint(otlp_http_signal_endpoint(
+                &otlp_exporter_endpoint,
+                "/v1/metrics",
+            ))
             .with_timeout(Duration::from_secs(3))
             .with_headers(headers)
             .build()
@@ -992,5 +1011,19 @@ mod redaction_tests {
     )]
     fn test_redact_path_and_query(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(redact_path_and_query(input), expected);
+    }
+
+    #[rstest]
+    #[case::host_only("https://api.honeycomb.io/", "https://api.honeycomb.io/v1/traces")]
+    #[case::with_path(
+        "https://o1.ingest.de.sentry.io/api/2/integration/otlp",
+        "https://o1.ingest.de.sentry.io/api/2/integration/otlp/v1/traces"
+    )]
+    #[case::with_path_and_trailing_slash(
+        "https://o1.ingest.de.sentry.io/api/2/integration/otlp/",
+        "https://o1.ingest.de.sentry.io/api/2/integration/otlp/v1/traces"
+    )]
+    fn test_otlp_http_signal_endpoint(#[case] endpoint: &str, #[case] expected: &str) {
+        assert_eq!(otlp_http_signal_endpoint(endpoint, "/v1/traces"), expected);
     }
 }

@@ -595,6 +595,10 @@ pub struct TracingSettings {
     /// trace directive: an event that passes both is exported twice.
     #[serde(default = "default_otel_log_directive")]
     pub otel_log_directive: String,
+    /// Export metrics over OTLP. Disable it for backends without an OTLP
+    /// metrics intake (eg. Sentry), whose endpoint would reject every export.
+    #[serde(default = "yes")]
+    pub is_metrics_export_enabled: bool,
 }
 
 fn default_otel_trace_directive() -> String {

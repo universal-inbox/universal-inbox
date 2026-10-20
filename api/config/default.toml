@@ -227,7 +227,11 @@ format = "Pretty"
 
 # [application.observability.tracing]
 # otlp_exporter_protocol = "Grpc" # or Http
+# Base endpoint: with Http, the signal path (/v1/traces, /v1/logs, /v1/metrics)
+# is appended to it.
 # otlp_exporter_endpoint = "https://otlp.host"
+# Disable for backends without an OTLP metrics intake (eg. Sentry):
+# is_metrics_export_enabled = true
 # is_stdout_logging_enabled = true
 # Each OTLP signal has its own filter, independent from `log_directive`
 # (stdout only) and from RUST_LOG. Same EnvFilter syntax.
