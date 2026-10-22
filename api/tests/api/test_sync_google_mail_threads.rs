@@ -390,9 +390,12 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
         None,
     )
     .await;
+    // Universal Inbox only knows the thread before its new message
+    let mut known_google_mail_thread_456 = google_mail_thread_get_456.clone();
+    known_google_mail_thread_456.messages.truncate(1);
     let existing_notification = create_notification_from_google_mail_thread(
         &app.app,
-        &google_mail_thread_get_456,
+        &known_google_mail_thread_456,
         app.user.id,
         google_mail_integration_connection.id,
     )

@@ -474,30 +474,32 @@ impl NotificationRepository for Repository {
                     .push_unseparated(")");
             }
 
+            // The page scans away from the cursor, in the direction it is read in
+            let comparator = if is_ascending_scan(order_by, page_token) {
+                ">"
+            } else {
+                "<"
+            };
             match page_token {
-                Some(PageToken::After(updated_at)) => {
+                Some(PageToken::After(updated_at) | PageToken::Before(updated_at)) => {
                     separated
-                        .push(format!(
-                            " notification.{} ",
-                            match order_by {
-                                NotificationListOrder::UpdatedAtAsc => "updated_at >",
-                                NotificationListOrder::UpdatedAtDesc => "updated_at <",
-                            }
-                        ))
+                        .push(format!(" notification.updated_at {comparator} "))
                         .push_bind_unseparated(updated_at.naive_utc());
                 }
-                Some(PageToken::Before(updated_at)) => {
+                Some(
+                    PageToken::AfterItem { updated_at, id }
+                    | PageToken::BeforeItem { updated_at, id },
+                ) => {
                     separated
                         .push(format!(
-                            " notification.{} ",
-                            match order_by {
-                                NotificationListOrder::UpdatedAtAsc => "updated_at <",
-                                NotificationListOrder::UpdatedAtDesc => "updated_at >",
-                            }
+                            " (notification.updated_at, notification.id) {comparator} ("
                         ))
-                        .push_bind_unseparated(updated_at.naive_utc());
+                        .push_bind_unseparated(updated_at.naive_utc())
+                        .push_unseparated(", ")
+                        .push_bind_unseparated(*id)
+                        .push_unseparated(")");
                 }
-                _ => {}
+                Some(PageToken::Offset(_)) | None => {}
             }
         }
 
@@ -611,20 +613,19 @@ impl NotificationRepository for Repository {
             user_id,
         );
 
-        let reverse_order = matches!(page_token, Some(PageToken::Before(_)));
-        let order_by_column = match order_by {
-            NotificationListOrder::UpdatedAtAsc => format!(
-                "notification.updated_at {}",
-                if reverse_order { "DESC" } else { "ASC" }
-            ),
-            NotificationListOrder::UpdatedAtDesc => format!(
-                "notification.updated_at {}",
-                if reverse_order { "ASC" } else { "DESC" }
-            ),
+        let reverse_order = is_before_page_token(&page_token);
+        let direction = if is_ascending_scan(order_by, &page_token) {
+            "ASC"
+        } else {
+            "DESC"
         };
 
+        // `id` breaks `updated_at` ties: a sync stamps many notifications with the same
+        // second, and without a total order Postgres returns them in any order.
         query_builder
-            .push(format!(" ORDER BY {} ", order_by_column))
+            .push(format!(
+                " ORDER BY notification.updated_at {direction}, notification.id {direction} "
+            ))
             .push(" LIMIT ")
             .push_bind(DEFAULT_PAGE_SIZE as i64);
         if let Some(PageToken::Offset(offset)) = page_token {
@@ -660,8 +661,14 @@ impl NotificationRepository for Repository {
             per_page: DEFAULT_PAGE_SIZE,
             pages_count: total.div_ceil(DEFAULT_PAGE_SIZE),
             total,
-            previous_page_token: content.first().map(|n| PageToken::Before(n.updated_at)),
-            next_page_token: content.last().map(|n| PageToken::After(n.updated_at)),
+            previous_page_token: content.first().map(|n| PageToken::BeforeItem {
+                updated_at: n.updated_at,
+                id: n.id.0,
+            }),
+            next_page_token: content.last().map(|n| PageToken::AfterItem {
+                updated_at: n.updated_at,
+                id: n.id.0,
+            }),
             content,
         })
     }
@@ -986,6 +993,11 @@ impl NotificationRepository for Repository {
             notification.last_read_at = notification
                 .last_read_at
                 .max(existing_notification.last_read_at);
+            // A synced notification carries no task: keep the task it is linked to, which the
+            // UPDATE below never writes, so that an unchanged notification stays untouched.
+            if notification.task_id.is_none() {
+                notification.task_id = existing_notification.task_id;
+            }
         }
 
         let last_read_at_naive_utc = notification
@@ -996,7 +1008,12 @@ impl NotificationRepository for Repository {
             .map(|snoozed_until| snoozed_until.naive_utc());
 
         if let Some(existing_notification) = existing_notification {
-            if existing_notification == *notification {
+            // `snoozed_until` is outside `Notification` equality, but a source that snoozes
+            // (its snoozes are forwarded both ways) changes it on its own.
+            if existing_notification == *notification
+                && (!update_snoozed_until
+                    || existing_notification.snoozed_until == notification.snoozed_until)
+            {
                 debug!(
                     "Existing {} notification {} (from {}) for {} does not need updating: {:?}",
                     kind,
@@ -1718,6 +1735,19 @@ async fn update_set_aside_at(
     );
 
     Ok(updated_notifications_count)
+}
+
+fn is_before_page_token(page_token: &Option<PageToken>) -> bool {
+    matches!(
+        page_token,
+        Some(PageToken::Before(_) | PageToken::BeforeItem { .. })
+    )
+}
+
+/// Whether a list page is read by ascending `(updated_at, id)`: the list order, reversed
+/// for a page before a cursor (the page is reversed back once read).
+fn is_ascending_scan(order_by: NotificationListOrder, page_token: &Option<PageToken>) -> bool {
+    (order_by == NotificationListOrder::UpdatedAtAsc) != is_before_page_token(page_token)
 }
 
 /// Push `last_read_at = now` when the patch dismisses the notification (read, deleted or

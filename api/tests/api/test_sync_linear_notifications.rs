@@ -11,8 +11,8 @@ use universal_inbox::{
         provider::IntegrationProviderKind,
     },
     notification::{
-        Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
-        service::NotificationPatch,
+        Notification, NotificationSourceKind, NotificationStatus, NotificationSyncSourceKind,
+        NotificationWithTask, service::NotificationPatch,
     },
     third_party::{
         integrations::{
@@ -41,7 +41,7 @@ use crate::helpers::{
             assert_sync_notifications, create_notification_from_linear_notification,
             mock_linear_notifications_query, sync_linear_notifications_response,
         },
-        list_notifications, sync_notifications, update_notification,
+        list_notifications, set_notification_updated_at, sync_notifications, update_notification,
     },
     rest::get_resource,
     settings,
@@ -384,4 +384,78 @@ async fn test_sync_linear_notifications_should_mark_existing_notifications_for_s
             unreachable!("Unexpected notification ID");
         }
     }
+}
+
+/// Read in Universal Inbox is not forwarded to Linear, which keeps reporting the
+/// notification as unread: a sync of an unchanged notification must not undo it.
+#[rstest]
+#[tokio::test]
+async fn test_sync_notifications_should_keep_user_status_of_unchanged_notification(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    sync_linear_notifications_response: Response<notifications_query::ResponseData>,
+    linear_oauth_credential: OAuthCredentialFixture,
+) {
+    use pretty_assertions::assert_eq;
+
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
+        &settings,
+        linear_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+    mock_linear_notifications_query(
+        &app.app.linear_mock_server,
+        &sync_linear_notifications_response,
+    )
+    .await;
+
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::Linear),
+        false,
+    )
+    .await;
+    let unread_notification = notifications
+        .iter()
+        .find(|notification| notification.status == NotificationStatus::Unread)
+        .expect("the Linear fixture must have an unread notification");
+
+    update_notification(
+        &app,
+        unread_notification.id,
+        &NotificationPatch {
+            status: Some(NotificationStatus::Read),
+            ..NotificationPatch::default()
+        },
+        app.user.id,
+    )
+    .await;
+    let previous_updated_at = Utc.with_ymd_and_hms(2026, 10, 21, 12, 57, 31).unwrap();
+    set_notification_updated_at(&app.app, unread_notification.id, previous_updated_at).await;
+
+    // Same Linear payload. Forced, as the first sync just ran.
+    app.app
+        .notification_service
+        .read()
+        .await
+        .sync_notifications_with_transaction(NotificationSyncSourceKind::Linear, app.user.id, true)
+        .await
+        .unwrap();
+
+    let resynced_notification: Box<NotificationWithTask> = get_resource(
+        &app.client,
+        &app.app.api_address,
+        "notifications",
+        unread_notification.id.into(),
+    )
+    .await;
+    assert_eq!(resynced_notification.status, NotificationStatus::Read);
+    assert_eq!(resynced_notification.updated_at, previous_updated_at);
 }

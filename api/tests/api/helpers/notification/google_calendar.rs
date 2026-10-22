@@ -77,6 +77,7 @@ pub async fn create_notification_from_google_calendar_event(
             *gcal_third_party_item,
             google_calendar_service,
             user_id,
+            false,
         )
         .await
         .unwrap()

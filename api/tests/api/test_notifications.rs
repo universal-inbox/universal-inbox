@@ -7,13 +7,14 @@ use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use universal_inbox::{
+    PageToken,
     integration_connection::{
         config::IntegrationConnectionConfig,
         integrations::{github::GithubConfig, linear::LinearConfig},
     },
     notification::{
-        Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
-        service::NotificationPatch,
+        Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
+        NotificationStatus, NotificationWithTask, service::NotificationPatch,
     },
     third_party::{
         integrations::{github::GithubNotification, linear::LinearNotification},
@@ -43,7 +44,8 @@ use crate::helpers::{
         linear::{
             create_notification_from_linear_notification, sync_linear_notifications_response,
         },
-        list_notifications, list_only_snoozed_notifications, update_notification,
+        list_notifications, list_notifications_page, list_only_snoozed_notifications,
+        update_notification,
     },
     rest::{
         get_resource, get_resource_response, patch_resource, patch_resource_collection,
@@ -191,9 +193,14 @@ mod list_notifications {
         )
         .await;
 
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0], *expected_notification1);
-        assert_eq!(result[1], *expected_notification2);
+        // Notifications created in the same second tie on `updated_at`: the list then
+        // orders them by id.
+        let mut expected_notifications = vec![
+            *expected_notification1.clone(),
+            *expected_notification2.clone(),
+        ];
+        expected_notifications.sort_by_key(|n| (n.updated_at, n.id.0));
+        assert_eq!(result, expected_notifications);
 
         let result = list_notifications(
             &app.client,
@@ -206,10 +213,9 @@ mod list_notifications {
         )
         .await;
 
-        assert_eq!(result.len(), 3);
-        assert_eq!(result[0], *expected_notification1);
-        assert_eq!(result[1], *expected_notification2);
-        assert_eq!(result[2], *snoozed_notification);
+        expected_notifications.push(*snoozed_notification);
+        expected_notifications.sort_by_key(|n| (n.updated_at, n.id.0));
+        assert_eq!(result, expected_notifications);
 
         let result = list_notifications(
             &app.client,
@@ -254,6 +260,121 @@ mod list_notifications {
         .await;
 
         assert_eq!(result.len(), 0);
+    }
+
+    /// A sync stamps many notifications with the same `updated_at` second: the list must
+    /// still return them in one stable order, and a cursor must not skip the ties.
+    #[rstest]
+    #[case::ascending(NotificationListOrder::UpdatedAtAsc)]
+    #[case::descending(NotificationListOrder::UpdatedAtDesc)]
+    #[tokio::test]
+    async fn test_list_notifications_with_same_updated_at_in_stable_order(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
+        github_oauth_credential: OAuthCredentialFixture,
+        #[case] order_by: NotificationListOrder,
+    ) {
+        let app = authenticated_app.await;
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            github_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+
+        let mut notification_ids = vec![];
+        for source_id in ["42", "43", "44", "45", "46"] {
+            let mut tied_github_notification = github_notification.clone();
+            tied_github_notification.id = source_id.to_string();
+            let notification = create_notification_from_github_notification(
+                &app.app,
+                &tied_github_notification,
+                app.user.id,
+                github_integration_connection.id,
+            )
+            .await;
+            notification_ids.push(notification.id);
+        }
+        let updated_at = Utc.with_ymd_and_hms(2026, 10, 21, 12, 57, 31).unwrap();
+        sqlx::query("UPDATE notification SET updated_at = $1 WHERE user_id = $2")
+            .bind(updated_at.naive_utc())
+            .bind(app.user.id.0)
+            .execute(&*app.app.repository.pool)
+            .await
+            .unwrap();
+
+        notification_ids.sort_by_key(|id| id.0);
+        if order_by == NotificationListOrder::UpdatedAtDesc {
+            notification_ids.reverse();
+        }
+
+        for _ in 0..3 {
+            let page =
+                list_notifications_page(&app.client, &app.app.api_address, order_by, None).await;
+            let listed_ids: Vec<NotificationId> = page.content.iter().map(|n| n.id).collect();
+            assert_eq!(listed_ids, notification_ids);
+        }
+
+        // The cursors of a page boundary in the middle of the ties
+        let after_page = list_notifications_page(
+            &app.client,
+            &app.app.api_address,
+            order_by,
+            Some(PageToken::AfterItem {
+                updated_at,
+                id: notification_ids[1].0,
+            }),
+        )
+        .await;
+        let listed_ids: Vec<NotificationId> = after_page.content.iter().map(|n| n.id).collect();
+        assert_eq!(listed_ids, notification_ids[2..]);
+        assert_eq!(
+            after_page.previous_page_token,
+            Some(PageToken::BeforeItem {
+                updated_at,
+                id: notification_ids[2].0,
+            })
+        );
+
+        let before_page = list_notifications_page(
+            &app.client,
+            &app.app.api_address,
+            order_by,
+            Some(PageToken::BeforeItem {
+                updated_at,
+                id: notification_ids[3].0,
+            }),
+        )
+        .await;
+        let listed_ids: Vec<NotificationId> = before_page.content.iter().map(|n| n.id).collect();
+        assert_eq!(listed_ids, notification_ids[..3]);
+        assert_eq!(
+            before_page.next_page_token,
+            Some(PageToken::AfterItem {
+                updated_at,
+                id: notification_ids[2].0,
+            })
+        );
+
+        // A timestamp-only token from before the `(updated_at, id)` cursors still works
+        let legacy_cursor = match order_by {
+            NotificationListOrder::UpdatedAtAsc => updated_at - TimeDelta::seconds(1),
+            NotificationListOrder::UpdatedAtDesc => updated_at + TimeDelta::seconds(1),
+        };
+        let legacy_page = list_notifications_page(
+            &app.client,
+            &app.app.api_address,
+            order_by,
+            Some(PageToken::After(legacy_cursor)),
+        )
+        .await;
+        let listed_ids: Vec<NotificationId> = legacy_page.content.iter().map(|n| n.id).collect();
+        assert_eq!(listed_ids, notification_ids);
     }
 
     #[rstest]

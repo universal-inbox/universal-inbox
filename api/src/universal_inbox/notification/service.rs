@@ -1296,6 +1296,7 @@ impl NotificationService {
         third_party_item: ThirdPartyItem,
         third_party_notification_service: Arc<U>,
         user_id: UserId,
+        source_unchanged: bool,
     ) -> Result<Option<Notification>, UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
@@ -1308,6 +1309,7 @@ impl NotificationService {
                 third_party_item,
                 third_party_notification_service,
                 user_id,
+                source_unchanged,
             )
             .await?;
 
@@ -1334,6 +1336,7 @@ impl NotificationService {
         third_party_item: ThirdPartyItem,
         third_party_notification_service: Arc<U>,
         user_id: UserId,
+        source_unchanged: bool,
     ) -> Result<UpsertStatus<Box<Notification>>, UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
@@ -1346,6 +1349,7 @@ impl NotificationService {
             third_party_notification_service,
             None,
             user_id,
+            source_unchanged,
         )
         .await
     }
@@ -1486,7 +1490,9 @@ impl NotificationService {
                 .await?;
 
             let mut notification_creation_results = vec![];
-            for third_party_item in third_party_items {
+            for upserted_third_party_item in third_party_items {
+                let source_unchanged = upserted_third_party_item.modified_value_ref().is_none();
+                let third_party_item = *upserted_third_party_item.value();
                 // tag: New notification integration
                 if let Some(notification_creation_result) = match third_party_item.kind() {
                     // For now, only Google Calendar events are derived from another third party item
@@ -1498,6 +1504,7 @@ impl NotificationService {
                                 third_party_item,
                                 notification_service.google_calendar_service.clone(),
                                 user_id,
+                                source_unchanged,
                             )
                             .await?
                     }
@@ -1509,6 +1516,7 @@ impl NotificationService {
                             third_party_item,
                             notification_service.notion_service.clone(),
                             user_id,
+                            source_unchanged,
                         )
                         .await?,
                     _ => {
@@ -1518,6 +1526,7 @@ impl NotificationService {
                                 third_party_item,
                                 third_party_notification_service.clone(),
                                 user_id,
+                                source_unchanged,
                             )
                             .await?
                     }
@@ -1693,6 +1702,7 @@ impl NotificationService {
         third_party_notification_service: Arc<U>,
         task_id: Option<TaskId>,
         user_id: UserId,
+        source_unchanged: bool,
     ) -> Result<UpsertStatus<Box<Notification>>, UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
@@ -1731,6 +1741,14 @@ impl NotificationService {
         {
             notification.status = NotificationStatus::Deleted;
         }
+        if source_unchanged
+            && notification.status == NotificationStatus::Unread
+            && let Some(user_status) = self
+                .get_user_dismissal_status(executor, third_party_item, user_id)
+                .await?
+        {
+            notification.status = user_status;
+        }
         let upsert_notification = self
             .repository
             .create_or_update_notification(
@@ -1742,6 +1760,35 @@ impl NotificationService {
             .await?;
         record_notifications_changed(upsert_notification.changed_value().map(|n| &**n));
         Ok(upsert_notification)
+    }
+
+    /// Read and dismissals stay in Universal Inbox: most sources still report the item as
+    /// unread. When the source item did not change since the last sync, there is no new
+    /// activity, so the user's status (returned here) wins over the `Unread` rebuilt from
+    /// the source. This also leaves `updated_at` alone, so the notification keeps its place
+    /// in the list.
+    async fn get_user_dismissal_status(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<Option<NotificationStatus>, UniversalInboxError> {
+        let existing_notification = self
+            .repository
+            .get_notification_for_source_id(executor, &third_party_item.source_id, user_id)
+            .await?;
+
+        Ok(existing_notification
+            .filter(|existing_notification| {
+                existing_notification.source_item.id == third_party_item.id
+                    && matches!(
+                        existing_notification.status,
+                        NotificationStatus::Read
+                            | NotificationStatus::Deleted
+                            | NotificationStatus::Unsubscribed
+                    )
+            })
+            .map(|existing_notification| existing_notification.status))
     }
 
     /// A cancelled event replaces its invitation when the invitation is still waiting for
@@ -1837,6 +1884,7 @@ impl NotificationService {
                     third_party_task_service,
                     Some(task.id),
                     user_id,
+                    false,
                 )
                 .await
                 .map(Some);

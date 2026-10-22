@@ -1292,6 +1292,7 @@ async fn generate_google_calendar_notifications(
             *gcal_third_party_item,
             google_calendar_service.clone(),
             user_id,
+            false,
         )
         .await?
         .unwrap();
@@ -1318,6 +1319,7 @@ async fn generate_google_calendar_notifications(
             *gcal_design_third_party_item,
             google_calendar_service,
             user_id,
+            false,
         )
         .await?
         .unwrap();
@@ -1676,6 +1678,7 @@ where
             *third_party_item,
             third_party_notification_service,
             user_id,
+            false,
         )
         .await?
         .unwrap();

@@ -13,8 +13,8 @@ use universal_inbox::{
         provider::IntegrationProviderKind,
     },
     notification::{
-        Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
-        service::NotificationPatch,
+        Notification, NotificationSourceKind, NotificationStatus, NotificationSyncSourceKind,
+        NotificationWithTask, service::NotificationPatch,
     },
     third_party::{
         integrations::{
@@ -63,7 +63,8 @@ use crate::helpers::{
             mock_github_pull_request_review_thread_comments_query,
             mock_github_pull_request_review_threads_query, sync_github_notifications,
         },
-        list_notifications, sync_notifications, sync_notifications_response, update_notification,
+        list_notifications, set_notification_updated_at, sync_notifications,
+        sync_notifications_response, update_notification,
     },
     rest::get_resource,
     settings,
@@ -350,6 +351,135 @@ async fn test_sync_notifications_should_keep_latest_last_read_at_of_deleted_noti
             deleted_at
         })
     );
+}
+
+/// Read and dismissals are not forwarded to Github, which keeps reporting the thread as
+/// unread: a sync of an unchanged thread must not undo them, nor move the notification in
+/// the list by bumping its `updated_at`, also when it is linked to a task.
+#[rstest]
+#[case::read(NotificationStatus::Read, false)]
+#[case::deleted(NotificationStatus::Deleted, false)]
+#[case::unsubscribed(NotificationStatus::Unsubscribed, false)]
+#[case::read_linked_to_task(NotificationStatus::Read, true)]
+#[tokio::test]
+async fn test_sync_notifications_should_keep_user_status_of_unchanged_notification(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
+    mut sync_github_notifications: Vec<GithubNotification>,
+    github_pull_request_123_response: Response<pull_request_query::ResponseData>,
+    todoist_item: Box<TodoistItem>,
+    sync_todoist_projects_response: TodoistSyncResponse,
+    github_oauth_credential: OAuthCredentialFixture,
+    todoist_oauth_credential: OAuthCredentialFixture,
+    #[case] user_status: NotificationStatus,
+    #[case] linked_to_task: bool,
+) {
+    use pretty_assertions::assert_eq;
+
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings,
+        github_oauth_credential,
+        None,
+        None,
+    )
+    .await;
+
+    for github_notification in sync_github_notifications.iter_mut() {
+        github_notification.unread = true;
+    }
+    mock_github_notifications_service(&app.app.github_mock_server, "1", &sync_github_notifications)
+        .await;
+    let empty_result = Vec::<GithubNotification>::new();
+    mock_github_notifications_service(&app.app.github_mock_server, "2", &empty_result).await;
+    mock_github_pull_request_query(
+        &app.app.github_mock_server,
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
+        &github_pull_request_123_response,
+    )
+    .await;
+
+    let synced_notifications = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::Github),
+        false,
+    )
+    .await;
+    let notification = synced_notifications
+        .iter()
+        .find(|notification| notification.source_item.source_id == "456")
+        .expect("the Github notification 456 must be synced");
+    assert_eq!(notification.status, NotificationStatus::Unread);
+
+    let task_id = if linked_to_task {
+        create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            todoist_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        )
+        .await;
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TodoistItem(todoist_item),
+            app.user.id,
+        )
+        .await;
+        Some(creation.task.as_ref().unwrap().id)
+    } else {
+        None
+    };
+
+    update_notification(
+        &app,
+        notification.id,
+        &NotificationPatch {
+            status: Some(user_status),
+            task_id,
+            ..NotificationPatch::default()
+        },
+        app.user.id,
+    )
+    .await;
+    let previous_updated_at = Utc.with_ymd_and_hms(2026, 10, 21, 12, 57, 31).unwrap();
+    set_notification_updated_at(&app.app, notification.id, previous_updated_at).await;
+
+    // Same Github payload: no new activity on the thread. Forced, as the first sync just ran.
+    app.app
+        .notification_service
+        .read()
+        .await
+        .sync_notifications_with_transaction(NotificationSyncSourceKind::Github, app.user.id, true)
+        .await
+        .unwrap();
+
+    let resynced_notification: Box<NotificationWithTask> = get_resource(
+        &app.client,
+        &app.app.api_address,
+        "notifications",
+        notification.id.into(),
+    )
+    .await;
+    assert_eq!(resynced_notification.status, user_status);
+    assert_eq!(resynced_notification.updated_at, previous_updated_at);
+    assert_eq!(resynced_notification.task.map(|task| task.id), task_id);
 }
 
 #[rstest]

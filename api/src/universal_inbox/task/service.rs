@@ -808,7 +808,7 @@ impl TaskService {
                 if let Some(task_creation_result) = task_service
                     .create_task_from_third_party_item(
                         executor,
-                        third_party_item,
+                        *third_party_item.value(),
                         third_party_task_service.clone(),
                         user_id,
                     )

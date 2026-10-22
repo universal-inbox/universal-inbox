@@ -98,6 +98,7 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
                     *third_party_item,
                     self.slack_service.clone(),
                     user_id,
+                    false,
                 )
                 .await?
             }
@@ -107,6 +108,7 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
                     *third_party_item,
                     self.slack_service.clone(),
                     user_id,
+                    false,
                 )
                 .await?
             }

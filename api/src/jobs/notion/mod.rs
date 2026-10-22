@@ -693,6 +693,7 @@ async fn save_block_and_notify(
             *third_party_item,
             notion_service.clone(),
             connection.user_id,
+            false,
         )
         .await?;
     Ok(())
@@ -910,6 +911,7 @@ async fn save_discussion_for_connection(
             *third_party_item,
             notion_service.clone(),
             connection.user_id,
+            false,
         )
         .await?;
     Ok(())

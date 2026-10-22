@@ -280,6 +280,7 @@ impl ThirdPartyItemService {
                         *third_party_item.clone(),
                         self.api_service.clone(),
                         user_id,
+                        false,
                     )
                     .await?
             }
@@ -300,6 +301,8 @@ impl ThirdPartyItemService {
         )
     }
 
+    /// Each synced item keeps its upsert status, so callers can tell an item the source
+    /// did not change (`Untouched`) from a new or updated one.
     #[tracing::instrument(
         level = "debug",
         skip_all,
@@ -311,7 +314,7 @@ impl ThirdPartyItemService {
         third_party_service: Arc<U>,
         user_id: UserId,
         last_sync_completed_at: Option<DateTime<Utc>>,
-    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>
+    ) -> Result<Vec<UpsertStatus<Box<ThirdPartyItem>>>, UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
         U: ThirdPartyItemSourceService<T> + Send + Sync,
@@ -338,7 +341,7 @@ impl ThirdPartyItemService {
                 .create_or_update_third_party_item(executor, Box::new(item))
                 .await?;
 
-            upserted_third_party_items.push(*upsert_result.value());
+            upserted_third_party_items.push(upsert_result);
         }
         debug!(
             "Successfully synced {} third party items for user {user_id}",
@@ -348,7 +351,7 @@ impl ThirdPartyItemService {
         if !third_party_service.is_sync_incremental() {
             let active_source_third_party_item_ids = upserted_third_party_items
                 .iter()
-                .map(|tpi| tpi.id)
+                .map(|tpi| tpi.value_ref().id)
                 .collect();
 
             if let Ok(task_source_kind) = kind.try_into() {
@@ -375,8 +378,8 @@ impl ThirdPartyItemService {
                         )
                         .await?;
 
-                    if let Some(upserted_third_party_item) = upsert_result.modified_value() {
-                        upserted_third_party_items.push(*upserted_third_party_item);
+                    if upsert_result.modified_value_ref().is_some() {
+                        upserted_third_party_items.push(upsert_result);
                     }
                 }
                 debug!(

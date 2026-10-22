@@ -3,16 +3,18 @@
 use std::{fmt::Debug, sync::Arc};
 
 use anyhow::anyhow;
+use chrono::{DateTime, Utc};
 use reqwest::{Client, Response};
 use serde_json::json;
 use tokio_retry::{Retry, strategy::FixedInterval};
 
 use universal_inbox::{
-    Page,
+    Page, PageToken,
     integration_connection::IntegrationConnectionId,
     notification::{
-        Notification, NotificationId, NotificationSource, NotificationSourceKind,
-        NotificationStatus, NotificationWithTask, service::NotificationPatch,
+        Notification, NotificationId, NotificationListOrder, NotificationSource,
+        NotificationSourceKind, NotificationStatus, NotificationWithTask,
+        service::NotificationPatch,
     },
     task::{TaskCreation, TaskId},
     third_party::item::{ThirdPartyItem, ThirdPartyItemData},
@@ -99,6 +101,43 @@ pub async fn list_notifications_with_tasks(
     .expect("Cannot parse JSON result");
 
     notifications_page.content
+}
+
+/// Move a notification back in time, so a test can tell whether an action bumps its
+/// `updated_at` (most writes stamp the current second).
+pub async fn set_notification_updated_at(
+    app: &TestedApp,
+    notification_id: NotificationId,
+    updated_at: DateTime<Utc>,
+) {
+    sqlx::query("UPDATE notification SET updated_at = $1 WHERE id = $2")
+        .bind(updated_at.naive_utc())
+        .bind(notification_id.0)
+        .execute(&*app.repository.pool)
+        .await
+        .unwrap();
+}
+
+/// The page of Unread notifications in `order_by` order, from `page_token`.
+pub async fn list_notifications_page(
+    client: &Client,
+    api_address: &str,
+    order_by: NotificationListOrder,
+    page_token: Option<PageToken>,
+) -> Page<NotificationWithTask> {
+    let page_token_parameter = page_token
+        .map(|token| format!("&page_token={}", token.to_url_parameter().unwrap()))
+        .unwrap_or_default();
+    client
+        .get(format!(
+            "{api_address}notifications?status=Unread&trigger_sync=false&order_by={order_by}{page_token_parameter}"
+        ))
+        .send()
+        .await
+        .expect("Failed to execute request")
+        .json()
+        .await
+        .expect("Cannot parse JSON result")
 }
 
 pub async fn list_notifications(
@@ -281,6 +320,7 @@ where
             *third_party_item,
             third_party_notification_service,
             user_id,
+            false,
         )
         .await
         .unwrap()

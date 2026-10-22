@@ -558,7 +558,7 @@ async fn maybe_refill_current_page(
     api_base_url: &Url,
     notifications_page: Signal<Page<NotificationWithTask>>,
     notification_filters: Signal<NotificationFilters>,
-    mut ui_model: Signal<UniversalInboxUIModel>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) -> Option<FetchedList> {
     let (per_page, pages_count, len) = {
         let page = notifications_page.read();
@@ -582,30 +582,13 @@ async fn maybe_refill_current_page(
         return None;
     }
 
-    // Preserve the selected notification across the refetch by remembering its id.
-    let selected_id = ui_model
-        .read()
-        .selected_notification_index
-        .and_then(|index| notifications_page.read().content.get(index).map(|n| n.id));
-
-    let fetched_list = refresh_notifications(
+    refresh_notifications(
         api_base_url,
         notifications_page,
         notification_filters,
         ui_model,
     )
-    .await;
-
-    if let Some(id) = selected_id
-        && let Some(index) = notifications_page
-            .read()
-            .content
-            .iter()
-            .position(|n| n.id == id)
-    {
-        ui_model.write().selected_notification_index = Some(index);
-    }
-    fetched_list
+    .await
 }
 
 /// Build the status / snooze query parameters for a section's notification list.
@@ -626,12 +609,22 @@ fn section_list_parameters(section: NotificationSection) -> Vec<(&'static str, S
     }
 }
 
-/// Fetch the displayed list, returning it when it succeeded.
+/// The index of the selected notification in a refreshed list, `None` when it left the
+/// list (the index is then left as is, and clamped by the notifications page).
+fn selected_index_after_refresh(
+    selected_id: NotificationId,
+    refreshed_ids: impl IntoIterator<Item = NotificationId>,
+) -> Option<usize> {
+    refreshed_ids.into_iter().position(|id| id == selected_id)
+}
+
+/// Fetch the displayed list, returning it when it succeeded. The selected notification
+/// stays selected when it is still in the list.
 async fn refresh_notifications(
     api_base_url: &Url,
     mut notifications_page: Signal<Page<NotificationWithTask>>,
     notification_filters: Signal<NotificationFilters>,
-    ui_model: Signal<UniversalInboxUIModel>,
+    mut ui_model: Signal<UniversalInboxUIModel>,
 ) -> Option<FetchedList> {
     let section = CURRENT_NOTIFICATION_SECTION();
     let is_filtered = notification_filters().is_filtered();
@@ -663,7 +656,32 @@ async fn refresh_notifications(
 
     let new_notifications_page = result.ok()?;
     let total = new_notifications_page.total;
+    let selected_id = ui_model
+        .peek()
+        .selected_notification_index
+        .and_then(|index| {
+            notifications_page
+                .peek()
+                .content
+                .get(index)
+                .map(|notification| notification.id)
+        });
+    let new_selected_index = selected_id.and_then(|id| {
+        selected_index_after_refresh(
+            id,
+            new_notifications_page
+                .content
+                .iter()
+                .map(|notification| notification.id),
+        )
+    });
     *notifications_page.write() = new_notifications_page;
+    // The selection follows the notification, not its former position: a refresh can
+    // move it (eg. a sync changed its `updated_at`). Written in the same tick as the
+    // list, so the state → URL effect never sees another notification at the old index.
+    if let Some(index) = new_selected_index {
+        ui_model.write().selected_notification_index = Some(index);
+    }
     Some(FetchedList {
         section,
         is_filtered,
@@ -1209,5 +1227,30 @@ mod tests {
                 ("include_snoozed_notifications", "true".to_string()),
             ]
         );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_selected_index_after_refresh_follows_moved_notification() {
+        let ids: Vec<NotificationId> = (1..=5)
+            .map(|n| NotificationId(uuid::Uuid::from_u128(n)))
+            .collect();
+        // The selected notification was first; a sync bumped its `updated_at`, so the
+        // refreshed list (oldest first) now has it last.
+        let selected_id = ids[0];
+        let refreshed_ids = [ids[1], ids[2], ids[3], ids[4], ids[0]];
+
+        assert_eq!(
+            selected_index_after_refresh(selected_id, refreshed_ids),
+            Some(4)
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_selected_index_after_refresh_when_notification_left_the_list() {
+        let ids: Vec<NotificationId> = (1..=3)
+            .map(|n| NotificationId(uuid::Uuid::from_u128(n)))
+            .collect();
+
+        assert_eq!(selected_index_after_refresh(ids[0], [ids[1], ids[2]]), None);
     }
 }

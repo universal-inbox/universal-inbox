@@ -158,6 +158,16 @@ pub enum PageToken {
     Before(DateTime<Utc>),
     After(DateTime<Utc>),
     Offset(usize),
+    /// Keyset cursors on `(updated_at, id)` of the boundary item. Unlike `Before` and
+    /// `After`, they do not skip the items sharing the boundary item's `updated_at`.
+    BeforeItem {
+        updated_at: DateTime<Utc>,
+        id: uuid::Uuid,
+    },
+    AfterItem {
+        updated_at: DateTime<Utc>,
+        id: uuid::Uuid,
+    },
 }
 
 impl Default for PageToken {
