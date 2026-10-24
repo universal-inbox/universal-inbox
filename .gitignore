@@ -25,3 +25,6 @@ docker/cache
 
 # Beads / Dolt files (added by bd init)
 .beads-credential-key
+
+# Claude Code state accidentally created in a sub-crate
+api/.claude/
