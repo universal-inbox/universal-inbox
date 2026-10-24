@@ -74,6 +74,7 @@ fn entity_kind_label(entity_kind: AuditEntityKind, count: usize) -> String {
     let label = match entity_kind {
         AuditEntityKind::Notification => "notification",
         AuditEntityKind::Task => "task",
+        AuditEntityKind::Context => "context",
     };
     if count > 1 {
         format!("{count} {label}s")
@@ -173,7 +174,7 @@ pub fn AuditLogPage(entity_id: String) -> Element {
                     }
 
                     div { class: "inline-flex p-0.5 gap-0.5 bg-ui-surface-alt rounded-ui-md", role: "group", "aria-label": "Entity",
-                        for (value, label) in [(None, "All"), (Some(AuditEntityKind::Notification), "Notifications"), (Some(AuditEntityKind::Task), "Tasks")] {
+                        for (value, label) in [(None, "All"), (Some(AuditEntityKind::Notification), "Notifications"), (Some(AuditEntityKind::Task), "Tasks"), (Some(AuditEntityKind::Context), "Contexts")] {
                             button {
                                 class: "px-2.5 py-[3px] rounded-ui-sm text-[length:var(--ui-text-sm)] font-medium text-ui-base-muted aria-pressed:bg-ui-surface aria-pressed:text-ui-base-content aria-pressed:shadow-ui-sm",
                                 "aria-pressed": "{entity_kind() == value}",
