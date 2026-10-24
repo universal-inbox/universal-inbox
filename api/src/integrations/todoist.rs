@@ -777,6 +777,42 @@ impl TodoistService {
         cached_fetch_all_projects(self, user_id, access_token, sync_token).await
     }
 
+    /// The user's Todoist projects, with the id Todoist gives them, so that they can be bound on
+    /// it instead of on their name. Deleted projects are left out. Empty without a Todoist
+    /// access token.
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = user_id.to_string())
+    )]
+    pub async fn list_projects(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Vec<ProjectSummary>, UniversalInboxError> {
+        let Some((access_token, _)) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
+            .await?
+        else {
+            return Ok(vec![]);
+        };
+
+        Ok(self
+            .fetch_all_projects(user_id, &access_token, None)
+            .await?
+            .into_iter()
+            .filter(|todoist_project| !todoist_project.is_deleted)
+            .map(|todoist_project| ProjectSummary {
+                source_id: todoist_project.id.into(),
+                name: todoist_project.name,
+            })
+            .collect())
+    }
+
     #[allow(clippy::blocks_in_conditions)]
     async fn fetch_task(
         &self,
