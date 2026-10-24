@@ -48,6 +48,7 @@ macro_attr! {
     pub enum AuditEntityKind {
         Notification,
         Task,
+        Context,
     }
 }
 
@@ -170,16 +171,19 @@ pub struct AuditEvent {
     pub user_id: UserId,
     pub entity_kind: AuditEntityKind,
     pub entity_id: Uuid,
-    /// For a notification event, the task it is linked to.
+    /// For a notification event, the task it is linked to. For an attachment or a note event,
+    /// the context or task it belongs to (`entity_id` is then the attachment or the note).
     pub related_entity_id: Option<Uuid>,
     pub action: AuditAction,
-    /// Title of the notification or task when the change happened.
+    /// Title of the notification or task, or name of the context, when the change happened.
     pub title: String,
-    /// `NotificationSourceKind` or `TaskSourceKind` of the entity.
+    /// `NotificationSourceKind` or `TaskSourceKind` of the entity, or the binding provider of a
+    /// context (`Local` when it is not bound).
     pub source_kind: Option<String>,
     /// Changed fields, keyed by column name (`status`, `snoozed_until`, `set_aside_at`, `task_id`).
     pub changes: BTreeMap<String, AuditChange>,
-    /// Task creation parameters. The task body is never copied, only whether one is set.
+    /// Task or context creation parameters. A task or note body is never copied, only whether one
+    /// is set (`body_present`).
     pub params: Option<serde_json::Value>,
     pub actor: AuditActor,
     /// Display name of the actor when it is resolved at read time (MCP client name).

@@ -142,6 +142,10 @@ pub const NOTIFICATION_UPDATE_SNOOZED_UNTIL: &str = "notification.update_snoozed
 pub const NOTIFICATION_APPLY_SIDE_EFFECTS: &str = "notification.apply_side_effects";
 pub const NOTIFICATION_APPLY_TASK_SIDE_EFFECTS: &str = "notification.apply_task_side_effects";
 
+// Contexts
+pub const CONTEXT_ID: &str = "context.id";
+pub const CONTEXT_STATUS_CHANGE: &str = "context.status_change";
+
 // Tasks
 pub const TASK_ID: &str = "task.id";
 pub const TASK_IDS: &str = "task.ids";
