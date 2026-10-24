@@ -15,6 +15,10 @@ ignore = [
   # rsa: Marvin timing side channel on private-key decryption. No fixed release yet.
   # rsa is only used by openidconnect to verify ID token signatures with public keys.
   { id = "RUSTSEC-2023-0071", reason = "rsa only verifies signatures with public keys; no fixed release" },
+  # crypto-bigint 0.5: timing variability in constant-time operations. Fixed only in 0.7.6;
+  # pulled by p256/p384 via openidconnect 4.0.1 (latest), which only verifies ID token
+  # signatures with public keys, so no secret-dependent operation is exposed.
+  { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 only verifies signatures with public keys via openidconnect; no fixed 0.5 release" },
 ]
 
 [bans]

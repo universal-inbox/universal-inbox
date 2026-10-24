@@ -1,4 +1,5 @@
 [advisories]
 ignore = [
   "RUSTSEC-2023-0071",  # rsa: only verifies signatures with public keys; no fixed release (keep in sync with deny.toml)
+  "RUSTSEC-2026-0387",  # crypto-bigint 0.5: only verifies signatures with public keys via openidconnect; no fixed 0.5 release (keep in sync with deny.toml)
 ]
