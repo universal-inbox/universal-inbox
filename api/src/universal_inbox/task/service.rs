@@ -9,10 +9,11 @@ use chrono::{DateTime, TimeDelta, Utc};
 use futures::FutureExt;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use universal_inbox::{
     HasHtmlUrl, Page,
+    context::Context as UiContext,
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{
         Notification, NotificationSource, NotificationStatus, service::NotificationPatch,
@@ -45,7 +46,10 @@ use crate::{
         ticktick::TickTickService,
         todoist::TodoistService,
     },
-    repository::{Repository, task::TaskRepository, third_party::ThirdPartyItemRepository},
+    repository::{
+        Repository, context::ContextRepository, task::TaskRepository,
+        third_party::ThirdPartyItemRepository,
+    },
     universal_inbox::{
         UniversalInboxError, UpdateStatus, UpsertStatus,
         integration_connection::service::{
@@ -748,20 +752,98 @@ impl TaskService {
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
         let integration_provider_kind = third_party_task_service.get_integration_provider_kind();
-        with_system_actor(
-            "SyncTasks",
-            Some(integration_provider_kind),
-            self.run_sync_third_party_tasks(third_party_task_service, user_id, force_sync),
-        )
+        with_system_actor("SyncTasks", Some(integration_provider_kind), async {
+            self.run_sync_third_party_tasks(third_party_task_service, user_id, force_sync)
+                .await
+                .map(|(task_creation_results, _)| task_creation_results)
+        })
         .await
     }
 
+    /// Synchronize Todoist tasks, then the contexts mirroring its projects. Same system job as
+    /// `sync_third_party_tasks`.
+    async fn sync_todoist_tasks_and_contexts(
+        &self,
+        user_id: UserId,
+        force_sync: bool,
+    ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
+        with_system_actor("SyncTasks", Some(IntegrationProviderKind::Todoist), async {
+            let (task_creation_results, synced) = self
+                .run_sync_third_party_tasks(self.todoist_service.clone(), user_id, force_sync)
+                .await?;
+
+            // Best effort: the task sync is done and its outcome is recorded, the next sync
+            // retries the contexts.
+            if synced && let Err(err) = self.sync_todoist_project_contexts(user_id).await {
+                warn!(
+                    { attr::USER_ID } = user_id.to_string(),
+                    "Failed to synchronize the Todoist project contexts: {err}"
+                );
+            }
+            Ok(task_creation_results)
+        })
+        .await
+    }
+
+    /// Fetch the Todoist projects of the user and mirror them as contexts.
+    pub async fn sync_todoist_project_contexts(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<UpsertStatus<Box<UiContext>>>, UniversalInboxError> {
+        let mut transaction = self.begin().await.context(format!(
+            "Failed to create new transaction while syncing Todoist project contexts for user {user_id}"
+        ))?;
+        let projects = self
+            .todoist_service
+            .list_projects(&mut transaction, user_id)
+            .await?;
+        let upserts = self
+            .upsert_mirrored_contexts(
+                &mut transaction,
+                user_id,
+                IntegrationProviderKind::Todoist,
+                projects,
+            )
+            .await?;
+        transaction.commit().await.context(format!(
+            "Failed to commit while syncing Todoist project contexts for user {user_id}"
+        ))?;
+        Ok(upserts)
+    }
+
+    /// Mirror each upstream project as a context bound on its `source_id`.
+    pub async fn upsert_mirrored_contexts(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        provider: IntegrationProviderKind,
+        projects: Vec<ProjectSummary>,
+    ) -> Result<Vec<UpsertStatus<Box<UiContext>>>, UniversalInboxError> {
+        let mut upserts = Vec::with_capacity(projects.len());
+        for project in projects {
+            upserts.push(
+                self.repository
+                    .upsert_mirrored_context(
+                        executor,
+                        user_id,
+                        provider,
+                        project.source_id,
+                        project.name,
+                    )
+                    .await?,
+            );
+        }
+        Ok(upserts)
+    }
+
+    /// The task creation results, and whether the sync actually ran (it does not when there is
+    /// no validated and enabled integration, or when another sync is in flight).
     async fn run_sync_third_party_tasks<T, U>(
         &self,
         third_party_task_service: Arc<U>,
         user_id: UserId,
         force_sync: bool,
-    ) -> Result<Vec<TaskCreationResult>, UniversalInboxError>
+    ) -> Result<(Vec<TaskCreationResult>, bool), UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
         U: ThirdPartyTaskService<T>
@@ -864,14 +946,14 @@ impl TaskService {
             debug!(
                 "No validated {integration_provider_kind} integration found for user {user_id}, skipping tasks sync"
             );
-            return Ok(vec![]);
+            return Ok((vec![], false));
         };
 
         if !integration_connection.provider.is_sync_tasks_enabled() {
             debug!(
                 "{integration_provider_kind} integration for user {user_id} is disabled, skipping tasks sync"
             );
-            return Ok(vec![]);
+            return Ok((vec![], false));
         }
 
         let synced_before = (min_sync_interval_in_minutes != 0).then(|| {
@@ -900,7 +982,7 @@ impl TaskService {
             debug!(
                 "{integration_provider_kind} tasks sync for user {user_id} is already in flight, skipping"
             );
-            return Ok(vec![]);
+            return Ok((vec![], false));
         }
 
         info!("Syncing {integration_provider_kind} tasks for user {user_id}");
@@ -969,7 +1051,7 @@ impl TaskService {
             "Successfully synced {integration_provider_kind} tasks"
         );
 
-        Ok(task_creation_results)
+        Ok((task_creation_results, true))
     }
 
     /// Save a third party item as a task and apply side effects
@@ -1126,7 +1208,7 @@ impl TaskService {
         let result: Result<Vec<TaskCreationResult>, UniversalInboxError> = async move {
             match source {
                 TaskSyncSourceKind::Todoist => {
-                    self.sync_third_party_tasks(self.todoist_service.clone(), user_id, force_sync)
+                    self.sync_todoist_tasks_and_contexts(user_id, force_sync)
                         .await
                 }
                 TaskSyncSourceKind::Linear => {
