@@ -406,7 +406,9 @@ pub fn redact_path(path: &str) -> String {
 
 /// `path_and_query` with one-time token path segments (see [`redact_path`])
 /// and the value of every [`SENSITIVE_QUERY_PARAMETERS`] entry replaced by
-/// `REDACTED` (parameter names and other values are kept for debugging).
+/// `REDACTED`. Names are compared after form-urlencoded decoding (`%XX`, `+`),
+/// as the handlers do, so `co%64e` is redacted like `code`; the raw name and
+/// other values are kept for debugging.
 pub fn redact_path_and_query(path_and_query: &str) -> String {
     let Some((path, query)) = path_and_query.split_once('?') else {
         return redact_path(path_and_query);
@@ -414,18 +416,23 @@ pub fn redact_path_and_query(path_and_query: &str) -> String {
     let redacted_query = query
         .split('&')
         .map(|pair| match pair.split_once('=') {
-            Some((key, _))
-                if SENSITIVE_QUERY_PARAMETERS
-                    .iter()
-                    .any(|sensitive| key.eq_ignore_ascii_case(sensitive)) =>
-            {
-                format!("{key}=REDACTED")
+            Some((raw_key, _)) if is_sensitive_query_key(raw_key) => {
+                format!("{raw_key}=REDACTED")
             }
             _ => pair.to_string(),
         })
         .collect::<Vec<_>>()
         .join("&");
     format!("{}?{redacted_query}", redact_path(path))
+}
+
+fn is_sensitive_query_key(raw_key: &str) -> bool {
+    let Some((key, _)) = url::form_urlencoded::parse(raw_key.as_bytes()).next() else {
+        return false;
+    };
+    SENSITIVE_QUERY_PARAMETERS
+        .iter()
+        .any(|sensitive| key.eq_ignore_ascii_case(sensitive))
 }
 
 /// A [`ServiceRequest`] view whose `uri()` has its credentials redacted.
@@ -979,6 +986,30 @@ mod redaction_tests {
     #[case::mixed(
         "/api/auth/session/authenticated?foo=bar&CODE=x&token=y",
         "/api/auth/session/authenticated?foo=bar&CODE=REDACTED&token=REDACTED"
+    )]
+    #[case::percent_encoded_names(
+        "/api/oauth/callback?co%64e=secret&sta%74e=secret",
+        "/api/oauth/callback?co%64e=REDACTED&sta%74e=REDACTED"
+    )]
+    #[case::percent_encoded_mixed_case(
+        "/api/oauth/callback?Co%44e=secret",
+        "/api/oauth/callback?Co%44e=REDACTED"
+    )]
+    #[case::percent_encoded_underscore(
+        "/api/oauth/callback?access%5Ftoken=secret",
+        "/api/oauth/callback?access%5Ftoken=REDACTED"
+    )]
+    #[case::plus_is_not_a_credential_name(
+        "/api/oauth/callback?pass+word=x",
+        "/api/oauth/callback?pass+word=x"
+    )]
+    #[case::harmless_encoded_key_and_bare_key(
+        "/api/notifications?fo%6F=bar&flag",
+        "/api/notifications?fo%6F=bar&flag"
+    )]
+    #[case::double_encoded_name_is_not_a_credential_name(
+        "/api/oauth/callback?%2563ode=x",
+        "/api/oauth/callback?%2563ode=x"
     )]
     #[case::email_verification_token(
         "/api/users/0192f3a1-user/email-verification/secret-token",
