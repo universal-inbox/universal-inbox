@@ -36,6 +36,7 @@ mod test_reauthentication;
 mod test_set_aside_notifications;
 mod test_slack_backfill_team_id;
 mod test_slack_bridge;
+mod test_slack_emoji_cache;
 mod test_slack_notifications;
 mod test_slack_tasks;
 mod test_slack_webhook;

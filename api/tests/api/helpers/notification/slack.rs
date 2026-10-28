@@ -459,3 +459,24 @@ pub fn slack_auth_test_response(team_id: &str) -> Value {
         "user_id": "U05XXX"
     })
 }
+
+pub async fn mock_slack_list_emojis_for_token(
+    slack_mock_server: &MockServer,
+    access_token: &str,
+    emojis: Value,
+    expected_calls: u64,
+) {
+    Mock::given(method("GET"))
+        .and(path("/emoji.list"))
+        .and(header(
+            "authorization",
+            format!("Bearer {access_token}").as_str(),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "ok": true,
+            "emoji": emojis,
+        })))
+        .expect(expected_calls)
+        .mount(slack_mock_server)
+        .await;
+}

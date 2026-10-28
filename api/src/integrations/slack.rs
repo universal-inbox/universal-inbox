@@ -1579,7 +1579,7 @@ async fn cached_fetch_team(
 
 #[concurrent_cached(
     key = "String",
-    convert = r#"{ format!("{}__{}", slack_base_url, slack_api_token.team_id.as_ref().map(|t| t.0.as_str()).unwrap_or("no-team")) }"#,
+    convert = r#"{ format!("{}__{}", slack_base_url, slack_token_cache_scope(slack_api_token)) }"#,
     ty = "crate::utils::cache::TracedRedisCache<HashMap<SlackEmojiName, SlackEmojiRef>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_emojis`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:list_emojis", Duration::from_secs(24 * 60 * 60), false).await }"##,
