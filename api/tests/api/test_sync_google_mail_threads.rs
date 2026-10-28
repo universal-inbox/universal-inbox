@@ -36,8 +36,8 @@ use universal_inbox::{
                 GoogleCalendarEventAttendeeResponseStatus, GoogleCalendarEventStatus,
             },
             google_mail::{
-                GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL, GoogleMailMessageBody,
-                GoogleMailMessageHeader, GoogleMailThread,
+                GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_SENT_LABEL, GOOGLE_MAIL_UNREAD_LABEL,
+                GoogleMailMessageBody, GoogleMailMessageHeader, GoogleMailThread,
             },
             todoist::TodoistItem,
         },
@@ -1039,8 +1039,9 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
 }
 
 #[rstest]
-#[case(true, NotificationStatus::Deleted)]
-#[case(false, NotificationStatus::Unread)]
+#[case::sent_label(true, false, NotificationStatus::Deleted)]
+#[case::no_sent_label(false, false, NotificationStatus::Unread)]
+#[case::spoofed_display_name_without_sent_label(false, true, NotificationStatus::Unread)]
 #[tokio::test]
 async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_replied(
     settings: Settings,
@@ -1049,12 +1050,14 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
     google_mail_user_profile: GoogleMailUserProfile,
     google_mail_labels_list: GoogleMailLabelList,
     google_mail_oauth_credential: OAuthCredentialFixture,
-    #[case] last_message_from_user: bool,
+    #[case] last_message_sent_label: bool,
+    #[case] spoofed_display_name: bool,
     #[case] expected_notification_status: NotificationStatus,
 ) {
-    // When a GoogleMailThread has new unread messages and the last message is from the user,
-    // the notification should be marked as Deleted (user already responded).
-    // Otherwise, it should be marked as Unread.
+    // When a GoogleMailThread has new unread messages and the last message carries the Gmail
+    // SENT label, the notification should be marked as Deleted (user already responded).
+    // The From header is sender-controlled, so an external sender using the owner's address
+    // in the display name must not hide the notification: it stays Unread.
     let app = authenticated_app.await;
     let google_mail_config = GoogleMailConfig::enabled();
     let synced_label_id = google_mail_config.synced_label.id.clone();
@@ -1062,11 +1065,15 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
         Pii::<EmailAddress>::from_str(&google_mail_user_profile.email_address).unwrap();
 
     // Set thread as unread (required for testing the user-replied logic)
-    google_mail_thread_get_456.messages[1].label_ids = Some(vec![
+    let mut last_message_labels = vec![
         GOOGLE_MAIL_INBOX_LABEL.to_string(),
         synced_label_id.clone(),
         GOOGLE_MAIL_UNREAD_LABEL.to_string(),
-    ]);
+    ];
+    if last_message_sent_label {
+        last_message_labels.push(GOOGLE_MAIL_SENT_LABEL.to_string());
+    }
+    google_mail_thread_get_456.messages[1].label_ids = Some(last_message_labels);
 
     // Set the "From" header of the last message based on test case
     google_mail_thread_get_456.messages[1].payload.headers = vec![
@@ -1080,8 +1087,10 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
         },
         GoogleMailMessageHeader {
             name: "From".to_string(),
-            value: if last_message_from_user {
+            value: if last_message_sent_label {
                 format!("User Name <{}>", user_email_address.expose())
+            } else if spoofed_display_name {
+                format!("{} <external@example.com>", user_email_address.expose())
             } else {
                 "External Sender <external@example.com>".to_string()
             },
@@ -1163,9 +1172,13 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
     .await;
     assert_eq!(synced_notification.kind, NotificationSourceKind::GoogleMail);
     assert_eq!(
-        synced_notification.status, expected_notification_status,
-        "Expected notification status to be {:?} when last_message_from_user={}, but got {:?}",
-        expected_notification_status, last_message_from_user, synced_notification.status
+        synced_notification.status,
+        expected_notification_status,
+        "Expected notification status to be {:?} when last_message_sent_label={}, spoofed_display_name={}, but got {:?}",
+        expected_notification_status,
+        last_message_sent_label,
+        spoofed_display_name,
+        synced_notification.status
     );
     assert_eq!(
         synced_notification.source_item.integration_connection_id,

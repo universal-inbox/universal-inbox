@@ -20,6 +20,7 @@ pub const GOOGLE_MAIL_UNREAD_LABEL: &str = "UNREAD";
 pub const GOOGLE_MAIL_INBOX_LABEL: &str = "INBOX";
 pub const GOOGLE_MAIL_STARRED_LABEL: &str = "STARRED";
 pub const GOOGLE_MAIL_IMPORTANT_LABEL: &str = "IMPORTANT";
+pub const GOOGLE_MAIL_SENT_LABEL: &str = "SENT";
 pub const DEFAULT_GOOGLE_MAIL_HTML_URL: &str = "https://mail.google.com";
 
 #[serde_as]
@@ -167,13 +168,12 @@ impl GoogleMailThread {
         }
     }
 
-    /// Check if the last message in the thread was sent by the user
+    /// Check if the last message in the thread was sent by the user, based on the
+    /// provider-assigned `SENT` label (the `From` header is sender-controlled and can't be trusted)
     pub fn is_last_message_from_user(&self) -> bool {
         self.messages
             .last()
-            .and_then(|message| message.get_header("From"))
-            .map(|from_header| from_header.contains(&self.user_email_address.expose().to_string()))
-            .unwrap_or(false)
+            .is_some_and(|message| message.is_tagged_with(GOOGLE_MAIL_SENT_LABEL))
     }
 }
 
@@ -782,6 +782,85 @@ mod tests {
                 .render_content_as_html();
 
                 assert_eq!(content, "<p>this is an invitation</p>\n");
+            }
+        }
+
+        mod is_last_message_from_user {
+            use super::*;
+
+            fn message(label_ids: Option<Vec<&str>>, from: &str) -> GoogleMailMessage {
+                GoogleMailMessage {
+                    id: "msg".to_string(),
+                    thread_id: "thread".to_string(),
+                    label_ids: label_ids
+                        .map(|labels| labels.into_iter().map(str::to_string).collect()),
+                    snippet: "test".to_string(),
+                    size_estimate: 1,
+                    history_id: "1".to_string(),
+                    internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
+                    payload: GoogleMailMessagePayload {
+                        mime_type: "text/plain".to_string(),
+                        headers: vec![GoogleMailMessageHeader {
+                            name: "From".to_string(),
+                            value: from.to_string(),
+                        }],
+                        ..GoogleMailMessagePayload::default()
+                    },
+                }
+            }
+
+            fn thread(messages: Vec<GoogleMailMessage>) -> GoogleMailThread {
+                GoogleMailThread {
+                    id: "thread".to_string(),
+                    history_id: "1".to_string(),
+                    user_email_address: "owner@example.com".parse().unwrap(),
+                    messages,
+                }
+            }
+
+            #[rstest]
+            fn test_sent_label_on_last_message() {
+                assert!(
+                    thread(vec![
+                        message(Some(vec![GOOGLE_MAIL_INBOX_LABEL]), "a@example.com"),
+                        message(Some(vec![GOOGLE_MAIL_SENT_LABEL]), "owner@example.com"),
+                    ])
+                    .is_last_message_from_user()
+                );
+            }
+
+            #[rstest]
+            fn test_sent_label_only_on_earlier_message() {
+                assert!(
+                    !thread(vec![
+                        message(Some(vec![GOOGLE_MAIL_SENT_LABEL]), "owner@example.com"),
+                        message(Some(vec![GOOGLE_MAIL_INBOX_LABEL]), "a@example.com"),
+                    ])
+                    .is_last_message_from_user()
+                );
+            }
+
+            #[rstest]
+            fn test_owner_address_in_display_name_without_sent_label() {
+                assert!(
+                    !thread(vec![message(
+                        Some(vec![GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL]),
+                        "owner@example.com <external@example.com>",
+                    )])
+                    .is_last_message_from_user()
+                );
+            }
+
+            #[rstest]
+            fn test_last_message_without_labels() {
+                assert!(
+                    !thread(vec![message(None, "owner@example.com")]).is_last_message_from_user()
+                );
+            }
+
+            #[rstest]
+            fn test_empty_thread() {
+                assert!(!thread(vec![]).is_last_message_from_user());
             }
         }
 
