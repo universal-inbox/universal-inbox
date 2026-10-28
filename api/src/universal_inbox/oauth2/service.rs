@@ -270,6 +270,20 @@ impl OAuth2Service {
                 user_error: "Invalid or expired authorization code".to_string(),
             })?;
 
+        // The grant must still exist. The share lock is held until the transaction
+        // commits, so a concurrent revocation waits for the issued tokens and then
+        // revokes them.
+        if !self
+            .repository
+            .lock_user_consent(transaction, auth_code.user_id, &auth_code.client_id)
+            .await?
+        {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: "Invalid or expired authorization code".to_string(),
+            });
+        }
+
         // Verify the code has not expired
         if auth_code.expires_at < Utc::now() {
             return Err(UniversalInboxError::InvalidInputData {
@@ -494,8 +508,14 @@ impl OAuth2Service {
         user_id: UserId,
         client_id: &str,
     ) -> Result<u64, UniversalInboxError> {
+        // Lock order must match `exchange_code` (code row, then consent row).
+        // Kill outstanding authorization codes so they cannot be redeemed later.
+        self.repository
+            .delete_authorization_codes_for_client(transaction, user_id, client_id)
+            .await?;
         // Drop the stored consent so the user is re-prompted on the next
         // authorize request, even before any refresh token has been issued.
+        // This blocks while a concurrent `exchange_code` holds the consent share lock.
         self.repository
             .delete_user_consent(transaction, user_id, client_id)
             .await?;

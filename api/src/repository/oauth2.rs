@@ -166,6 +166,23 @@ pub trait OAuth2Repository {
         client_id: &str,
     ) -> Result<u64, UniversalInboxError>;
 
+    /// Delete every outstanding authorization code issued to `client_id` for `user_id`.
+    async fn delete_authorization_codes_for_client(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<u64, UniversalInboxError>;
+
+    /// Take a share lock on the user's consent row for `client_id`, held until the
+    /// transaction ends. Returns `false` when no consent (grant) exists.
+    async fn lock_user_consent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<bool, UniversalInboxError>;
+
     /// Look up a cached CIMD metadata document by URL.
     /// Returns `None` if the row is missing — callers must also check
     /// `expires_at` and refetch when the cache entry has expired.
@@ -826,6 +843,80 @@ impl OAuth2Repository for Repository {
             })?;
 
         Ok(result.rows_affected())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
+    )]
+    async fn delete_authorization_codes_for_client(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<u64, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                DELETE FROM oauth2_authorization_code
+                WHERE user_id =
+            "#,
+        );
+        query_builder.push_bind(user_id.0);
+        query_builder.push(" AND client_id = ");
+        query_builder.push_bind(client_id);
+
+        let result = query_builder
+            .build()
+            .execute(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message =
+                    format!("Failed to delete OAuth2 authorization codes from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        Ok(result.rows_affected())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::OAUTH_CLIENT_ID } = %client_id, { attr::USER_ID } = user_id.to_string())
+    )]
+    async fn lock_user_consent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<bool, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                SELECT 1 FROM oauth2_user_consent
+                WHERE user_id =
+            "#,
+        );
+        query_builder.push_bind(user_id.0);
+        query_builder.push(" AND client_id = ");
+        query_builder.push_bind(client_id);
+        query_builder.push(" FOR SHARE");
+
+        let row = query_builder
+            .build()
+            .fetch_optional(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!("Failed to lock OAuth2 user consent in storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        Ok(row.is_some())
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields({ attr::OAUTH_CLIENT_ID_URL } = %client_id_url))]
