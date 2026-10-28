@@ -295,7 +295,16 @@ port = 5432
 username = "postgres"
 password = "password"
 database_name = "universal-inbox"
+# Enforce TLS on database connections: the connection fails if the server refuses TLS.
+# With `false`, a peer refusing TLS silently downgrades the connection to plaintext.
 use_tls = false
+# TLS mode used when `use_tls = true`: "verify-full" (default, verifies the certificate and the
+# hostname), "verify-ca" (certificate only) or "require" (encrypts, no certificate check).
+# See doc/src/config/database.md. Only valid with `use_tls = true`.
+# tls_mode = "verify-full"
+# PEM root certificate for "verify-ca" / "verify-full" (defaults to the system trust store).
+# Not valid with "require".
+# tls_root_cert_path = "/etc/ssl/certs/database-ca.pem"
 max_connections = 10
 # Max time to wait for a row/table lock before failing fast (SQLSTATE 55P03) instead of
 # hanging behind another transaction.

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, fmt, time::Duration};
+use std::{collections::HashMap, env, fmt, path::PathBuf, time::Duration};
 
 use sqlx::ConnectOptions;
 
@@ -834,6 +834,36 @@ fn default_acquire_timeout_in_seconds() -> u64 {
     5
 }
 
+/// TLS mode enforced on database connections when `use_tls` is true.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum DatabaseTlsMode {
+    /// Encrypt the connection, fail if the server refuses TLS. The certificate is not verified.
+    Require,
+    /// Like `Require`, and verify the server certificate chain against the trusted root(s).
+    VerifyCa,
+    /// Like `VerifyCa`, and verify the server certificate matches the `host`.
+    VerifyFull,
+}
+
+impl DatabaseTlsMode {
+    fn ssl_mode(self) -> sqlx::postgres::PgSslMode {
+        match self {
+            DatabaseTlsMode::Require => sqlx::postgres::PgSslMode::Require,
+            DatabaseTlsMode::VerifyCa => sqlx::postgres::PgSslMode::VerifyCa,
+            DatabaseTlsMode::VerifyFull => sqlx::postgres::PgSslMode::VerifyFull,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            DatabaseTlsMode::Require => "require",
+            DatabaseTlsMode::VerifyCa => "verify-ca",
+            DatabaseTlsMode::VerifyFull => "verify-full",
+        }
+    }
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct DatabaseSettings {
     pub username: String,
@@ -841,7 +871,17 @@ pub struct DatabaseSettings {
     pub port: u16,
     pub host: String,
     pub database_name: String,
+    /// Enforce TLS on database connections: the connection fails if the server refuses TLS.
+    /// When `false`, sqlx falls back to its default (`prefer`), which silently downgrades to
+    /// plaintext if the server (or a man-in-the-middle) refuses TLS.
     pub use_tls: bool,
+    /// TLS mode used when `use_tls` is true. Defaults to `verify-full`.
+    #[serde(default)]
+    pub tls_mode: Option<DatabaseTlsMode>,
+    /// PEM root certificate used to verify the server with `verify-ca` / `verify-full`.
+    /// Defaults to the system trust store.
+    #[serde(default)]
+    pub tls_root_cert_path: Option<PathBuf>,
     pub max_connections: u32,
     /// Max time to wait to acquire a row/table lock before giving up (SQLSTATE 55P03) rather
     /// than hanging. Kept short: legitimate single-row contention resolves in milliseconds.
@@ -1203,6 +1243,51 @@ impl EmailSettings {
 }
 
 impl DatabaseSettings {
+    /// TLS mode to enforce, `None` when `use_tls` is false (sqlx default applies).
+    fn effective_tls_mode(&self) -> Option<DatabaseTlsMode> {
+        self.use_tls
+            .then(|| self.tls_mode.unwrap_or(DatabaseTlsMode::VerifyFull))
+    }
+
+    /// Reject TLS settings that would be silently ignored, which would downgrade the connection
+    /// security the operator asked for.
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.use_tls {
+            if self.tls_mode.is_some() || self.tls_root_cert_path.is_some() {
+                return Err(
+                    "`database.tls_mode` and `database.tls_root_cert_path` require \
+                     `database.use_tls = true`"
+                        .to_string(),
+                );
+            }
+            return Ok(());
+        }
+        if self.tls_root_cert_path.is_some()
+            && self.effective_tls_mode() == Some(DatabaseTlsMode::Require)
+        {
+            return Err(
+                "`database.tls_root_cert_path` is ignored with `tls_mode = \"require\"`, use \
+                 `verify-ca` or `verify-full`"
+                    .to_string(),
+            );
+        }
+        Ok(())
+    }
+
+    fn connection_query_string(&self) -> String {
+        let Some(mode) = self.effective_tls_mode() else {
+            return String::new();
+        };
+        let mut query = format!("?sslmode={}", mode.as_str());
+        if let Some(path) = &self.tls_root_cert_path {
+            query.push_str(&format!(
+                "&sslrootcert={}",
+                urlencoding::encode(&path.to_string_lossy())
+            ));
+        }
+        query
+    }
+
     pub fn connection_string(&self) -> String {
         format!(
             "postgres://{}:{}@{}:{}/{}{}",
@@ -1211,7 +1296,7 @@ impl DatabaseSettings {
             self.host,
             self.port,
             self.database_name,
-            if self.use_tls { "?sslmode=require" } else { "" }
+            self.connection_query_string()
         )
     }
 
@@ -1226,8 +1311,31 @@ impl DatabaseSettings {
             self.password,
             self.host,
             self.port,
-            if self.use_tls { "?sslmode=require" } else { "" }
+            self.connection_query_string()
         )
+    }
+
+    /// Single source of truth for the connection options of the operational pool, including the
+    /// TLS mode enforced by `use_tls` / `tls_mode` / `tls_root_cert_path`.
+    pub fn connect_options(
+        &self,
+        log_statements_level: log::LevelFilter,
+    ) -> sqlx::postgres::PgConnectOptions {
+        let mut options = sqlx::postgres::PgConnectOptions::new()
+            .username(&self.username)
+            .password(&self.password)
+            .host(&self.host)
+            .port(self.port)
+            .database(&self.database_name)
+            .log_statements(log_statements_level);
+
+        if let Some(mode) = self.effective_tls_mode() {
+            options = options.ssl_mode(mode.ssl_mode());
+            if let Some(path) = &self.tls_root_cert_path {
+                options = options.ssl_root_cert(path);
+            }
+        }
+        options
     }
 
     /// Builds the single, shared connection pool for this database, applying
@@ -1240,13 +1348,9 @@ impl DatabaseSettings {
     ) -> Result<sqlx::PgPool, sqlx::Error> {
         let lock_timeout_in_milliseconds = self.lock_timeout_in_milliseconds;
         let statement_timeout_in_milliseconds = self.statement_timeout_in_milliseconds;
-        let options = sqlx::postgres::PgConnectOptions::new()
-            .username(&self.username)
-            .password(&self.password)
-            .host(&self.host)
-            .port(self.port)
-            .database(&self.database_name)
-            .log_statements(log_statements_level);
+        self.validate()
+            .map_err(|e| sqlx::Error::Configuration(e.into()))?;
+        let options = self.connect_options(log_statements_level);
 
         sqlx::postgres::PgPoolOptions::new()
             .max_connections(self.max_connections)
@@ -1318,12 +1422,14 @@ impl Settings {
             println!("Loading {config_path}/local config file");
         }
 
-        serde_path_to_error::deserialize(
+        let settings: Settings = serde_path_to_error::deserialize(
             config_builder
                 .add_source(Environment::with_prefix("universal_inbox").separator("__"))
                 .build()?,
         )
-        .map_err(|e| ConfigError::Message(e.to_string()))
+        .map_err(|e| ConfigError::Message(e.to_string()))?;
+        settings.database.validate().map_err(ConfigError::Message)?;
+        Ok(settings)
     }
 
     pub fn new() -> Result<Self, ConfigError> {
@@ -2192,5 +2298,162 @@ mod committed_secret_tests {
         .expect("smtp_password must be required");
 
         assert!(error.to_string().contains("smtp_password"));
+    }
+
+    fn database_settings(use_tls: bool) -> DatabaseSettings {
+        DatabaseSettings {
+            username: "user".to_string(),
+            password: "secret".to_string(),
+            port: 5432,
+            host: "127.0.0.1".to_string(),
+            database_name: "db".to_string(),
+            use_tls,
+            tls_mode: None,
+            tls_root_cert_path: None,
+            max_connections: 2,
+            lock_timeout_in_milliseconds: 3_000,
+            statement_timeout_in_milliseconds: 60_000,
+            acquire_timeout_in_seconds: 2,
+        }
+    }
+
+    mod database_tls {
+        use super::*;
+        use sqlx::postgres::PgSslMode;
+        use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpListener};
+
+        #[test]
+        fn test_use_tls_defaults_to_verify_full() {
+            let options = database_settings(true).connect_options(log::LevelFilter::Off);
+            assert!(matches!(options.get_ssl_mode(), PgSslMode::VerifyFull));
+        }
+
+        #[test]
+        fn test_tls_mode_require() {
+            let mut settings = database_settings(true);
+            settings.tls_mode = Some(DatabaseTlsMode::Require);
+            let options = settings.connect_options(log::LevelFilter::Off);
+            assert!(matches!(options.get_ssl_mode(), PgSslMode::Require));
+        }
+
+        #[test]
+        fn test_tls_mode_verify_full() {
+            let mut settings = database_settings(true);
+            settings.tls_mode = Some(DatabaseTlsMode::VerifyFull);
+            let options = settings.connect_options(log::LevelFilter::Off);
+            assert!(matches!(options.get_ssl_mode(), PgSslMode::VerifyFull));
+        }
+
+        #[test]
+        fn test_without_tls_keeps_sqlx_default() {
+            let options = database_settings(false).connect_options(log::LevelFilter::Off);
+            assert!(matches!(options.get_ssl_mode(), PgSslMode::Prefer));
+        }
+
+        #[test]
+        fn test_validate_rejects_tls_options_without_use_tls() {
+            let mut settings = database_settings(false);
+            settings.tls_mode = Some(DatabaseTlsMode::VerifyFull);
+            assert!(settings.validate().is_err());
+
+            let mut settings = database_settings(false);
+            settings.tls_root_cert_path = Some(PathBuf::from("/etc/ssl/root.pem"));
+            assert!(settings.validate().is_err());
+        }
+
+        #[test]
+        fn test_validate_rejects_root_cert_with_require() {
+            let mut settings = database_settings(true);
+            settings.tls_root_cert_path = Some(PathBuf::from("/etc/ssl/root.pem"));
+            // default mode (`verify-full`) uses the root cert
+            assert!(settings.validate().is_ok());
+            settings.tls_mode = Some(DatabaseTlsMode::Require);
+            assert!(settings.validate().is_err());
+            settings.tls_mode = Some(DatabaseTlsMode::VerifyCa);
+            assert!(settings.validate().is_ok());
+        }
+
+        #[test]
+        fn test_connection_strings_carry_the_tls_mode() {
+            assert!(
+                !database_settings(false)
+                    .connection_string()
+                    .contains("sslmode")
+            );
+            assert!(
+                database_settings(true)
+                    .connection_string()
+                    .ends_with("/db?sslmode=verify-full")
+            );
+
+            let mut settings = database_settings(true);
+            settings.tls_mode = Some(DatabaseTlsMode::VerifyFull);
+            settings.tls_root_cert_path = Some(PathBuf::from("/etc/ssl/root.pem"));
+            settings.tls_mode = Some(DatabaseTlsMode::VerifyCa);
+            assert!(
+                settings
+                    .connection_string()
+                    .ends_with("/db?sslmode=verify-ca&sslrootcert=%2Fetc%2Fssl%2Froot.pem")
+            );
+            settings.tls_mode = Some(DatabaseTlsMode::VerifyFull);
+            assert!(
+                settings
+                    .connection_string()
+                    .ends_with("/db?sslmode=verify-full&sslrootcert=%2Fetc%2Fssl%2Froot.pem")
+            );
+            assert!(
+                settings
+                    .connection_string_without_db()
+                    .contains("5432?sslmode=verify-full")
+            );
+        }
+
+        /// Starts a fake Postgres that answers `N` (no TLS) to the `SSLRequest`, then reports
+        /// whether the client went on to send a plaintext packet.
+        async fn refusing_peer() -> (u16, tokio::task::JoinHandle<bool>) {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let handle = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut ssl_request = [0u8; 8];
+                stream.read_exact(&mut ssl_request).await.unwrap();
+                // SSLRequest: length 8, code 80877103
+                assert_eq!(ssl_request, [0, 0, 0, 8, 4, 210, 22, 47]);
+                stream.write_all(b"N").await.unwrap();
+                let mut startup = [0u8; 8];
+                matches!(
+                    tokio::time::timeout(Duration::from_secs(2), stream.read(&mut startup)).await,
+                    Ok(Ok(n)) if n > 0
+                )
+            });
+            (port, handle)
+        }
+
+        #[tokio::test]
+        async fn test_connect_pool_fails_when_peer_refuses_tls() {
+            let (port, peer) = refusing_peer().await;
+            let mut settings = database_settings(true);
+            settings.port = port;
+
+            let result = settings.connect_pool(log::LevelFilter::Off).await;
+
+            assert!(result.is_err());
+            assert!(
+                !peer.await.unwrap(),
+                "client sent plaintext after TLS refusal"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_connect_pool_falls_back_to_plaintext_without_use_tls() {
+            // Control: proves the refusing peer detects a plaintext downgrade.
+            let (port, peer) = refusing_peer().await;
+            let mut settings = database_settings(false);
+            settings.port = port;
+
+            let _ = settings.connect_pool(log::LevelFilter::Off).await;
+
+            assert!(peer.await.unwrap(), "expected a plaintext startup packet");
+        }
     }
 }

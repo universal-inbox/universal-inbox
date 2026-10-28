@@ -12,6 +12,7 @@
 # Configuration
 
 - [Data Encryption at Rest](config/data_encryption.md)
+- [Database TLS](config/database.md)
 - [Integration Setup](config/setup/README.md)
   - [Github](config/setup/github.md)
   - [Google Mail](config/setup/gmail.md)
