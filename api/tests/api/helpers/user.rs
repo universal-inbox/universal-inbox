@@ -581,3 +581,20 @@ pub async fn emails_sent_to(app: &TestedApp, email: &Pii<EmailAddress>) -> Vec<E
         .map(|(_, template)| template.clone())
         .collect()
 }
+
+/// Emulate a discoverable authenticator for a start response.
+///
+/// The start endpoint never sends credential IDs (`allowCredentials` is
+/// always empty), but `SoftPasskey` is not discoverable and can only sign for
+/// a credential named in the allow-list. This puts the authenticator's own
+/// credential back, as a resident-key authenticator would find it itself.
+pub fn with_discoverable_credential(
+    mut challenge: webauthn_rs::prelude::RequestChallengeResponse,
+    credential_id: &impl serde::Serialize,
+) -> webauthn_rs::prelude::RequestChallengeResponse {
+    assert!(challenge.public_key.allow_credentials.is_empty());
+    challenge.public_key.allow_credentials =
+        serde_json::from_value(serde_json::json!([{ "type": "public-key", "id": credential_id }]))
+            .unwrap();
+    challenge
+}

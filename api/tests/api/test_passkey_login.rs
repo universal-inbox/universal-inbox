@@ -17,7 +17,7 @@ use crate::helpers::{
         finish_add_passkey_registration_response, finish_passkey_authentication_response,
         get_current_user_response, register_user, remove_auth_method_response,
         split_creation_challenge, start_add_passkey_registration_response,
-        start_passkey_authentication_response,
+        start_passkey_authentication_response, with_discoverable_credential,
     },
 };
 
@@ -39,12 +39,13 @@ fn split_request_challenge(body: &str) -> (RequestChallengeResponse, String) {
     (serde_json::from_str(body).unwrap(), nonce)
 }
 
-/// Register a passkey for the logged-in `client` and return its username.
+/// Register a passkey for the logged-in `client` and return its username and
+/// credential ID.
 async fn add_passkey(
     client: &Client,
     app: &TestedApp,
     authenticator: &mut WebauthnAuthenticator<SoftPasskey>,
-) -> String {
+) -> (String, Value) {
     let username = format!("passkey_{}", Uuid::new_v4().simple());
     let response = start_add_passkey_registration_response(client, app, &username).await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -54,19 +55,24 @@ async fn add_passkey(
         .unwrap();
     let response = finish_add_passkey_registration_response(client, app, &credential, &nonce).await;
     assert_eq!(response.status(), StatusCode::OK);
-    username
+    (username, serde_json::to_value(&credential.raw_id).unwrap())
 }
 
 /// Start a login ceremony with a fresh (logged out) client.
 async fn start_login(
     app: &TestedApp,
     username: &str,
+    credential_id: &Value,
 ) -> (Client, RequestChallengeResponse, String) {
     let login_client = cookie_client();
     let response = start_passkey_authentication_response(&login_client, app, username).await;
     assert_eq!(response.status(), StatusCode::OK);
     let (challenge, nonce) = split_request_challenge(&response.text().await.unwrap());
-    (login_client, challenge, nonce)
+    (
+        login_client,
+        with_discoverable_credential(challenge, credential_id),
+        nonce,
+    )
 }
 
 async fn assert_not_logged_in(client: &Client, app: &TestedApp) {
@@ -80,9 +86,9 @@ async fn test_a_still_registered_passkey_logs_in(#[future] tested_app_with_local
     let app = tested_app_with_local_auth.await;
     let (client, user) = register_user(&app, unique_email(), PASSWORD).await;
     let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
-    let username = add_passkey(&client, &app, &mut authenticator).await;
+    let (username, credential_id) = add_passkey(&client, &app, &mut authenticator).await;
 
-    let (login_client, challenge, nonce) = start_login(&app, &username).await;
+    let (login_client, challenge, nonce) = start_login(&app, &username, &credential_id).await;
     let credential = authenticator
         .do_authentication(app.front_base_url.clone(), challenge)
         .unwrap();
@@ -104,10 +110,10 @@ async fn test_a_replaced_passkey_cannot_finish_a_login_started_before_the_replac
     let app = tested_app_with_local_auth.await;
     let (client, _user) = register_user(&app, unique_email(), PASSWORD).await;
     let mut old_authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
-    let username = add_passkey(&client, &app, &mut old_authenticator).await;
+    let (username, credential_id) = add_passkey(&client, &app, &mut old_authenticator).await;
 
     // The login ceremony starts while the old passkey is registered...
-    let (login_client, challenge, nonce) = start_login(&app, &username).await;
+    let (login_client, challenge, nonce) = start_login(&app, &username, &credential_id).await;
 
     // ...then the passkey is replaced (removed, then another one added).
     let response = remove_auth_method_response(&client, &app, UserAuthKind::Passkey).await;
@@ -133,9 +139,9 @@ async fn test_a_removed_passkey_cannot_finish_a_pending_login(
     let app = tested_app_with_local_auth.await;
     let (client, _user) = register_user(&app, unique_email(), PASSWORD).await;
     let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
-    let username = add_passkey(&client, &app, &mut authenticator).await;
+    let (username, credential_id) = add_passkey(&client, &app, &mut authenticator).await;
 
-    let (login_client, challenge, nonce) = start_login(&app, &username).await;
+    let (login_client, challenge, nonce) = start_login(&app, &username, &credential_id).await;
     let response = remove_auth_method_response(&client, &app, UserAuthKind::Passkey).await;
     assert_eq!(response.status(), StatusCode::OK);
 

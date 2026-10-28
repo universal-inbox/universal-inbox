@@ -1731,9 +1731,11 @@ mod auth_rate_limit {
 /// The fix synthesizes shape-identical responses regardless of whether
 /// the username exists: registration always returns a fresh ephemeral
 /// `UserId`-bound challenge, and authentication mints a discoverable-
-/// style challenge with an empty `allow_credentials` list for unknown
-/// usernames. The HTTP status and body envelope are identical, and no
-/// `user_id` or username text reaches the client on the "exists" or
+/// style challenge. `allow_credentials` is cleared for known and unknown
+/// usernames alike, so neither the account's existence nor its credential
+/// IDs reach the client (the real credential stays in the server-side
+/// ceremony state). The HTTP status and body envelope are identical, and
+/// no `user_id` or username text reaches the client on the "exists" or
 /// "missing" paths.
 mod passkey_start_non_enumerable {
     use super::*;
@@ -1747,8 +1749,9 @@ mod passkey_start_non_enumerable {
     };
 
     /// Drive the full unauthenticated passkey registration ceremony so a
-    /// known passkey user exists in the database. Returns the username.
-    async fn register_passkey_user(app: &TestedApp, username: &str) {
+    /// known passkey user exists in the database. Returns the registered
+    /// credential ID (base64url).
+    async fn register_passkey_user(app: &TestedApp, username: &str) -> String {
         let client = reqwest::Client::builder()
             .cookie_store(true)
             .build()
@@ -1773,6 +1776,16 @@ mod passkey_start_non_enumerable {
         )
         .await;
         assert_eq!(finish_response.status(), reqwest::StatusCode::OK);
+        register_credential.id
+    }
+
+    /// Replace the per-ceremony values (challenge, nonce) so two start
+    /// responses can be compared structurally.
+    fn redact_ceremony_values(body: &str) -> serde_json::Value {
+        let mut value: serde_json::Value = serde_json::from_str(body).unwrap();
+        value["nonce"] = "<redacted>".into();
+        value["publicKey"]["challenge"] = "<redacted>".into();
+        value
     }
 
     #[rstest]
@@ -1865,7 +1878,7 @@ mod passkey_start_non_enumerable {
         let app = tested_app_with_local_auth.await;
 
         let registered_username = "carol_registered_passkey";
-        register_passkey_user(&app, registered_username).await;
+        let credential_id = register_passkey_user(&app, registered_username).await;
 
         let client = reqwest::Client::builder()
             .cookie_store(true)
@@ -1927,6 +1940,28 @@ mod passkey_start_non_enumerable {
         assert_eq!(
             known_challenge.public_key.rp_id, unknown_challenge.public_key.rp_id,
             "RP id must be identical across known/unknown branches",
+        );
+
+        // No credential ID may reach an unauthenticated caller: the
+        // allow-list is empty in both branches.
+        assert!(
+            known_challenge.public_key.allow_credentials.is_empty(),
+            "known-username response exposes allow_credentials: {known_body}",
+        );
+        assert!(
+            unknown_challenge.public_key.allow_credentials.is_empty(),
+            "unknown-username response exposes allow_credentials: {unknown_body}",
+        );
+        assert!(
+            !known_body.contains(&credential_id),
+            "known-username response leaks the registered credential ID: {known_body}",
+        );
+
+        // Same JSON structure once the per-ceremony values are redacted.
+        assert_eq!(
+            redact_ceremony_values(&known_body),
+            redact_ceremony_values(&unknown_body),
+            "known and unknown start responses must be structurally identical",
         );
     }
 }
@@ -2000,6 +2035,16 @@ mod passkey_authentication_ceremony_isolation {
         let attacker = cookie_client();
         let attacker_start = start_passkey_authentication_response(&attacker, &app, username).await;
         assert_eq!(attacker_start.status(), reqwest::StatusCode::OK);
+
+        // The server no longer sends credential IDs. SoftPasskey is not a
+        // discoverable authenticator, so emulate one: it looks up its own
+        // resident credential and presents it as the allow-list entry.
+        let mut request_challenge = request_challenge;
+        assert!(request_challenge.public_key.allow_credentials.is_empty());
+        request_challenge.public_key.allow_credentials = serde_json::from_value(
+            serde_json::json!([{ "type": "public-key", "id": register_credential.raw_id }]),
+        )
+        .unwrap();
 
         // The victim's ceremony still completes.
         let credential = authenticator

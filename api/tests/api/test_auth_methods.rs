@@ -754,7 +754,10 @@ mod passkey_disabled {
         let start =
             start_passkey_authentication_response(&enabled_login, &enabled_app, "alice").await;
         let body = start.text().await.unwrap();
-        let request_challenge: RequestChallengeResponse = serde_json::from_str(&body).unwrap();
+        let request_challenge = crate::helpers::user::with_discoverable_credential(
+            serde_json::from_str::<RequestChallengeResponse>(&body).unwrap(),
+            &credential.raw_id,
+        );
         let login_nonce = serde_json::from_str::<serde_json::Value>(&body).unwrap()["nonce"]
             .as_str()
             .unwrap()

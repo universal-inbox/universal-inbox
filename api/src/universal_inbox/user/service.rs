@@ -2521,16 +2521,17 @@ impl UserService {
     {
         self.ensure_passkey_auth_enabled()?;
 
-        // Security (universal-inbox-bkj.31): Avoid leaking whether the
-        // username is registered. If we find a matching passkey user we
-        // generate a real authentication challenge bound to their
-        // credential; if not, we mint an indistinguishable challenge
+        // Security (universal-inbox-bkj.31, universal-inbox-9aq2): Avoid
+        // leaking whether the username is registered, and never expose
+        // credential IDs to an unauthenticated caller. If we find a
+        // matching passkey user we generate a real authentication
+        // challenge bound to their credential; if not, we mint a challenge
         // bound to a fresh ephemeral UserId with no allowed credentials.
-        // The HTTP status and body shape are identical in both branches;
-        // the only intentional residual signal is the `allow_credentials`
-        // list (real for known users, empty for unknown users) — this is
-        // the simpler trade-off explicitly accepted by the issue, since
-        // a deterministic synthetic credential is non-trivial to forge.
+        // In both branches `allow_credentials` is cleared before the
+        // response is returned, so the client always receives a
+        // discoverable-style challenge. The real credential stays in the
+        // server-side `PasskeyAuthentication` state, which is what
+        // `finish_passkey_authentication` verifies against.
         // No username or UserId text is ever echoed back to the client.
         let lookup = self
             .repository
@@ -2549,10 +2550,14 @@ impl UserService {
             _ => (UserId::from(Uuid::new_v4()), Vec::new()),
         };
 
-        let (request_challenge_response, passkey_authentication) = self
+        let (mut request_challenge_response, passkey_authentication) = self
             .webauthn
             .start_passkey_authentication(&allowed)
             .context("Failed to start Passkey authentication")?;
+        request_challenge_response
+            .public_key
+            .allow_credentials
+            .clear();
 
         Ok((user_id, request_challenge_response, passkey_authentication))
     }
