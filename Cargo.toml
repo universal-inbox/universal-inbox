@@ -113,7 +113,7 @@ pretty_assertions = { version = "1.3.0" }
 regex = { version = "1.10.0" }
 reqwest = { version = "0.13", features = ["json", "cookies"] }
 rrule = { version = "0.14.0", features = ["serde"] }
-rstest = { version = "0.26.0" }
+rstest = { version = "0.28.0" }
 schemars = { version = "1.0", features = ["chrono04", "uuid1", "url2"] }
 secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -130,7 +130,7 @@ thiserror = { version = "2.0" }
 tracing = { version = "0.1.0", features = ["log"] }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }
-validator = { version = "0.20.0", features = ["derive"] }
+validator = { version = "0.21.0", features = ["derive"] }
 vec1 = { version = "1.12.0", features = ["serde"] }
 webauthn-rs = { version = "0.5.4" }
 webauthn-rs-proto = { version = "0.5.4" }
