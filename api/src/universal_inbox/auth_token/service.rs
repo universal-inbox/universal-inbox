@@ -25,7 +25,9 @@ use crate::{
         auth_token::{AuthenticationTokenRepository, hash_jwt_token},
     },
     universal_inbox::{UniversalInboxError, user::model::SessionAuthentication},
-    utils::jwt::{Claims, JWT_SIGNING_ALGO, JWTBase64EncodedSigningKeys, JWTSigningKeys},
+    utils::jwt::{
+        Claims, JWT_SIGNING_ALGO, JWTBase64EncodedSigningKeys, JWTSigningKeys, TokenPurpose,
+    },
 };
 
 /// [`BearerTokenChecker`] backed by the stored `authentication_token` rows.
@@ -126,6 +128,11 @@ impl AuthenticationTokenService {
             exp: expire_at.timestamp() as usize,
             sub: user_id.to_string(),
             jti: Uuid::new_v4().to_string(),
+            purpose: Some(if is_session_token {
+                TokenPurpose::Session
+            } else {
+                TokenPurpose::Api
+            }),
             aud: None,
             scope: None,
             client_id: None,
@@ -183,10 +190,11 @@ impl AuthenticationTokenService {
 
     /// Whether a validly signed bearer token may still authenticate.
     ///
-    /// Stored tokens (API keys created from the settings page or the CLI) are
-    /// looked up by digest and must be neither revoked nor expired. Tokens
-    /// that were never stored (session JWTs, short-lived OAuth2 access
-    /// tokens) are accepted on their signature and `exp` alone, as before.
+    /// Only API keys (created from the settings page or the CLI, including legacy
+    /// ones without a purpose claim) reach this check. They are looked up by digest
+    /// and must have a row that is neither revoked nor expired: a token with no row
+    /// is rejected. Session JWTs and OAuth2 access tokens are never checked here, the
+    /// middleware routes them by their purpose claim.
     #[tracing::instrument(level = "debug", skip_all)]
     pub async fn is_bearer_token_active(&self, jwt: &JWT) -> Result<bool, UniversalInboxError> {
         let mut transaction = self.repository.begin().await?;
@@ -200,7 +208,7 @@ impl AuthenticationTokenService {
             .context("Failed to commit while checking authentication token status")?;
 
         Ok(match status {
-            None => true,
+            None => false,
             Some((is_revoked, expire_at)) => {
                 !is_revoked && expire_at.is_none_or(|expire_at| expire_at > Utc::now())
             }

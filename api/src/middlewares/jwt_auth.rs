@@ -8,12 +8,28 @@
 //! extractors, and downstream middlewares ([`super::audience_guard`], MCP) read it directly
 //! from the request extensions.
 //!
-//! Tokens read from the `Authorization` header are additionally passed to an optional
-//! [`BearerTokenChecker`], which rejects stored API tokens that were revoked or have
-//! expired. OAuth2 access is revoked by deleting refresh tokens.
-//! Tokens read from the session cookie are passed to an optional
-//! [`SessionTokenChecker`], which rejects sessions that were logged out, or issued
-//! before the user's sessions were revoked (password change or reset).
+//! The revocation policy follows the signed [`TokenPurpose`] claim of the token, not the
+//! transport it arrives on:
+//!
+//! | Transport | Purpose            | Outcome                                              |
+//! |-----------|--------------------|------------------------------------------------------|
+//! | Bearer    | `Session`          | rejected                                             |
+//! | Bearer    | `Api` / no claim   | optional [`BearerTokenChecker`] (stored row required) |
+//! | Bearer    | `OAuth`            | accepted, revoked by deleting refresh tokens         |
+//! | Cookie    | `Session` / none   | optional [`SessionTokenChecker`]                      |
+//! | Cookie    | `Api` / `OAuth`    | rejected                                             |
+//!
+//! The [`SessionTokenChecker`] rejects sessions that were logged out, or issued before
+//! the user's sessions were revoked (password change or reset).
+//!
+//! Tokens minted before the purpose claim existed carry none (an audience still marks
+//! them as OAuth2, see [`Claims::effective_purpose`]). They are handled deliberately:
+//! - legacy session cookies keep working until they expire, and still go through the
+//!   session revocation check;
+//! - legacy session JWTs sent as bearer are rejected: without a claim a stored row is
+//!   required, and session JWTs have none;
+//! - legacy API tokens keep working, they have a stored row;
+//! - legacy OAuth2 tokens keep working, their audience identifies them.
 
 use std::{
     future::{Ready, ready},
@@ -34,7 +50,10 @@ use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use universal_inbox::user::UserId;
 
-use crate::{universal_inbox::UniversalInboxError, utils::jwt::Claims};
+use crate::{
+    universal_inbox::UniversalInboxError,
+    utils::jwt::{Claims, TokenPurpose},
+};
 
 /// A wrapper around a raw JWT string.
 #[derive(Hash, PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
@@ -65,6 +84,8 @@ pub trait SessionClaims {
     fn token_id(&self) -> &str;
     /// Issue time, in seconds since the Unix epoch.
     fn issued_at(&self) -> i64;
+    /// What the token is for, see [`Claims::effective_purpose`].
+    fn purpose(&self) -> Option<TokenPurpose>;
 }
 
 impl SessionClaims for Claims {
@@ -78,6 +99,10 @@ impl SessionClaims for Claims {
 
     fn issued_at(&self) -> i64 {
         self.iat as i64
+    }
+
+    fn purpose(&self) -> Option<TokenPurpose> {
+        self.effective_purpose()
     }
 }
 
@@ -346,13 +371,30 @@ where
     if let Some(jwt) = maybe_extracted_jwt {
         match decode::<ClaimsType>(jwt.0.as_str(), jwt_decoding_key, validation) {
             Ok(decoded) => {
-                let is_active = if is_bearer {
-                    match bearer_token_checker {
+                let purpose = decoded.claims.purpose();
+                let is_active = match (is_bearer, purpose) {
+                    (true, Some(TokenPurpose::Session)) => {
+                        return Ok(req
+                            .error_response(UniversalInboxError::Unauthorized(anyhow!(
+                                "Invalid token: a session token cannot be used as a bearer token"
+                            )))
+                            .map_into_right_body());
+                    }
+                    (false, Some(TokenPurpose::Api | TokenPurpose::OAuth)) => {
+                        return Ok(req
+                            .error_response(UniversalInboxError::Unauthorized(anyhow!(
+                                "Invalid session: not a session token"
+                            )))
+                            .map_into_right_body());
+                    }
+                    // OAuth2 access tokens need no stored row: they are revoked by
+                    // deleting the refresh tokens
+                    (true, Some(TokenPurpose::OAuth)) => Ok(true),
+                    (true, Some(TokenPurpose::Api) | None) => match bearer_token_checker {
                         Some(checker) => checker.is_active(jwt.clone()).await,
                         None => Ok(true),
-                    }
-                } else {
-                    match session_token_checker {
+                    },
+                    (false, Some(TokenPurpose::Session) | None) => match session_token_checker {
                         Some(checker) => {
                             checker
                                 .is_active(
@@ -363,7 +405,7 @@ where
                                 .await
                         }
                         None => Ok(true),
-                    }
+                    },
                 };
                 match is_active {
                     Ok(true) => {}
@@ -438,6 +480,7 @@ mod tests {
         rand::SystemRandom,
         signature::{Ed25519KeyPair, KeyPair},
     };
+    use rstest::rstest;
     use serde::{Deserialize, Serialize};
 
     use super::*;
@@ -450,6 +493,8 @@ mod tests {
         exp: usize,
         iat: usize,
         sub: String,
+        #[serde(default)]
+        purpose: Option<TokenPurpose>,
     }
 
     impl SessionClaims for TestClaims {
@@ -464,6 +509,10 @@ mod tests {
         fn issued_at(&self) -> i64 {
             self.iat as i64
         }
+
+        fn purpose(&self) -> Option<TokenPurpose> {
+            self.purpose
+        }
     }
 
     fn generate_keys() -> (EncodingKey, DecodingKey) {
@@ -477,11 +526,21 @@ mod tests {
 
     /// Builds a token for `sub`, expiring `exp_offset_secs` from now (negative = expired).
     fn make_token(encoding_key: &EncodingKey, sub: &str, exp_offset_secs: i64) -> String {
+        make_token_with_purpose(encoding_key, sub, exp_offset_secs, None)
+    }
+
+    fn make_token_with_purpose(
+        encoding_key: &EncodingKey,
+        sub: &str,
+        exp_offset_secs: i64,
+        purpose: Option<TokenPurpose>,
+    ) -> String {
         let now = Utc::now().timestamp();
         let claims = TestClaims {
             iat: now as usize,
             exp: (now + exp_offset_secs) as usize,
             sub: sub.to_string(),
+            purpose,
         };
         encode(&Header::new(ALGO), &claims, encoding_key).unwrap()
     }
@@ -804,5 +863,87 @@ mod tests {
             .to_request();
         let resp = test::call_service(&app, req).await;
         assert_eq!(actix_http::StatusCode::OK, resp.status());
+    }
+
+    /// Accepts or rejects every bearer token, like a store with no row (`false`) or an
+    /// active row (`true`).
+    struct FixedBearerChecker(bool);
+
+    impl BearerTokenChecker for FixedBearerChecker {
+        fn is_active(
+            &self,
+            _jwt: JWT,
+        ) -> LocalBoxFuture<'static, Result<bool, UniversalInboxError>> {
+            let is_active = self.0;
+            async move { Ok(is_active) }.boxed_local()
+        }
+    }
+
+    async fn bearer_status(
+        purpose: Option<TokenPurpose>,
+        bearer_row_exists: bool,
+    ) -> actix_http::StatusCode {
+        let (enc, dec) = generate_keys();
+        let token = make_token_with_purpose(&enc, "user", 3600, purpose);
+        let settings = AuthenticateMiddlewareSettings {
+            bearer_token_checker: Some(Arc::new(FixedBearerChecker(bearer_row_exists))),
+            // Would accept anything: must not be consulted for bearer tokens
+            session_token_checker: Some(Arc::new(RevokedSubjectChecker {
+                revoked_subject: "nobody",
+            })),
+            ..settings(dec)
+        };
+        let app = init_app_with_settings(settings, None).await;
+        let req = test::TestRequest::get()
+            .uri("/protected")
+            .insert_header(("Authorization", format!("Bearer {token}")))
+            .to_request();
+        test::call_service(&app, req).await.status()
+    }
+
+    #[rstest]
+    #[case::session_rejected(Some(TokenPurpose::Session), true, 401)]
+    #[case::session_rejected_without_row(Some(TokenPurpose::Session), false, 401)]
+    #[case::api_with_row_accepted(Some(TokenPurpose::Api), true, 200)]
+    #[case::api_without_row_rejected(Some(TokenPurpose::Api), false, 401)]
+    #[case::legacy_with_row_accepted(None, true, 200)]
+    #[case::legacy_without_row_rejected(None, false, 401)]
+    #[case::oauth_accepted_without_row(Some(TokenPurpose::OAuth), false, 200)]
+    #[actix_web::test]
+    async fn bearer_token_outcome_follows_purpose(
+        #[case] purpose: Option<TokenPurpose>,
+        #[case] bearer_row_exists: bool,
+        #[case] expected: u16,
+    ) {
+        assert_eq!(
+            expected,
+            bearer_status(purpose, bearer_row_exists).await.as_u16()
+        );
+    }
+
+    async fn cookie_status(purpose: Option<TokenPurpose>) -> actix_http::StatusCode {
+        let (enc, dec) = generate_keys();
+        let token = make_token_with_purpose(&enc, "cookie-user", 3600, purpose);
+        let app = init_app(dec, Some(token)).await;
+        let login_resp =
+            test::call_service(&app, test::TestRequest::get().uri("/login").to_request()).await;
+        let mut req = test::TestRequest::get().uri("/protected");
+        for cookie in login_resp.response().cookies() {
+            req = req.cookie(cookie);
+        }
+        app.call(req.to_request()).await.unwrap().status()
+    }
+
+    #[rstest]
+    #[case::session_accepted(Some(TokenPurpose::Session), 200)]
+    #[case::legacy_accepted(None, 200)]
+    #[case::api_rejected(Some(TokenPurpose::Api), 401)]
+    #[case::oauth_rejected(Some(TokenPurpose::OAuth), 401)]
+    #[actix_web::test]
+    async fn cookie_token_outcome_follows_purpose(
+        #[case] purpose: Option<TokenPurpose>,
+        #[case] expected: u16,
+    ) {
+        assert_eq!(expected, cookie_status(purpose).await.as_u16());
     }
 }

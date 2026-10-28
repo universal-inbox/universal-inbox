@@ -60,12 +60,34 @@ impl JWTSigningKeys {
     }
 }
 
+/// What a JWT is for. Signed into the token so that the revocation policy is chosen
+/// from the token itself and not from the transport (cookie or `Authorization` header)
+/// it arrives on.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TokenPurpose {
+    /// Web session, stored in the session cookie. Revoked by logout and password change.
+    Session,
+    /// API key, stored by digest. Revoked by deleting or revoking its row.
+    Api,
+    /// OAuth2 access token. Revoked by deleting the refresh tokens.
+    OAuth,
+}
+
+/// JWT claims shared by session, API and OAuth2 tokens.
+///
+/// Tokens minted before the `purpose` claim existed carry none. They are classified by
+/// [`Claims::effective_purpose`]: an audience means OAuth2, otherwise the purpose is
+/// unknown (legacy API key or session token) and the transport decides which
+/// revocation check applies. See the `jwt_auth` middleware for the resulting rules.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub exp: usize,
     pub iat: usize,
     pub sub: String,
     pub jti: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<TokenPurpose>,
     // OAuth2 fields (None for legacy API key tokens)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub aud: Option<String>,
@@ -76,6 +98,13 @@ pub struct Claims {
 }
 
 impl Claims {
+    /// The purpose of this token: the signed claim when present, `OAuth` for a legacy
+    /// token with an audience, `None` for a legacy API key or session token.
+    pub fn effective_purpose(&self) -> Option<TokenPurpose> {
+        self.purpose
+            .or_else(|| self.aud.as_ref().map(|_| TokenPurpose::OAuth))
+    }
+
     /// Whether this token grants `required_scope`.
     ///
     /// - Tokens without an audience are first-party credentials (API keys
@@ -115,10 +144,35 @@ mod tests {
             iat: 0,
             sub: "user".to_string(),
             jti: "jti".to_string(),
+            purpose: None,
             aud: aud.map(str::to_string),
             scope: scope.map(str::to_string),
             client_id: None,
         }
+    }
+
+    #[rstest]
+    #[case::session(Some(TokenPurpose::Session), None, Some(TokenPurpose::Session))]
+    #[case::api(Some(TokenPurpose::Api), None, Some(TokenPurpose::Api))]
+    #[case::oauth(Some(TokenPurpose::OAuth), Some("mcp"), Some(TokenPurpose::OAuth))]
+    #[case::claim_wins_over_audience(Some(TokenPurpose::Api), Some("mcp"), Some(TokenPurpose::Api))]
+    #[case::legacy_oauth_by_audience(None, Some("mcp"), Some(TokenPurpose::OAuth))]
+    #[case::legacy_api_or_session(None, None, None)]
+    fn test_effective_purpose(
+        #[case] purpose: Option<TokenPurpose>,
+        #[case] aud: Option<&str>,
+        #[case] expected: Option<TokenPurpose>,
+    ) {
+        let mut claims = claims(aud, None);
+        claims.purpose = purpose;
+        assert_eq!(claims.effective_purpose(), expected);
+    }
+
+    #[test]
+    fn test_legacy_claims_without_purpose_deserialize() {
+        let claims: Claims =
+            serde_json::from_str(r#"{"exp":1,"iat":0,"sub":"u","jti":"j"}"#).unwrap();
+        assert_eq!(claims.purpose, None);
     }
 
     #[rstest]

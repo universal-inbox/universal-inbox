@@ -191,7 +191,10 @@ mod close_session {
 
         use crate::helpers::{
             tested_app_with_local_auth,
-            user::{create_user, get_current_user_response, login_user_response},
+            user::{
+                create_user, get_current_user_response, get_current_user_with_bearer_response,
+                login_and_copy_session, login_user_response,
+            },
         };
 
         use super::*;
@@ -252,6 +255,41 @@ mod close_session {
             let response = get_current_user_with_cookie(&app, &copied_cookie).await;
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
             let response = get_current_user_response(&client, &app).await;
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        #[rstest]
+        #[tokio::test]
+        async fn test_session_jwt_is_rejected_as_bearer_token(
+            #[future] tested_app_with_local_auth: TestedApp,
+        ) {
+            let app = tested_app_with_local_auth.await;
+            let email = unique_email();
+            create_user(&app, email.clone(), PASSWORD).await;
+            let session = login_and_copy_session(&app, email, PASSWORD).await;
+
+            // The same JWT authenticates as a cookie but never as a bearer token
+            let response = get_current_user_with_cookie(&app, &session.cookie).await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let response = get_current_user_with_bearer_response(&app, &session.jwt()).await;
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        #[rstest]
+        #[tokio::test]
+        async fn test_logged_out_session_jwt_is_rejected_as_bearer_token(
+            #[future] tested_app_with_local_auth: TestedApp,
+        ) {
+            let app = tested_app_with_local_auth.await;
+            let email = unique_email();
+            create_user(&app, email.clone(), PASSWORD).await;
+            let session = login_and_copy_session(&app, email, PASSWORD).await;
+            let jwt = session.jwt();
+
+            let response = logout_user_response(&session.client, &app.api_address).await;
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let response = get_current_user_with_bearer_response(&app, &jwt).await;
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 

@@ -1,6 +1,12 @@
+use std::sync::Arc;
+
 use argon2::{Argon2, PasswordHasher};
 use email_address::EmailAddress;
-use reqwest::Client;
+use reqwest::{
+    Client,
+    cookie::{CookieStore, Jar},
+    header::{AUTHORIZATION, HeaderValue},
+};
 use secrecy::SecretBox;
 use serde_json::Value;
 use universal_inbox::pii::Pii;
@@ -128,6 +134,57 @@ pub async fn login_user_response(
             email,
             password: SecretBox::new(Box::new(Password(password.to_string()))),
         })
+        .send()
+        .await
+        .unwrap()
+}
+
+/// A user's session as an attacker who copied it would hold it: a client logged in
+/// with the cookie jar kept, to read back the session cookie and the session JWT it holds.
+pub struct CopiedSession {
+    pub client: Client,
+    pub cookie: HeaderValue,
+}
+
+impl CopiedSession {
+    /// The session JWT stored (signed, not encrypted) in the session cookie.
+    pub fn jwt(&self) -> String {
+        let cookie = self.cookie.to_str().unwrap();
+        regex::Regex::new(r"eyJ[\w-]+\.[\w-]+\.[\w-]+")
+            .unwrap()
+            .find(cookie)
+            .expect("the session cookie holds the session JWT")
+            .as_str()
+            .to_string()
+    }
+}
+
+pub async fn login_and_copy_session(
+    app: &TestedApp,
+    email: Pii<EmailAddress>,
+    password: &str,
+) -> CopiedSession {
+    let jar = Arc::new(Jar::default());
+    let client = Client::builder()
+        .cookie_provider(jar.clone())
+        .build()
+        .unwrap();
+    let response = login_user_response(&client, app, email, password).await;
+    assert_eq!(response.status(), http::StatusCode::OK);
+    let cookie = jar
+        .cookies(&app.api_address.parse().unwrap())
+        .expect("the login sets a session cookie");
+    CopiedSession { client, cookie }
+}
+
+/// `GET /users/me` with `jwt` sent as a bearer token and no cookie.
+pub async fn get_current_user_with_bearer_response(
+    app: &TestedApp,
+    jwt: &str,
+) -> reqwest::Response {
+    Client::new()
+        .get(format!("{}users/me", app.api_address))
+        .header(AUTHORIZATION, format!("Bearer {jwt}"))
         .send()
         .await
         .unwrap()

@@ -25,7 +25,9 @@ use crate::{
         UniversalInboxError,
         oauth2::cimd::{self, is_cimd_client_id},
     },
-    utils::jwt::{Claims, JWT_SIGNING_ALGO, JWTBase64EncodedSigningKeys, JWTSigningKeys},
+    utils::jwt::{
+        Claims, JWT_SIGNING_ALGO, JWTBase64EncodedSigningKeys, JWTSigningKeys, TokenPurpose,
+    },
 };
 
 const ACCESS_TOKEN_EXPIRY_SECS: u64 = 3600;
@@ -598,6 +600,7 @@ impl OAuth2Service {
             exp: expires_at.timestamp() as usize,
             sub: user_id.to_string(),
             jti: Uuid::new_v4().to_string(),
+            purpose: Some(TokenPurpose::OAuth),
             aud: Some(resource.to_string()),
             scope: Some(scope.to_string()),
             client_id: Some(client_id.to_string()),

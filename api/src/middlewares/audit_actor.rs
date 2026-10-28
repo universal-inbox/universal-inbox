@@ -81,6 +81,7 @@ mod tests {
                 iat: 0,
                 sub: "user".to_string(),
                 jti: "jti".to_string(),
+                purpose: None,
                 aud: aud.map(str::to_string),
                 scope: None,
                 client_id: aud.map(|_| "mcp-client".to_string()),

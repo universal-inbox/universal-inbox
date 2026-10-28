@@ -19,7 +19,8 @@ use crate::helpers::{
     tested_app_with_domain_blacklist, tested_app_with_local_auth,
     user::{
         create_user, create_user_and_login, front_origin_header, get_current_user_response,
-        get_password_reset_token, login_user_response, reset_password_response,
+        get_current_user_with_bearer_response, get_password_reset_token, login_and_copy_session,
+        login_user_response, reset_password_response,
     },
 };
 
@@ -134,6 +135,25 @@ async fn test_change_password_revokes_other_sessions(
     assert_eq!(response.status(), StatusCode::OK);
     let response = get_current_user_response(&new_client, &app).await;
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_change_password_revokes_other_session_jwts_used_as_bearer(
+    #[future] tested_app_with_local_auth: TestedApp,
+) {
+    let app = tested_app_with_local_auth.await;
+    let email = unique_email("revoke-bearer");
+    let (client, _user) = create_user_and_login(&app, email.clone(), PASSWORD).await;
+    let copied_session = login_and_copy_session(&app, email, PASSWORD).await;
+    let copied_jwt = copied_session.jwt();
+
+    wait_for_next_second().await;
+    let response = change_password_response(&client, &app, PASSWORD, NEW_PASSWORD).await;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let response = get_current_user_with_bearer_response(&app, &copied_jwt).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[rstest]
@@ -291,5 +311,41 @@ async fn test_reset_password_revokes_sessions(#[future] tested_app_with_local_au
     assert_eq!(response.status(), StatusCode::OK);
 
     let response = get_current_user_response(&logged_in_client, &app).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_reset_password_revokes_session_jwts_used_as_bearer(
+    #[future] tested_app_with_local_auth: TestedApp,
+) {
+    let app = tested_app_with_local_auth.await;
+    let email = unique_email("reset-bearer");
+    let user = create_user(&app, email.clone(), PASSWORD).await;
+    let copied_session = login_and_copy_session(&app, email.clone(), PASSWORD).await;
+    let copied_jwt = copied_session.jwt();
+
+    let anonymous_client = self::client();
+    let response = anonymous_client
+        .post(format!("{}users/password-reset", app.api_address))
+        .json(&email)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let password_reset_token = get_password_reset_token(&app, user.id).await.unwrap();
+
+    wait_for_next_second().await;
+    let response = reset_password_response(
+        &anonymous_client,
+        &app,
+        user.id,
+        password_reset_token,
+        NEW_PASSWORD,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = get_current_user_with_bearer_response(&app, &copied_jwt).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
