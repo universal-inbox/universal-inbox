@@ -376,11 +376,128 @@ pub fn sanitize_html_keeping_span_classes(html: &str) -> String {
         .to_string()
 }
 
+/// Sanitizes the HTML produced by `slack-blocks-render` before it is rendered
+/// with `dangerous_inner_html`. The renderer does not encode quotes in image
+/// alt text, so a crafted alt text can inject attributes (`style`, `class`,
+/// event handlers) into the generated `<img>`. Only the presentation classes
+/// the app passes to the renderer (`text-primary`, `text-warning` on mention
+/// `span`s, `slack-emoji` on emoji `img`s) are kept; `style` is never allowed.
+pub fn sanitize_slack_html(html: &str) -> String {
+    ammonia::Builder::default()
+        .set_tag_attribute_value("a", "target", "_blank")
+        .add_tag_attributes("span", &["class"])
+        .add_tag_attributes("img", &["class"])
+        // No sizing, alignment or tooltip attributes: an injected `width`/`height`
+        // could still blow an image up over the preview pane
+        .rm_tag_attributes("img", &["width", "height", "align"])
+        .rm_generic_attributes(&["title"])
+        .attribute_filter(|element, attribute, value| match (element, attribute) {
+            ("span", "class")
+                if value
+                    .split_whitespace()
+                    .all(|class| matches!(class, "text-primary" | "text-warning")) =>
+            {
+                Some(value.into())
+            }
+            ("img", "class") if value == "slack-emoji" => Some(value.into()),
+            (_, "class") => None,
+            _ => Some(value.into()),
+        })
+        .clean(html)
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::{Duration, Utc};
     use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    fn test_sanitize_slack_html_blocks_alt_text_attribute_injection() {
+        let sanitized = sanitize_slack_html(
+            r#"<p><img src="https://example.com/a.png" alt="x" style="position:fixed" onerror="alert(1)" width="9999" height="9999" align="left" title="t" /></p>"#,
+        );
+
+        assert_eq!(
+            sanitized,
+            r#"<p><img src="https://example.com/a.png" alt="x"></p>"#
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_sanitize_slack_html_neutralizes_renderer_alt_text_injection() {
+        use slack_blocks_render::{SlackReferences, html::render_blocks_as_html};
+        use slack_morphism::prelude::*;
+
+        let blocks = vec![SlackBlock::Image(SlackImageBlock::new(
+            SlackImageUrlOrFile::ImageUrl {
+                image_url: Url::parse("https://example.com/a.png").unwrap(),
+            },
+            r#"x" style="position:fixed" onerror="alert(1)" width="9999"#.to_string(),
+        ))];
+        let rendered = render_blocks_as_html(
+            blocks,
+            SlackReferences::default(),
+            "text-primary",
+            "text-warning",
+        );
+        // Documents the upstream bug: the renderer really lets attributes through
+        assert!(rendered.contains(r#"style="position:fixed""#));
+
+        let sanitized = sanitize_slack_html(&rendered);
+
+        assert!(!sanitized.contains("style="));
+        assert!(!sanitized.contains("onerror"));
+        assert!(!sanitized.contains("width="));
+        assert!(sanitized.contains(r#"src="https://example.com/a.png""#));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_sanitize_slack_html_filters_classes() {
+        let sanitized = sanitize_slack_html(
+            r#"<img class="fixed inset-0" src="https://example.com/a.png"><img class="slack-emoji" src="https://example.com/e.png" alt=":x:"><span class="text-warning">@me</span><span class="fixed inset-0">@evil</span><p class="fixed">p</p>"#,
+        );
+
+        assert!(!sanitized.contains("fixed"));
+        assert!(!sanitized.contains("inset-0"));
+        assert!(sanitized.contains(r#"<img class="slack-emoji""#));
+        assert!(sanitized.contains(r#"<span class="text-warning">@me</span>"#));
+        assert!(sanitized.contains("<span>@evil</span>"));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_sanitize_slack_html_keeps_allowed_markup() {
+        let sanitized = sanitize_slack_html(
+            r#"<p><a target="_blank" rel="noopener noreferrer" href="https://example.com">l</a> <em>e</em> <strong>s</strong> <code>c</code> <del>d</del></p><ul><li>i</li></ul><blockquote><p>q</p></blockquote><pre><code>x</code></pre><p><img src="https://example.com/a.png" alt="Image"></p>"#,
+        );
+
+        assert!(sanitized.contains(r#"href="https://example.com""#));
+        assert!(sanitized.contains(r#"target="_blank""#));
+        for fragment in [
+            "<em>e</em>",
+            "<strong>s</strong>",
+            "<code>c</code>",
+            "<del>d</del>",
+            "<ul><li>i</li></ul>",
+            "<blockquote><p>q</p></blockquote>",
+            "<pre><code>x</code></pre>",
+            r#"<img src="https://example.com/a.png" alt="Image">"#,
+        ] {
+            assert!(sanitized.contains(fragment), "missing {fragment}");
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn test_sanitize_slack_html_removes_scripts_and_js_links() {
+        let sanitized = sanitize_slack_html(
+            r#"<script>alert(1)</script><a href="javascript:alert(1)">link</a><pre style="white-space: pre-wrap;">x</pre>"#,
+        );
+
+        assert!(!sanitized.contains("<script"));
+        assert!(!sanitized.contains("javascript:"));
+        assert!(!sanitized.contains("style="));
+    }
 
     #[wasm_bindgen_test]
     fn test_sanitize_html_removes_scripts() {

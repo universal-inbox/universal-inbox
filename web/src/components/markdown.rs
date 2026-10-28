@@ -4,6 +4,8 @@ use comrak::{Options, markdown_to_html as md2html};
 use dioxus::prelude::*;
 use regex::Regex;
 
+use crate::utils::sanitize_slack_html;
+
 #[component]
 pub fn Markdown(text: String, class: Option<String>) -> Element {
     let class = class.unwrap_or("dark:prose-invert".to_string());
@@ -35,9 +37,11 @@ pub fn markdown_to_html(text: &str) -> String {
 #[component]
 pub fn SlackHtml(html: String, class: Option<String>) -> Element {
     let class = class.unwrap_or("dark:prose-invert".to_string());
+    let html = sanitize_slack_html(&html);
     rsx! {
         div {
-            class: "w-full max-w-full {class}",
+            // The renderer's inline `<pre style>` (wrapping) is stripped by the sanitizer
+            class: "w-full max-w-full [&_pre]:whitespace-pre-wrap [&_pre]:[word-break:break-word] {class}",
             dangerous_inner_html: "{html}"
         }
     }
@@ -166,6 +170,19 @@ mod markdown_to_html_tests {
                 markdown_to_html("```\nTest1\nTest2\n```"),
                 "<pre><code>Test1\nTest2\n</code></pre>\n".to_string()
             );
+        }
+    }
+
+    mod images {
+        use super::*;
+
+        #[wasm_bindgen_test]
+        fn test_markdown_to_html_image_alt_text_quote_does_not_inject_attributes() {
+            let result = markdown_to_html(
+                r#"![x" style="position:fixed" onerror="alert(1)](https://example.com/a.png)"#,
+            );
+            assert!(!result.contains(r#" style=""#));
+            assert!(!result.contains(r#" onerror=""#));
         }
     }
 
