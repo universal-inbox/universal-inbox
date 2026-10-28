@@ -256,6 +256,84 @@ async fn test_passkey_reauthentication_unlocks_sensitive_operations(
 
 #[rstest]
 #[tokio::test]
+async fn test_a_replaced_passkey_cannot_reauthenticate(
+    #[future] tested_app_with_short_reauthentication_window: TestedApp,
+) {
+    let app = tested_app_with_short_reauthentication_window.await;
+    let (client, _user) = register_user(&app, unique_email(), PASSWORD).await;
+    let origin = app.front_base_url.clone();
+    let mut old_authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+    let mut new_authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+
+    // Register the passkey that will be replaced
+    let response = start_add_passkey_registration_response(&client, &app, "reauth_old").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let (creation_challenge, nonce) = split_creation_challenge(&response.text().await.unwrap());
+    let register_credential = old_authenticator
+        .do_registration(origin.clone(), creation_challenge)
+        .unwrap();
+    let response =
+        finish_add_passkey_registration_response(&client, &app, &register_credential, &nonce).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Start a re-authentication ceremony bound to the old passkey
+    let response = client
+        .post(format!(
+            "{}users/me/reauthentication/passkey/start",
+            app.api_address
+        ))
+        .header(reqwest::header::ORIGIN, front_origin_header(&app))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.text().await.unwrap();
+    let nonce = serde_json::from_str::<Value>(&body).unwrap()["nonce"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let request_challenge: RequestChallengeResponse = serde_json::from_str(&body).unwrap();
+
+    // Replace the passkey: remove it, then register another one
+    let response = remove_auth_method_response(&client, &app, UserAuthKind::Passkey).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = start_add_passkey_registration_response(&client, &app, "reauth_new").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let (creation_challenge, new_nonce) = split_creation_challenge(&response.text().await.unwrap());
+    let register_credential = new_authenticator
+        .do_registration(origin.clone(), creation_challenge)
+        .unwrap();
+    let response =
+        finish_add_passkey_registration_response(&client, &app, &register_credential, &new_nonce)
+            .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let_session_go_stale().await;
+
+    // The removed passkey must not refresh the recent-authentication window
+    let credential = old_authenticator
+        .do_authentication(origin, request_challenge)
+        .unwrap();
+    let response = client
+        .post(format!(
+            "{}users/me/reauthentication/passkey/finish",
+            app.api_address
+        ))
+        .header(reqwest::header::ORIGIN, front_origin_header(&app))
+        .json(&finish_body_with_nonce(&credential, &nonce))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.status().is_client_error(),
+        "unexpected status {}",
+        response.status()
+    );
+    assert_reauthentication_required(create_api_token_response(&client, &app).await).await;
+}
+
+#[rstest]
+#[tokio::test]
 async fn test_an_api_token_cannot_run_sensitive_operations(
     #[future] tested_app_with_short_reauthentication_window: TestedApp,
 ) {

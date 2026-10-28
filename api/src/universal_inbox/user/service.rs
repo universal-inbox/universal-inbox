@@ -2578,18 +2578,18 @@ impl UserService {
                 format!("Failed to finish Passkey authentication for user {user_id}")
             })?;
 
-        let Some(user_auth) = self
+        // Lock the user's auth rows (same locks as `remove_auth_method`) so a
+        // concurrent removal or replacement of the passkey serializes with
+        // this check, which runs in the transaction that issues the session.
+        let Some(UserAuth::Passkey(mut passkey_user_auth)) = self
             .repository
-            .get_user_auth(executor, user_id, UserAuthKind::Passkey)
+            .get_all_user_auths(executor, user_id, true)
             .await?
+            .into_iter()
+            .find(|user_auth| matches!(user_auth, UserAuth::Passkey(_)))
         else {
             return Err(UniversalInboxError::ItemNotFound(format!(
                 "No passkey auth found for user {user_id}"
-            )));
-        };
-        let UserAuth::Passkey(mut passkey_user_auth) = user_auth else {
-            return Err(UniversalInboxError::Unexpected(anyhow!(
-                "No passkey found for user {user_id}"
             )));
         };
         let Some(user) = self.repository.get_user(executor, user_id).await? else {
@@ -2598,14 +2598,21 @@ impl UserService {
             )));
         };
 
-        if passkey_user_auth
-            .passkey
-            .update_credential(&auth_result)
-            .unwrap_or_default()
-        {
-            self.repository
-                .update_passkey(executor, &user_id, &passkey_user_auth.passkey)
-                .await?;
+        // The ceremony holds the passkey snapshot taken when it started:
+        // `None` means the asserted credential is no longer the account's
+        // current one (removed or replaced), so the login must be refused.
+        match passkey_user_auth.passkey.update_credential(&auth_result) {
+            Some(true) => {
+                self.repository
+                    .update_passkey(executor, &user_id, &passkey_user_auth.passkey)
+                    .await?;
+            }
+            Some(false) => {}
+            None => {
+                return Err(UniversalInboxError::Unauthorized(anyhow!(
+                    "Passkey credential does not match the current credential of user {user_id}"
+                )));
+            }
         }
 
         Ok(user)
@@ -2659,23 +2666,32 @@ impl UserService {
                 }
             })?;
 
+        // Same row locks as `remove_auth_method`: see `finish_passkey_authentication`.
         let Some(UserAuth::Passkey(mut passkey_user_auth)) = self
             .repository
-            .get_user_auth(executor, user_id, UserAuthKind::Passkey)
+            .get_all_user_auths(executor, user_id, true)
             .await?
+            .into_iter()
+            .find(|user_auth| matches!(user_auth, UserAuth::Passkey(_)))
         else {
             return Err(UniversalInboxError::UnsupportedAction(
                 "This account has no passkey: confirm your identity another way".to_string(),
             ));
         };
-        if passkey_user_auth
-            .passkey
-            .update_credential(&auth_result)
-            .unwrap_or_default()
-        {
-            self.repository
-                .update_passkey(executor, &user_id, &passkey_user_auth.passkey)
-                .await?;
+        match passkey_user_auth.passkey.update_credential(&auth_result) {
+            Some(true) => {
+                self.repository
+                    .update_passkey(executor, &user_id, &passkey_user_auth.passkey)
+                    .await?;
+            }
+            Some(false) => {}
+            None => {
+                debug!("Passkey re-authentication used a removed credential for user {user_id}");
+                return Err(UniversalInboxError::InvalidInputData {
+                    source: None,
+                    user_error: "The passkey could not be verified".to_string(),
+                });
+            }
         }
 
         Ok(())

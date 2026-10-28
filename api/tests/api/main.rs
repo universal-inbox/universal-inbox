@@ -30,6 +30,7 @@ mod test_notion_webhook;
 mod test_oauth2_cimd;
 mod test_oauth2_revocation;
 mod test_oauth_callback;
+mod test_passkey_login;
 mod test_pause_integration_connections;
 mod test_realtime_events;
 mod test_realtime_stream;

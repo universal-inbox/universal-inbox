@@ -12,7 +12,9 @@ use serde_json::Value;
 use universal_inbox::pii::Pii;
 use url::Url;
 use uuid::Uuid;
-use webauthn_rs::prelude::{CreationChallengeResponse, RegisterPublicKeyCredential};
+use webauthn_rs::prelude::{
+    CreationChallengeResponse, PublicKeyCredential, RegisterPublicKeyCredential,
+};
 
 use universal_inbox::{
     auth::SessionAuthValidationParameters,
@@ -525,6 +527,24 @@ pub async fn start_passkey_authentication_response(
         ))
         .header(reqwest::header::ORIGIN, front_origin_header(app))
         .json(&Username(username.to_string()))
+        .send()
+        .await
+        .unwrap()
+}
+
+pub async fn finish_passkey_authentication_response(
+    client: &Client,
+    app: &TestedApp,
+    credential: &PublicKeyCredential,
+    nonce: &str,
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{}users/passkeys/authentication/finish",
+            app.api_address
+        ))
+        .header(reqwest::header::ORIGIN, front_origin_header(app))
+        .json(&finish_body_with_nonce(credential, nonce))
         .send()
         .await
         .unwrap()
