@@ -583,6 +583,7 @@ pub async fn finish_passkey_reauthentication(
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(*response);
     }
+    user_service.ensure_passkey_auth_enabled()?;
     let user_id = authenticated
         .claims
         .sub
@@ -837,6 +838,9 @@ pub async fn finish_add_passkey_registration(
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(*response);
     }
+    // Before reading the ceremony state: a disabled method answers 403, not a
+    // missing-state error.
+    user_service.ensure_passkey_auth_enabled()?;
     let user_id = authenticated
         .claims
         .sub
@@ -1474,6 +1478,9 @@ pub async fn finish_passkey_registration(
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(*response);
     }
+    // Before reading the ceremony state: a disabled method answers 403, not a
+    // missing-state error.
+    user_service.ensure_passkey_auth_enabled()?;
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -1703,6 +1710,9 @@ pub async fn finish_passkey_authentication(
     if let Err(response) = check_ip_rate_limit(&req, &rate_limiter) {
         return Ok(*response);
     }
+    // Before reading the ceremony state: a disabled method answers 403, not a
+    // missing-state error.
+    user_service.ensure_passkey_auth_enabled()?;
     let service = user_service.clone();
     let mut transaction = service
         .begin()

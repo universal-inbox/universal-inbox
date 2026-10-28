@@ -425,6 +425,8 @@ impl UserService {
         username: &Username,
         session_authentication: Option<&SessionAuthentication>,
     ) -> Result<(CreationChallengeResponse, PasskeyRegistration), UniversalInboxError> {
+        self.ensure_passkey_auth_enabled()?;
+
         // `finish` is bound to the state this call returns: checking here
         // covers the whole ceremony.
         self.ensure_recently_authenticated(user_id, session_authentication)?;
@@ -474,6 +476,8 @@ impl UserService {
         register_credentials: RegisterPublicKeyCredential,
         passkey_registration: PasskeyRegistration,
     ) -> Result<UserAuthMethod, UniversalInboxError> {
+        self.ensure_passkey_auth_enabled()?;
+
         let passkey = self
             .webauthn
             .finish_passkey_registration(&register_credentials, &passkey_registration)
@@ -1705,6 +1709,26 @@ impl UserService {
             })
     }
 
+    /// Fails with a 403 when this instance does not offer passkey
+    /// authentication (e.g. OIDC only): every passkey registration,
+    /// authentication and add-method endpoint checks this first, so no
+    /// account or session can be created through a disabled method.
+    pub fn ensure_passkey_auth_enabled(&self) -> Result<(), UniversalInboxError> {
+        if self
+            .application_settings
+            .security
+            .authentication
+            .iter()
+            .any(|auth_settings| matches!(auth_settings, AuthenticationSettings::Passkey))
+        {
+            Ok(())
+        } else {
+            Err(UniversalInboxError::Forbidden(
+                "Passkey authentication is disabled".to_string(),
+            ))
+        }
+    }
+
     pub fn get_new_password_hash(
         &self,
         password: SecretBox<Password>,
@@ -2420,6 +2444,8 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         username: &Username,
     ) -> Result<(UserId, CreationChallengeResponse, PasskeyRegistration), UniversalInboxError> {
+        self.ensure_passkey_auth_enabled()?;
+
         // Security (universal-inbox-bkj.31): Avoid leaking whether the
         // username is already registered (and the existing user's UserId
         // UUID) from this unauthenticated endpoint. Regardless of whether
@@ -2465,6 +2491,8 @@ impl UserService {
         register_credentials: RegisterPublicKeyCredential,
         passkey_registration: PasskeyRegistration,
     ) -> Result<User, UniversalInboxError> {
+        self.ensure_passkey_auth_enabled()?;
+
         let passkey = self
             .webauthn
             .finish_passkey_registration(&register_credentials, &passkey_registration)
@@ -2491,6 +2519,8 @@ impl UserService {
         username: &Username,
     ) -> Result<(UserId, RequestChallengeResponse, PasskeyAuthentication), UniversalInboxError>
     {
+        self.ensure_passkey_auth_enabled()?;
+
         // Security (universal-inbox-bkj.31): Avoid leaking whether the
         // username is registered. If we find a matching passkey user we
         // generate a real authentication challenge bound to their
@@ -2539,6 +2569,8 @@ impl UserService {
         credentials: PublicKeyCredential,
         passkey_authentication: PasskeyAuthentication,
     ) -> Result<User, UniversalInboxError> {
+        self.ensure_passkey_auth_enabled()?;
+
         let auth_result = self
             .webauthn
             .finish_passkey_authentication(&credentials, &passkey_authentication)
@@ -2588,6 +2620,8 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<(RequestChallengeResponse, PasskeyAuthentication), UniversalInboxError> {
+        self.ensure_passkey_auth_enabled()?;
+
         let Some(UserAuth::Passkey(passkey_user_auth)) = self
             .repository
             .get_user_auth(executor, user_id, UserAuthKind::Passkey)
@@ -2612,6 +2646,8 @@ impl UserService {
         credentials: PublicKeyCredential,
         passkey_authentication: PasskeyAuthentication,
     ) -> Result<(), UniversalInboxError> {
+        self.ensure_passkey_auth_enabled()?;
+
         let auth_result = self
             .webauthn
             .finish_passkey_authentication(&credentials, &passkey_authentication)

@@ -233,6 +233,25 @@ pub async fn tested_app_with_local_auth(
     setup_tested_app_with_local_auth(
         settings,
         local_auth_settings(),
+        true,
+        db_connection.await,
+        redis_storage.await,
+    )
+    .await
+}
+
+/// Like `tested_app_with_local_auth`, with `Passkey` authentication disabled.
+#[fixture]
+pub async fn tested_app_with_local_auth_without_passkey(
+    settings: Settings,
+    #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
+    #[future] db_connection: TestDb,
+    #[future] redis_storage: JobStorage,
+) -> TestedApp {
+    setup_tested_app_with_local_auth(
+        settings,
+        local_auth_settings(),
+        false,
         db_connection.await,
         redis_storage.await,
     )
@@ -251,6 +270,7 @@ pub async fn tested_app_with_local_auth_without_email(
     setup_tested_app_with_local_auth(
         settings,
         local_auth_settings(),
+        true,
         db_connection.await,
         redis_storage.await,
     )
@@ -277,6 +297,7 @@ pub async fn tested_app_with_short_reauthentication_window(
     setup_tested_app_with_local_auth(
         settings,
         local_auth_settings(),
+        true,
         db_connection.await,
         redis_storage.await,
     )
@@ -297,6 +318,7 @@ pub async fn tested_app_with_account_rate_limits(
             max_account_emails_per_address: TEST_MAX_ACCOUNT_EMAILS_PER_ADDRESS,
             ..local_auth_settings()
         },
+        true,
         db_connection.await,
         redis_storage.await,
     )
@@ -306,6 +328,7 @@ pub async fn tested_app_with_account_rate_limits(
 async fn setup_tested_app_with_local_auth(
     mut settings: Settings,
     local_auth_settings: LocalAuthenticationSettings,
+    passkey_enabled: bool,
     test_db: TestDb,
     redis_storage: JobStorage,
 ) -> TestedApp {
@@ -315,6 +338,13 @@ async fn setup_tested_app_with_local_auth(
 
     settings.application.security.authentication =
         vec![AuthenticationSettings::Local(local_auth_settings)];
+    if passkey_enabled {
+        settings
+            .application
+            .security
+            .authentication
+            .push(AuthenticationSettings::Passkey);
+    }
     settings.application.security.email_domain_blacklist = HashMap::new();
 
     let pool: Arc<PgPool> = test_db.pool.clone();
@@ -398,6 +428,11 @@ pub async fn tested_app_with_domain_blacklist(
         .security
         .authentication
         .push(AuthenticationSettings::Local(local_auth_settings()));
+    settings
+        .application
+        .security
+        .authentication
+        .push(AuthenticationSettings::Passkey);
     settings.application.security.email_domain_blacklist.insert(
         "blocked.com".to_string(),
         "Registration is not allowed from this domain".to_string(),

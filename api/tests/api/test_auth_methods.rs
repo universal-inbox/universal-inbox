@@ -596,3 +596,195 @@ mod remove_auth_method {
         assert!(body.get("message").unwrap().contains("last"));
     }
 }
+
+/// `Passkey` missing from `application.security.authentication` must close
+/// every passkey endpoint: no account, session or auth method can be created
+/// through a method the instance does not offer.
+mod passkey_disabled {
+    use super::*;
+    use crate::helpers::{
+        tested_app_with_local_auth_without_passkey,
+        user::{
+            finish_body_with_nonce, finish_passkey_registration_response_unauthenticated,
+            front_origin_header, split_creation_challenge, start_passkey_authentication_response,
+            start_passkey_registration_response,
+        },
+    };
+    use pretty_assertions::assert_eq;
+    use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
+    use webauthn_rs::prelude::RequestChallengeResponse;
+
+    fn cookie_client() -> reqwest::Client {
+        reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap()
+    }
+
+    async fn assert_passkey_disabled(response: reqwest::Response) {
+        assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+        assert_eq!(
+            response.text().await.unwrap(),
+            "{\"message\":\"Forbidden access: Passkey authentication is disabled\"}"
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_passkey_registration_is_forbidden(
+        #[future] tested_app_with_local_auth_without_passkey: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth_without_passkey.await;
+        let client = cookie_client();
+
+        let response = start_passkey_registration_response(&client, &app, "mallory_passkey").await;
+
+        assert_passkey_disabled(response).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_passkey_authentication_start_is_forbidden(
+        #[future] tested_app_with_local_auth_without_passkey: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth_without_passkey.await;
+        let client = cookie_client();
+
+        let response =
+            start_passkey_authentication_response(&client, &app, "mallory_passkey").await;
+
+        assert_passkey_disabled(response).await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_add_passkey_start_is_forbidden(
+        #[future] tested_app_with_local_auth_without_passkey: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth_without_passkey.await;
+        let (client, user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        let response = start_add_passkey_registration_response(&client, &app, "john_passkey").await;
+
+        assert_passkey_disabled(response).await;
+        assert_eq!(get_all_user_auths(&app, user.id).await.len(), 1);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_passkey_reauthentication_start_is_forbidden(
+        #[future] tested_app_with_local_auth_without_passkey: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth_without_passkey.await;
+        let (client, _user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        let response = client
+            .post(format!(
+                "{}users/me/reauthentication/passkey/start",
+                app.api_address
+            ))
+            .header(reqwest::header::ORIGIN, front_origin_header(&app))
+            .send()
+            .await
+            .unwrap();
+
+        assert_passkey_disabled(response).await;
+    }
+
+    /// Finish endpoints answer 403 even with a well-formed credential
+    /// produced by an instance that does enable passkeys.
+    #[rstest]
+    #[tokio::test]
+    async fn test_passkey_finish_endpoints_are_forbidden(
+        #[future] tested_app_with_local_auth: TestedApp,
+        #[future] tested_app_with_local_auth_without_passkey: TestedApp,
+    ) {
+        let enabled_app = tested_app_with_local_auth.await;
+        let app = tested_app_with_local_auth_without_passkey.await;
+        let origin = enabled_app.front_base_url.clone();
+        let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+
+        // A real registration challenge and credential from the enabled app.
+        let enabled_client = cookie_client();
+        let start =
+            start_passkey_registration_response(&enabled_client, &enabled_app, "alice").await;
+        assert_eq!(start.status(), http::StatusCode::OK);
+        let (challenge, nonce) = split_creation_challenge(&start.text().await.unwrap());
+        let credential = authenticator
+            .do_registration(origin.clone(), challenge)
+            .unwrap();
+        let finish = finish_passkey_registration_response_unauthenticated(
+            &enabled_client,
+            &enabled_app,
+            &credential,
+            &nonce,
+        )
+        .await;
+        assert_eq!(finish.status(), http::StatusCode::OK);
+
+        // Unauthenticated registration finish on the disabled app.
+        let client = cookie_client();
+        let response = finish_passkey_registration_response_unauthenticated(
+            &client,
+            &app,
+            &credential,
+            &nonce,
+        )
+        .await;
+        assert_passkey_disabled(response).await;
+        let me_response = client
+            .get(format!("{}users/me", app.api_address))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(me_response.status(), http::StatusCode::UNAUTHORIZED);
+
+        // Authentication finish on the disabled app.
+        let enabled_login = cookie_client();
+        let start =
+            start_passkey_authentication_response(&enabled_login, &enabled_app, "alice").await;
+        let body = start.text().await.unwrap();
+        let request_challenge: RequestChallengeResponse = serde_json::from_str(&body).unwrap();
+        let login_nonce = serde_json::from_str::<serde_json::Value>(&body).unwrap()["nonce"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let login_credential = authenticator
+            .do_authentication(origin, request_challenge)
+            .unwrap();
+        let response = client
+            .post(format!(
+                "{}users/passkeys/authentication/finish",
+                app.api_address
+            ))
+            .header(reqwest::header::ORIGIN, front_origin_header(&app))
+            .json(&finish_body_with_nonce(&login_credential, &login_nonce))
+            .send()
+            .await
+            .unwrap();
+        assert_passkey_disabled(response).await;
+
+        // Add-passkey finish by an authenticated local user.
+        let (local_client, user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+        let response =
+            finish_add_passkey_registration_response(&local_client, &app, &credential, &nonce)
+                .await;
+        assert_passkey_disabled(response).await;
+        assert_eq!(get_all_user_auths(&app, user.id).await.len(), 1);
+    }
+}
