@@ -232,7 +232,7 @@ where
     build_fmt_layer_with_writer(log_format, RedactingMakeWriter(io::stdout))
 }
 
-fn build_fmt_layer_with_writer<S, W>(
+pub(crate) fn build_fmt_layer_with_writer<S, W>(
     log_format: LogFormat,
     make_writer: W,
 ) -> Box<dyn Layer<S> + Send + Sync>

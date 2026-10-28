@@ -133,6 +133,16 @@ pub async fn oauth_authorize_url(
     })))
 }
 
+/// Logs the unauthenticated `error` query parameter as a Debug-quoted field:
+/// `Debug` escapes CR/LF and other control characters, so a caller cannot forge
+/// log lines (CWE-117) by sending a decoded newline.
+fn log_provider_error(error: &str) {
+    error!(
+        provider_error = ?error,
+        "OAuth callback received provider error from upstream"
+    );
+}
+
 /// Provider redirect target of the integration OAuth flow.
 ///
 /// Mounted outside the `/api` scope (the provider redirects the browser
@@ -156,9 +166,9 @@ pub async fn oauth_callback(
 
     if let Some(ref error) = query.error {
         // The upstream OAuth provider returned an error in the query string
-        // (e.g. `error=access_denied`). Log the raw value for diagnostics and
+        // (e.g. `error=access_denied`). Log the value for diagnostics and
         // surface a generic provider-error code to the user.
-        error!("OAuth callback received provider error from upstream: {error}");
+        log_provider_error(error);
         return build_error_redirect(front_base_url, OAuthCallbackErrorCode::ProviderError);
     }
 
@@ -246,9 +256,58 @@ fn build_error_redirect(front_base_url: &str, error: OAuthCallbackErrorCode) -> 
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        io,
+        sync::{Arc, Mutex},
+    };
+
     use anyhow::anyhow;
+    use tracing_subscriber::{Registry, fmt::MakeWriter, layer::SubscriberExt};
 
     use super::*;
+    use crate::{configuration::LogFormat, observability::build_fmt_layer_with_writer};
+
+    #[derive(Clone, Default)]
+    struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+    impl io::Write for SharedBuffer {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for SharedBuffer {
+        type Writer = SharedBuffer;
+
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    #[test]
+    fn test_log_provider_error_escapes_control_characters() {
+        let buffer = SharedBuffer::default();
+        let subscriber = Registry::default().with(build_fmt_layer_with_writer(
+            LogFormat::Pretty,
+            buffer.clone(),
+        ));
+
+        tracing::subscriber::with_default(subscriber, || {
+            log_provider_error("foo\n\nfake entry");
+        });
+
+        let output = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+        assert!(output.contains(r"foo\n\nfake entry"), "{output}");
+        assert!(
+            !output.lines().any(|line| line.starts_with("fake entry")),
+            "{output}"
+        );
+    }
 
     #[test]
     fn code_strings_are_stable_kebab_case() {
