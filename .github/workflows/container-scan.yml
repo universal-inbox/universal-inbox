@@ -57,7 +57,7 @@ jobs:
           docker-images: true
           swap-storage: true
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build runtime image
@@ -83,7 +83,7 @@ jobs:
           output: trivy-results.sarif
           exit-code: "0"
       - name: Upload scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         # Fork PRs get a read-only token and cannot upload SARIF.
         if: always() && hashFiles('trivy-results.sarif') != '' && github.event.pull_request.head.repo.fork != true
         with:
