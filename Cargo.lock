@@ -621,9 +621,9 @@ dependencies = [
 
 [[package]]
 name = "async-stripe"
-version = "1.0.0-rc.8"
+version = "1.0.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab149862d2d33453ce54e9c73af81d48c47b52888a2925fe94751694e0fe07ef"
+checksum = "fbbfb37a60928c837f3d1db41ed9561a69e86052e5ea11451bfc8406fd22d99e"
 dependencies = [
  "async-stripe-client-core",
  "async-stripe-shared",
@@ -640,9 +640,9 @@ dependencies = [
 
 [[package]]
 name = "async-stripe-billing"
-version = "1.0.0-rc.8"
+version = "1.0.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6aa35d8f69a65cbb916b7ed201a7200f05e2b9fb2b5ceb5cbe42f7301314ad1e"
+checksum = "7cc8d927d27943b360584e527524efba0bc92c15cee39e33efee64c0727e9e2a"
 dependencies = [
  "async-stripe-client-core",
  "async-stripe-shared",
@@ -656,9 +656,9 @@ dependencies = [
 
 [[package]]
 name = "async-stripe-checkout"
-version = "1.0.0-rc.8"
+version = "1.0.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6630dbba85de2b1000a005b4e6f205b09e0cfdbd72fd0ee2676e55938bc731a8"
+checksum = "1a7cc969611dc770fbffe5520128d53fb7618f2f64cacdcc5fdc80066042bd92"
 dependencies = [
  "async-stripe-client-core",
  "async-stripe-shared",
@@ -672,9 +672,9 @@ dependencies = [
 
 [[package]]
 name = "async-stripe-client-core"
-version = "1.0.0-rc.8"
+version = "1.0.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "012387ff812fa51c118a2b324cdde3684d676c6e351f687abc933d47f429fad7"
+checksum = "fb102f82be32b4be0af662746ecc1b632371903eb096e8d840505431277e090c"
 dependencies = [
  "async-stripe-shared",
  "async-stripe-types",
@@ -690,9 +690,9 @@ dependencies = [
 
 [[package]]
 name = "async-stripe-core"
-version = "1.0.0-rc.8"
+version = "1.0.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d71c7d42ab20f94af44ec5fd49a7e17d5a07e0a89e50ede3a915d1a027b5cad"
+checksum = "d0a62f29770d512604b6b85e977ec692f7fe31449a6af1c2ad39a4a3559992b3"
 dependencies = [
  "async-stripe-client-core",
  "async-stripe-shared",
@@ -706,9 +706,9 @@ dependencies = [
 
 [[package]]
 name = "async-stripe-shared"
-version = "1.0.0-rc.8"
+version = "1.0.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "315ef4797e2af87e5764e28ca513449ba3fa9e960b6ee081d406224536de3c37"
+checksum = "80a31d49bf137889e1ece81c2aca94d144c041815388df5b8616a787e7beb611"
 dependencies = [
  "async-stripe-types",
  "miniserde",
@@ -732,9 +732,9 @@ dependencies = [
 
 [[package]]
 name = "async-stripe-webhook"
-version = "1.0.0-rc.8"
+version = "1.0.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a578d77acc0dadcc6a5b372b239784d80f0b94a4a9c7211c79a35625373d650e"
+checksum = "adb8ab49949e196b392c827e319ec6950385a21721324dbb67bd5b2a0388bab4"
 dependencies = [
  "async-stripe-shared",
  "async-stripe-types",
@@ -8646,7 +8646,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
