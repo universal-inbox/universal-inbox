@@ -100,9 +100,9 @@ ENV CONFIG_FILE /app/config/prod.toml
 ENV UNIVERSAL_INBOX__APPLICATION__VERSION=${VERSION}
 # Create non-root user owning /app (writable by the entrypoint, which rewrites
 # /app/config/prod.toml at startup) and /data (intended writable volume mount).
-RUN groupadd -r ui \
-  && useradd -r -g ui -d /app -s /usr/sbin/nologin ui \
+RUN groupadd -r -g 10001 ui \
+  && useradd -r -u 10001 -g ui -d /app -s /usr/sbin/nologin ui \
   && chown -R ui:ui /app /data
-USER ui
+USER 10001:10001
 ENTRYPOINT ["/app/universal-inbox-entrypoint"]
 CMD ["serve"]
