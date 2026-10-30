@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use apalis::prelude::*;
+use chrono::{DateTime, Utc};
 use opentelemetry::trace::Status;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -31,6 +32,7 @@ use crate::{
 
 pub mod cron;
 pub mod envelope;
+pub mod metrics;
 pub mod notion;
 pub mod oauth;
 pub mod slack;
@@ -91,9 +93,13 @@ impl UniversalInboxJob {
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_universal_inbox_job(
     JobEnvelope {
-        job, audit_actor, ..
+        job,
+        audit_actor,
+        enqueued_at,
+        ..
     }: JobEnvelope,
     task_id: TaskId,
+    attempt: Attempt,
     notification_service: Data<Arc<RwLock<NotificationService>>>,
     task_service: Data<Arc<RwLock<TaskService>>>,
     integration_connection_service: Data<Arc<RwLock<IntegrationConnectionService>>>,
@@ -110,6 +116,8 @@ pub async fn handle_universal_inbox_job(
             run_universal_inbox_job(
                 job,
                 task_id,
+                attempt,
+                enqueued_at,
                 notification_service,
                 task_service,
                 integration_connection_service,
@@ -144,6 +152,8 @@ fn job_audit_actor(job: &UniversalInboxJob, enqueued_by: Option<AuditActor>) -> 
 async fn run_universal_inbox_job(
     job: UniversalInboxJob,
     task_id: TaskId,
+    attempt: Attempt,
+    enqueued_at: Option<DateTime<Utc>>,
     notification_service: Data<Arc<RwLock<NotificationService>>>,
     task_service: Data<Arc<RwLock<TaskService>>>,
     integration_connection_service: Data<Arc<RwLock<IntegrationConnectionService>>>,
@@ -152,6 +162,10 @@ async fn run_universal_inbox_job(
     audit_service: Data<Arc<AuditService>>,
 ) -> Result<(), UniversalInboxError> {
     let current_span = tracing::Span::current();
+    let job_name = job.name();
+    let metrics = metrics::job_metrics();
+    metrics.job_started(job_name, attempt.current(), enqueued_at, Utc::now());
+    let started_at = Instant::now();
 
     info!(
         { attr::JOB_ID } = task_id.to_string(),
@@ -234,6 +248,12 @@ async fn run_universal_inbox_job(
             audit_service.purge_expired_audit_events().await.map(|_| ())
         }
     };
+
+    metrics.job_finished(
+        job_name,
+        started_at.elapsed(),
+        result.as_ref().err().map(|err| err.error_type()),
+    );
 
     match result {
         Ok(_) => {

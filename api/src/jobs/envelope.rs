@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 use apalis::{layers::tracing::MakeSpan, prelude::*};
 use apalis_redis::{RedisError, RedisStorage};
+use chrono::{DateTime, Utc};
 use opentelemetry::{global, trace::TraceContextExt};
 use serde::{Deserialize, Serialize};
 use tracing::{Instrument, Span, field, info_span};
@@ -35,12 +36,17 @@ pub struct JobEnvelope {
     pub trace_context: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audit_actor: Option<AuditActor>,
+    /// When the job was enqueued, to measure how long it waited. `None` for a job
+    /// queued before it existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enqueued_at: Option<DateTime<Utc>>,
     #[serde(flatten)]
     pub job: UniversalInboxJob,
 }
 
 impl JobEnvelope {
-    /// Wraps `job` with the trace context of the current span and the current audit actor.
+    /// Wraps `job` with the trace context of the current span, the current audit actor and the
+    /// enqueue time.
     pub fn new(job: UniversalInboxJob) -> Self {
         let mut trace_context = HashMap::new();
         global::get_text_map_propagator(|propagator| {
@@ -49,6 +55,7 @@ impl JobEnvelope {
         JobEnvelope {
             trace_context,
             audit_actor: current_actor(),
+            enqueued_at: Some(Utc::now()),
             job,
         }
     }
@@ -148,7 +155,18 @@ mod tests {
 
         assert!(envelope.trace_context.is_empty());
         assert_eq!(envelope.audit_actor, None);
+        assert_eq!(envelope.enqueued_at, None);
         assert_eq!(envelope.job.name(), "SyncTasks");
+    }
+
+    #[test]
+    fn test_new_envelope_records_its_enqueue_time() {
+        let before = Utc::now();
+
+        let envelope = JobEnvelope::new(sync_tasks_job());
+
+        let enqueued_at = envelope.enqueued_at.unwrap();
+        assert!(before <= enqueued_at && enqueued_at <= Utc::now());
     }
 
     #[test]
@@ -159,6 +177,7 @@ mod tests {
                 "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01".to_string(),
             )]),
             audit_actor: Some(AuditActor::ApiKey),
+            enqueued_at: Some(Utc::now()),
             job: sync_tasks_job(),
         };
 
@@ -167,6 +186,7 @@ mod tests {
 
         assert_eq!(decoded.trace_context, envelope.trace_context);
         assert_eq!(decoded.audit_actor, Some(AuditActor::ApiKey));
+        assert_eq!(decoded.enqueued_at, envelope.enqueued_at);
         assert_eq!(decoded.job.name(), "SyncTasks");
     }
 

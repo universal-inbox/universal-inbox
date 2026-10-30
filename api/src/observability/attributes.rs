@@ -162,6 +162,10 @@ pub const SCREENSHOTS_ONLY: &str = "screenshots.only";
 pub const JOB_ID: &str = "job.id";
 pub const JOB_NAME: &str = "job.name";
 pub const JOB_ATTEMPT: &str = "job.attempt";
+/// How a job execution ended: `success` or `failure`
+pub const JOB_OUTCOME: &str = "job.outcome";
+/// State of the jobs counted in the queue length: `pending`, `running`, `failed` or `dead`
+pub const JOB_QUEUE_STATE: &str = "job.queue.state";
 pub const CRON_TICK: &str = "cron.tick";
 
 // Audit log

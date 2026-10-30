@@ -46,7 +46,7 @@ use chrono::{TimeDelta, Utc};
 use configuration::{AuthenticationSettings, CronSettings};
 use csp::{CSP, Directive, Source, Sources};
 use integrations::{api::APIService, google_calendar::GoogleCalendarService, slack::SlackService};
-use jobs::{JobMakeSpan, JobStorage};
+use jobs::{JobMakeSpan, JobStorage, metrics::run_queue_sampler};
 use jsonwebtoken::{Algorithm, Validation};
 use mailer::Mailer;
 use regex::Regex;
@@ -780,6 +780,7 @@ pub async fn run_worker(
             .get()
     });
     info!("Starting {count} asynchronous Workers");
+    tokio::spawn(run_queue_sampler(redis_storage.clone()));
     let mut monitor = Monitor::new().register(
         WorkerBuilder::new("universal-inbox-worker")
             .layer(job_trace_layer(&redis_storage))
