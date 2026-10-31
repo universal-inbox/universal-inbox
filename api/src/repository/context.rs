@@ -12,11 +12,12 @@ use universal_inbox::{
         NoteBackend, NoteBackendBinding, NoteId,
     },
     integration_connection::provider::IntegrationProviderKind,
+    task::ProjectId,
     user::UserId,
 };
 
 use crate::observability::attr;
-use crate::universal_inbox::UniversalInboxError;
+use crate::universal_inbox::{UniversalInboxError, UpsertStatus};
 use crate::utils::crypto::{aad, data_keyring};
 
 use super::Repository;
@@ -39,6 +40,24 @@ pub trait ContextRepository {
         executor: &mut Transaction<'_, Postgres>,
         id: ContextId,
     ) -> Result<Option<Context>, UniversalInboxError>;
+    /// Create or rename the context mirroring the upstream project `source_id`, found on its
+    /// binding `(user_id, provider, source_id)`, never on its name.
+    ///
+    /// - absent: created, mirrored, flat and `Active`, with an empty note (through
+    ///   `create_context_with_note`);
+    /// - mirrored and the name differs: renamed, upstream owns the name;
+    /// - mirrored and the name matches: `Untouched`, nothing is written;
+    /// - not mirrored: `Untouched`, the name belongs to Universal Inbox.
+    ///
+    /// The status, parent and note are never changed.
+    async fn upsert_mirrored_context(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        provider: IntegrationProviderKind,
+        source_id: ProjectId,
+        name: String,
+    ) -> Result<UpsertStatus<Box<Context>>, UniversalInboxError>;
     async fn list_contexts_for_user(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -199,6 +218,106 @@ impl ContextRepository for Repository {
         .context("Failed to fetch context from storage")?;
 
         row.map(Context::try_from).transpose()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = user_id.to_string())
+    )]
+    async fn upsert_mirrored_context(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        provider: IntegrationProviderKind,
+        source_id: ProjectId,
+        name: String,
+    ) -> Result<UpsertStatus<Box<Context>>, UniversalInboxError> {
+        let binding = ContextBinding::new(provider, source_id.clone(), true).map_err(|err| {
+            UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: err.to_string(),
+            }
+        })?;
+
+        let existing = sqlx::query_as!(
+            ContextRow,
+            r#"
+                SELECT
+                  id,
+                  user_id,
+                  parent_id,
+                  name,
+                  binding_provider::TEXT as "binding_provider?",
+                  binding_source_id,
+                  binding_mirrored,
+                  status::TEXT as "status!",
+                  note_id,
+                  created_at,
+                  updated_at
+                FROM context
+                WHERE user_id = $1
+                  AND binding_provider = $2::integration_provider_kind
+                  AND binding_source_id = $3
+                FOR UPDATE
+            "#,
+            user_id.0,
+            provider.to_string() as _,
+            source_id.0
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .context("Failed to fetch context by binding from storage")?
+        .map(Context::try_from)
+        .transpose()?;
+
+        let Some(existing) = existing else {
+            let now = Utc::now();
+            let context = Box::new(Context {
+                id: ContextId(Uuid::new_v4()),
+                user_id,
+                parent_id: None,
+                name,
+                binding: Some(binding),
+                status: ContextStatus::Active,
+                note_id: NoteId(Uuid::new_v4()),
+                created_at: now,
+                updated_at: now,
+            });
+            let (context, _) = self
+                .create_context_with_note(executor, context, String::new())
+                .await?;
+            return Ok(UpsertStatus::Created(context));
+        };
+
+        let owned_by_upstream = existing
+            .binding
+            .as_ref()
+            .is_some_and(|binding| binding.mirrored);
+        if !owned_by_upstream || existing.name == name {
+            return Ok(UpsertStatus::Untouched(Box::new(existing)));
+        }
+
+        sqlx::query!(
+            r#"UPDATE context SET name = $1, updated_at = $2 WHERE id = $3"#,
+            name,
+            Utc::now().naive_utc(),
+            existing.id.0
+        )
+        .execute(&mut **executor)
+        .await
+        .context("Failed to rename context in storage")?;
+
+        let updated = self
+            .get_context(executor, existing.id)
+            .await?
+            .ok_or_else(|| {
+                UniversalInboxError::ItemNotFound(format!("Context {} not found", existing.id))
+            })?;
+        Ok(UpsertStatus::Updated {
+            old: Box::new(existing),
+            new: Box::new(updated),
+        })
     }
 
     #[tracing::instrument(
