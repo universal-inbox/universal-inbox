@@ -18,6 +18,7 @@ use validator::Validate;
 
 use crate::{
     HasHtmlUrl,
+    context::ContextId,
     integration_connection::integrations::task_time_config::TaskTimeConfig,
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::Notification,
@@ -46,6 +47,10 @@ pub struct Task {
     pub tags: Vec<String>,
     pub parent_id: Option<TaskId>,
     pub project: String,
+    /// Binding to the task's context, written alongside `project` (the name,
+    /// still authoritative) while readers move over.
+    #[serde(default)]
+    pub context_id: Option<ContextId>,
     pub is_recurring: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -65,6 +70,7 @@ impl PartialEq for Task {
             && self.tags == other.tags
             && self.parent_id == other.parent_id
             && self.project == other.project
+            && self.context_id == other.context_id
             && self.is_recurring == other.is_recurring
             && self.kind == other.kind
             && self.source_item.id == other.source_item.id
@@ -441,6 +447,8 @@ pub struct CreateOrUpdateTaskRequest {
     pub tags: Vec<String>,
     pub parent_id: Option<TaskId>,
     pub project: DefaultValue<String>,
+    /// `None` leaves an existing binding untouched on update.
+    pub context_id: Option<ContextId>,
     pub is_recurring: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -463,6 +471,7 @@ impl From<CreateOrUpdateTaskRequest> for Task {
             tags: request.tags,
             parent_id: request.parent_id,
             project: request.project.into_value(),
+            context_id: request.context_id,
             is_recurring: request.is_recurring,
             created_at: request.created_at,
             updated_at: request.updated_at,

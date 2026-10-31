@@ -2048,6 +2048,7 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
                     .unwrap_or_else(|| TODOIST_INBOX_PROJECT.to_string()),
                 None,
             ),
+            context_id: None,
             is_recurring: false,
             created_at,
             updated_at,
