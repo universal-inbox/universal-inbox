@@ -706,9 +706,9 @@ dependencies = [
 
 [[package]]
 name = "async-stripe-shared"
-version = "1.0.0-rc.6"
+version = "1.0.0-rc.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80a31d49bf137889e1ece81c2aca94d144c041815388df5b8616a787e7beb611"
+checksum = "315ef4797e2af87e5764e28ca513449ba3fa9e960b6ee081d406224536de3c37"
 dependencies = [
  "async-stripe-types",
  "miniserde",
@@ -732,9 +732,9 @@ dependencies = [
 
 [[package]]
 name = "async-stripe-webhook"
-version = "1.0.0-rc.6"
+version = "1.0.0-rc.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adb8ab49949e196b392c827e319ec6950385a21721324dbb67bd5b2a0388bab4"
+checksum = "a578d77acc0dadcc6a5b372b239784d80f0b94a4a9c7211c79a35625373d650e"
 dependencies = [
  "async-stripe-shared",
  "async-stripe-types",
