@@ -785,7 +785,8 @@ impl TaskService {
         .await
     }
 
-    /// Fetch the Todoist projects of the user and mirror them as contexts.
+    /// Fetch the Todoist projects of the user, mirror them as contexts, then bind the user's
+    /// Todoist tasks to them.
     pub async fn sync_todoist_project_contexts(
         &self,
         user_id: UserId,
@@ -805,6 +806,17 @@ impl TaskService {
                 projects,
             )
             .await?;
+        // Tasks synced before their context existed (first sync, new project) are bound by id
+        // now, in the same transaction as the contexts.
+        let backfill = self
+            .repository
+            .backfill_todoist_task_context_ids(&mut transaction, user_id)
+            .await?;
+        debug!(
+            bound = backfill.bound,
+            unmatched = backfill.unmatched,
+            "Bound Todoist tasks to their project contexts for user {user_id}"
+        );
         transaction.commit().await.context(format!(
             "Failed to commit while syncing Todoist project contexts for user {user_id}"
         ))?;

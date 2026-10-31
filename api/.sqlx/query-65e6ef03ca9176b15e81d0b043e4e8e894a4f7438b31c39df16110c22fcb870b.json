@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                INSERT INTO task\n                  (\n                    id,\n                    title,\n                    body_enc,\n                    status,\n                    completed_at,\n                    priority,\n                    due_at,\n                    tags,\n                    parent_id,\n                    project,\n                    is_recurring,\n                    created_at,\n                    updated_at,\n                    kind,\n                    source_item_id,\n                    sink_item_id,\n                    user_id\n                  )\n                VALUES\n                  ($1, $2, $3, $4::task_status, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::task_kind, $15, $16, $17)\n                RETURNING\n                  id\n            ",
+  "query": "\n                INSERT INTO task\n                  (\n                    id,\n                    title,\n                    body_enc,\n                    status,\n                    completed_at,\n                    priority,\n                    due_at,\n                    tags,\n                    parent_id,\n                    project,\n                    context_id,\n                    is_recurring,\n                    created_at,\n                    updated_at,\n                    kind,\n                    source_item_id,\n                    sink_item_id,\n                    user_id\n                  )\n                VALUES\n                  ($1, $2, $3, $4::task_status, $5, $6, $7, $8, $9, $10, $18, $11, $12, $13, $14::task_kind, $15, $16, $17)\n                RETURNING\n                  id\n            ",
   "describe": {
     "columns": [
       {
@@ -56,6 +56,7 @@
         },
         "Uuid",
         "Uuid",
+        "Uuid",
         "Uuid"
       ]
     },
@@ -63,5 +64,5 @@
       false
     ]
   },
-  "hash": "79bf935080bb120f9e0d89866b683c18a8ea5693e926a5388d709c694fd97c3e"
+  "hash": "65e6ef03ca9176b15e81d0b043e4e8e894a4f7438b31c39df16110c22fcb870b"
 }
