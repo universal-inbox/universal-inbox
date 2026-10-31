@@ -11,6 +11,7 @@ mod test_cache;
 mod test_change_password;
 mod test_cron;
 mod test_data_encryption;
+mod test_dead_letter;
 mod test_export_user_data;
 mod test_github_notifications;
 mod test_google_calendar_notifications;

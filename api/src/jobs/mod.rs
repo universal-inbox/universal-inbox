@@ -31,6 +31,7 @@ use crate::{
 };
 
 pub mod cron;
+pub mod dead_letter;
 pub mod envelope;
 pub mod metrics;
 pub mod notion;
@@ -38,7 +39,7 @@ pub mod oauth;
 pub mod slack;
 pub mod sync;
 
-pub use envelope::{JobEnvelope, JobMakeSpan, JobStorage, push_job};
+pub use envelope::{JobEnvelope, JobMakeSpan, JobStorage, connect_job_storage, push_job};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, Deserialize)]
@@ -83,6 +84,22 @@ impl UniversalInboxJob {
             Self::RetryOAuthGrantRevocations { .. } => "RetryOAuthGrantRevocations",
             Self::PauseIntegrationConnections { .. } => "PauseIntegrationConnections",
             Self::PurgeAuditEvents => "PurgeAuditEvents",
+        }
+    }
+
+    /// The user the job works for, `None` for a job working for all users or not known
+    /// before it runs (Slack and Notion events are resolved to a user by the job)
+    pub fn user_id(&self) -> Option<UserId> {
+        match self {
+            Self::SyncNotifications(job) => job.user_id,
+            Self::SyncTasks(job) => job.user_id,
+            Self::ProcessNotificationSideEffects { user_id, .. } => Some(*user_id),
+            Self::SlackPushEventCallback(_)
+            | Self::NotionWebhookEvent(_)
+            | Self::RefreshOAuthTokens { .. }
+            | Self::RetryOAuthGrantRevocations { .. }
+            | Self::PauseIntegrationConnections { .. }
+            | Self::PurgeAuditEvents => None,
         }
     }
 }

@@ -250,7 +250,7 @@ pub async fn list_users(user_service: Arc<UserService>) -> Result<(), UniversalI
 /// introducers of terminal escape sequences) in user-supplied values before
 /// they are written to the operator's terminal, so a crafted username or
 /// email display name cannot erase, overwrite or recolour other rows.
-fn sanitize_for_terminal(value: &str) -> String {
+pub(super) fn sanitize_for_terminal(value: &str) -> String {
     value
         .chars()
         .map(|c| {

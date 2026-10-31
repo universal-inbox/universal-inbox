@@ -13,17 +13,32 @@ use apalis_redis::{RedisError, RedisStorage};
 use chrono::{DateTime, Utc};
 use opentelemetry::{global, trace::TraceContextExt};
 use serde::{Deserialize, Serialize};
-use tracing::{Instrument, Span, field, info_span};
+use tracing::{Instrument, Span, field, info, info_span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use universal_inbox::audit::AuditActor;
 
 use crate::{
-    jobs::UniversalInboxJob, observability::attr,
+    configuration::Settings, jobs::UniversalInboxJob, observability::attr,
     universal_inbox::audit::actor_context::current_actor,
 };
 
 pub type JobStorage = RedisStorage<JobEnvelope>;
+
+/// Namespace of the Redis keys of the job queue
+pub const JOB_QUEUE_NAMESPACE: &str = "universal-inbox:jobs:UniversalInboxJob";
+
+/// Connects to the job queue of the Redis server configured in `settings`
+pub async fn connect_job_storage(settings: &Settings) -> Result<JobStorage, RedisError> {
+    info!(
+        "Connecting to Redis server for job queuing on {}",
+        &settings.redis.safe_connection_string()
+    );
+    Ok(RedisStorage::new_with_config(
+        apalis_redis::connect(settings.redis.connection_string()).await?,
+        apalis_redis::Config::default().set_namespace(JOB_QUEUE_NAMESPACE),
+    ))
+}
 
 /// Payload stored on the job queue: the job, the W3C trace context of the
 /// span that enqueued it and the audit actor that enqueued it.

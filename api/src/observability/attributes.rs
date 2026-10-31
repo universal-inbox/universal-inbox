@@ -166,6 +166,10 @@ pub const JOB_ATTEMPT: &str = "job.attempt";
 pub const JOB_OUTCOME: &str = "job.outcome";
 /// State of the jobs counted in the queue length: `pending`, `running`, `failed` or `dead`
 pub const JOB_QUEUE_STATE: &str = "job.queue.state";
+/// Dead jobs selected (listed, or to requeue or delete) by a `dead-jobs` command
+pub const JOB_DEAD_COUNT: &str = "job.dead.count";
+/// Dead jobs a `dead-jobs` command requeued or deleted
+pub const JOB_DEAD_PROCESSED_COUNT: &str = "job.dead.processed_count";
 pub const CRON_TICK: &str = "cron.tick";
 
 // Audit log

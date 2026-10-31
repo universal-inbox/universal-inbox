@@ -1,12 +1,11 @@
 use std::str::FromStr;
 
-use apalis_redis::RedisStorage;
-use clap::{Parser, Subcommand};
+use anyhow::Context;
+use clap::{ArgGroup, Parser, Subcommand};
 use email_address::EmailAddress;
 use futures::future;
-use std::{net::TcpListener, sync::Arc};
+use std::{net::TcpListener, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
-use tracing::info;
 use universal_inbox::pii::Pii;
 
 use universal_inbox::{
@@ -20,6 +19,7 @@ use universal_inbox::{
 use crate::{
     configuration::Settings,
     integrations::slack::SlackService,
+    jobs::connect_job_storage,
     run_ping_server, run_server, run_worker,
     universal_inbox::{
         UniversalInboxError,
@@ -41,6 +41,7 @@ pub mod anonymize;
 pub mod data_encryption;
 pub mod generate;
 pub mod integration_connection;
+pub mod jobs;
 pub mod oauth;
 #[cfg(feature = "screenshots")]
 pub mod screenshots;
@@ -174,6 +175,71 @@ pub enum Commands {
     Billing {
         #[clap(subcommand)]
         action: crate::billing::commands::BillingAction,
+    },
+
+    /// List, requeue and delete the jobs that exhausted their attempts (dead letter queue).
+    /// For the local dev stack or an explicit maintenance: never run it against the
+    /// production Redis from a laptop.
+    DeadJobs {
+        #[clap(subcommand)]
+        command: DeadJobsCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DeadJobsCommands {
+    /// List dead jobs, most recently dead first
+    List {
+        /// Only list the jobs of this type (eg. `SyncTasks`, or `undecodable` for the jobs
+        /// whose payload does not decode)
+        #[arg(short = 't', long)]
+        job_type: Option<String>,
+        /// Maximum number of jobs to list
+        #[arg(short, long, default_value = "50")]
+        limit: usize,
+    },
+    /// Put dead jobs back on the queue, their attempts reset. Jobs whose payload does not
+    /// decode are not requeued: they would die again.
+    #[command(group(ArgGroup::new("selection").required(true).args(["job_ids", "all"])))]
+    Requeue {
+        /// Ids of the dead jobs to requeue
+        job_ids: Vec<String>,
+        /// Requeue all dead jobs (asks for confirmation without `--job-type`)
+        #[arg(short, long)]
+        all: bool,
+        /// Only requeue the jobs of this type (with `--all`)
+        #[arg(short = 't', long, conflicts_with = "job_ids")]
+        job_type: Option<String>,
+        /// Print the jobs that would be requeued, without requeuing them
+        #[arg(short, long)]
+        dry_run: bool,
+        /// Do not ask for confirmation
+        #[arg(short, long)]
+        yes: bool,
+    },
+    /// Delete dead jobs, after confirmation
+    #[command(group(
+        ArgGroup::new("selection").required(true).args(["job_ids", "older_than", "all"])
+    ))]
+    Cleanup {
+        /// Ids of the dead jobs to delete
+        job_ids: Vec<String>,
+        /// Delete the jobs that died more than this duration ago (eg. `7d`, `12h`)
+        #[arg(short, long, value_parser = humantime::parse_duration)]
+        older_than: Option<Duration>,
+        /// Delete all dead jobs
+        #[arg(short, long)]
+        all: bool,
+        /// Only delete the jobs of this type (`undecodable` for the jobs whose payload does
+        /// not decode), with `--older-than` or `--all`
+        #[arg(short = 't', long, conflicts_with = "job_ids")]
+        job_type: Option<String>,
+        /// Print the jobs that would be deleted, without deleting them
+        #[arg(short, long)]
+        dry_run: bool,
+        /// Do not ask for confirmation
+        #[arg(short, long)]
+        yes: bool,
     },
 }
 
@@ -364,6 +430,9 @@ impl Cli {
             _ => match &self.command {
                 Commands::User {
                     command: UserCommands::List,
+                }
+                | Commands::DeadJobs {
+                    command: DeadJobsCommands::List { .. },
                 } => (log::LevelFilter::Error.to_string(), log::LevelFilter::Error),
                 _ => (
                     settings
@@ -519,17 +588,9 @@ impl Cli {
                 async_workers_count,
                 embed_async_workers,
             } => {
-                info!(
-                    "Connecting to Redis server for job queuing on {}",
-                    &settings.redis.safe_connection_string()
-                );
-                let redis_storage = RedisStorage::new_with_config(
-                    apalis_redis::connect(settings.redis.connection_string())
-                        .await
-                        .expect("Redis storage connection failed"),
-                    apalis_redis::Config::default()
-                        .set_namespace("universal-inbox:jobs:UniversalInboxJob"),
-                );
+                let redis_storage = connect_job_storage(&settings)
+                    .await
+                    .expect("Redis storage connection failed");
 
                 let listener = TcpListener::bind(format!(
                     "{}:{}",
@@ -592,17 +653,9 @@ impl Cli {
                     .check_committed_secrets()
                     .map_err(|message| UniversalInboxError::Unexpected(anyhow::anyhow!(message)))?;
 
-                info!(
-                    "Connecting to Redis server for job queuing on {}",
-                    &settings.redis.safe_connection_string()
-                );
-                let redis_storage = RedisStorage::new_with_config(
-                    apalis_redis::connect(settings.redis.connection_string())
-                        .await
-                        .expect("Redis storage connection failed"),
-                    apalis_redis::Config::default()
-                        .set_namespace("universal-inbox:jobs:UniversalInboxJob"),
-                );
+                let redis_storage = connect_job_storage(&settings)
+                    .await
+                    .expect("Redis storage connection failed");
 
                 let worker_port = settings
                     .application
@@ -819,6 +872,50 @@ impl Cli {
             Commands::Billing { action } => {
                 crate::billing::commands::run(action, billing_service).await
             }
+
+            Commands::DeadJobs { command } => {
+                let storage = connect_job_storage(&settings)
+                    .await
+                    .context("Failed to connect to the job queue")?;
+                match command {
+                    DeadJobsCommands::List { job_type, limit } => {
+                        jobs::list_dead_jobs(&storage, job_type.as_deref(), *limit).await
+                    }
+                    DeadJobsCommands::Requeue {
+                        job_ids,
+                        job_type,
+                        dry_run,
+                        yes,
+                        ..
+                    } => {
+                        jobs::requeue_dead_jobs(
+                            &storage,
+                            jobs::dead_job_selection(job_ids, None),
+                            job_type.as_deref(),
+                            *dry_run,
+                            *yes,
+                        )
+                        .await
+                    }
+                    DeadJobsCommands::Cleanup {
+                        job_ids,
+                        older_than,
+                        job_type,
+                        dry_run,
+                        yes,
+                        ..
+                    } => {
+                        jobs::cleanup_dead_jobs(
+                            &storage,
+                            jobs::dead_job_selection(job_ids, *older_than),
+                            job_type.as_deref(),
+                            *dry_run,
+                            *yes,
+                        )
+                        .await
+                    }
+                }
+            }
         }
     }
 }
@@ -841,5 +938,33 @@ mod tests {
 
         let other = Cli::try_parse_from(["universal-inbox", "user", "list"]).unwrap();
         assert!(!other.quiets_info_logs(OutputMode::Interactive));
+    }
+
+    #[test]
+    fn test_dead_jobs_commands_require_one_selection() {
+        let parse = |args: &[&str]| {
+            Cli::try_parse_from(["universal-inbox", "dead-jobs"].iter().chain(args)).is_ok()
+        };
+
+        assert!(parse(&["requeue", "id1", "id2"]));
+        assert!(parse(&["requeue", "--all", "--job-type", "SyncTasks"]));
+        assert!(!parse(&["requeue"]));
+        assert!(!parse(&["requeue", "id1", "--all"]));
+        assert!(!parse(&["requeue", "id1", "--job-type", "SyncTasks"]));
+
+        assert!(parse(&[
+            "cleanup",
+            "--older-than",
+            "7d",
+            "--job-type",
+            "SyncTasks"
+        ]));
+        assert!(parse(&["cleanup", "--all", "--job-type", "undecodable"]));
+        assert!(!parse(&["cleanup", "id1", "--job-type", "SyncTasks"]));
+        assert!(parse(&["cleanup", "id1", "--dry-run"]));
+        assert!(parse(&["cleanup", "--all", "--yes"]));
+        assert!(!parse(&["cleanup"]));
+        assert!(!parse(&["cleanup", "--all", "--older-than", "7d"]));
+        assert!(!parse(&["cleanup", "--older-than", "a week"]));
     }
 }
