@@ -58,6 +58,14 @@ pub trait ContextRepository {
         source_id: ProjectId,
         name: String,
     ) -> Result<UpsertStatus<Box<Context>>, UniversalInboxError>;
+    /// Id of the mirrored context bound on `(user_id, provider, source_id)`, if any. Read-only.
+    async fn get_mirrored_context_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        provider: IntegrationProviderKind,
+        source_id: &ProjectId,
+    ) -> Result<Option<ContextId>, UniversalInboxError>;
     async fn list_contexts_for_user(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -218,6 +226,38 @@ impl ContextRepository for Repository {
         .context("Failed to fetch context from storage")?;
 
         row.map(Context::try_from).transpose()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = user_id.to_string())
+    )]
+    async fn get_mirrored_context_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        provider: IntegrationProviderKind,
+        source_id: &ProjectId,
+    ) -> Result<Option<ContextId>, UniversalInboxError> {
+        let id = sqlx::query_scalar!(
+            r#"
+                SELECT id
+                FROM context
+                WHERE user_id = $1
+                  AND binding_provider = $2::integration_provider_kind
+                  AND binding_source_id = $3
+                  AND binding_mirrored
+            "#,
+            user_id.0,
+            provider.to_string() as _,
+            source_id.0
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .context("Failed to fetch context id by binding from storage")?;
+
+        Ok(id.map(ContextId))
     }
 
     #[tracing::instrument(

@@ -35,8 +35,8 @@ use universal_inbox::{
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     realtime::RealtimeEventKind,
     task::{
-        CreateOrUpdateTaskRequest, DueDate, ProjectSummary, TaskCreation, TaskCreationConfig,
-        TaskSource, TaskSourceKind, TaskStatus,
+        CreateOrUpdateTaskRequest, DueDate, ProjectId, ProjectSummary, TaskCreation,
+        TaskCreationConfig, TaskSource, TaskSourceKind, TaskStatus,
         integrations::todoist::{TODOIST_INBOX_PROJECT, TodoistProject},
         service::TaskPatch,
     },
@@ -60,7 +60,10 @@ use crate::{
         task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
         third_party::ThirdPartyItemSourceService,
     },
-    repository::{Repository, task::TaskRepository, third_party::ThirdPartyItemRepository},
+    repository::{
+        Repository, context::ContextRepository, task::TaskRepository,
+        third_party::ThirdPartyItemRepository,
+    },
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
         realtime::record_event,
@@ -859,6 +862,7 @@ impl TodoistService {
                 .collect(),
             parent_id: None, // Unsupported for now
             project: DefaultValue::new(TODOIST_INBOX_PROJECT.to_string(), Some(project_name)),
+            context_id: None,
             is_recurring: source
                 .due
                 .as_ref()
@@ -1036,13 +1040,25 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
             .map(|project| project.name.clone())
             .unwrap_or_else(|| "No project".to_string());
 
-        Ok(TodoistService::build_task_with_project_name(
+        let mut task_request = TodoistService::build_task_with_project_name(
             source,
             project_name,
             source_third_party_item,
             user_id,
         )
-        .await)
+        .await;
+        // Bound by id: the project id, never the name. No context yet leaves it unset, the next
+        // sync's backfill binds it.
+        task_request.context_id = self
+            .repository
+            .get_mirrored_context_id(
+                executor,
+                user_id,
+                IntegrationProviderKind::Todoist,
+                &ProjectId(source.project_id.clone()),
+            )
+            .await?;
+        Ok(task_request)
     }
 
     #[allow(clippy::blocks_in_conditions)]

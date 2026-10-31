@@ -572,6 +572,7 @@ impl TickTickService {
             tags: source.tag_names(),
             parent_id: None,
             project: DefaultValue::new(TICKTICK_INBOX_PROJECT.to_string(), Some(project_name)),
+            context_id: None,
             is_recurring: source.is_recurring(),
             created_at: source
                 .created_time

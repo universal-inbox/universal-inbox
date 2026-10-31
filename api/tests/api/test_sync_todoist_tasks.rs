@@ -201,7 +201,18 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         notifications[0].source_item.source_id,
         new_task.source_item.source_id
     );
-    assert_eq!(notifications[0].task, Some(new_task.clone()));
+    // The task was created before its project's context existed: the sync binds it right after,
+    // so the stored task carries the context id the creation result did not have yet
+    let stored_new_task = notifications[0].task.clone().unwrap();
+    assert!(new_task.context_id.is_none());
+    assert!(stored_new_task.context_id.is_some());
+    assert_eq!(
+        stored_new_task,
+        Task {
+            context_id: stored_new_task.context_id,
+            ..new_task.clone()
+        }
+    );
     assert_eq!(
         Into::<Notification>::into(notifications[0].clone()),
         new_todoist_task_creation.notifications[0]
@@ -975,10 +986,14 @@ mod project_contexts {
     use universal_inbox::{
         audit::{AuditActor, AuditUserChannel},
         context::{Context, ContextBinding, ContextId, ContextStatus, Note, NoteId},
-        task::{ProjectId, ProjectSummary},
+        task::{CreateOrUpdateTaskRequest, ProjectId, ProjectSummary},
+        utils::default_value::DefaultValue,
     };
     use universal_inbox_api::{
-        repository::context::ContextRepository,
+        repository::{
+            context::ContextRepository,
+            task::{TaskContextBackfill, TaskRepository},
+        },
         universal_inbox::{UpsertStatus, audit::actor_context::with_system_actor},
     };
 
@@ -1360,5 +1375,317 @@ mod project_contexts {
         .await
         .unwrap();
         assert_eq!(integration_connection.last_tasks_sync_failure_message, None);
+    }
+
+    /// `(task id, task.project, task.context_id)` of every task of the user
+    async fn task_bindings(app: &AuthenticatedApp) -> Vec<(Uuid, String, Option<Uuid>)> {
+        sqlx::query("SELECT id, project, context_id FROM task WHERE user_id = $1 ORDER BY id")
+            .bind(app.user.id.0)
+            .fetch_all(&*app.app.repository.pool)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row| (row.get("id"), row.get("project"), row.get("context_id")))
+            .collect()
+    }
+
+    async fn task_audit_rows(app: &AuthenticatedApp) -> i64 {
+        sqlx::query_scalar("SELECT count(*) FROM audit_event WHERE entity_kind = 'Task'")
+            .fetch_one(&*app.app.repository.pool)
+            .await
+            .unwrap()
+    }
+
+    async fn backfill(app: &AuthenticatedApp) -> TaskContextBackfill {
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &actor()).await;
+        let result = app
+            .app
+            .repository
+            .backfill_todoist_task_context_ids(&mut transaction, app.user.id)
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+        result
+    }
+
+    async fn sync_todoist_fixture(
+        app: &AuthenticatedApp,
+        settings: &Settings,
+        todoist_oauth_credential: OAuthCredentialFixture,
+        items: &TodoistSyncResponse,
+        projects: &TodoistSyncResponse,
+    ) {
+        connect_todoist(app, settings, todoist_oauth_credential).await;
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            projects,
+            None,
+        )
+        .await;
+        mock_todoist_sync_resources_service(&app.app.todoist_mock_server, "items", items, None)
+            .await;
+        let _: Vec<TaskCreationResult> = sync_tasks(
+            &app.client,
+            &app.app.api_address,
+            Some(TaskSourceKind::Todoist),
+            false,
+        )
+        .await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_sync_binds_every_task_to_the_context_of_its_project_id(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_todoist_items_response: TodoistSyncResponse,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        sync_todoist_fixture(
+            &app,
+            &settings,
+            todoist_oauth_credential,
+            &sync_todoist_items_response,
+            &sync_todoist_projects_response,
+        )
+        .await;
+
+        let contexts = list_contexts(&app).await;
+        let tasks = task_bindings(&app).await;
+        assert_eq!(
+            tasks.len(),
+            sync_todoist_items_response.items.as_ref().unwrap().len()
+        );
+        for (_, project, context_id) in &tasks {
+            let context = contexts
+                .iter()
+                .find(|context| &context.name == project)
+                .unwrap_or_else(|| panic!("no context for {project}"));
+            assert_eq!(*context_id, Some(context.id.0), "task of {project}");
+        }
+        // The Inbox project is covered too
+        assert!(tasks.iter().any(|(_, project, _)| project == "Inbox"));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_project_rename_keeps_the_task_bindings_and_a_rerun_changes_nothing(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_todoist_items_response: TodoistSyncResponse,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        sync_todoist_fixture(
+            &app,
+            &settings,
+            todoist_oauth_credential,
+            &sync_todoist_items_response,
+            &sync_todoist_projects_response,
+        )
+        .await;
+        let before = task_bindings(&app).await;
+        let audit_rows_before = task_audit_rows(&app).await;
+
+        // Renamed upstream: same source id, same context
+        upsert(&app, vec![project("2222", "Renamed project")]).await;
+        let result = backfill(&app).await;
+
+        assert_eq!(task_bindings(&app).await, before);
+        assert_eq!(
+            result,
+            TaskContextBackfill {
+                bound: 0,
+                unmatched: 0,
+                unreadable: 0
+            }
+        );
+        // Binding tasks is not audited
+        assert_eq!(task_audit_rows(&app).await, audit_rows_before);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_backfill_binds_by_project_id_never_by_name(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_todoist_items_response: TodoistSyncResponse,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        sync_todoist_fixture(
+            &app,
+            &settings,
+            todoist_oauth_credential,
+            &sync_todoist_items_response,
+            &sync_todoist_projects_response,
+        )
+        .await;
+        let synced = task_bindings(&app).await;
+        let project2_tasks = synced.iter().filter(|(_, p, _)| p == "Project2").count() as u64;
+        let inbox_tasks = synced.iter().filter(|(_, p, _)| p == "Inbox").count() as u64;
+        assert!(project2_tasks > 0 && inbox_tasks > 0);
+
+        // Existing deployment: tasks not bound yet, and the project of "Project2" is now another
+        // context (id 5555) that still carries the same NAME
+        sqlx::query("UPDATE task SET context_id = NULL")
+            .execute(&*app.app.repository.pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE context SET binding_source_id = '5555' WHERE name = 'Project2'")
+            .execute(&*app.app.repository.pool)
+            .await
+            .unwrap();
+        let audit_rows_before = task_audit_rows(&app).await;
+
+        let result = backfill(&app).await;
+
+        assert_eq!(
+            result,
+            TaskContextBackfill {
+                bound: inbox_tasks,
+                unmatched: project2_tasks,
+                unreadable: 0
+            }
+        );
+        let inbox_context = list_contexts(&app)
+            .await
+            .into_iter()
+            .find(|context| context.name == "Inbox")
+            .unwrap();
+        for (_, project, context_id) in task_bindings(&app).await {
+            match project.as_str() {
+                "Inbox" => assert_eq!(context_id, Some(inbox_context.id.0)),
+                // Matching "Project2" by name would bind these
+                _ => assert_eq!(context_id, None, "task of {project}"),
+            }
+        }
+
+        // Idempotent
+        let before = task_bindings(&app).await;
+        let again = backfill(&app).await;
+        assert_eq!(
+            again,
+            TaskContextBackfill {
+                bound: 0,
+                unmatched: project2_tasks,
+                unreadable: 0
+            }
+        );
+        assert_eq!(task_bindings(&app).await, before);
+        assert_eq!(task_audit_rows(&app).await, audit_rows_before);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_backfill_corrects_a_stale_binding_and_a_rerun_changes_nothing(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_todoist_items_response: TodoistSyncResponse,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        sync_todoist_fixture(
+            &app,
+            &settings,
+            todoist_oauth_credential,
+            &sync_todoist_items_response,
+            &sync_todoist_projects_response,
+        )
+        .await;
+        let synced = task_bindings(&app).await;
+        let contexts = list_contexts(&app).await;
+        let inbox_context = contexts.iter().find(|c| c.name == "Inbox").unwrap();
+        let project2_tasks = synced.iter().filter(|(_, p, _)| p == "Project2").count() as u64;
+
+        // A task moved to a project whose context was created after the task sync stays bound to
+        // its previous context: here the "Project2" tasks are still bound to the Inbox context
+        sqlx::query("UPDATE task SET context_id = $1 WHERE project = 'Project2'")
+            .bind(inbox_context.id.0)
+            .execute(&*app.app.repository.pool)
+            .await
+            .unwrap();
+
+        let result = backfill(&app).await;
+
+        assert_eq!(result.bound, project2_tasks);
+        assert_eq!(task_bindings(&app).await, synced);
+        let again = backfill(&app).await;
+        assert_eq!(again.bound, 0);
+        assert_eq!(task_bindings(&app).await, synced);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_task_update_without_a_context_never_clears_its_binding(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_todoist_items_response: TodoistSyncResponse,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        sync_todoist_fixture(
+            &app,
+            &settings,
+            todoist_oauth_credential,
+            &sync_todoist_items_response,
+            &sync_todoist_projects_response,
+        )
+        .await;
+        let before = task_bindings(&app).await;
+        let (task_id, _, Some(_)) = before[0] else {
+            panic!("expected a bound task");
+        };
+
+        // A sync whose context step failed builds the request without a context id
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &actor()).await;
+        let task = app
+            .app
+            .repository
+            .get_one_task(&mut transaction, task_id.into())
+            .await
+            .unwrap()
+            .unwrap();
+        let status = app
+            .app
+            .repository
+            .create_or_update_task(
+                &mut transaction,
+                Box::new(CreateOrUpdateTaskRequest {
+                    id: task.id,
+                    title: DefaultValue::new(task.title.clone(), None),
+                    body: "changed body".to_string(),
+                    status: task.status,
+                    completed_at: task.completed_at,
+                    priority: task.priority,
+                    due_at: DefaultValue::new(task.due_at.clone(), None),
+                    tags: task.tags.clone(),
+                    parent_id: task.parent_id,
+                    project: DefaultValue::new(task.project.clone(), None),
+                    context_id: None,
+                    is_recurring: task.is_recurring,
+                    created_at: task.created_at,
+                    updated_at: Utc::now(),
+                    kind: task.kind,
+                    source_item: task.source_item.clone(),
+                    sink_item: task.sink_item.clone(),
+                    user_id: task.user_id,
+                }),
+            )
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+
+        assert!(matches!(status, UpsertStatus::Updated { .. }));
+        assert_eq!(task_bindings(&app).await, before);
     }
 }

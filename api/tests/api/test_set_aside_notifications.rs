@@ -914,6 +914,7 @@ async fn triage_notification(
                 tags: vec![],
                 parent_id: None,
                 project: DefaultValue::new("Inbox".to_string(), None),
+                context_id: None,
                 is_recurring: false,
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),

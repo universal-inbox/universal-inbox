@@ -1,8 +1,10 @@
+use std::collections::HashMap;
+
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{FromRow, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow, types::Json};
-use tracing::debug;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -12,6 +14,7 @@ use universal_inbox::{
         CreateOrUpdateTaskRequest, DueDate, Task, TaskId, TaskPriority, TaskSourceKind, TaskStatus,
         TaskSummary, service::TaskPatch,
     },
+    third_party::item::ThirdPartyItemData,
     user::UserId,
 };
 
@@ -20,8 +23,20 @@ use crate::universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus};
 use crate::utils::crypto::{aad, data_keyring};
 
 use super::{
-    FromRowWithPrefix, Repository, decode_rows_skipping_invalid, third_party::ThirdPartyItemRow,
+    FromRowWithPrefix, Repository, decode_rows_skipping_invalid,
+    third_party::{ThirdPartyItemRow, decrypt_third_party_item_data},
 };
+
+/// Outcome of binding existing Todoist tasks to their project contexts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TaskContextBackfill {
+    /// Tasks bound by this run
+    pub bound: u64,
+    /// Todoist tasks still without a context (project deleted upstream, or no context yet)
+    pub unmatched: u64,
+    /// Todoist tasks whose source item could not be read
+    pub unreadable: u64,
+}
 
 #[async_trait]
 pub trait TaskRepository {
@@ -78,6 +93,15 @@ pub trait TaskRepository {
         executor: &mut Transaction<'_, Postgres>,
         task: Box<CreateOrUpdateTaskRequest>,
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError>;
+    /// Bind the user's Todoist tasks to the context of their project, by id: the task's source
+    /// item carries the Todoist `project_id` the context is bound on. A task's
+    /// `context_id` is set or corrected, never cleared, so a rerun changes nothing. Never matches
+    /// on a name.
+    async fn backfill_todoist_task_context_ids(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<TaskContextBackfill, UniversalInboxError>;
     async fn update_task(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -118,6 +142,7 @@ impl TaskRepository for Repository {
                   task.tags as task__tags,
                   task.parent_id as task__parent_id,
                   task.project as task__project,
+                  task.context_id as task__context_id,
                   task.is_recurring as task__is_recurring,
                   task.created_at as task__created_at,
                   task.updated_at as task__updated_at,
@@ -205,6 +230,7 @@ impl TaskRepository for Repository {
                   task.tags as task__tags,
                   task.parent_id as task__parent_id,
                   task.project as task__project,
+                  task.context_id as task__context_id,
                   task.is_recurring as task__is_recurring,
                   task.created_at as task__created_at,
                   task.updated_at as task__updated_at,
@@ -312,6 +338,7 @@ impl TaskRepository for Repository {
                   task.tags as task__tags,
                   task.parent_id as task__parent_id,
                   task.project as task__project,
+                  task.context_id as task__context_id,
                   task.is_recurring as task__is_recurring,
                   task.created_at as task__created_at,
                   task.updated_at as task__updated_at,
@@ -396,6 +423,7 @@ impl TaskRepository for Repository {
                   task.tags as task__tags,
                   task.parent_id as task__parent_id,
                   task.project as task__project,
+                  task.context_id as task__context_id,
                   task.is_recurring as task__is_recurring,
                   task.created_at as task__created_at,
                   task.updated_at as task__updated_at,
@@ -539,6 +567,7 @@ impl TaskRepository for Repository {
                     tags,
                     parent_id,
                     project,
+                    context_id,
                     is_recurring,
                     created_at,
                     updated_at,
@@ -548,7 +577,7 @@ impl TaskRepository for Repository {
                     user_id
                   )
                 VALUES
-                  ($1, $2, $3, $4::task_status, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::task_kind, $15, $16, $17)
+                  ($1, $2, $3, $4::task_status, $5, $6, $7, $8, $9, $10, $18, $11, $12, $13, $14::task_kind, $15, $16, $17)
             "#,
             task.id.0,
             task.title,
@@ -569,7 +598,8 @@ impl TaskRepository for Repository {
             task.sink_item
                 .as_ref()
                 .map(|item| item.id.0),
-            task.user_id.0
+            task.user_id.0,
+            task.context_id.map(|id| id.0)
         )
         .execute(&mut **executor)
         .await
@@ -669,6 +699,7 @@ impl TaskRepository for Repository {
                   task.tags as task__tags,
                   task.parent_id as task__parent_id,
                   task.project as task__project,
+                  task.context_id as task__context_id,
                   task.is_recurring as task__is_recurring,
                   task.created_at as task__created_at,
                   task.updated_at as task__updated_at,
@@ -738,6 +769,7 @@ impl TaskRepository for Repository {
                 task.tags as task__tags,
                 task.parent_id as task__parent_id,
                 task.project as task__project,
+                task.context_id as task__context_id,
                 task.is_recurring as task__is_recurring,
                 task.created_at as task__created_at,
                 task.updated_at as task__updated_at,
@@ -825,6 +857,8 @@ impl TaskRepository for Repository {
                     .project
                     .clone()
                     .value_or(existing_task.project.clone()),
+                // A request without a binding never clears an existing one.
+                context_id: task_request.context_id.or(existing_task.context_id),
                 ..(*task_request.clone()).into()
             };
 
@@ -898,6 +932,11 @@ impl TaskRepository for Repository {
                     .push("project = ")
                     .push_bind_unseparated(task_request.project.clone().into_value());
             }
+            if let Some(context_id) = task_request.context_id {
+                separated
+                    .push("context_id = ")
+                    .push_bind_unseparated(context_id.0);
+            }
             separated
                 .push("is_recurring = ")
                 .push_bind_unseparated(task_request.is_recurring);
@@ -959,6 +998,7 @@ impl TaskRepository for Repository {
                     tags,
                     parent_id,
                     project,
+                    context_id,
                     is_recurring,
                     created_at,
                     updated_at,
@@ -968,7 +1008,7 @@ impl TaskRepository for Repository {
                     user_id
                   )
                 VALUES
-                  ($1, $2, $3, $4::task_status, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::task_kind, $15, $16, $17)
+                  ($1, $2, $3, $4::task_status, $5, $6, $7, $8, $9, $10, $18, $11, $12, $13, $14::task_kind, $15, $16, $17)
                 RETURNING
                   id
             "#,
@@ -989,7 +1029,8 @@ impl TaskRepository for Repository {
                     task_request.kind.to_string() as _,
                     task_request.source_item.id.0,
                     task_request.sink_item.as_ref().map(|item| item.id.0),
-                    task_request.user_id.0
+                    task_request.user_id.0,
+                    task_request.context_id.map(|id| id.0)
                 )
                 .fetch_one(&mut **executor)
                 .await
@@ -1006,6 +1047,104 @@ impl TaskRepository for Repository {
             id: task_id,
             ..Into::<Task>::into(*task_request)
         })))
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = user_id.to_string())
+    )]
+    async fn backfill_todoist_task_context_ids(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<TaskContextBackfill, UniversalInboxError> {
+        // The project id sits in the encrypted item data, out of SQL's reach: decrypt in
+        // application code and match on the id only.
+        let contexts: HashMap<String, Uuid> = sqlx::query!(
+            r#"
+                SELECT id, binding_source_id as "binding_source_id!"
+                FROM context
+                WHERE user_id = $1
+                  AND binding_provider = 'Todoist'
+                  AND binding_mirrored
+            "#,
+            user_id.0
+        )
+        .fetch_all(&mut **executor)
+        .await
+        .context("Failed to fetch Todoist contexts from storage")?
+        .into_iter()
+        .map(|row| (row.binding_source_id, row.id))
+        .collect();
+
+        // Every Todoist task is checked, not only the unbound ones: a task moved to a project
+        // whose context did not exist at the time keeps its old binding until the context
+        // appears. Bounded by the user's task count.
+        let candidates = sqlx::query!(
+            r#"
+                SELECT
+                  task.id as task_id,
+                  task.context_id,
+                  third_party_item.id as item_id,
+                  third_party_item.data_enc as "data_enc!"
+                FROM task
+                JOIN third_party_item ON task.source_item_id = third_party_item.id
+                WHERE task.user_id = $1
+                  AND third_party_item.kind::TEXT = 'TodoistItem'
+            "#,
+            user_id.0
+        )
+        .fetch_all(&mut **executor)
+        .await
+        .context("Failed to fetch Todoist tasks from storage")?;
+
+        let mut backfill = TaskContextBackfill {
+            bound: 0,
+            unmatched: 0,
+            unreadable: 0,
+        };
+        for candidate in candidates {
+            let project_id =
+                match decrypt_third_party_item_data(&candidate.data_enc, candidate.item_id) {
+                    Ok(ThirdPartyItemData::TodoistItem(item)) => Some(item.project_id),
+                    Ok(_) => None,
+                    Err(err) => {
+                        warn!(
+                            { attr::USER_ID } = user_id.to_string(),
+                            "Cannot read the source item of task {}: {err}", candidate.task_id
+                        );
+                        backfill.unreadable += 1;
+                        continue;
+                    }
+                };
+            // Never clears a binding: no context for the project leaves the task as it is
+            let resolved = project_id.and_then(|id| contexts.get(&id));
+            match (resolved, candidate.context_id) {
+                (Some(context_id), current) if current != Some(*context_id) => {
+                    backfill.bound += sqlx::query!(
+                        "UPDATE task SET context_id = $1 WHERE id = $2",
+                        context_id,
+                        candidate.task_id
+                    )
+                    .execute(&mut **executor)
+                    .await
+                    .context("Failed to bind a Todoist task to its context")?
+                    .rows_affected();
+                }
+                (None, None) => backfill.unmatched += 1,
+                _ => {}
+            }
+        }
+
+        if backfill.unmatched > 0 {
+            warn!(
+                { attr::USER_ID } = user_id.to_string(),
+                "{} Todoist task(s) have no context for their project and stay unbound",
+                backfill.unmatched
+            );
+        }
+        Ok(backfill)
     }
 
     #[tracing::instrument(
@@ -1134,6 +1273,7 @@ impl TaskRepository for Repository {
                   task.tags as task__tags,
                   task.parent_id as task__parent_id,
                   task.project as task__project,
+                  task.context_id as task__context_id,
                   task.is_recurring as task__is_recurring,
                   task.created_at as task__created_at,
                   task.updated_at as task__updated_at,
@@ -1258,6 +1398,7 @@ impl TaskRepository for Repository {
                   task.tags as task__tags,
                   task.parent_id as task__parent_id,
                   task.project as task__project,
+                  task.context_id as task__context_id,
                   task.is_recurring as task__is_recurring,
                   task.created_at as task__created_at,
                   task.updated_at as task__updated_at,
@@ -1337,6 +1478,7 @@ pub struct TaskRow {
     tags: Vec<String>,
     parent_id: Option<Uuid>,
     project: String,
+    context_id: Option<Uuid>,
     is_recurring: bool,
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
@@ -1369,6 +1511,7 @@ impl FromRowWithPrefix<'_, PgRow> for TaskRow {
             tags: row.try_get(format!("{prefix}tags").as_str())?,
             parent_id: row.try_get(format!("{prefix}parent_id").as_str())?,
             project: row.try_get(format!("{prefix}project").as_str())?,
+            context_id: row.try_get(format!("{prefix}context_id").as_str())?,
             is_recurring: row.try_get(format!("{prefix}is_recurring").as_str())?,
             created_at: row.try_get(format!("{prefix}created_at").as_str())?,
             updated_at: row.try_get(format!("{prefix}updated_at").as_str())?,
@@ -1448,6 +1591,7 @@ impl TryFrom<&TaskRow> for Task {
             tags: row.tags.clone(),
             parent_id: row.parent_id.map(|id| id.into()),
             project: row.project.to_string(),
+            context_id: row.context_id.map(|id| id.into()),
             is_recurring: row.is_recurring,
             created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
             updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
