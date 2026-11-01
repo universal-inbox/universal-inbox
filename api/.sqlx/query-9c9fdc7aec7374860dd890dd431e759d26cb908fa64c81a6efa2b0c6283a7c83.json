@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE context\n                SET parent_id = $1, updated_at = $2\n                WHERE id = $3\n                  AND binding_mirrored\n                  AND status <> 'Tombstoned'\n                  AND parent_id IS DISTINCT FROM $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamp",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9c9fdc7aec7374860dd890dd431e759d26cb908fa64c81a6efa2b0c6283a7c83"
+}

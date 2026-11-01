@@ -25,6 +25,7 @@ use wiremock::{
 };
 
 use universal_inbox::{
+    context::MirroredProject,
     integration_connection::{
         integrations::todoist::{SyncToken, TodoistContext},
         provider::{
@@ -780,20 +781,20 @@ impl TodoistService {
         cached_fetch_all_projects(self, user_id, access_token, sync_token).await
     }
 
-    /// The user's Todoist projects, with the id Todoist gives them, so that they can be bound on
-    /// it instead of on their name. Deleted projects are left out. Empty without a Todoist
-    /// access token.
+    /// The user's Todoist projects, with the id Todoist gives them and the id of their parent, so
+    /// that they can be bound on it instead of on their name. Deleted projects are left out.
+    /// Empty without a Todoist access token.
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
         skip_all,
         fields({ attr::USER_ID } = user_id.to_string())
     )]
-    pub async fn list_projects(
+    pub async fn list_mirrored_projects(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-    ) -> Result<Vec<ProjectSummary>, UniversalInboxError> {
+    ) -> Result<Vec<MirroredProject>, UniversalInboxError> {
         let Some((access_token, _)) = self
             .integration_connection_service
             .read()
@@ -809,9 +810,11 @@ impl TodoistService {
             .await?
             .into_iter()
             .filter(|todoist_project| !todoist_project.is_deleted)
-            .map(|todoist_project| ProjectSummary {
+            .map(|todoist_project| MirroredProject {
                 source_id: todoist_project.id.into(),
                 name: todoist_project.name,
+                parent_source_id: todoist_project.parent_id.map(ProjectId),
+                is_archived: todoist_project.is_archived,
             })
             .collect())
     }

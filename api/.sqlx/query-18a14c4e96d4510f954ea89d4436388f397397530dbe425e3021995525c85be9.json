@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE context\n                SET name = $1, status = $2::context_status, updated_at = $3\n                WHERE id = $4\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        {
+          "Custom": {
+            "name": "context_status",
+            "kind": {
+              "Enum": [
+                "Active",
+                "Archived",
+                "Tombstoned"
+              ]
+            }
+          }
+        },
+        "Timestamp",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "18a14c4e96d4510f954ea89d4436388f397397530dbe425e3021995525c85be9"
+}

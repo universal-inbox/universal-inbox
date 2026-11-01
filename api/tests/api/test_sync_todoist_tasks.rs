@@ -985,8 +985,10 @@ mod project_contexts {
 
     use universal_inbox::{
         audit::{AuditActor, AuditUserChannel},
-        context::{Context, ContextBinding, ContextId, ContextStatus, Note, NoteId},
-        task::{CreateOrUpdateTaskRequest, ProjectId, ProjectSummary},
+        context::{
+            Context, ContextBinding, ContextId, ContextStatus, MirroredProject, Note, NoteId,
+        },
+        task::{CreateOrUpdateTaskRequest, ProjectId},
         utils::default_value::DefaultValue,
     };
     use universal_inbox_api::{
@@ -1023,17 +1025,26 @@ mod project_contexts {
             .unwrap()
     }
 
-    fn project(source_id: &str, name: &str) -> ProjectSummary {
-        ProjectSummary {
+    fn project(source_id: &str, name: &str) -> MirroredProject {
+        MirroredProject {
             source_id: ProjectId(source_id.to_string()),
             name: name.to_string(),
+            parent_source_id: None,
+            is_archived: false,
+        }
+    }
+
+    fn child(source_id: &str, name: &str, parent_source_id: &str) -> MirroredProject {
+        MirroredProject {
+            parent_source_id: Some(ProjectId(parent_source_id.to_string())),
+            ..project(source_id, name)
         }
     }
 
     /// Upsert `projects` in a transaction of its own, as the sync does
     async fn upsert(
         app: &AuthenticatedApp,
-        projects: Vec<ProjectSummary>,
+        projects: Vec<MirroredProject>,
     ) -> Vec<UpsertStatus<Box<Context>>> {
         let mut transaction = app.app.repository.begin().await.unwrap();
         set_audit_actor(&mut transaction, &actor()).await;
@@ -1278,7 +1289,7 @@ mod project_contexts {
 
     #[rstest]
     #[tokio::test]
-    async fn test_deleted_projects_get_no_context_and_archived_ones_an_active_one(
+    async fn test_deleted_projects_get_no_context_and_archived_ones_an_archived_one(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         mut sync_todoist_projects_response: TodoistSyncResponse,
@@ -1322,11 +1333,14 @@ mod project_contexts {
             .collect();
         names.sort();
         assert_eq!(names, vec!["Archived project", "Inbox", "Project2"]);
-        assert!(
-            contexts
-                .iter()
-                .all(|context| context.status == ContextStatus::Active)
-        );
+        for context in &contexts {
+            let expected = if context.name == "Archived project" {
+                ContextStatus::Archived
+            } else {
+                ContextStatus::Active
+            };
+            assert_eq!(context.status, expected, "status of {}", context.name);
+        }
     }
 
     #[rstest]
@@ -1687,5 +1701,253 @@ mod project_contexts {
 
         assert!(matches!(status, UpsertStatus::Updated { .. }));
         assert_eq!(task_bindings(&app).await, before);
+    }
+
+    /// The context of each project source id
+    fn by_source(contexts: &[Context]) -> HashMap<String, Context> {
+        contexts
+            .iter()
+            .filter_map(|context| {
+                let binding = context.binding.as_ref()?;
+                Some((binding.source_id.0.clone(), context.clone()))
+            })
+            .collect()
+    }
+
+    fn tree() -> Vec<MirroredProject> {
+        vec![
+            project("A", "A"),
+            child("B", "B", "A"),
+            child("C", "C", "B"),
+            child("D", "D", "C"),
+        ]
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_project_tree_is_mirrored_whatever_the_response_order(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        // The same tree twice, under other source ids: parents first, then children first
+        let reversed: Vec<MirroredProject> = tree()
+            .into_iter()
+            .rev()
+            .map(|project| MirroredProject {
+                source_id: ProjectId(format!("r{}", project.source_id.0)),
+                parent_source_id: project
+                    .parent_source_id
+                    .map(|parent| ProjectId(format!("r{}", parent.0))),
+                ..project
+            })
+            .collect();
+        upsert(&app, tree()).await;
+        upsert(&app, reversed).await;
+
+        let contexts = by_source(&list_contexts(&app).await);
+        for prefix in ["", "r"] {
+            let context = |name: &str| &contexts[&format!("{prefix}{name}")];
+            assert_eq!(context("A").parent_id, None);
+            assert_eq!(context("B").parent_id, Some(context("A").id));
+            assert_eq!(context("C").parent_id, Some(context("B").id));
+            assert_eq!(context("D").parent_id, Some(context("C").id));
+        }
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_project_moved_upstream_moves_its_context_and_a_rerun_writes_nothing(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        upsert(&app, tree()).await;
+        let before = by_source(&list_contexts(&app).await);
+
+        let mut moved = tree();
+        moved[2] = child("C", "C", "A");
+        let statuses = upsert(&app, moved.clone()).await;
+
+        let after = by_source(&list_contexts(&app).await);
+        assert_eq!(after["C"].id, before["C"].id);
+        assert_eq!(after["C"].parent_id, Some(after["A"].id));
+        // D follows C, it is not moved itself
+        assert_eq!(after["D"].parent_id, Some(after["C"].id));
+        assert!(matches!(&statuses[2], UpsertStatus::Updated { old, new }
+            if old.parent_id == Some(before["B"].id) && new.parent_id == Some(before["A"].id)));
+        assert_eq!(
+            context_audit_actions(&app.app, after["C"].id.0).await,
+            vec!["Created", "Updated", "Updated"]
+        );
+
+        let again = upsert(&app, moved).await;
+        assert!(
+            again
+                .iter()
+                .all(|status| matches!(status, UpsertStatus::Untouched(_)))
+        );
+        assert_eq!(by_source(&list_contexts(&app).await), after);
+        assert_eq!(
+            context_audit_actions(&app.app, after["C"].id.0).await,
+            vec!["Created", "Updated", "Updated"]
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_the_archive_state_round_trips(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let archived = |is_archived| MirroredProject {
+            is_archived,
+            ..project("2222", "Project2")
+        };
+        upsert(&app, vec![archived(false)]).await;
+        let id = list_contexts(&app).await[0].id;
+
+        upsert(&app, vec![archived(true)]).await;
+        assert_eq!(list_contexts(&app).await[0].status, ContextStatus::Archived);
+        upsert(&app, vec![archived(true)]).await;
+        upsert(&app, vec![archived(false)]).await;
+        assert_eq!(list_contexts(&app).await[0].status, ContextStatus::Active);
+
+        assert_eq!(
+            context_audit_actions(&app.app, id.0).await,
+            vec!["Created", "Updated", "Updated"]
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_cycles_and_dangling_parents_are_mirrored_at_the_root(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+
+        upsert(
+            &app,
+            vec![
+                child("X", "X", "Y"),
+                child("Y", "Y", "X"),
+                child("O", "Orphan", "gone"),
+                child("Z", "Z", "X"),
+            ],
+        )
+        .await;
+
+        let contexts = by_source(&list_contexts(&app).await);
+        assert_eq!(contexts["X"].parent_id, None);
+        assert_eq!(contexts["Y"].parent_id, None);
+        assert_eq!(contexts["O"].parent_id, None);
+        assert_eq!(contexts["Z"].parent_id, Some(contexts["X"].id));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_ui_owned_children_and_tombstoned_contexts_are_left_alone(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        upsert(&app, vec![project("A", "A"), project("T", "T")]).await;
+        let mirrored = by_source(&list_contexts(&app).await);
+        let now = Utc::now().trunc_subsecs(6);
+        let ui_child = Box::new(Context {
+            id: ContextId(Uuid::new_v4()),
+            user_id: app.user.id,
+            parent_id: Some(mirrored["A"].id),
+            name: "Mine".to_string(),
+            binding: None,
+            status: ContextStatus::Active,
+            note_id: NoteId(Uuid::new_v4()),
+            created_at: now,
+            updated_at: now,
+        });
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &actor()).await;
+        app.app
+            .repository
+            .create_context_with_note(&mut transaction, ui_child.clone(), String::new())
+            .await
+            .unwrap();
+        app.app
+            .repository
+            .update_context_status(
+                &mut transaction,
+                mirrored["T"].id,
+                universal_inbox::context::ContextStatusChange::Tombstone,
+            )
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+        let before = list_contexts(&app).await;
+
+        upsert(
+            &app,
+            vec![
+                project("A", "A"),
+                MirroredProject {
+                    is_archived: true,
+                    ..child("T", "Renamed", "A")
+                },
+            ],
+        )
+        .await;
+
+        assert_eq!(list_contexts(&app).await, before);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_project_under_a_context_upstream_does_not_own_is_mirrored_at_the_root(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        upsert(&app, vec![project("T", "T")]).await;
+        let tombstoned = by_source(&list_contexts(&app).await)["T"].id;
+        let now = Utc::now().trunc_subsecs(6);
+        let not_mirrored = Box::new(Context {
+            id: ContextId(Uuid::new_v4()),
+            user_id: app.user.id,
+            parent_id: None,
+            name: "Mine".to_string(),
+            binding: Some(
+                ContextBinding::new(IntegrationProviderKind::Todoist, "U".into(), false).unwrap(),
+            ),
+            status: ContextStatus::Active,
+            note_id: NoteId(Uuid::new_v4()),
+            created_at: now,
+            updated_at: now,
+        });
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &actor()).await;
+        app.app
+            .repository
+            .create_context_with_note(&mut transaction, not_mirrored.clone(), String::new())
+            .await
+            .unwrap();
+        app.app
+            .repository
+            .update_context_status(
+                &mut transaction,
+                tombstoned,
+                universal_inbox::context::ContextStatusChange::Tombstone,
+            )
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+
+        upsert(
+            &app,
+            vec![
+                project("U", "U"),
+                project("T", "T"),
+                child("M", "M", "U"),
+                child("N", "N", "T"),
+            ],
+        )
+        .await;
+
+        let contexts = by_source(&list_contexts(&app).await);
+        assert_eq!(contexts["M"].parent_id, None);
+        assert_eq!(contexts["N"].parent_id, None);
+        assert_eq!(contexts["U"].id, not_mirrored.id);
     }
 }
