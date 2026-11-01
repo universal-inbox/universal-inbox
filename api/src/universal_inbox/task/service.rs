@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fmt::Debug,
     panic::AssertUnwindSafe,
     sync::{Arc, Weak},
@@ -13,7 +14,10 @@ use tracing::{debug, error, info, warn};
 
 use universal_inbox::{
     HasHtmlUrl, Page,
-    context::Context as UiContext,
+    context::{
+        Context as UiContext, ContextId, ContextStatus, MirroredProject, RootedParent,
+        resolve_mirrored_parents,
+    },
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{
         Notification, NotificationSource, NotificationStatus, service::NotificationPatch,
@@ -796,7 +800,7 @@ impl TaskService {
         ))?;
         let projects = self
             .todoist_service
-            .list_projects(&mut transaction, user_id)
+            .list_mirrored_projects(&mut transaction, user_id)
             .await?;
         let upserts = self
             .upsert_mirrored_contexts(
@@ -823,29 +827,101 @@ impl TaskService {
         Ok(upserts)
     }
 
-    /// Mirror each upstream project as a context bound on its `source_id`.
+    /// Mirror each upstream project as a context bound on its `source_id`, with its parent.
+    ///
+    /// Two passes, so the order of `projects` does not matter: every project is upserted first
+    /// (name and archive state), then the parents are resolved on `source_id` and written. A
+    /// dangling parent or a parent cycle puts the project at the root. The whole tree is computed
+    /// before any parent is written, so no intermediate state holds a cycle.
     pub async fn upsert_mirrored_contexts(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         provider: IntegrationProviderKind,
-        projects: Vec<ProjectSummary>,
+        projects: Vec<MirroredProject>,
     ) -> Result<Vec<UpsertStatus<Box<UiContext>>>, UniversalInboxError> {
+        let (parents, rooted) = resolve_mirrored_parents(&projects);
+        for (source_id, reason) in rooted {
+            let reason = match reason {
+                RootedParent::Dangling => "its parent is not in the upstream projects",
+                RootedParent::Cycle => "it is part of a parent cycle",
+            };
+            warn!(
+                { attr::USER_ID } = user_id.to_string(),
+                "{provider} project {source_id} is mirrored at the root: {reason}"
+            );
+        }
+
         let mut upserts = Vec::with_capacity(projects.len());
-        for project in projects {
+        for project in &projects {
             upserts.push(
                 self.repository
                     .upsert_mirrored_context(
                         executor,
                         user_id,
                         provider,
-                        project.source_id,
-                        project.name,
+                        project.source_id.clone(),
+                        project.name.clone(),
+                        project.is_archived,
                     )
                     .await?,
             );
         }
-        Ok(upserts)
+
+        // Only a context upstream owns can be an upstream parent: a context the UI owns, or a
+        // tombstone, keeps its own parent, so a mirrored child under it could close a cycle
+        let context_ids: HashMap<_, ContextId> = projects
+            .iter()
+            .zip(&upserts)
+            .filter(|(_, upsert)| {
+                let context = upsert.value_ref();
+                context
+                    .binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.mirrored)
+                    && context.status != ContextStatus::Tombstoned
+            })
+            .map(|(project, upsert)| (project.source_id.clone(), upsert.value_ref().id))
+            .collect();
+        let mut statuses = Vec::with_capacity(upserts.len());
+        for (project, upsert) in projects.iter().zip(upserts) {
+            let parent_source_id = parents.get(&project.source_id).cloned().flatten();
+            let parent_id = parent_source_id
+                .as_ref()
+                .and_then(|parent| context_ids.get(parent).copied());
+            if let (Some(parent), None) = (&parent_source_id, parent_id) {
+                warn!(
+                    { attr::USER_ID } = user_id.to_string(),
+                    "{provider} project {} is mirrored at the root: its parent {parent} is not \
+                     a context upstream owns",
+                    project.source_id
+                );
+            }
+            let context_id = upsert.value_ref().id;
+            if !self
+                .repository
+                .set_mirrored_context_parent(executor, context_id, parent_id)
+                .await?
+            {
+                statuses.push(upsert);
+                continue;
+            }
+            let moved = Box::new(
+                self.repository
+                    .get_context(executor, context_id)
+                    .await?
+                    .ok_or_else(|| {
+                        UniversalInboxError::ItemNotFound(format!("Context {context_id} not found"))
+                    })?,
+            );
+            statuses.push(match upsert {
+                UpsertStatus::Created(_) => UpsertStatus::Created(moved),
+                UpsertStatus::Updated { old, .. } | UpsertStatus::Untouched(old) => {
+                    UpsertStatus::Updated { old, new: moved }
+                }
+            });
+        }
+        Ok(statuses)
     }
 
     /// The task creation results, and whether the sync actually ran (it does not when there is
