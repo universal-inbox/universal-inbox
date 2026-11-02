@@ -4,7 +4,7 @@
     "@iconify-json/mdi": "^1.2.3",
     "@iconify-json/tabler": "^1.2.40",
     "@iconify/tailwind4": "^1.2.3",
-    "@rspack/cli": "^2.2.7",
+    "@rspack/cli": "^2.3.0",
     "@rspack/core": "^2.2.7",
     "@tailwindcss/typography": "^0.5.20",
     "flatpickr": "^4.6.13",
@@ -14,7 +14,7 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
-    "@iconify-json/lucide": "^1.2.136",
+    "@iconify-json/lucide": "^1.2.149",
     "crisp-sdk-web": "^1.2.1"
   },
   "overrides": {
