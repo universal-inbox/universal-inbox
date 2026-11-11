@@ -2,50 +2,40 @@
   "lockfile_version": "1",
   "packages": {
     "beads@latest": {
-      "last_modified": "2026-08-27T07:16:00Z",
-      "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#beads",
+      "last_modified": "2026-11-06T15:06:19Z",
+      "resolved": "github:NixOS/nixpkgs/4fe25e12eb9f4c744966dd3de5a05246cf098601#beads",
       "source": "devbox-search",
-      "version": "1.0.3",
+      "version": "1.3.2",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/rhl9bdfbh36jdsxmxb8irb3j8c0vsa5b-beads-1.0.3",
+              "path": "/nix/store/a17yqwbgz1jbybpzzklsbayrq48i02nn-beads-1.3.2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/rhl9bdfbh36jdsxmxb8irb3j8c0vsa5b-beads-1.0.3"
+          "store_path": "/nix/store/a17yqwbgz1jbybpzzklsbayrq48i02nn-beads-1.3.2"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/qaqfqp1h1sm4xdjs9gxmp3hwidjdnml4-beads-1.0.3",
+              "path": "/nix/store/1xx2p7aj43p5hk87p4lnvil145sdhdfz-beads-1.3.2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/qaqfqp1h1sm4xdjs9gxmp3hwidjdnml4-beads-1.0.3"
-        },
-        "x86_64-darwin": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/kdjdkxl59qv1nx50851dbmij4dajgpf9-beads-1.0.3",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/kdjdkxl59qv1nx50851dbmij4dajgpf9-beads-1.0.3"
+          "store_path": "/nix/store/1xx2p7aj43p5hk87p4lnvil145sdhdfz-beads-1.3.2"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/kfml4ci9j8s0d0lzg0rjcbwdn7ya25c1-beads-1.0.3",
+              "path": "/nix/store/pv8vrgbmg0fhwy6pdpzjk4daijj8lkd0-beads-1.3.2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/kfml4ci9j8s0d0lzg0rjcbwdn7ya25c1-beads-1.0.3"
+          "store_path": "/nix/store/pv8vrgbmg0fhwy6pdpzjk4daijj8lkd0-beads-1.3.2"
         }
       }
     },
