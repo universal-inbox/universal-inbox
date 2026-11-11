@@ -28,3 +28,6 @@ docker/cache
 
 # Claude Code state accidentally created in a sub-crate
 api/.claude/
+
+# Local, untracked agent instructions
+/AGENTS.local.md

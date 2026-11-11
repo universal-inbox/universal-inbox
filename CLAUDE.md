@@ -52,3 +52,5 @@ Run `bd prime` for the full workflow.
 then `bd dolt push`.
 
 _Last updated: 2026-05-30_
+
+If `AGENTS.local.md` exists at the repository root, read it: it holds local, untracked agent instructions.
