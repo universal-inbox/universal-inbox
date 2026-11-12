@@ -1,4 +1,8 @@
-use std::{fmt, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    str::FromStr,
+};
 
 use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
@@ -151,6 +155,78 @@ impl ContextStatus {
             (from, change) => Err(ContextError::InvalidStatusChange { from, change }),
         }
     }
+}
+
+/// An upstream project as the context mirror sees it: what upstream owns of a mirrored context.
+#[derive(Debug, PartialEq, Clone, Eq)]
+pub struct MirroredProject {
+    pub source_id: ProjectId,
+    pub name: String,
+    /// The upstream parent project, `None` for a root project
+    pub parent_source_id: Option<ProjectId>,
+    pub is_archived: bool,
+}
+
+/// Why a project's upstream parent was dropped and the project mirrored at the root
+#[derive(Debug, PartialEq, Clone, Copy, Eq)]
+pub enum RootedParent {
+    /// The parent project is not in the upstream response
+    Dangling,
+    /// The project is part of a parent cycle
+    Cycle,
+}
+
+/// The parent `source_id` of each project `source_id`, `None` at the root
+pub type MirroredParents = HashMap<ProjectId, Option<ProjectId>>;
+
+/// The parent `source_id` of each project, resolved on `source_id` only, never on a name.
+///
+/// A parent missing from `projects` or a parent cycle puts the project at the root and is
+/// reported in the second value. The order of `projects` does not matter.
+pub fn resolve_mirrored_parents(
+    projects: &[MirroredProject],
+) -> (MirroredParents, Vec<(ProjectId, RootedParent)>) {
+    let upstream: HashMap<&ProjectId, Option<&ProjectId>> = projects
+        .iter()
+        .map(|project| (&project.source_id, project.parent_source_id.as_ref()))
+        .collect();
+    let mut rooted: Vec<(ProjectId, RootedParent)> = vec![];
+    let mut in_cycle: HashSet<&ProjectId> = HashSet::new();
+    for project in projects {
+        // Walk the ancestors: coming back to a project already on the path closes a cycle
+        let mut path: Vec<&ProjectId> = vec![&project.source_id];
+        let mut current = &project.source_id;
+        while let Some(Some(parent)) = upstream.get(current) {
+            if let Some(start) = path.iter().position(|id| id == parent) {
+                in_cycle.extend(path[start..].iter().copied());
+                break;
+            }
+            if in_cycle.contains(parent) {
+                break;
+            }
+            path.push(parent);
+            current = parent;
+        }
+    }
+
+    let parents = projects
+        .iter()
+        .map(|project| {
+            let parent = match &project.parent_source_id {
+                _ if in_cycle.contains(&project.source_id) => {
+                    rooted.push((project.source_id.clone(), RootedParent::Cycle));
+                    None
+                }
+                Some(parent) if !upstream.contains_key(parent) => {
+                    rooted.push((project.source_id.clone(), RootedParent::Dangling));
+                    None
+                }
+                parent => parent.clone(),
+            };
+            (project.source_id.clone(), parent)
+        })
+        .collect();
+    (parents, rooted)
 }
 
 /// The markdown note of a context. Universal Inbox owns its body.
@@ -436,5 +512,75 @@ mod tests {
             Err(ContextError::InvalidNoteBackendKind)
         );
         assert!(NoteBackendBinding::new("Obsidian".to_string(), serde_json::json!({})).is_ok());
+    }
+
+    mod mirrored_parents {
+        use super::*;
+
+        fn project(source_id: &str, parent: Option<&str>) -> MirroredProject {
+            MirroredProject {
+                source_id: ProjectId(source_id.to_string()),
+                name: source_id.to_string(),
+                parent_source_id: parent.map(|id| ProjectId(id.to_string())),
+                is_archived: false,
+            }
+        }
+
+        fn parent_of(
+            parents: &HashMap<ProjectId, Option<ProjectId>>,
+            source_id: &str,
+        ) -> Option<String> {
+            parents[&ProjectId(source_id.to_string())]
+                .as_ref()
+                .map(|id| id.0.clone())
+        }
+
+        #[test]
+        fn test_a_tree_resolves_in_any_order() {
+            let mut projects = vec![
+                project("A", None),
+                project("B", Some("A")),
+                project("C", Some("B")),
+                project("D", Some("C")),
+            ];
+            let (parents, rooted) = resolve_mirrored_parents(&projects);
+            projects.reverse();
+            let (reversed, _) = resolve_mirrored_parents(&projects);
+
+            assert_eq!(parents, reversed);
+            assert_eq!(parent_of(&parents, "A"), None);
+            assert_eq!(parent_of(&parents, "B"), Some("A".to_string()));
+            assert_eq!(parent_of(&parents, "D"), Some("C".to_string()));
+            assert!(rooted.is_empty());
+        }
+
+        #[test]
+        fn test_cycles_and_dangling_parents_go_to_the_root() {
+            let projects = vec![
+                project("X", Some("Y")),
+                project("Y", Some("X")),
+                project("S", Some("S")),
+                project("Z", Some("X")),
+                project("O", Some("gone")),
+            ];
+            let (parents, mut rooted) = resolve_mirrored_parents(&projects);
+            rooted.sort_by(|a, b| a.0.0.cmp(&b.0.0));
+
+            assert_eq!(parent_of(&parents, "X"), None);
+            assert_eq!(parent_of(&parents, "Y"), None);
+            assert_eq!(parent_of(&parents, "S"), None);
+            // Under a cycle member, not in the cycle
+            assert_eq!(parent_of(&parents, "Z"), Some("X".to_string()));
+            assert_eq!(parent_of(&parents, "O"), None);
+            assert_eq!(
+                rooted,
+                vec![
+                    (ProjectId("O".to_string()), RootedParent::Dangling),
+                    (ProjectId("S".to_string()), RootedParent::Cycle),
+                    (ProjectId("X".to_string()), RootedParent::Cycle),
+                    (ProjectId("Y".to_string()), RootedParent::Cycle),
+                ]
+            );
+        }
     }
 }

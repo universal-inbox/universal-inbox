@@ -43,13 +43,14 @@ pub trait ContextRepository {
     /// Create or rename the context mirroring the upstream project `source_id`, found on its
     /// binding `(user_id, provider, source_id)`, never on its name.
     ///
-    /// - absent: created, mirrored, flat and `Active`, with an empty note (through
-    ///   `create_context_with_note`);
-    /// - mirrored and the name differs: renamed, upstream owns the name;
-    /// - mirrored and the name matches: `Untouched`, nothing is written;
-    /// - not mirrored: `Untouched`, the name belongs to Universal Inbox.
+    /// - absent: created, mirrored and flat, `Archived` when `is_archived` else `Active`, with an
+    ///   empty note (through `create_context_with_note`);
+    /// - mirrored and the name or the archive state differs: renamed and archived or unarchived
+    ///   (through [`ContextStatus::apply`]), upstream owns both;
+    /// - mirrored and both match: `Untouched`, nothing is written;
+    /// - not mirrored, or `Tombstoned`: `Untouched`.
     ///
-    /// The status, parent and note are never changed.
+    /// The parent and note are never changed here.
     async fn upsert_mirrored_context(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -57,7 +58,16 @@ pub trait ContextRepository {
         provider: IntegrationProviderKind,
         source_id: ProjectId,
         name: String,
+        is_archived: bool,
     ) -> Result<UpsertStatus<Box<Context>>, UniversalInboxError>;
+    /// Set the parent of a mirrored, non-`Tombstoned` context. Writes only when the parent
+    /// differs; returns whether it wrote.
+    async fn set_mirrored_context_parent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        id: ContextId,
+        parent_id: Option<ContextId>,
+    ) -> Result<bool, UniversalInboxError>;
     /// Id of the mirrored context bound on `(user_id, provider, source_id)`, if any. Read-only.
     async fn get_mirrored_context_id(
         &self,
@@ -272,7 +282,13 @@ impl ContextRepository for Repository {
         provider: IntegrationProviderKind,
         source_id: ProjectId,
         name: String,
+        is_archived: bool,
     ) -> Result<UpsertStatus<Box<Context>>, UniversalInboxError> {
+        let upstream_status = if is_archived {
+            ContextStatus::Archived
+        } else {
+            ContextStatus::Active
+        };
         let binding = ContextBinding::new(provider, source_id.clone(), true).map_err(|err| {
             UniversalInboxError::InvalidInputData {
                 source: None,
@@ -319,7 +335,7 @@ impl ContextRepository for Repository {
                 parent_id: None,
                 name,
                 binding: Some(binding),
-                status: ContextStatus::Active,
+                status: upstream_status,
                 note_id: NoteId(Uuid::new_v4()),
                 created_at: now,
                 updated_at: now,
@@ -334,19 +350,36 @@ impl ContextRepository for Repository {
             .binding
             .as_ref()
             .is_some_and(|binding| binding.mirrored);
-        if !owned_by_upstream || existing.name == name {
+        if !owned_by_upstream
+            || existing.status == ContextStatus::Tombstoned
+            || (existing.name == name && existing.status == upstream_status)
+        {
             return Ok(UpsertStatus::Untouched(Box::new(existing)));
         }
 
+        let status = match (existing.status, upstream_status) {
+            (from, to) if from == to => Ok(from),
+            (from, ContextStatus::Archived) => from.apply(ContextStatusChange::Archive),
+            (from, _) => from.apply(ContextStatusChange::Unarchive),
+        }
+        .map_err(|err| UniversalInboxError::InvalidInputData {
+            source: None,
+            user_error: err.to_string(),
+        })?;
         sqlx::query!(
-            r#"UPDATE context SET name = $1, updated_at = $2 WHERE id = $3"#,
+            r#"
+                UPDATE context
+                SET name = $1, status = $2::context_status, updated_at = $3
+                WHERE id = $4
+            "#,
             name,
+            status.to_string() as _,
             Utc::now().naive_utc(),
             existing.id.0
         )
         .execute(&mut **executor)
         .await
-        .context("Failed to rename context in storage")?;
+        .context("Failed to update mirrored context in storage")?;
 
         let updated = self
             .get_context(executor, existing.id)
@@ -358,6 +391,33 @@ impl ContextRepository for Repository {
             old: Box::new(existing),
             new: Box::new(updated),
         })
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
+    async fn set_mirrored_context_parent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        id: ContextId,
+        parent_id: Option<ContextId>,
+    ) -> Result<bool, UniversalInboxError> {
+        let result = sqlx::query!(
+            r#"
+                UPDATE context
+                SET parent_id = $1, updated_at = $2
+                WHERE id = $3
+                  AND binding_mirrored
+                  AND status <> 'Tombstoned'
+                  AND parent_id IS DISTINCT FROM $1
+            "#,
+            parent_id.map(|id| id.0),
+            Utc::now().naive_utc(),
+            id.0
+        )
+        .execute(&mut **executor)
+        .await
+        .context("Failed to set the parent of a mirrored context in storage")?;
+
+        Ok(result.rows_affected() > 0)
     }
 
     #[tracing::instrument(
