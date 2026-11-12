@@ -814,6 +814,7 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
                     .unwrap_or_else(|| TODOIST_INBOX_PROJECT.to_string()),
                 None,
             ),
+            context_id: None,
             is_recurring: false,
             created_at: source.created_at,
             updated_at: source.updated_at,

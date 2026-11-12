@@ -1,6 +1,7 @@
 use std::{fmt, str::FromStr};
 
 use chrono::{DateTime, Utc};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
@@ -247,7 +248,7 @@ macro_attr! {
 macro_rules! uuid_newtype {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
-        #[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
+        #[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash, JsonSchema)]
         #[serde(transparent)]
         pub struct $name(pub Uuid);
 
