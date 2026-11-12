@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT id, context_id, body_enc, backend_kind, backend_binding, created_at, updated_at\n                FROM note\n                WHERE context_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "note",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "context_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "note",
+            "name": "context_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "body_enc",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "note",
+            "name": "body_enc"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "backend_kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "note",
+            "name": "backend_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "backend_binding",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "note",
+            "name": "backend_binding"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamp",
+        "origin": {
+          "Table": {
+            "table": "note",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at",
+        "type_info": "Timestamp",
+        "origin": {
+          "Table": {
+            "table": "note",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "37f684a8ff0e67092a380c5d7d26d7b4fe082fe6245a4738eb98e48f971c01a1"
+}

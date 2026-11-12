@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO attachment\n                  (id, user_id, context_id, task_id, kind, url, title, provider, position, created_at, updated_at)\n                VALUES\n                  ($1, $2, $3, $4, $5::attachment_kind, $6, $7, $8::integration_provider_kind, $9, $10, $11)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "attachment_kind",
+            "kind": {
+              "Enum": [
+                "Url",
+                "ThirdPartyItem"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Text",
+        {
+          "Custom": {
+            "name": "integration_provider_kind",
+            "kind": {
+              "Enum": [
+                "Github",
+                "Todoist",
+                "Linear",
+                "GoogleMail",
+                "Slack",
+                "TickTick",
+                "GoogleCalendar",
+                "API",
+                "GoogleDrive",
+                "Notion"
+              ]
+            }
+          }
+        },
+        "Int4",
+        "Timestamp",
+        "Timestamp"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4f17bd0363b1d2725d340d0b893114827f63701ecb7f8ab0ea1dbe02392c9b8f"
+}
