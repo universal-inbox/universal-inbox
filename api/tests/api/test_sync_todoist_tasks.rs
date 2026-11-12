@@ -963,3 +963,402 @@ async fn test_sync_all_tasks_asynchronously_in_error(
         "Failed to fetch tasks from Todoist"
     );
 }
+
+mod project_contexts {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    use chrono::SubsecRound;
+    use sqlx::Row;
+    use uuid::Uuid;
+
+    use universal_inbox::{
+        audit::{AuditActor, AuditUserChannel},
+        context::{Context, ContextBinding, ContextId, ContextStatus, Note, NoteId},
+        task::{ProjectId, ProjectSummary},
+    };
+    use universal_inbox_api::{
+        repository::context::ContextRepository,
+        universal_inbox::{UpsertStatus, audit::actor_context::with_system_actor},
+    };
+
+    use crate::helpers::{TestedApp, set_audit_actor};
+
+    fn actor() -> AuditActor {
+        AuditActor::User {
+            via: AuditUserChannel::Web,
+        }
+    }
+
+    async fn list_contexts(app: &AuthenticatedApp) -> Vec<Context> {
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        app.app
+            .repository
+            .list_contexts_for_user(&mut transaction, app.user.id)
+            .await
+            .unwrap()
+    }
+
+    async fn note_of(app: &AuthenticatedApp, context: &Context) -> Option<Note> {
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        app.app
+            .repository
+            .get_note_for_context(&mut transaction, context.id)
+            .await
+            .unwrap()
+    }
+
+    fn project(source_id: &str, name: &str) -> ProjectSummary {
+        ProjectSummary {
+            source_id: ProjectId(source_id.to_string()),
+            name: name.to_string(),
+        }
+    }
+
+    /// Upsert `projects` in a transaction of its own, as the sync does
+    async fn upsert(
+        app: &AuthenticatedApp,
+        projects: Vec<ProjectSummary>,
+    ) -> Vec<UpsertStatus<Box<Context>>> {
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &actor()).await;
+        let upserts = app
+            .app
+            .task_service
+            .read()
+            .await
+            .upsert_mirrored_contexts(
+                &mut transaction,
+                app.user.id,
+                IntegrationProviderKind::Todoist,
+                projects,
+            )
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+        upserts
+    }
+
+    async fn context_audit_actions(app: &TestedApp, entity_id: Uuid) -> Vec<String> {
+        sqlx::query(
+            "SELECT action FROM audit_event
+             WHERE entity_id = $1 AND entity_kind = 'Context' ORDER BY created_at, id",
+        )
+        .bind(entity_id)
+        .fetch_all(&*app.repository.pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.get("action"))
+        .collect()
+    }
+
+    async fn connect_todoist(
+        app: &AuthenticatedApp,
+        settings: &Settings,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            settings,
+            todoist_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_sync_tasks_mirrors_each_todoist_project_as_one_context(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_todoist_items_response: TodoistSyncResponse,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        connect_todoist(&app, &settings, todoist_oauth_credential).await;
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        )
+        .await;
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "items",
+            &sync_todoist_items_response,
+            None,
+        )
+        .await;
+
+        let task_creations: Vec<TaskCreationResult> = sync_tasks(
+            &app.client,
+            &app.app.api_address,
+            Some(TaskSourceKind::Todoist),
+            false,
+        )
+        .await;
+
+        // `Task.project` is still the project name
+        let items_count = sync_todoist_items_response.items.as_ref().unwrap().len();
+        assert_eq!(task_creations.len(), items_count);
+        assert!(
+            task_creations
+                .iter()
+                .all(|creation| ["Inbox", "Project2"].contains(&creation.task.project.as_str()))
+        );
+
+        let contexts = list_contexts(&app).await;
+        assert_eq!(contexts.len(), 2);
+        for (source_id, name) in [("1111", "Inbox"), ("2222", "Project2")] {
+            let context = contexts
+                .iter()
+                .find(|context| context.name == name)
+                .unwrap_or_else(|| panic!("no context for {name}"));
+            assert_eq!(
+                context.binding,
+                Some(
+                    ContextBinding::new(IntegrationProviderKind::Todoist, source_id.into(), true)
+                        .unwrap()
+                )
+            );
+            assert_eq!(context.parent_id, None);
+            assert_eq!(context.status, ContextStatus::Active);
+            let note = note_of(&app, context).await.expect("a context has a note");
+            assert_eq!(note.id, context.note_id);
+            assert_eq!(note.body, "");
+            // Recorded as made by the sync job
+            assert_eq!(
+                context_audit_actions(&app.app, context.id.0).await,
+                vec!["Created"]
+            );
+        }
+        let actor_kind: String = sqlx::query_scalar(
+            "SELECT actor_kind FROM audit_event WHERE entity_kind = 'Context' LIMIT 1",
+        )
+        .fetch_one(&*app.app.repository.pool)
+        .await
+        .unwrap();
+        assert_eq!(actor_kind, "System");
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_upsert_renames_the_context_bound_to_the_same_source_id(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let created = upsert(&app, vec![project("2222", "Project2")]).await;
+        let UpsertStatus::Created(created) = &created[0] else {
+            panic!("expected a creation, got {:?}", created[0]);
+        };
+
+        let renamed = upsert(&app, vec![project("2222", "Renamed project")]).await;
+
+        let UpsertStatus::Updated { old, new } = &renamed[0] else {
+            panic!("expected an update, got {:?}", renamed[0]);
+        };
+        assert_eq!(old.name, "Project2");
+        assert_eq!(new.name, "Renamed project");
+        assert_eq!(new.id, created.id);
+        assert_eq!(new.note_id, created.note_id);
+        assert_eq!(new.binding, created.binding);
+        assert!(new.updated_at > created.updated_at);
+        let contexts = list_contexts(&app).await;
+        assert_eq!(contexts.len(), 1);
+        assert_eq!(contexts[0].name, "Renamed project");
+        assert_eq!(
+            context_audit_actions(&app.app, created.id.0).await,
+            vec!["Created", "Updated"]
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_upsert_of_an_unchanged_project_writes_nothing(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let created = upsert(&app, vec![project("2222", "Project2")]).await;
+        let UpsertStatus::Created(created) = &created[0] else {
+            panic!("expected a creation, got {:?}", created[0]);
+        };
+        let before = list_contexts(&app).await;
+
+        let again = upsert(&app, vec![project("2222", "Project2")]).await;
+
+        let UpsertStatus::Untouched(untouched) = &again[0] else {
+            panic!("expected no change, got {:?}", again[0]);
+        };
+        assert_eq!(untouched.id, created.id);
+        assert_eq!(list_contexts(&app).await, before);
+        assert_eq!(
+            context_audit_actions(&app.app, created.id.0).await,
+            vec!["Created"]
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_upsert_leaves_a_context_the_ui_owns_alone(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let now = Utc::now().trunc_subsecs(6);
+        let new_context = |name: &str, binding: Option<ContextBinding>| {
+            Box::new(Context {
+                id: ContextId(Uuid::new_v4()),
+                user_id: app.user.id,
+                parent_id: None,
+                name: name.to_string(),
+                binding,
+                status: ContextStatus::Active,
+                note_id: NoteId(Uuid::new_v4()),
+                created_at: now,
+                updated_at: now,
+            })
+        };
+        let not_mirrored = new_context(
+            "My name for it",
+            Some(
+                ContextBinding::new(IntegrationProviderKind::Todoist, "2222".into(), false)
+                    .unwrap(),
+            ),
+        );
+        let unbound = new_context("Project2", None);
+        let mut transaction = app.app.repository.begin().await.unwrap();
+        set_audit_actor(&mut transaction, &actor()).await;
+        for context in [&not_mirrored, &unbound] {
+            app.app
+                .repository
+                .create_context_with_note(&mut transaction, context.clone(), String::new())
+                .await
+                .unwrap();
+        }
+        transaction.commit().await.unwrap();
+
+        // The binding is on the source id: the name is Universal Inbox's, and the unbound
+        // context named like the project is not the project's context
+        let same_source = upsert(&app, vec![project("2222", "Project2")]).await;
+        assert!(
+            matches!(&same_source[0], UpsertStatus::Untouched(context) if context.id == not_mirrored.id)
+        );
+        let other_source = upsert(&app, vec![project("3333", "Project2")]).await;
+        let UpsertStatus::Created(created) = &other_source[0] else {
+            panic!("expected a creation, got {:?}", other_source[0]);
+        };
+        assert_ne!(created.id, unbound.id);
+
+        let contexts = list_contexts(&app).await;
+        assert_eq!(contexts.len(), 3);
+        let stored = |id: ContextId| contexts.iter().find(|context| context.id == id).unwrap();
+        assert_eq!(stored(not_mirrored.id).name, "My name for it");
+        assert_eq!(stored(unbound.id).binding, None);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_deleted_projects_get_no_context_and_archived_ones_an_active_one(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        mut sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        connect_todoist(&app, &settings, todoist_oauth_credential).await;
+        let projects = sync_todoist_projects_response.projects.as_mut().unwrap();
+        let mut deleted = projects[1].clone();
+        deleted.id = "3333".to_string();
+        deleted.name = "Deleted project".to_string();
+        deleted.is_deleted = true;
+        let mut archived = projects[1].clone();
+        archived.id = "4444".to_string();
+        archived.name = "Archived project".to_string();
+        archived.is_archived = true;
+        projects.push(deleted);
+        projects.push(archived);
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        )
+        .await;
+
+        // As the sync runs it, under the system actor
+        let task_service = app.app.task_service.read().await;
+        with_system_actor(
+            "SyncTasks",
+            Some(IntegrationProviderKind::Todoist),
+            task_service.sync_todoist_project_contexts(app.user.id),
+        )
+        .await
+        .unwrap();
+
+        let contexts = list_contexts(&app).await;
+        let mut names: Vec<&str> = contexts
+            .iter()
+            .map(|context| context.name.as_str())
+            .collect();
+        names.sort();
+        assert_eq!(names, vec!["Archived project", "Inbox", "Project2"]);
+        assert!(
+            contexts
+                .iter()
+                .all(|context| context.status == ContextStatus::Active)
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_failing_context_step_does_not_change_the_task_sync(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        connect_todoist(&app, &settings, todoist_oauth_credential).await;
+        // No item to sync, so no project is needed by the task sync, and the projects request
+        // of the context step is not mocked: it fails
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "items",
+            &TodoistSyncResponse {
+                items: Some(vec![]),
+                projects: None,
+                labels: None,
+                full_sync: false,
+                temp_id_mapping: HashMap::new(),
+                sync_token: SyncToken("abcd".to_string()),
+            },
+            None,
+        )
+        .await;
+
+        let task_creations: Vec<TaskCreationResult> = sync_tasks(
+            &app.client,
+            &app.app.api_address,
+            Some(TaskSourceKind::Todoist),
+            false,
+        )
+        .await;
+
+        assert!(task_creations.is_empty());
+        assert!(list_contexts(&app).await.is_empty());
+        let integration_connection = get_integration_connection_per_provider(
+            &app,
+            app.user.id,
+            IntegrationProviderKind::Todoist,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(integration_connection.last_tasks_sync_failure_message, None);
+    }
+}
