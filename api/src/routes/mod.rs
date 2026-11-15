@@ -1,6 +1,7 @@
 pub mod audit_event;
 pub mod auth;
 pub mod config;
+pub mod context;
 pub mod health_check;
 pub mod integration_connection;
 pub mod notification;
@@ -73,6 +74,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::TooManyLoginAttempts { .. } => StatusCode::TOO_MANY_REQUESTS,
             UniversalInboxError::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
             UniversalInboxError::UnsupportedAction(_) => StatusCode::BAD_REQUEST,
+            UniversalInboxError::UnresolvedTaskDestination(_) => StatusCode::BAD_REQUEST,
             UniversalInboxError::DatabaseError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::DatabaseUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
             UniversalInboxError::SessionStoreUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
@@ -258,6 +260,7 @@ mod tests {
             },
             UniversalInboxError::Conflict(String::new()),
             UniversalInboxError::UnsupportedAction(String::new()),
+            UniversalInboxError::UnresolvedTaskDestination(String::new()),
             UniversalInboxError::ItemNotFound(String::new()),
             UniversalInboxError::DatabaseError {
                 source: sqlx::Error::PoolTimedOut,

@@ -3,6 +3,7 @@ use http::StatusCode;
 use pretty_assertions::assert_eq;
 use rstest::*;
 
+use universal_inbox::task::ProjectReference;
 use universal_inbox::{
     integration_connection::{
         IntegrationConnectionStatus,
@@ -77,8 +78,6 @@ async fn test_sync_ticktick_tasks_should_add_new_task_and_update_existing_one(
     // Mock TickTick list projects (called during sync AND during third_party_item_into_task)
     mock_ticktick_list_projects_service(&app.app.ticktick_mock_server, &ticktick_projects_response)
         .await;
-    // list_all_tasks now pulls the TickTick inbox as well; return empty for the fixture data.
-    mock_ticktick_inbox_data_service(&app.app.ticktick_mock_server, &[]).await;
 
     let ticktick_items = ticktick_tasks_response.clone();
     // Create an existing third-party item for the second task (tt_task_1456)
@@ -91,7 +90,7 @@ async fn test_sync_ticktick_tasks_should_add_new_task_and_update_existing_one(
             priority:
                 universal_inbox::third_party::integrations::ticktick::TickTickItemPriority::High,
             tags: Some(vec![TickTickTag::new("tag1")]),
-            project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
+            project_id: "inbox1111".to_string(), // ie. "Inbox"
             ..ticktick_items[1].clone()
         })),
         app.user.id,
@@ -107,14 +106,14 @@ async fn test_sync_ticktick_tasks_should_add_new_task_and_update_existing_one(
         .unwrap();
 
     // Mock TickTick list tasks for each project
-    // tt_proj_1111 (Inbox) has task tt_task_1123
+    // inbox1111 (Inbox) has task tt_task_1123
     let inbox_tasks: Vec<TickTickItem> = ticktick_items
         .iter()
-        .filter(|t| t.project_id == "tt_proj_1111")
+        .filter(|t| t.project_id == "inbox1111")
         .cloned()
         .collect();
-    mock_ticktick_list_tasks_service(&app.app.ticktick_mock_server, "tt_proj_1111", &inbox_tasks)
-        .await;
+    // TickTick serves its inbox at a dedicated endpoint, not in the project list
+    mock_ticktick_inbox_data_service(&app.app.ticktick_mock_server, &inbox_tasks).await;
     // tt_proj_2222 (Project2) has task tt_task_1456
     let project2_tasks: Vec<TickTickItem> = ticktick_items
         .iter()
@@ -290,7 +289,7 @@ async fn test_sync_ticktick_tasks_should_adopt_the_sink_rename_of_a_linear_task(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 default_due_at: Some(PresetDueDate::Today),
                 task_manager_provider_kind: Some(IntegrationProviderKind::TickTick),
                 ..Default::default()
@@ -336,7 +335,6 @@ async fn test_sync_ticktick_tasks_should_adopt_the_sink_rename_of_a_linear_task(
     mock_ticktick_list_projects_service(&app.app.ticktick_mock_server, &ticktick_projects_response)
         .await;
     mock_ticktick_inbox_data_service(&app.app.ticktick_mock_server, &[]).await;
-    mock_ticktick_list_tasks_service(&app.app.ticktick_mock_server, "tt_proj_1111", &[]).await;
     mock_ticktick_list_tasks_service(
         &app.app.ticktick_mock_server,
         "tt_proj_2222",

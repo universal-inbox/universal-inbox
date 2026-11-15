@@ -12,7 +12,6 @@ use async_trait::async_trait;
 use cached::proc_macro::cached;
 use chrono::{DateTime, Timelike, Utc};
 use http::{HeaderMap, HeaderValue};
-use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
@@ -36,8 +35,8 @@ use universal_inbox::{
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     realtime::RealtimeEventKind,
     task::{
-        CreateOrUpdateTaskRequest, DueDate, ProjectId, ProjectSummary, TaskCreation,
-        TaskCreationConfig, TaskSource, TaskSourceKind, TaskStatus,
+        CreateOrUpdateTaskRequest, DueDate, ProjectId, TaskCreation, TaskCreationConfig,
+        TaskDestination, TaskSource, TaskSourceKind, TaskStatus,
         integrations::todoist::{TODOIST_INBOX_PROJECT, TodoistProject},
         service::TaskPatch,
     },
@@ -67,7 +66,7 @@ use crate::{
     },
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
-        realtime::record_event,
+        realtime::record_event, task::destination,
     },
     utils::api::{ApiClient, ApiClientError},
 };
@@ -336,6 +335,8 @@ impl TodoistService {
                 is_archived: false,
                 is_favorite: false,
                 view_style: "list".to_string(),
+                // The mock mimics Todoist: its "Inbox" project carries the flag
+                inbox_project: *name == TODOIST_INBOX_PROJECT,
             })
             .collect();
         Mock::given(method("POST"))
@@ -660,6 +661,7 @@ impl TodoistService {
                             status: Some(TaskStatus::Deleted),
                             ..Default::default()
                         },
+                        None,
                         third_party_item.user_id,
                     )
                     .await?;
@@ -781,6 +783,34 @@ impl TodoistService {
         cached_fetch_all_projects(self, user_id, access_token, sync_token).await
     }
 
+    /// The Todoist project id of `destination`, through the context it names. `None` without a
+    /// destination. A TickTick destination is refused: a Todoist task never goes there.
+    async fn destination_project_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        destination: Option<&TaskDestination>,
+        user_id: UserId,
+    ) -> Result<Option<String>, UniversalInboxError> {
+        match destination {
+            None => Ok(None),
+            Some(TaskDestination::Context(context_id)) => {
+                let (_, project_id) = destination::resolve_todoist_context(
+                    &self.repository,
+                    executor,
+                    user_id,
+                    *context_id,
+                )
+                .await?;
+                Ok(Some(project_id.0))
+            }
+            Some(destination @ TaskDestination::TickTickProject(_)) => {
+                Err(UniversalInboxError::UnresolvedTaskDestination(format!(
+                    "A Todoist task cannot go to {destination}"
+                )))
+            }
+        }
+    }
+
     /// The user's Todoist projects, with the id Todoist gives them and the id of their parent, so
     /// that they can be bound on it instead of on their name. Deleted projects are left out.
     /// Empty without a Todoist access token.
@@ -805,6 +835,9 @@ impl TodoistService {
             return Ok(vec![]);
         };
 
+        // Fresh projects: a rename or a new project reaches the contexts on this sync, not when
+        // the cache expires. The tasks synced next reuse what this fetch caches.
+        self.projects_cache_index.fetch_add(1, Ordering::Relaxed);
         Ok(self
             .fetch_all_projects(user_id, &access_token, None)
             .await?
@@ -815,6 +848,7 @@ impl TodoistService {
                 name: todoist_project.name,
                 parent_source_id: todoist_project.parent_id.map(ProjectId),
                 is_archived: todoist_project.is_archived,
+                is_inbox: todoist_project.inbox_project,
             })
             .collect())
     }
@@ -865,7 +899,7 @@ impl TodoistService {
                 .collect(),
             parent_id: None, // Unsupported for now
             project: DefaultValue::new(TODOIST_INBOX_PROJECT.to_string(), Some(project_name)),
-            context_id: None,
+            context_id: DefaultValue::new(None, None),
             is_recurring: source
                 .due
                 .as_ref()
@@ -1050,9 +1084,10 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
             user_id,
         )
         .await;
-        // Bound by id: the project id, never the name. No context yet leaves it unset, the next
-        // sync's backfill binds it.
-        task_request.context_id = self
+        // Bound by id: the project id, never the name. Todoist owns the binding, so a move in
+        // Todoist rebinds the task; no context yet leaves the binding as it is, the next sync's
+        // backfill binds it.
+        let context_id = self
             .repository
             .get_mirrored_context_id(
                 executor,
@@ -1061,6 +1096,7 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
                 &ProjectId(source.project_id.clone()),
             )
             .await?;
+        task_request.context_id = DefaultValue::new(context_id, context_id.map(Some));
         Ok(task_request)
     }
 
@@ -1192,15 +1228,10 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
             .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot update a Todoist task without an access token"))?;
-        let project_id = match patch.project_name {
-            Some(ref project_name) => Some(
-                self.get_or_create_project(executor, project_name, user_id, Some(&access_token))
-                    .await?
-                    .source_id
-                    .to_string(),
-            ),
-            None => None,
-        };
+        // Moved by id, through the context: a project is never looked up by name nor created
+        let project_id = self
+            .destination_project_id(executor, patch.destination.as_ref(), user_id)
+            .await?;
         let has_item_update = patch.priority.is_some()
             || patch.due_at.is_some()
             || patch.body.is_some()
@@ -1268,16 +1299,10 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
             .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot create a Todoist task without an access token"))?;
-        let project_id = if let Some(project_name) = &task.project_name {
-            Some(
-                self.get_or_create_project(executor, project_name, user_id, Some(&access_token))
-                    .await?
-                    .source_id
-                    .to_string(),
-            )
-        } else {
-            None
-        };
+        // `None`: Todoist puts the task in the inbox
+        let project_id = self
+            .destination_project_id(executor, task.destination.as_ref(), user_id)
+            .await?;
         // Build the due object, attaching the IANA timezone when the due is a
         // UTC datetime. Todoist treats a `...Z` date as a *fixed-timezone* due
         // and rejects it (error 20) unless `timezone` is also set.
@@ -1329,119 +1354,6 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
 
         task.ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!("Failed to find newly created task on Todoist"))
-        })
-    }
-
-    #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields({ attr::USER_ID } = user_id.to_string())
-    )]
-    async fn search_projects(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        matches: &str,
-        user_id: UserId,
-    ) -> Result<Vec<ProjectSummary>, UniversalInboxError> {
-        let Some((access_token, _)) = self
-            .integration_connection_service
-            .read()
-            .await
-            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
-            .await?
-        else {
-            return Ok(vec![]);
-        };
-
-        let projects = self
-            .fetch_all_projects(user_id, &access_token, None)
-            .await?;
-        let search_regex = RegexBuilder::new(matches)
-            .case_insensitive(true)
-            .size_limit(100_000)
-            .build()
-            .context(format!(
-                "Failed to build regular expression from `{matches}`"
-            ))?;
-
-        Ok(projects
-            .into_iter()
-            .filter(|todoist_project| search_regex.is_match(&todoist_project.name))
-            .map(|todoist_project| ProjectSummary {
-                source_id: todoist_project.id.into(),
-                name: todoist_project.name,
-            })
-            .collect())
-    }
-
-    #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields({ attr::USER_ID } = user_id.to_string())
-    )]
-    async fn get_or_create_project(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        project_name: &str,
-        user_id: UserId,
-        access_token: Option<&AccessToken>,
-    ) -> Result<ProjectSummary, UniversalInboxError> {
-        let access_token = match access_token {
-            Some(access_token) => access_token.clone(),
-            None => {
-                self.integration_connection_service
-                    .read()
-                    .await
-                    .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
-                    .await?
-                    .ok_or_else(|| {
-                        anyhow!(
-                            "Cannot create Todoist project {project_name} without an access token"
-                        )
-                    })?
-                    .0
-            }
-        };
-
-        let projects = self
-            .fetch_all_projects(user_id, &access_token, None)
-            .await?;
-        if let Some(project) = projects
-            .iter()
-            .find(|project| project.name == *project_name)
-        {
-            return Ok(ProjectSummary {
-                source_id: project.id.clone().into(),
-                name: project.name.clone(),
-            });
-        }
-
-        let command_id = Uuid::new_v4();
-        let response = self
-            .send_sync_commands(
-                vec![TodoistSyncCommand::ProjectAdd {
-                    uuid: command_id,
-                    temp_id: Uuid::new_v4(),
-                    args: TodoistSyncCommandProjectAddArgs {
-                        name: project_name.to_string(),
-                    },
-                }],
-                &access_token,
-            )
-            .await?;
-        self.projects_cache_index.fetch_add(1, Ordering::Relaxed);
-
-        let project_id = response
-            .temp_id_mapping
-            .values()
-            .next()
-            .context("Cannot find newly added project's ID".to_string())?
-            .to_string();
-        Ok(ProjectSummary {
-            source_id: project_id.into(),
-            name: project_name.to_string(),
         })
     }
 }

@@ -1,6 +1,7 @@
 use chrono::{NaiveTime, TimeZone, Utc};
 use rstest::*;
 
+use universal_inbox::task::TaskDestination;
 use universal_inbox::{
     HasHtmlUrl,
     integration_connection::{
@@ -73,7 +74,7 @@ mod patch_task {
         let creation = create_task_third_party_item(
             &app.app,
             ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
-                project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
+                project_id: "inbox1111".to_string(), // ie. "Inbox"
                 ..*ticktick_item.clone()
             })),
             app.user.id,
@@ -146,7 +147,7 @@ mod patch_task {
         let creation = create_task_third_party_item(
             &app.app,
             ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
-                project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
+                project_id: "inbox1111".to_string(), // ie. "Inbox"
                 ..*ticktick_item.clone()
             })),
             app.user.id,
@@ -223,7 +224,7 @@ mod patch_task {
         let creation = create_task_third_party_item(
             &app.app,
             ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
-                project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
+                project_id: "inbox1111".to_string(), // ie. "Inbox"
                 ..*ticktick_item.clone()
             })),
             app.user.id,
@@ -286,6 +287,88 @@ mod patch_task {
         )
         .await;
         assert_eq!(reloaded_task.title, new_title);
+    }
+
+    /// A move between two TickTick projects sharing a name reaches TickTick: the destination is
+    /// told by its project id, not by the name the task row keeps.
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_ticktick_task_moves_between_projects_sharing_a_name(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        ticktick_item: Box<TickTickItem>,
+        ticktick_projects_response: Vec<TickTickProject>,
+    ) {
+        let app = authenticated_app.await;
+        let _integration_connection = create_ticktick_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings,
+            IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+            None,
+        )
+        .await;
+        let shared_name = "Errands".to_string();
+        let projects: Vec<TickTickProject> = ["tt_proj_from", "tt_proj_to"]
+            .into_iter()
+            .map(|id| TickTickProject {
+                id: id.to_string(),
+                name: shared_name.clone(),
+                ..ticktick_projects_response[0].clone()
+            })
+            .collect();
+        mock_ticktick_list_projects_service(&app.app.ticktick_mock_server, &projects).await;
+
+        let creation = create_task_third_party_item(
+            &app.app,
+            ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
+                project_id: "tt_proj_from".to_string(),
+                ..*ticktick_item.clone()
+            })),
+            app.user.id,
+        )
+        .await;
+        let existing_task = creation.task.as_ref().unwrap().clone();
+
+        // Sent once, to the other project
+        mock_ticktick_update_task_service(
+            &app.app.ticktick_mock_server,
+            &ticktick_item.id,
+            "tt_proj_to",
+            &ticktick_item.id,
+            &TickTickCreateTaskResponse {
+                id: ticktick_item.id.clone(),
+                project_id: "tt_proj_to".to_string(),
+                title: ticktick_item.title.clone(),
+                content: ticktick_item.content.clone(),
+                desc: ticktick_item.desc.clone(),
+                all_day: ticktick_item.all_day,
+                start_date: ticktick_item.start_date,
+                due_date: ticktick_item.due_date,
+                time_zone: ticktick_item.time_zone.clone(),
+                priority: ticktick_item.priority,
+                status: ticktick_item.status,
+                tags: ticktick_item.tags.clone(),
+            },
+        )
+        .await;
+
+        let patched_task: Box<Task> = patch_resource(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            existing_task.id.into(),
+            &TaskPatch {
+                destination: Some(TaskDestination::TickTickProject(
+                    "tt_proj_to".to_string().into(),
+                )),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        // The row keeps the shared name: only the upstream move tells the two projects apart
+        assert_eq!(patched_task.project, shared_name);
     }
 
     #[rstest]
@@ -394,7 +477,7 @@ mod patch_task {
             Some(TaskCreation {
                 title: ticktick_item.title.clone(),
                 body,
-                project_name: Some("Project2".to_string()),
+                destination: Some(TaskDestination::TickTickProject(project_id.clone().into())),
                 due_at: ticktick_item.get_due_date(),
                 priority: ticktick_item.priority.into(),
                 task_provider_kind: Some(IntegrationProviderKind::TickTick),
@@ -521,7 +604,6 @@ mod patch_task {
         )
         .await;
 
-        let project = "Project2".to_string();
         let project_id = "tt_proj_2222".to_string();
         let ticktick_item = Box::new(TickTickItem {
             project_id: project_id.clone(),
@@ -606,7 +688,7 @@ mod patch_task {
             Some(TaskCreation {
                 title: ticktick_item.title.clone(),
                 body,
-                project_name: Some(project.clone()),
+                destination: Some(TaskDestination::TickTickProject(project_id.clone().into())),
                 due_at: Some(due_at),
                 priority: ticktick_item.priority.into(),
                 task_provider_kind: Some(IntegrationProviderKind::TickTick),

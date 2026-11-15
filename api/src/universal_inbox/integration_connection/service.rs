@@ -35,6 +35,7 @@ use universal_inbox::{
 
 use crate::observability::RecordSpanError;
 use crate::observability::attr;
+use crate::universal_inbox::task::destination;
 use crate::{
     integrations::oauth2::{
         AccessToken, AuthorizationCode, PkceVerifier, RefreshToken,
@@ -286,6 +287,32 @@ impl IntegrationConnectionService {
         self.repository
             .fetch_all_integration_connections(executor, for_user_id, status, lock_rows)
             .await
+    }
+
+    /// The user's connections as the settings show them: each with the reason its default
+    /// project cannot be used, if any
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = for_user_id.to_string())
+    )]
+    pub async fn list_integration_connections_for_user(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        for_user_id: UserId,
+    ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
+        let mut connections = self
+            .repository
+            .fetch_all_integration_connections(executor, for_user_id, None, false)
+            .await?;
+        destination::fill_default_project_issues(
+            &self.repository,
+            executor,
+            for_user_id,
+            &mut connections,
+        )
+        .await?;
+        Ok(connections)
     }
 
     /// Atomically claims every one of `for_user_id`'s connections whose notifications or
@@ -672,11 +699,12 @@ impl IntegrationConnectionService {
         // integration-cap path does. Edits that keep syncs off stay allowed.
         // `disable_all_syncs()` reports whether it had anything left to switch
         // off, so every toggle the pause covers is covered here too.
-        if let Some(connection) = self
+        let connection = self
             .repository
             .get_integration_connection(executor, integration_connection_id)
             .await?
-            && connection.user_id == for_user_id
+            .filter(|connection| connection.user_id == for_user_id);
+        if let Some(connection) = &connection
             && connection.auto_paused_by_plan_at.is_some()
         {
             let enables_sync =
@@ -696,6 +724,17 @@ impl IntegrationConnectionService {
                 });
             }
         }
+
+        destination::validate_default_project(
+            &self.repository,
+            executor,
+            for_user_id,
+            &integration_connection_config,
+            connection
+                .map(|connection| connection.provider.config())
+                .as_ref(),
+        )
+        .await?;
 
         let updated_integration_connection_config = self
             .repository

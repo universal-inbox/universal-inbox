@@ -16,6 +16,7 @@ use universal_inbox::{
         config::IntegrationConnectionConfig,
         provider::{IntegrationProvider, IntegrationProviderKind},
     },
+    task::DefaultProjectIssue,
     user::UserPreferencesPatch,
 };
 
@@ -751,6 +752,10 @@ pub fn IntegrationSettings(
                 // The connection is intact but the plan switched its syncs off.
                 // Without this arm it reads as "Connected" while nothing syncs.
                 (StatusLeafVariant::SyncIssue, "Paused by plan")
+            } else if ic.default_project_issue.is_some() {
+                // The default project is gone or archived: task creation with it fails, which
+                // outranks a degraded sync
+                (StatusLeafVariant::SyncIssue, "Check settings")
             } else if ic.is_sync_degraded() {
                 (StatusLeafVariant::SyncIssue, "Sync issue")
             } else {
@@ -975,6 +980,7 @@ pub fn IntegrationSettings(
                                         provider: provider.clone(),
                                         provider_user_id: conn.provider_user_id.clone(),
                                         connection_id: conn.id,
+                                        default_project_issue: conn.default_project_issue.clone(),
                                     }
                                 }
                             }
@@ -1065,6 +1071,9 @@ pub fn IntegrationConnectionProviderConfiguration(
     connection_id: ReadSignal<IntegrationConnectionId>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
+    /// Why the stored default project cannot be used, shown under its field
+    #[props(default)]
+    default_project_issue: ReadSignal<Option<DefaultProjectIssue>>,
 ) -> Element {
     match provider {
         IntegrationProvider::GoogleCalendar { config } => rsx! {
@@ -1101,20 +1110,23 @@ pub fn IntegrationConnectionProviderConfiguration(
         IntegrationProvider::TickTick { config, .. } => rsx! {
             TickTickProviderConfiguration {
                 on_config_change: move |c| on_config_change.call(c),
-                config: config.clone()
+                config: config.clone(),
+                default_project_issue,
             }
         },
         IntegrationProvider::Todoist { config, .. } => rsx! {
             TodoistProviderConfiguration {
                 on_config_change: move |c| on_config_change.call(c),
-                config: config.clone()
+                config: config.clone(),
+                default_project_issue,
             }
         },
         IntegrationProvider::Linear { config } => rsx! {
             LinearProviderConfiguration {
                 ui_model: ui_model,
                 on_config_change: move |c| on_config_change.call(c),
-                config: config.clone()
+                config: config.clone(),
+                default_project_issue,
             }
         },
         IntegrationProvider::Slack { config, context } => rsx! {
@@ -1125,6 +1137,7 @@ pub fn IntegrationConnectionProviderConfiguration(
                 context: context.clone(),
                 provider_user_id,
                 connection_id,
+                default_project_issue,
             }
         },
         _ => rsx! {},

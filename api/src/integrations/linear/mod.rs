@@ -36,7 +36,7 @@ use universal_inbox::{
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
         CreateOrUpdateTaskRequest, TaskCreationConfig, TaskSource, TaskSourceKind, TaskStatus,
-        integrations::todoist::TODOIST_INBOX_PROJECT, service::TaskPatch,
+        service::TaskPatch,
     },
     third_party::{
         integrations::linear::{LinearIssue, LinearNotification},
@@ -787,6 +787,11 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
                 "Cannot build a Linear task without a task creation"
             ))
         })?;
+        let project = task_creation_config.project.clone().ok_or_else(|| {
+            UniversalInboxError::Unexpected(anyhow!(
+                "Cannot build a Linear task without the project it starts in"
+            ))
+        })?;
 
         Ok(Box::new(CreateOrUpdateTaskRequest {
             id: Uuid::new_v4().into(),
@@ -807,14 +812,9 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
                 .map(|label| label.name.clone())
                 .collect(),
             parent_id: None,
-            project: DefaultValue::new(
-                task_creation_config
-                    .project_name
-                    .clone()
-                    .unwrap_or_else(|| TODOIST_INBOX_PROJECT.to_string()),
-                None,
-            ),
-            context_id: None,
+            // Only seeded, like the title: a move in the task manager stays
+            project: DefaultValue::new(project.project_name, None),
+            context_id: DefaultValue::new(project.context_id, None),
             is_recurring: false,
             created_at: source.created_at,
             updated_at: source.updated_at,

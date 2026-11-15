@@ -35,7 +35,7 @@ use universal_inbox::{
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
         CreateOrUpdateTaskRequest, TaskCreationConfig, TaskSource, TaskSourceKind, TaskStatus,
-        integrations::todoist::TODOIST_INBOX_PROJECT, service::TaskPatch,
+        service::TaskPatch,
     },
     third_party::{
         integrations::slack::{
@@ -2015,6 +2015,11 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
                 "Cannot build a Slack task without a task creation"
             ))
         })?;
+        let project = task_creation_config.project.clone().ok_or_else(|| {
+            UniversalInboxError::Unexpected(anyhow!(
+                "Cannot build a Slack task without the project it starts in"
+            ))
+        })?;
         let status = match source.state {
             SlackReactionState::ReactionAdded => TaskStatus::Active,
             SlackReactionState::ReactionRemoved => TaskStatus::Done,
@@ -2041,14 +2046,9 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
             due_at: DefaultValue::new(task_creation_config.due_at.clone(), None),
             tags: vec![],
             parent_id: None,
-            project: DefaultValue::new(
-                task_creation_config
-                    .project_name
-                    .clone()
-                    .unwrap_or_else(|| TODOIST_INBOX_PROJECT.to_string()),
-                None,
-            ),
-            context_id: None,
+            // Only seeded, like the title: a move in the task manager stays
+            project: DefaultValue::new(project.project_name, None),
+            context_id: DefaultValue::new(project.context_id, None),
             is_recurring: false,
             created_at,
             updated_at,

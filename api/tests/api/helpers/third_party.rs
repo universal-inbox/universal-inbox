@@ -7,13 +7,18 @@ use uuid::Uuid;
 
 use universal_inbox_api::utils::crypto::{aad, data_keyring};
 
-use super::TestedApp;
+use super::{TestedApp, task::todoist::mirror_fixture_todoist_projects};
 
 pub async fn create_task_third_party_item(
     app: &TestedApp,
     data: ThirdPartyItemData,
     user_id: UserId,
 ) -> Box<ThirdPartyItemCreationResult> {
+    // As the Todoist sync does before the tasks: the projects mirrored as contexts, so the task is
+    // bound to its project and the inbox is told by its context
+    if matches!(data, ThirdPartyItemData::TodoistItem(_)) {
+        mirror_fixture_todoist_projects(app, user_id).await;
+    }
     let mut transaction = app.repository.begin().await.unwrap();
     let result = app
         .third_party_item_service

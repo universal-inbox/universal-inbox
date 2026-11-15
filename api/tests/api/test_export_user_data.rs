@@ -7,6 +7,7 @@ use reqwest::{Client, StatusCode, header};
 use rstest::*;
 use serde_json::Value;
 
+use universal_inbox::task::ProjectReference;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
@@ -132,7 +133,7 @@ async fn test_export_contains_user_data_without_secrets(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 ..Default::default()
             },
         }),

@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 
 use universal_inbox::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
-    task::{Task, TaskCreation, service::TaskPatch},
+    task::{DefaultProject, Task, TaskCreation, service::TaskPatch},
     third_party::{
         integrations::slack::SlackReaction,
         item::{
@@ -34,7 +34,11 @@ use crate::{
     universal_inbox::{
         UniversalInboxError, UpsertStatus,
         integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, task::service::TaskService,
+        notification::service::NotificationService,
+        task::{
+            destination,
+            service::{ProjectSeeds, TaskService},
+        },
     },
 };
 
@@ -165,6 +169,7 @@ impl ThirdPartyItemService {
                         executor,
                         *third_party_item.clone(),
                         self.todoist_service.clone(),
+                        &mut ProjectSeeds::default(),
                         user_id,
                     )
                     .await?
@@ -179,6 +184,7 @@ impl ThirdPartyItemService {
                         executor,
                         *third_party_item.clone(),
                         self.ticktick_service.clone(),
+                        &mut ProjectSeeds::default(),
                         user_id,
                     )
                     .await?
@@ -193,6 +199,7 @@ impl ThirdPartyItemService {
                         executor,
                         *third_party_item.clone(),
                         self.slack_service.clone(),
+                        &mut ProjectSeeds::default(),
                         user_id,
                     )
                     .await?
@@ -207,6 +214,7 @@ impl ThirdPartyItemService {
                         executor,
                         *third_party_item.clone(),
                         self.linear_service.clone(),
+                        &mut ProjectSeeds::default(),
                         user_id,
                     )
                     .await?
@@ -458,6 +466,7 @@ impl ThirdPartyItemService {
         task: &mut Task,
         overwrite_existing_sink_item: bool,
         task_provider_kind: IntegrationProviderKind,
+        default_project: Option<&DefaultProject>,
     ) -> Result<Box<ThirdPartyItem>, UniversalInboxError> {
         match task_provider_kind {
             IntegrationProviderKind::Todoist => {
@@ -466,6 +475,7 @@ impl ThirdPartyItemService {
                     task,
                     overwrite_existing_sink_item,
                     self.todoist_service.clone(),
+                    default_project,
                 )
                 .await
             }
@@ -475,6 +485,7 @@ impl ThirdPartyItemService {
                     task,
                     overwrite_existing_sink_item,
                     self.ticktick_service.clone(),
+                    default_project,
                 )
                 .await
             }
@@ -490,6 +501,7 @@ impl ThirdPartyItemService {
         task: &mut Task,
         overwrite_existing_sink_item: bool,
         third_party_task_service: Arc<U>,
+        default_project: Option<&DefaultProject>,
     ) -> Result<Box<ThirdPartyItem>, UniversalInboxError>
     where
         T: ThirdPartyItemFromSource,
@@ -505,18 +517,6 @@ impl ThirdPartyItemService {
             .await?
             .ok_or_else(|| anyhow!("Cannot create a sink item without an access token for {integration_provider_kind}"))?;
 
-        let task_creation = TaskCreation {
-            title: task.title.clone(),
-            body: Some(task.body.clone()),
-            project_name: Some(task.project.clone()),
-            due_at: task.due_at.clone(),
-            priority: task.priority,
-            task_provider_kind: None,
-            // The source task's `due_at` already carries any time-of-day; there
-            // is no separate time config to apply when mirroring to a sink.
-            time_config: None,
-        };
-
         if let Some(sink_item) = &task.sink_item
             && !overwrite_existing_sink_item
         {
@@ -527,6 +527,28 @@ impl ThirdPartyItemService {
                 sink_item.source_id
             );
             return Ok(Box::new(sink_item.clone()));
+        };
+
+        // By id: the task's context, else the integration's default project. A default that
+        // does not resolve fails here, the task is never put in the inbox instead.
+        let destination = destination::sink_destination(
+            &self.repository,
+            executor,
+            task,
+            integration_provider_kind,
+            default_project,
+        )
+        .await?;
+        let task_creation = TaskCreation {
+            title: task.title.clone(),
+            body: Some(task.body.clone()),
+            destination,
+            due_at: task.due_at.clone(),
+            priority: task.priority,
+            task_provider_kind: None,
+            // The source task's `due_at` already carries any time-of-day; there
+            // is no separate time config to apply when mirroring to a sink.
+            time_config: None,
         };
 
         let third_party_task = third_party_task_service

@@ -40,11 +40,12 @@ use crate::{
     mcp::tools::{
         ActOnNotificationArgs, BulkActNotificationsArgs, CreateTaskFromNotificationArgs,
         GetNotificationArgs, GetTaskArgs, ListNotificationsArgs, ListTasksArgs, McpServices,
-        SearchAuditLogArgs, SearchTasksArgs, SyncNotificationsArgs, SyncTasksArgs, ToolCallError,
-        UpdateTaskArgs, act_on_notification_output_schema, bulk_act_notifications_output_schema,
-        create_task_from_notification_output_schema, execute_tool, get_notification_output_schema,
-        get_task_output_schema, list_notifications_output_schema, list_tasks_output_schema,
-        required_scope, search_audit_log_output_schema, search_tasks_output_schema,
+        SearchAuditLogArgs, SearchContextsArgs, SearchTasksArgs, SyncNotificationsArgs,
+        SyncTasksArgs, ToolCallError, UpdateTaskArgs, act_on_notification_output_schema,
+        bulk_act_notifications_output_schema, create_task_from_notification_output_schema,
+        execute_tool, get_notification_output_schema, get_task_output_schema,
+        list_notifications_output_schema, list_tasks_output_schema, required_scope,
+        search_audit_log_output_schema, search_contexts_output_schema, search_tasks_output_schema,
         sync_notifications_output_schema, sync_tasks_output_schema, update_task_output_schema,
     },
     routes::{self, INTERNAL_ERROR_MESSAGE},
@@ -718,6 +719,22 @@ impl UniversalInboxMcpServer {
     }
 
     #[tool(
+        name = "search_contexts",
+        title = "Search projects",
+        description = "Find the projects a task can be created in or moved to (Todoist projects, mirrored by Universal Inbox), each with its id and its path from the root project. Matches the name of the project or of one of its parents. Pass a project's id as the destination when creating or updating a task: a project is never chosen by its name. Archived projects are not listed.",
+        output_schema = search_contexts_output_schema(),
+        annotations(read_only_hint = true, idempotent_hint = true)
+    )]
+    async fn search_contexts(
+        &self,
+        Parameters(args): Parameters<SearchContextsArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call_structured_tool("search_contexts", args, context)
+            .await
+    }
+
+    #[tool(
         name = "search_audit_log",
         title = "Search audit log",
         description = "Search the audit log of changes to notifications and tasks: status changes (from -> to), snoozes, set aside, task links, task creations with their parameters, and who made each change (the user from the web app, an API key, the browser extension, an MCP client, a sync job, a webhook or an agent, with its reason). Use it to answer \"who changed this and why\", for example with entity_id for the history of one notification or task. Newest first, one page per call; events are kept for a limited retention period.",
@@ -845,8 +862,8 @@ mod registration_tests {
         let tools = UniversalInboxMcpServer::tool_router().list_all();
         assert_eq!(
             tools.len(),
-            12,
-            "expected all 12 MCP tools to be registered"
+            13,
+            "expected all 13 MCP tools to be registered"
         );
         for tool in &tools {
             assert!(
@@ -887,8 +904,8 @@ mod registration_tests {
         let tools = UniversalInboxMcpServer::tool_router().list_all();
         assert_eq!(
             tools.len(),
-            12,
-            "expected all 12 MCP tools to be registered"
+            13,
+            "expected all 13 MCP tools to be registered"
         );
 
         let expected_required: std::collections::HashMap<&str, &[&str]> = [

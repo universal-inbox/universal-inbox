@@ -9,6 +9,7 @@ use wiremock::{
     matchers::{method, path},
 };
 
+use universal_inbox::task::TaskDestination;
 use universal_inbox::{
     HasHtmlUrl, Page, PageToken,
     audit::{
@@ -46,9 +47,9 @@ use crate::helpers::{
     task::{
         sync_tasks,
         todoist::{
-            mock_todoist_get_item_service, mock_todoist_item_add_service,
-            mock_todoist_sync_resources_service, sync_todoist_items_response,
-            sync_todoist_projects_response, todoist_item,
+            mirror_fixture_todoist_projects, mock_todoist_get_item_service,
+            mock_todoist_item_add_service, mock_todoist_sync_resources_service,
+            sync_todoist_items_response, sync_todoist_projects_response, todoist_item,
         },
     },
     user::front_origin_header,
@@ -449,6 +450,7 @@ mod changes {
         .await;
         mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone()).await;
 
+        let contexts = mirror_fixture_todoist_projects(&app.app, app.user.id).await;
         let notification_with_task = create_task_from_notification(
             &app.client,
             &app.app.api_address,
@@ -456,7 +458,7 @@ mod changes {
             Some(TaskCreation {
                 title: todoist_item.content.clone(),
                 body: Some(body.clone()),
-                project_name: Some("Project2".to_string()),
+                destination: Some(TaskDestination::Context(contexts["2222"])),
                 due_at,
                 priority: todoist_item.priority.into(),
                 task_provider_kind: None,

@@ -15,8 +15,8 @@ use tracing::{debug, error, info, warn};
 use universal_inbox::{
     HasHtmlUrl, Page,
     context::{
-        Context as UiContext, ContextId, ContextStatus, MirroredProject, RootedParent,
-        resolve_mirrored_parents,
+        Context as UiContext, ContextId, ContextStatus, ContextSummary, MirroredProject,
+        RootedParent, resolve_mirrored_parents, summarize_contexts,
     },
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{
@@ -24,9 +24,10 @@ use universal_inbox::{
     },
     realtime::RealtimeEventKind,
     task::{
-        CreateOrUpdateTaskRequest, ProjectSummary, Task, TaskCreation, TaskCreationConfig,
-        TaskCreationResult, TaskId, TaskSource, TaskSourceKind, TaskStatus, TaskSummary,
-        TaskSyncSourceKind, service::TaskPatch,
+        CreateOrUpdateTaskRequest, DefaultProject, ProjectReference, ProjectSummary, Task,
+        TaskCreation, TaskCreationConfig, TaskCreationResult, TaskDestination, TaskId, TaskProject,
+        TaskSource, TaskSourceKind, TaskStatus, TaskSummary, TaskSyncSourceKind,
+        service::TaskPatch,
     },
     third_party::{
         integrations::slack::SlackReaction,
@@ -41,6 +42,7 @@ use universal_inbox::{
 use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::universal_inbox::audit::actor_context::with_system_actor;
+use crate::universal_inbox::task::destination;
 use crate::{
     integrations::{
         linear::LinearService,
@@ -66,6 +68,13 @@ use crate::{
     },
     utils::panic::panic_message,
 };
+
+/// The project the new tasks of a Linear or Slack sync start in, per default project and task
+/// manager: resolved once for all the items of a sync.
+#[derive(Default)]
+pub struct ProjectSeeds(
+    HashMap<(Option<ProjectReference>, Option<IntegrationProviderKind>), TaskProject>,
+);
 
 pub struct TaskService {
     repository: Arc<Repository>,
@@ -198,11 +207,15 @@ impl TaskService {
         synced_third_party_item: &ThirdPartyItem,
         upsert_task: &mut UpsertStatus<Box<Task>>,
         sink_provider_kind_hint: Option<IntegrationProviderKind>,
+        default_project: Option<&ProjectReference>,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let sink_provider_kind = self
             .resolve_sink_provider_kind(executor, user_id, sink_provider_kind_hint)
             .await?;
+        // The default read for the task manager the sink is created in
+        let default_project =
+            default_project.map(|reference| DefaultProject::new(reference, sink_provider_kind));
 
         match upsert_task {
             UpsertStatus::Created(task) => {
@@ -227,7 +240,13 @@ impl TaskService {
                     .context("Unable to access third_party_item_service from task_service")?
                     .read()
                     .await
-                    .create_sink_item_from_task(executor, task, false, sink_provider_kind)
+                    .create_sink_item_from_task(
+                        executor,
+                        task,
+                        false,
+                        sink_provider_kind,
+                        default_project.as_ref(),
+                    )
                     .await?;
             }
             UpsertStatus::Updated {
@@ -257,7 +276,13 @@ impl TaskService {
                         .context("Unable to access third_party_item_service from task_service")?
                         .read()
                         .await
-                        .create_sink_item_from_task(executor, new_task, false, sink_provider_kind)
+                        .create_sink_item_from_task(
+                            executor,
+                            new_task,
+                            false,
+                            sink_provider_kind,
+                            default_project.as_ref(),
+                        )
                         .await?;
 
                     return Ok(());
@@ -301,8 +326,11 @@ impl TaskService {
 
                 let task_patch = TaskPatch {
                     status: (new_task.status != old_task.status).then_some(new_task.status),
-                    project_name: (new_task.project != old_task.project)
-                        .then(|| new_task.project.clone()),
+                    // Only the task manager moves a task: the move reaches the other item by id
+                    destination: (new_task.context_id != old_task.context_id)
+                        .then_some(new_task.context_id)
+                        .flatten()
+                        .map(TaskDestination::Context),
                     due_at: (new_task.due_at != old_task.due_at).then(|| new_task.due_at.clone()),
                     priority: (new_task.priority != old_task.priority).then_some(new_task.priority),
                     body: (new_task.body != old_task.body).then(|| new_task.body.clone()),
@@ -343,7 +371,13 @@ impl TaskService {
                     .context("Unable to access third_party_item_service from task_service")?
                     .read()
                     .await
-                    .create_sink_item_from_task(executor, new_task, true, sink_provider_kind)
+                    .create_sink_item_from_task(
+                        executor,
+                        new_task,
+                        true,
+                        sink_provider_kind,
+                        default_project.as_ref(),
+                    )
                     .await?;
             }
             _ => {}
@@ -599,6 +633,7 @@ impl TaskService {
                 executor,
                 *updated_third_party_item,
                 third_party_task_service,
+                &mut ProjectSeeds::default(),
                 user_id,
             )
             .await?
@@ -628,6 +663,7 @@ impl TaskService {
         executor: &mut Transaction<'_, Postgres>,
         third_party_item: ThirdPartyItem,
         third_party_task_service: Arc<U>,
+        project_seeds: &mut ProjectSeeds,
         user_id: UserId,
     ) -> Result<Option<TaskCreationResult>, UniversalInboxError>
     where
@@ -655,6 +691,9 @@ impl TaskService {
         let task_creation = integration_connection
             .provider
             .get_task_creation_default_values(&third_party_item);
+        let task_creation = self
+            .with_project_seed(executor, task_creation, project_seeds, user_id)
+            .await?;
 
         let upsert_task = self
             .sync_third_party_item_as_task(
@@ -757,40 +796,32 @@ impl TaskService {
     {
         let integration_provider_kind = third_party_task_service.get_integration_provider_kind();
         with_system_actor("SyncTasks", Some(integration_provider_kind), async {
-            self.run_sync_third_party_tasks(third_party_task_service, user_id, force_sync)
+            self.run_sync_third_party_tasks(third_party_task_service, user_id, force_sync, false)
                 .await
-                .map(|(task_creation_results, _)| task_creation_results)
         })
         .await
     }
 
-    /// Synchronize Todoist tasks, then the contexts mirroring its projects. Same system job as
-    /// `sync_third_party_tasks`.
+    /// Synchronize the contexts mirroring the Todoist projects, then the Todoist tasks. Same
+    /// system job as `sync_third_party_tasks`.
+    ///
+    /// The contexts go first, once the sync is claimed: a task is bound to its context as it is
+    /// synced, and the inbox is told by its context, so the tasks of a first sync are bound and
+    /// their inbox notifications created in that very sync.
     async fn sync_todoist_tasks_and_contexts(
         &self,
         user_id: UserId,
         force_sync: bool,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
         with_system_actor("SyncTasks", Some(IntegrationProviderKind::Todoist), async {
-            let (task_creation_results, synced) = self
-                .run_sync_third_party_tasks(self.todoist_service.clone(), user_id, force_sync)
-                .await?;
-
-            // Best effort: the task sync is done and its outcome is recorded, the next sync
-            // retries the contexts.
-            if synced && let Err(err) = self.sync_todoist_project_contexts(user_id).await {
-                warn!(
-                    { attr::USER_ID } = user_id.to_string(),
-                    "Failed to synchronize the Todoist project contexts: {err}"
-                );
-            }
-            Ok(task_creation_results)
+            self.run_sync_third_party_tasks(self.todoist_service.clone(), user_id, force_sync, true)
+                .await
         })
         .await
     }
 
-    /// Fetch the Todoist projects of the user, mirror them as contexts, then bind the user's
-    /// Todoist tasks to them.
+    /// Fetch the Todoist projects of the user, mirror them as contexts, bind the user's Todoist
+    /// tasks to them, then migrate the stored default projects to contexts.
     pub async fn sync_todoist_project_contexts(
         &self,
         user_id: UserId,
@@ -821,6 +852,16 @@ impl TaskService {
             unmatched = backfill.unmatched,
             "Bound Todoist tasks to their project contexts for user {user_id}"
         );
+        // The stored default projects bind by id too, once their contexts exist
+        let migrated = destination::migrate_todoist_default_projects(
+            &self.repository,
+            &mut transaction,
+            user_id,
+        )
+        .await?;
+        if migrated > 0 {
+            debug!("Migrated {migrated} default project(s) to contexts for user {user_id}");
+        }
         transaction.commit().await.context(format!(
             "Failed to commit while syncing Todoist project contexts for user {user_id}"
         ))?;
@@ -856,14 +897,7 @@ impl TaskService {
         for project in &projects {
             upserts.push(
                 self.repository
-                    .upsert_mirrored_context(
-                        executor,
-                        user_id,
-                        provider,
-                        project.source_id.clone(),
-                        project.name.clone(),
-                        project.is_archived,
-                    )
+                    .upsert_mirrored_context(executor, user_id, provider, project)
                     .await?,
             );
         }
@@ -924,14 +958,19 @@ impl TaskService {
         Ok(statuses)
     }
 
-    /// The task creation results, and whether the sync actually ran (it does not when there is
-    /// no validated and enabled integration, or when another sync is in flight).
+    /// The task creation results. Nothing is synced when there is no validated and enabled
+    /// integration, or when another sync is in flight.
+    ///
+    /// `mirror_todoist_contexts`: once the sync is claimed, mirror the Todoist projects as
+    /// contexts before fetching the tasks. Best effort: a failure is logged and the tasks are
+    /// still synced, the next sync retries the contexts.
     async fn run_sync_third_party_tasks<T, U>(
         &self,
         third_party_task_service: Arc<U>,
         user_id: UserId,
         force_sync: bool,
-    ) -> Result<(Vec<TaskCreationResult>, bool), UniversalInboxError>
+        mirror_todoist_contexts: bool,
+    ) -> Result<Vec<TaskCreationResult>, UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
         U: ThirdPartyTaskService<T>
@@ -974,12 +1013,15 @@ impl TaskService {
                 .await?;
 
             let mut task_creation_results = vec![];
+            // The default project is resolved once for every item of the sync
+            let mut project_seeds = ProjectSeeds::default();
             for third_party_item in third_party_items {
                 if let Some(task_creation_result) = task_service
                     .create_task_from_third_party_item(
                         executor,
                         *third_party_item.value(),
                         third_party_task_service.clone(),
+                        &mut project_seeds,
                         user_id,
                     )
                     .await?
@@ -1034,14 +1076,14 @@ impl TaskService {
             debug!(
                 "No validated {integration_provider_kind} integration found for user {user_id}, skipping tasks sync"
             );
-            return Ok((vec![], false));
+            return Ok(vec![]);
         };
 
         if !integration_connection.provider.is_sync_tasks_enabled() {
             debug!(
                 "{integration_provider_kind} integration for user {user_id} is disabled, skipping tasks sync"
             );
-            return Ok((vec![], false));
+            return Ok(vec![]);
         }
 
         let synced_before = (min_sync_interval_in_minutes != 0).then(|| {
@@ -1070,10 +1112,19 @@ impl TaskService {
             debug!(
                 "{integration_provider_kind} tasks sync for user {user_id} is already in flight, skipping"
             );
-            return Ok((vec![], false));
+            return Ok(vec![]);
         }
 
         info!("Syncing {integration_provider_kind} tasks for user {user_id}");
+
+        if mirror_todoist_contexts
+            && let Err(err) = self.sync_todoist_project_contexts(user_id).await
+        {
+            warn!(
+                { attr::USER_ID } = user_id.to_string(),
+                "Failed to synchronize the Todoist project contexts: {err}"
+            );
+        }
 
         // Phase 2 — the actual fetch + upsert, in its own transaction, committed
         // regardless of outcome for the same reason as the notification-side twin: a
@@ -1139,7 +1190,7 @@ impl TaskService {
             "Successfully synced {integration_provider_kind} tasks"
         );
 
-        Ok((task_creation_results, true))
+        Ok(task_creation_results)
     }
 
     /// Save a third party item as a task and apply side effects
@@ -1159,6 +1210,9 @@ impl TaskService {
         let sink_provider_kind_hint = task_creation_config
             .as_ref()
             .and_then(|c| c.task_manager_provider_kind);
+        let default_project = task_creation_config
+            .as_ref()
+            .and_then(|c| c.target_project.clone());
 
         let mut upsert_task = self
             .save_third_party_item_as_task(
@@ -1176,6 +1230,7 @@ impl TaskService {
                 third_party_item,
                 &mut upsert_task,
                 sink_provider_kind_hint,
+                default_project.as_ref(),
                 user_id,
             )
             .await?;
@@ -1225,6 +1280,55 @@ impl TaskService {
         Ok(upsert_task)
     }
 
+    /// `config` with the project a new task starts in (`TaskCreationConfig::project`), from
+    /// `seeds` when already resolved for the same default project
+    async fn with_project_seed(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        config: Option<TaskCreationConfig>,
+        seeds: &mut ProjectSeeds,
+        user_id: UserId,
+    ) -> Result<Option<TaskCreationConfig>, UniversalInboxError> {
+        let Some(mut config) = config else {
+            return Ok(None);
+        };
+        if config.project.is_some() {
+            return Ok(Some(config));
+        }
+        let key = (
+            config.target_project.clone(),
+            config.task_manager_provider_kind,
+        );
+        let project = match seeds.0.get(&key) {
+            Some(project) => project.clone(),
+            None => {
+                let task_manager = match config.task_manager_provider_kind {
+                    Some(task_manager) => task_manager,
+                    None => {
+                        destination::preferred_task_manager(&self.repository, executor, user_id)
+                            .await?
+                    }
+                };
+                let default_project = config
+                    .target_project
+                    .as_ref()
+                    .map(|reference| DefaultProject::new(reference, task_manager));
+                let project = destination::seed_task_project(
+                    &self.repository,
+                    executor,
+                    user_id,
+                    default_project.as_ref(),
+                    task_manager,
+                )
+                .await?;
+                seeds.0.insert(key, project.clone());
+                project
+            }
+        };
+        config.project = Some(project);
+        Ok(Some(config))
+    }
+
     pub async fn save_third_party_item_as_task<T, U>(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1246,6 +1350,17 @@ impl TaskService {
             )
         })?;
 
+        // A task from a source-only integration (Linear, Slack) starts in its integration's
+        // default project. A sync resolves it once for all its items (`ProjectSeeds`), a single
+        // item here.
+        let task_creation_config = self
+            .with_project_seed(
+                executor,
+                task_creation_config,
+                &mut ProjectSeeds::default(),
+                user_id,
+            )
+            .await?;
         let task_request = third_party_task_service
             .third_party_item_into_task(
                 executor,
@@ -1442,10 +1557,25 @@ impl TaskService {
             )));
         }
 
-        let updated_task = self
+        let destination = match &patch.destination {
+            Some(destination) => Some(
+                self.resolve_task_destination(executor, destination, for_user_id)
+                    .await?,
+            ),
+            None => None,
+        };
+        let mut updated_task = self
             .repository
-            .update_task(executor, task_id, patch, for_user_id)
+            .update_task(executor, task_id, patch, destination.as_ref(), for_user_id)
             .await?;
+        // The row keeps a TickTick project's name, not its id: a move between two projects
+        // sharing a name leaves the row as it is, and is still a change to send upstream.
+        // Remove once TickTick tasks are bound to contexts by id (qk5d.11).
+        if let Some(task) = &updated_task.result
+            && moves_to_another_ticktick_project(task, patch.destination.as_ref())
+        {
+            updated_task.updated = true;
+        }
         record_tasks_changed(updated_task.changed_value().map(|task| &**task));
 
         if let UpdateStatus {
@@ -1581,43 +1711,101 @@ impl TaskService {
         task_provider_kind: IntegrationProviderKind,
     ) -> Result<Vec<ProjectSummary>, UniversalInboxError> {
         match task_provider_kind {
-            IntegrationProviderKind::Todoist => {
-                self.todoist_service
-                    .search_projects(executor, matches, user_id)
-                    .await
-            }
             IntegrationProviderKind::TickTick => {
                 self.ticktick_service
                     .search_projects(executor, matches, user_id)
                     .await
             }
+            // Todoist projects are mirrored as contexts: `search_contexts`
+            IntegrationProviderKind::Todoist => Err(UniversalInboxError::UnsupportedAction(
+                "Todoist projects are searched as contexts (GET /contexts/search)".to_string(),
+            )),
             _ => Err(UniversalInboxError::UnsupportedAction(format!(
                 "Project search is not supported for {task_provider_kind}"
             ))),
         }
     }
 
-    pub async fn get_or_create_project(
+    /// The user's contexts a task can be bound to (active, mirroring a Todoist project) where
+    /// one segment of the path contains `matches`, case-insensitively (a plain substring, never
+    /// a pattern), with their path.
+    ///
+    /// Order: with an empty `matches` the inbox first; then the contexts whose own name matches
+    /// before those matching only through a parent; then by path.
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = user_id.to_string())
+    )]
+    pub async fn search_contexts(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        project_name: &str,
+        matches: &str,
         user_id: UserId,
-        task_provider_kind: IntegrationProviderKind,
-    ) -> Result<ProjectSummary, UniversalInboxError> {
-        match task_provider_kind {
-            IntegrationProviderKind::Todoist => {
-                self.todoist_service
-                    .get_or_create_project(executor, project_name, user_id, None)
-                    .await
+    ) -> Result<Vec<ContextSummary>, UniversalInboxError> {
+        let contexts = self
+            .repository
+            .list_contexts_for_user(executor, user_id)
+            .await?;
+        let summaries = summarize_contexts(&contexts);
+        let matches = matches.trim().to_lowercase();
+        let mut found: Vec<(bool, ContextSummary)> = contexts
+            .iter()
+            .filter(|context| context.is_todoist_destination())
+            .filter_map(|context| summaries.get(&context.id).cloned())
+            .filter_map(|summary| {
+                let name_matches = summary.name.to_lowercase().contains(&matches);
+                (name_matches
+                    || summary
+                        .path
+                        .iter()
+                        .any(|segment| segment.to_lowercase().contains(&matches)))
+                .then_some((name_matches, summary))
+            })
+            .collect();
+        let inbox_first = matches.is_empty();
+        found.sort_by(|(a_name, a), (b_name, b)| {
+            (inbox_first && b.is_inbox)
+                .cmp(&(inbox_first && a.is_inbox))
+                .then(b_name.cmp(a_name))
+                .then_with(|| a.display_path().cmp(&b.display_path()))
+        });
+        Ok(found.into_iter().map(|(_, summary)| summary).collect())
+    }
+
+    /// `destination` as the task is bound to it: its context, or its TickTick project, and the
+    /// name kept in the deprecated `project` column. A destination that does not resolve is an
+    /// error, nothing is created.
+    pub async fn resolve_task_destination(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        destination: &TaskDestination,
+        user_id: UserId,
+    ) -> Result<TaskProject, UniversalInboxError> {
+        match destination {
+            TaskDestination::Context(context_id) => {
+                let (context, _) = destination::resolve_todoist_context(
+                    &self.repository,
+                    executor,
+                    user_id,
+                    *context_id,
+                )
+                .await?;
+                Ok(TaskProject {
+                    context_id: Some(context.id),
+                    project_name: context.name,
+                })
             }
-            IntegrationProviderKind::TickTick => {
-                self.ticktick_service
-                    .get_or_create_project(executor, project_name, user_id, None)
-                    .await
+            TaskDestination::TickTickProject(project_id) => {
+                let project = self
+                    .ticktick_service
+                    .resolve_project_for_user(executor, project_id, user_id)
+                    .await?;
+                Ok(TaskProject {
+                    context_id: None,
+                    project_name: project.name,
+                })
             }
-            _ => Err(UniversalInboxError::UnsupportedAction(format!(
-                "Project creation is not supported for {task_provider_kind}"
-            ))),
         }
     }
 
@@ -1702,4 +1890,23 @@ fn record_tasks_changed<'a>(tasks: impl IntoIterator<Item = &'a Task>) {
             Some(task.id.0),
         );
     }
+}
+
+/// Whether `destination` moves `task` to another TickTick project. A TickTick destination binds by
+/// the provider project id, while the task row only keeps the project name: two TickTick projects
+/// can share a name, so the move is told from the task's TickTick item, not from the row.
+fn moves_to_another_ticktick_project(task: &Task, destination: Option<&TaskDestination>) -> bool {
+    let Some(TaskDestination::TickTickProject(project_id)) = destination else {
+        return false;
+    };
+    [Some(&task.source_item), task.sink_item.as_ref()]
+        .into_iter()
+        .flatten()
+        .find_map(|item| match &item.data {
+            ThirdPartyItemData::TickTickItem(ticktick_item) => {
+                Some(ticktick_item.project_id != project_id.0)
+            }
+            _ => None,
+        })
+        .unwrap_or(false)
 }

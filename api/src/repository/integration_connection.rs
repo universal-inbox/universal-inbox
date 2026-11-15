@@ -2370,6 +2370,8 @@ impl TryFrom<&IntegrationConnectionRow> for IntegrationConnection {
                         })
                 })
                 .transpose()?,
+            // Computed by the service from the contexts, never stored
+            default_project_issue: None,
         })
     }
 }

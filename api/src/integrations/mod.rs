@@ -4,15 +4,12 @@ use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
     notification::{Notification, NotificationSource},
-    task::{
-        CreateOrUpdateTaskRequest, ProjectSummary, TaskCreation, TaskCreationConfig,
-        service::TaskPatch,
-    },
+    task::{CreateOrUpdateTaskRequest, TaskCreation, TaskCreationConfig, service::TaskPatch},
     third_party::item::{ThirdPartyItem, ThirdPartyItemSourceKind},
     user::UserId,
 };
 
-use crate::{integrations::oauth2::AccessToken, universal_inbox::UniversalInboxError};
+use crate::universal_inbox::UniversalInboxError;
 
 static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
@@ -133,18 +130,5 @@ pub mod task {
             task: &TaskCreation,
             user_id: UserId,
         ) -> Result<T, UniversalInboxError>;
-        async fn search_projects(
-            &self,
-            executor: &mut Transaction<'_, Postgres>,
-            matches: &str,
-            user_id: UserId,
-        ) -> Result<Vec<ProjectSummary>, UniversalInboxError>;
-        async fn get_or_create_project(
-            &self,
-            executor: &mut Transaction<'_, Postgres>,
-            project_name: &str,
-            user_id: UserId,
-            access_token: Option<&AccessToken>,
-        ) -> Result<ProjectSummary, UniversalInboxError>;
     }
 }

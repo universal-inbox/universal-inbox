@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  id,\n                  user_id,\n                  parent_id,\n                  name,\n                  binding_provider::TEXT as \"binding_provider?\",\n                  binding_source_id,\n                  binding_mirrored,\n                  status::TEXT as \"status!\",\n                  note_id,\n                  created_at,\n                  updated_at\n                FROM context\n                WHERE id = $1\n            ",
+  "query": "\n                SELECT\n                  id,\n                  user_id,\n                  parent_id,\n                  name,\n                  binding_provider::TEXT as \"binding_provider?\",\n                  binding_source_id,\n                  binding_mirrored,\n                  status::TEXT as \"status!\",\n                  is_inbox,\n                  note_id,\n                  created_at,\n                  updated_at\n                FROM context\n                WHERE user_id = $1\n                ORDER BY created_at ASC, id ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -83,6 +83,17 @@
       },
       {
         "ordinal": 8,
+        "name": "is_inbox",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "context",
+            "name": "is_inbox"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
         "name": "note_id",
         "type_info": "Uuid",
         "origin": {
@@ -93,7 +104,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "created_at",
         "type_info": "Timestamp",
         "origin": {
@@ -104,7 +115,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "updated_at",
         "type_info": "Timestamp",
         "origin": {
@@ -131,8 +142,9 @@
       null,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "cb9ba16c8b61d384b737cf21dd112b55fc0f40246da089089c27e25d480bde17"
+  "hash": "f92e1580d0ebcc5adb3acd0a13c0721c6aaf9c2ee6c5828b07f884fdd64c13fd"
 }

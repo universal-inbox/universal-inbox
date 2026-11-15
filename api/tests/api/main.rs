@@ -57,6 +57,7 @@ mod test_sync_scheduling_concurrency;
 mod test_sync_slack_threads;
 mod test_sync_ticktick_tasks;
 mod test_sync_todoist_tasks;
+mod test_task_contexts;
 mod test_tasks;
 mod test_third_party;
 mod test_ticktick_tasks;

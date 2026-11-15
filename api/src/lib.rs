@@ -368,6 +368,7 @@ pub async fn run_server(
             .service(routes::oauth2::scope(oauth2_rate_limiter.clone()))
             .service(routes::notification::scope())
             .service(routes::task::scope())
+            .service(routes::context::scope())
             .service(routes::user::scope(auth_rate_limiter.clone()))
             .service(routes::webhook::scope())
             .service(routes::third_party::scope())

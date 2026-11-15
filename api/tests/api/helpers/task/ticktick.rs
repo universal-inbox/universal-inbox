@@ -274,7 +274,7 @@ pub fn assert_sync_ticktick_items(
                 );
                 assert_eq!(
                     task.get_html_url(),
-                    "https://ticktick.com/webapp/#p/tt_proj_1111/tasks/tt_task_1123"
+                    "https://ticktick.com/webapp/#p/inbox1111/tasks/tt_task_1123"
                         .parse::<Url>()
                         .unwrap()
                 );

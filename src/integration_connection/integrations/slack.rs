@@ -6,7 +6,7 @@ use slack_morphism::{SlackReactionName, SlackTeamId};
 
 use crate::integration_connection::integrations::task_time_config::TaskTimeConfig;
 use crate::integration_connection::provider::IntegrationProviderKind;
-use crate::task::{PresetDueDate, ProjectSummary, TaskPriority};
+use crate::task::{PresetDueDate, ProjectReference, TaskPriority};
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct SlackEmojiSuggestion {
@@ -123,7 +123,7 @@ impl SlackConfig {
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct SlackSyncTaskConfig {
-    pub target_project: Option<ProjectSummary>,
+    pub target_project: Option<ProjectReference>,
     pub default_due_at: Option<PresetDueDate>,
     pub default_priority: TaskPriority,
     pub task_manager_provider_kind: Option<IntegrationProviderKind>,

@@ -15,6 +15,9 @@
 
 use dioxus::prelude::*;
 
+use universal_inbox::context::CONTEXT_PATH_SEPARATOR;
+
+use super::badges::{Tag, TagVariant};
 use super::select::{
     POP_ITEM_LABEL_CLASSES, POP_ITEM_META_CLASSES, POP_ITEM_MONO_CLASSES, ss_highlight,
 };
@@ -113,6 +116,73 @@ pub fn TaskMgrOption(logo: Element, label: String, #[props(default)] query: Stri
         }
         span { class: POP_ITEM_LABEL_CLASSES,
             { ss_highlight(&label, &query) }
+        }
+    }
+}
+
+// ─── Context path (Todoist project picker) ──────────────────────────────────
+
+/// The segments of `path` to display: all of them up to 3, else the first, an ellipsis, the
+/// parent and the leaf (`Work / … / Q4 / Launch`).
+fn displayed_path_segments(path: &[String]) -> Vec<String> {
+    if path.len() <= 3 {
+        return path.to_vec();
+    }
+    vec![
+        path[0].clone(),
+        "…".to_string(),
+        path[path.len() - 2].clone(),
+        path[path.len() - 1].clone(),
+    ]
+}
+
+/// A project path: the parents muted and cut first when space runs out, the leaf kept whole.
+/// The full path goes in the `title` tooltip. An empty `path` falls back to `label` (TickTick
+/// projects have no path).
+#[component]
+pub fn ContextPath(
+    path: Vec<String>,
+    label: String,
+    #[props(default)] query: String,
+    #[props(default = false)] archived: bool,
+) -> Element {
+    let segments = if path.is_empty() {
+        vec![label]
+    } else {
+        displayed_path_segments(&path)
+    };
+    let full_path = if path.is_empty() {
+        segments.join(CONTEXT_PATH_SEPARATOR)
+    } else {
+        path.join(CONTEXT_PATH_SEPARATOR)
+    };
+    let (leaf, parents) = segments
+        .split_last()
+        .map(|(leaf, parents)| (leaf.clone(), parents.to_vec()))
+        .unwrap_or_default();
+
+    rsx! {
+        span { class: "flex items-center min-w-0 gap-1.5", title: "{full_path}",
+            span { class: "flex min-w-0",
+                if !parents.is_empty() {
+                    span { class: "min-w-0 truncate text-ui-base-muted",
+                        for (index, parent) in parents.iter().enumerate() {
+                            if index > 0 {
+                                "{CONTEXT_PATH_SEPARATOR}"
+                            }
+                            { ss_highlight(parent, &query) }
+                        }
+                    }
+                    // Outside the truncating span: its trailing space would collapse there
+                    span { class: "shrink-0 whitespace-pre text-ui-base-muted",
+                        "{CONTEXT_PATH_SEPARATOR}"
+                    }
+                }
+                span { class: "shrink-0 truncate max-w-full", { ss_highlight(&leaf, &query) } }
+            }
+            if archived {
+                Tag { variant: TagVariant::Muted, "Archived" }
+            }
         }
     }
 }

@@ -8,6 +8,7 @@ use wasm_bindgen::JsCast;
 use web_sys::HtmlInputElement;
 
 use universal_inbox::{
+    context::ContextSummary,
     integration_connection::{
         IntegrationConnection, IntegrationConnectionId,
         integrations::task_time_config::TaskTimeConfig,
@@ -17,10 +18,10 @@ use universal_inbox::{
     },
     notification::{NotificationId, NotificationWithTask},
     task::{
-        DueDate, ProjectId, ProjectSummary, TASK_TITLE_MAX_LENGTH, TaskCreation, TaskId,
-        TaskPlanning, TaskPriority, integrations::todoist::TODOIST_INBOX_PROJECT,
+        DueDate, ProjectReference, ProjectSummary, TASK_TITLE_MAX_LENGTH, Task, TaskCreation,
+        TaskId, TaskPlanning, TaskPriority, TaskSourceKind,
     },
-    third_party::integrations::ticktick::TICKTICK_INBOX_PROJECT,
+    third_party::item::{ThirdPartyItemData, ThirdPartyItemSource, ThirdPartyItemSourceKind},
 };
 use url::Url;
 
@@ -28,7 +29,7 @@ use crate::{
     components::{
         datepicker::flatpickr,
         integrations::icons::NotificationIcon,
-        project_search_field::ProjectSearchField,
+        project_search_field::{ProjectChoice, ProjectSearchField, reference_destination},
         task_manager_picker::{default_task_manager_kind, user_default_task_manager_kind},
         task_time_config_row::TaskTimeConfigRow,
         ui::{
@@ -55,7 +56,13 @@ pub fn TaskPlanningModal(
 ) -> Element {
     let mut selected_task_provider_kind: Signal<Option<IntegrationProviderKind>> =
         use_signal(|| None);
-    let mut project: Signal<Option<String>> = use_signal(|| None);
+    // The picked project, by id; `initial_project` is the task's own when planning a task, to
+    // move it only when the user picked another project
+    let mut project: Signal<Option<ProjectReference>> = use_signal(|| None);
+    let mut initial_project: Signal<Option<ProjectReference>> = use_signal(|| None);
+    let mut bound_context: Signal<Option<ContextSummary>> = use_signal(|| None);
+    let mut select_inbox_when_empty = use_signal(|| false);
+    let mut default_project_error: Signal<Option<String>> = use_signal(|| None);
     let mut due_at = use_signal(|| Utc::now().format("%Y-%m-%d").to_string());
     let mut priority = use_signal(|| Some(TaskPriority::P4));
     let mut time_config: Signal<Option<TaskTimeConfig>> = use_signal(|| None);
@@ -80,7 +87,12 @@ pub fn TaskPlanningModal(
             *current_notification_id.write() = Some(notification_to_plan().id);
             if let Some(task) = notification_to_plan().task {
                 task_title.write().clone_from(&task.title);
-                *project.write() = Some(task.project.clone());
+                // The task's own task manager, so a TickTick task gets the TickTick picker
+                *selected_task_provider_kind.write() = task_manager_kind(&task);
+                let current = task_project_reference(&task);
+                *project.write() = current.clone();
+                *initial_project.write() = current;
+                *bound_context.write() = task.context.clone();
                 if let Some(task_due_at) = task.due_at.as_ref() {
                     *due_at.write() = match task_due_at {
                         DueDate::DateTime(dt) => dt.format("%Y-%m-%d").to_string(),
@@ -113,45 +125,47 @@ pub fn TaskPlanningModal(
                 && let Some(connection) = connections
                     .iter()
                     .find(|c| c.provider.kind() == selected_kind)
+                && Some(connection.id) != current_task_service_integration_connection_id()
             {
-                let connection_id = connection.id;
-                match &connection.provider {
+                *current_task_service_integration_connection_id.write() = Some(connection.id);
+                // The integration's default project, else its inbox (by flag, never by name).
+                // The inbox is skipped when its tasks become notifications: the new task would
+                // come back as a notification.
+                let (default_project, inbox_allowed) = match &connection.provider {
                     IntegrationProvider::Todoist {
                         config:
                             TodoistConfig {
+                                default_project,
                                 create_notification_from_inbox_task,
                                 ..
                             },
                         ..
-                    } if !create_notification_from_inbox_task
-                        && Some(connection_id)
-                            != current_task_service_integration_connection_id() =>
-                    {
-                        *current_task_service_integration_connection_id.write() =
-                            Some(connection_id);
-                        if project.peek().is_none() {
-                            *project.write() = Some(TODOIST_INBOX_PROJECT.to_string());
-                        }
                     }
-                    IntegrationProvider::TickTick {
+                    | IntegrationProvider::TickTick {
                         config:
                             TickTickConfig {
+                                default_project,
                                 create_notification_from_inbox_task,
                                 ..
                             },
                         ..
-                    } if !create_notification_from_inbox_task
-                        && Some(connection_id)
-                            != current_task_service_integration_connection_id() =>
-                    {
-                        *current_task_service_integration_connection_id.write() =
-                            Some(connection_id);
-                        if project.peek().is_none() {
-                            *project.write() = Some(TICKTICK_INBOX_PROJECT.to_string());
-                        }
-                    }
-                    _ => {}
+                    } => (
+                        default_project.clone(),
+                        !create_notification_from_inbox_task,
+                    ),
+                    _ => (None, false),
+                };
+                // A stale default opens the field empty with its error, never on the inbox
+                let issue = connection.default_project_issue.clone();
+                *default_project_error.write() = issue.as_ref().map(|issue| issue.to_string());
+                // The inbox only stands in for no default at all: a default not usable here (a
+                // legacy Todoist value) leaves the field empty, for the user to pick
+                let has_default = default_project.is_some();
+                if project.peek().is_none() {
+                    *project.write() = usable_default_project(default_project, selected_kind)
+                        .filter(|_| issue.is_none());
                 }
+                *select_inbox_when_empty.write() = inbox_allowed && issue.is_none() && !has_default;
             }
         }
     });
@@ -169,11 +183,15 @@ pub fn TaskPlanningModal(
 
     // Submit-CTA validity. In plan-existing-task mode the title is read-only —
     // only the project is required. In create mode both title and project are.
+    // A TickTick task without a project goes to the TickTick inbox, which the
+    // TickTick picker cannot list.
     let invalid = use_memo(move || {
+        let missing_project = project.read().is_none()
+            && selected_task_provider_kind() != Some(IntegrationProviderKind::TickTick);
         if task_to_plan.read().is_some() {
-            project.read().is_none()
+            missing_project
         } else {
-            task_title.read().trim().is_empty() || project.read().is_none()
+            task_title.read().trim().is_empty() || missing_project
         }
     });
 
@@ -222,7 +240,8 @@ pub fn TaskPlanningModal(
                             }
                             if let Some(task) = task_to_plan() {
                                 if let Some(params) = build_planning(
-                                    project(), &due_at.read(), priority(), time_config(),
+                                    project(), initial_project(), selected_task_provider_kind(),
+                                    &due_at.read(), priority(), time_config(),
                                 ) {
                                     on_task_planning.call((params, task.id));
                                     close_flyonui_modal("#task-planning-modal");
@@ -294,10 +313,24 @@ pub fn TaskPlanningModal(
                                     "Project"
                                     span { class: "text-ui-error-hover ml-0.5", "aria-hidden": "true", "*" }
                                 }
-                                ModalProjectField {
+                                ProjectSearchField {
                                     api_base_url: api_base_url.clone(),
-                                    project,
-                                    provider_kind: selected_task_provider_kind,
+                                    value: project(),
+                                    bound_context: bound_context(),
+                                    provider_kind: selected_task_provider_kind(),
+                                    on_change: move |choice: Option<ProjectChoice>| {
+                                        project.set(choice.map(|choice| choice.reference));
+                                    },
+                                    error: default_project_error(),
+                                    select_inbox_when_empty: select_inbox_when_empty(),
+                                    allow_clear: false,
+                                    placeholder: if selected_task_provider_kind() == Some(IntegrationProviderKind::TickTick) {
+                                        "Inbox".to_string()
+                                    } else {
+                                        "Pick a project…".to_string()
+                                    },
+                                    name: "project-search-input".to_string(),
+                                    width: "100%".to_string(),
                                 }
                             }
 
@@ -414,44 +447,6 @@ pub fn TaskPlanningModal(
     }
 }
 
-/// Bridges the modal's legacy `Signal<Option<String>>` (project name only) with
-/// the new `ProjectSearchField` which works in `Option<ProjectSummary>`.
-/// External writes to `project` (e.g. inbox-project defaults) are mirrored
-/// onto an internal summary signal so the search-select trigger stays in sync.
-#[component]
-fn ModalProjectField(
-    api_base_url: ReadSignal<Url>,
-    project: Signal<Option<String>>,
-    provider_kind: ReadSignal<Option<IntegrationProviderKind>>,
-) -> Element {
-    let mut selected_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
-
-    use_effect(move || {
-        let current_name = project();
-        let selected_name = selected_project.peek().as_ref().map(|p| p.name.clone());
-        if current_name != selected_name {
-            selected_project.set(current_name.map(|name| ProjectSummary {
-                source_id: ProjectId::from(name.clone()),
-                name,
-            }));
-        }
-    });
-
-    rsx! {
-        ProjectSearchField {
-            api_base_url,
-            selected_project,
-            provider_kind,
-            on_change: move |selected: Option<ProjectSummary>| {
-                project.set(selected.map(|p| p.name));
-            },
-            name: "project-search-input".to_string(),
-            placeholder: "Pick a project…".to_string(),
-            width: "100%".to_string(),
-        }
-    }
-}
-
 /// Combine a parsed due date with the optional time config: when both a date
 /// and a time config are present, upgrade the date to a timezone-aware
 /// datetime (shared [`DueDate::with_time_config`]). A time config with no due
@@ -466,35 +461,89 @@ fn apply_time_config(
     }
 }
 
+/// The task manager a task lives in: its own for a Todoist or TickTick task, its sink's for a
+/// task synced from another source
+fn task_manager_kind(task: &Task) -> Option<IntegrationProviderKind> {
+    match task.kind {
+        TaskSourceKind::Todoist => Some(IntegrationProviderKind::Todoist),
+        TaskSourceKind::TickTick => Some(IntegrationProviderKind::TickTick),
+        _ => match task
+            .sink_item
+            .as_ref()
+            .map(|item| item.get_third_party_item_source_kind())
+        {
+            Some(ThirdPartyItemSourceKind::Todoist) => Some(IntegrationProviderKind::Todoist),
+            Some(ThirdPartyItemSourceKind::TickTick) => Some(IntegrationProviderKind::TickTick),
+            _ => None,
+        },
+    }
+}
+
+/// The project a task is in, by id: its context, else its TickTick project (TickTick projects
+/// are not mirrored as contexts yet, the name is the one TickTick gave at the last sync)
+fn task_project_reference(task: &Task) -> Option<ProjectReference> {
+    if let Some(context_id) = task.context_id {
+        return Some(ProjectReference::Context { context_id });
+    }
+    let ticktick_item = [Some(&task.source_item), task.sink_item.as_ref()]
+        .into_iter()
+        .flatten()
+        .find_map(|item| match &item.data {
+            ThirdPartyItemData::TickTickItem(ticktick_item) => Some(ticktick_item),
+            _ => None,
+        })?;
+    Some(ProjectReference::Project(ProjectSummary {
+        source_id: ticktick_item.project_id.clone().into(),
+        name: task.project.clone(),
+    }))
+}
+
+fn parse_due_at(due_at_str: &str) -> Option<Option<DueDate>> {
+    if due_at_str.is_empty() {
+        Some(None)
+    } else {
+        due_at_str.parse::<DueDate>().ok().map(Some)
+    }
+}
+
+/// The project the modal opens on: the integration's default, when it can be picked as is (a
+/// context for Todoist, a TickTick project for TickTick). A legacy Todoist default, not
+/// migrated to its context yet, opens the field empty: it is never sent as a TickTick project.
+fn usable_default_project(
+    default_project: Option<ProjectReference>,
+    task_manager: IntegrationProviderKind,
+) -> Option<ProjectReference> {
+    default_project.filter(|reference| reference_destination(reference, task_manager).is_some())
+}
+
+/// `selected_project` is only sent when it differs from `initial_project`: planning a task
+/// without touching its project never moves it
 fn build_planning(
-    selected_project: Option<String>,
+    selected_project: Option<ProjectReference>,
+    initial_project: Option<ProjectReference>,
+    task_manager: Option<IntegrationProviderKind>,
     due_at_str: &str,
     priority: Option<TaskPriority>,
     time_config: Option<TaskTimeConfig>,
 ) -> Option<TaskPlanning> {
-    let due_at = if due_at_str.is_empty() {
-        Ok(None)
-    } else {
-        due_at_str.parse::<DueDate>().map(Some)
-    };
-    let priority = priority.ok_or("Task priority is required");
-    let project_name = selected_project.ok_or("Task project is required");
+    let due_at = parse_due_at(due_at_str)?;
+    let priority = priority?;
+    let task_manager = task_manager.unwrap_or(IntegrationProviderKind::Todoist);
+    let destination = selected_project
+        .filter(|project| Some(project) != initial_project.as_ref())
+        .and_then(|project| reference_destination(&project, task_manager));
 
-    if let (Ok(project_name), Ok(due_at), Ok(priority)) = (project_name, due_at, priority) {
-        return Some(TaskPlanning {
-            project_name,
-            due_at: apply_time_config(due_at, &time_config),
-            priority,
-            time_config,
-        });
-    }
-
-    None
+    Some(TaskPlanning {
+        destination,
+        due_at: apply_time_config(due_at, &time_config),
+        priority,
+        time_config,
+    })
 }
 
 fn build_creation(
     title: &str,
-    selected_project: Option<String>,
+    selected_project: Option<ProjectReference>,
     due_at_str: &str,
     priority: Option<TaskPriority>,
     task_provider_kind: Option<IntegrationProviderKind>,
@@ -504,25 +553,99 @@ fn build_creation(
     if title.is_empty() {
         return None;
     }
-    let due_at = if due_at_str.is_empty() {
-        Ok(None)
-    } else {
-        due_at_str.parse::<DueDate>().map(Some)
-    };
-    let priority = priority.ok_or("Task priority is required");
-    let project_name = selected_project.ok_or("Task project is required");
+    let due_at = parse_due_at(due_at_str)?;
+    let priority = priority?;
 
-    if let (Ok(project_name), Ok(due_at), Ok(priority)) = (project_name, due_at, priority) {
-        return Some(TaskCreation {
-            title: title.to_string(),
-            body: None,
-            project_name: Some(project_name),
-            due_at: apply_time_config(due_at, &time_config),
-            priority,
-            task_provider_kind,
-            time_config,
-        });
+    Some(TaskCreation {
+        title: title.to_string(),
+        body: None,
+        // `None`: the task manager's inbox (TickTick only, the Todoist inbox is picked by id)
+        destination: selected_project.and_then(|project| {
+            reference_destination(
+                &project,
+                task_provider_kind.unwrap_or(IntegrationProviderKind::Todoist),
+            )
+        }),
+        due_at: apply_time_config(due_at, &time_config),
+        priority,
+        task_provider_kind,
+        time_config,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use universal_inbox::{context::ContextId, task::TaskDestination};
+    use uuid::Uuid;
+    use wasm_bindgen_test::*;
+
+    fn legacy_todoist_default() -> ProjectReference {
+        ProjectReference::Project(ProjectSummary {
+            source_id: "2222".into(),
+            name: "Work".to_string(),
+        })
     }
 
-    None
+    /// Review finding 1: a Todoist default stored before contexts (`{source_id, name}`) is never
+    /// sent as a TickTick destination; the modal opens empty for the user to pick
+    #[wasm_bindgen_test]
+    fn test_a_legacy_todoist_default_is_never_a_ticktick_destination() {
+        assert_eq!(
+            usable_default_project(
+                Some(legacy_todoist_default()),
+                IntegrationProviderKind::Todoist
+            ),
+            None
+        );
+        let creation = build_creation(
+            "Plan",
+            Some(legacy_todoist_default()),
+            "",
+            Some(TaskPriority::P4),
+            Some(IntegrationProviderKind::Todoist),
+            None,
+        )
+        .unwrap();
+        assert_eq!(creation.destination, None);
+    }
+
+    #[wasm_bindgen_test]
+    fn test_usable_defaults_keep_their_destination() {
+        let context = ProjectReference::Context {
+            context_id: ContextId(Uuid::nil()),
+        };
+        assert_eq!(
+            usable_default_project(Some(context.clone()), IntegrationProviderKind::Todoist),
+            Some(context.clone())
+        );
+        // The same `{source_id, name}` is a TickTick project for TickTick
+        assert_eq!(
+            build_creation(
+                "Plan",
+                Some(legacy_todoist_default()),
+                "",
+                Some(TaskPriority::P4),
+                Some(IntegrationProviderKind::TickTick),
+                None,
+            )
+            .unwrap()
+            .destination,
+            Some(TaskDestination::TickTickProject("2222".into()))
+        );
+        // Planning without touching the project never moves the task
+        assert_eq!(
+            build_planning(
+                Some(context.clone()),
+                Some(context),
+                Some(IntegrationProviderKind::Todoist),
+                "",
+                Some(TaskPriority::P4),
+                None,
+            )
+            .unwrap()
+            .destination,
+            None
+        );
+    }
 }

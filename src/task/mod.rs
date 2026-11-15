@@ -18,12 +18,12 @@ use validator::Validate;
 
 use crate::{
     HasHtmlUrl,
-    context::ContextId,
+    context::{ContextId, ContextSummary},
     integration_connection::integrations::task_time_config::TaskTimeConfig,
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::Notification,
-    task::integrations::todoist::{DEFAULT_TODOIST_HTML_URL, TODOIST_INBOX_PROJECT},
-    third_party::integrations::ticktick::{DEFAULT_TICKTICK_HTML_URL, TICKTICK_INBOX_PROJECT},
+    task::integrations::todoist::DEFAULT_TODOIST_HTML_URL,
+    third_party::integrations::ticktick::DEFAULT_TICKTICK_HTML_URL,
     third_party::item::{
         ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemSource, ThirdPartyItemSourceKind,
     },
@@ -31,8 +31,13 @@ use crate::{
     utils::default_value::DefaultValue,
 };
 
+pub mod destination;
 pub mod integrations;
 pub mod service;
+
+pub use destination::{
+    DefaultProject, DefaultProjectIssue, ProjectReference, TaskDestination, TaskProject,
+};
 
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
@@ -46,11 +51,16 @@ pub struct Task {
     pub due_at: Option<DueDate>,
     pub tags: Vec<String>,
     pub parent_id: Option<TaskId>,
+    /// Deprecated: the project name, written for compatibility until the column is dropped.
+    /// Read only by the TickTick preview, as TickTick tasks have no context yet.
     pub project: String,
-    /// Binding to the task's context, written alongside `project` (the name,
-    /// still authoritative) while readers move over.
+    /// The binding of the task to its context, by id
     #[serde(default)]
     pub context_id: Option<ContextId>,
+    /// The context `context_id` points to, as readers display it. Filled when the task is read
+    /// from storage, never written.
+    #[serde(default)]
+    pub context: Option<ContextSummary>,
     pub is_recurring: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -90,7 +100,9 @@ pub struct TaskSummary {
     pub priority: TaskPriority,
     pub due_at: Option<DueDate>,
     pub tags: Vec<String>,
-    pub project: String,
+    pub context_id: Option<ContextId>,
+    /// Display only
+    pub context_name: Option<String>,
 }
 
 impl fmt::Display for TaskSummary {
@@ -111,7 +123,9 @@ pub struct TaskSummaryWithStatus {
     pub due_at: Option<DueDate>,
     pub tags: Vec<String>,
     pub parent_id: Option<TaskId>,
-    pub project: String,
+    pub context_id: Option<ContextId>,
+    /// Display only
+    pub context_name: Option<String>,
     pub is_recurring: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -131,7 +145,8 @@ impl From<Task> for TaskSummaryWithStatus {
             due_at: t.due_at,
             tags: t.tags,
             parent_id: t.parent_id,
-            project: t.project,
+            context_id: t.context_id,
+            context_name: t.context.map(|context| context.name),
             is_recurring: t.is_recurring,
             created_at: t.created_at,
             updated_at: t.updated_at,
@@ -142,7 +157,7 @@ impl From<Task> for TaskSummaryWithStatus {
 }
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, JsonSchema)]
 pub struct ProjectSummary {
     pub source_id: ProjectId,
     pub name: String,
@@ -183,14 +198,19 @@ impl From<ProjectId> for String {
 }
 
 impl Task {
-    pub fn is_in_inbox(&self) -> bool {
+    /// Whether the task sits in its task manager's inbox, by identity, never by the project
+    /// name: the inbox context flag for Todoist, the TickTick inbox project id for TickTick.
+    ///
+    /// `todoist_inbox`: the user's Todoist inbox context, if mirrored
+    pub fn is_in_inbox(&self, todoist_inbox: Option<ContextId>) -> bool {
+        let in_todoist_inbox = || self.context_id.is_some() && self.context_id == todoist_inbox;
         match self.kind {
-            TaskSourceKind::Todoist => self.project == TODOIST_INBOX_PROJECT,
-            TaskSourceKind::TickTick => self.project == TICKTICK_INBOX_PROJECT,
+            TaskSourceKind::Todoist => in_todoist_inbox(),
+            TaskSourceKind::TickTick => is_in_ticktick_inbox(&self.source_item),
             _ => match &self.sink_item {
                 Some(sink_item) => match sink_item.get_third_party_item_source_kind() {
-                    ThirdPartyItemSourceKind::Todoist => self.project == TODOIST_INBOX_PROJECT,
-                    ThirdPartyItemSourceKind::TickTick => self.project == TICKTICK_INBOX_PROJECT,
+                    ThirdPartyItemSourceKind::Todoist => in_todoist_inbox(),
+                    ThirdPartyItemSourceKind::TickTick => is_in_ticktick_inbox(sink_item),
                     _ => false,
                 },
                 _ => false,
@@ -218,6 +238,21 @@ impl Task {
             _ => DEFAULT_TODOIST_HTML_URL.parse::<Url>().unwrap(),
         }
     }
+}
+
+/// TickTick inbox tasks carry the project id `inbox{userTickTickId}`
+fn is_in_ticktick_inbox(item: &ThirdPartyItem) -> bool {
+    match &item.data {
+        ThirdPartyItemData::TickTickItem(ticktick_item) => {
+            is_ticktick_inbox_project_id(&ticktick_item.project_id)
+        }
+        _ => false,
+    }
+}
+
+/// Whether a TickTick project id is the user's inbox: `inbox{userTickTickId}`
+pub fn is_ticktick_inbox_project_id(project_id: &str) -> bool {
+    project_id.starts_with("inbox")
 }
 
 impl HasHtmlUrl for Task {
@@ -397,9 +432,6 @@ macro_attr! {
 pub const TASK_TITLE_MAX_LENGTH: u64 = 1024;
 /// Maximum length, in characters, of a task body set by a user.
 pub const TASK_BODY_MAX_LENGTH: u64 = 65_536;
-/// Maximum length, in characters, of a task project name set by a user.
-pub const TASK_PROJECT_NAME_MAX_LENGTH: u64 = 255;
-
 /// A user's request to create a task. Callers validate it (`Validate`) at the
 /// request boundary (HTTP, MCP).
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, JsonSchema, Validate)]
@@ -409,8 +441,9 @@ pub struct TaskCreation {
     pub title: String,
     #[validate(length(max = TASK_BODY_MAX_LENGTH))]
     pub body: Option<String>,
-    #[validate(length(max = TASK_PROJECT_NAME_MAX_LENGTH))]
-    pub project_name: Option<String>,
+    /// The project to create the task in, by id: a context id (see `search_contexts`) for
+    /// Todoist, a TickTick project id for TickTick. Omitted: the task manager's inbox.
+    pub destination: Option<TaskDestination>,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
     pub task_provider_kind: Option<IntegrationProviderKind>,
@@ -420,7 +453,12 @@ pub struct TaskCreation {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct TaskCreationConfig {
-    pub project_name: Option<String>,
+    /// The integration's stored default project, `None`: the task manager's inbox
+    pub target_project: Option<ProjectReference>,
+    /// The project a new task starts in, resolved from `target_project` by the task service
+    /// (once per sync) before the task is built
+    #[serde(default)]
+    pub project: Option<TaskProject>,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
     pub task_manager_provider_kind: Option<IntegrationProviderKind>,
@@ -446,9 +484,12 @@ pub struct CreateOrUpdateTaskRequest {
     pub due_at: DefaultValue<Option<DueDate>>,
     pub tags: Vec<String>,
     pub parent_id: Option<TaskId>,
+    /// Deprecated, display only (see [`Task::project`])
     pub project: DefaultValue<String>,
-    /// `None` leaves an existing binding untouched on update.
-    pub context_id: Option<ContextId>,
+    /// The binding to the task's context, same ownership as `title`: the `default_value` seeds
+    /// it at creation, the `value` is only set by the integration that owns the project (Todoist,
+    /// once its context exists). Linear and Slack only seed it, so a sync never undoes a move.
+    pub context_id: DefaultValue<Option<ContextId>>,
     pub is_recurring: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -471,7 +512,8 @@ impl From<CreateOrUpdateTaskRequest> for Task {
             tags: request.tags,
             parent_id: request.parent_id,
             project: request.project.into_value(),
-            context_id: request.context_id,
+            context_id: request.context_id.into_value(),
+            context: None,
             is_recurring: request.is_recurring,
             created_at: request.created_at,
             updated_at: request.updated_at,
@@ -484,8 +526,10 @@ impl From<CreateOrUpdateTaskRequest> for Task {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct TaskPlanning {
-    pub project_name: String,
+    /// `None`: the task manager's inbox
+    pub destination: Option<TaskDestination>,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
     #[serde(default)]
@@ -638,7 +682,7 @@ mod tests {
             TaskCreation {
                 title: title.to_string(),
                 body: None,
-                project_name: None,
+                destination: None,
                 due_at: None,
                 priority: TaskPriority::P4,
                 task_provider_kind: None,
@@ -662,13 +706,6 @@ mod tests {
             TaskCreation { body: Some(chars(TASK_BODY_MAX_LENGTH + 1)), ..task_creation("t") },
             false
         )]
-        #[case::project_name_too_long(
-            TaskCreation {
-                project_name: Some(chars(TASK_PROJECT_NAME_MAX_LENGTH + 1)),
-                ..task_creation("t")
-            },
-            false
-        )]
         fn test_validate_task_creation(#[case] creation: TaskCreation, #[case] is_valid: bool) {
             assert_eq!(creation.validate().is_ok(), is_valid);
         }
@@ -686,13 +723,6 @@ mod tests {
         )]
         #[case::body_too_long(
             TaskPatch { body: Some(chars(TASK_BODY_MAX_LENGTH + 1)), ..Default::default() },
-            false
-        )]
-        #[case::project_name_too_long(
-            TaskPatch {
-                project_name: Some(chars(TASK_PROJECT_NAME_MAX_LENGTH + 1)),
-                ..Default::default()
-            },
             false
         )]
         fn test_validate_task_patch(#[case] patch: TaskPatch, #[case] is_valid: bool) {

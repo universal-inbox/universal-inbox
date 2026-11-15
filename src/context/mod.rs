@@ -24,10 +24,28 @@ pub struct Context {
     /// `None`: a UI-owned context, with no upstream. Universal Inbox owns its `name` and `parent_id`.
     pub binding: Option<ContextBinding>,
     pub status: ContextStatus,
+    /// `true`: the context mirrors the provider's inbox project, found by the provider's own
+    /// flag, never by the name "Inbox". At most one per user and provider.
+    pub is_inbox: bool,
     /// Always present: the note is created with the context.
     pub note_id: NoteId,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+impl Context {
+    /// Bound to a Todoist project
+    pub fn is_todoist_bound(&self) -> bool {
+        self.binding
+            .as_ref()
+            .is_some_and(|binding| binding.provider == IntegrationProviderKind::Todoist)
+    }
+
+    /// A task can be created in or moved to it: bound to a Todoist project and `Active` (Todoist
+    /// takes no new task in an archived project)
+    pub fn is_todoist_destination(&self) -> bool {
+        self.is_todoist_bound() && self.status == ContextStatus::Active
+    }
 }
 
 /// Link between a context and the upstream project it mirrors. It is made on the provider's
@@ -116,7 +134,7 @@ impl fmt::Display for ContextError {
 impl std::error::Error for ContextError {}
 
 macro_attr! {
-    #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, Hash, EnumFromStr!, EnumDisplay!)]
+    #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, Hash, EnumFromStr!, EnumDisplay!, JsonSchema)]
     pub enum ContextStatus {
         Active,
         Archived,
@@ -165,6 +183,8 @@ pub struct MirroredProject {
     /// The upstream parent project, `None` for a root project
     pub parent_source_id: Option<ProjectId>,
     pub is_archived: bool,
+    /// The provider's inbox project
+    pub is_inbox: bool,
 }
 
 /// Why a project's upstream parent was dropped and the project mirrored at the root
@@ -227,6 +247,60 @@ pub fn resolve_mirrored_parents(
         })
         .collect();
     (parents, rooted)
+}
+
+/// A context as a reader sees it: its name, where it sits in the tree, its status.
+///
+/// The name is display only: nothing binds on it, a task or a default is bound on `id`.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, JsonSchema)]
+pub struct ContextSummary {
+    pub id: ContextId,
+    pub name: String,
+    /// The names from the root context down to this one (included)
+    pub path: Vec<String>,
+    pub status: ContextStatus,
+    pub is_inbox: bool,
+}
+
+impl ContextSummary {
+    /// The path joined with the ` / ` separator: `Work / Clients / Acme`
+    pub fn display_path(&self) -> String {
+        self.path.join(CONTEXT_PATH_SEPARATOR)
+    }
+}
+
+pub const CONTEXT_PATH_SEPARATOR: &str = " / ";
+
+/// The summary of each context of `contexts`, with its path computed from the parents found in
+/// `contexts`. A parent missing from `contexts` ends the path; a parent cycle (which the tree
+/// writers prevent) is cut where it closes.
+pub fn summarize_contexts(contexts: &[Context]) -> HashMap<ContextId, ContextSummary> {
+    let by_id: HashMap<ContextId, &Context> = contexts.iter().map(|c| (c.id, c)).collect();
+    contexts
+        .iter()
+        .map(|context| {
+            let mut path = vec![context.name.clone()];
+            let mut seen: HashSet<ContextId> = HashSet::from([context.id]);
+            let mut current = context;
+            while let Some(parent) = current.parent_id.and_then(|id| by_id.get(&id).copied())
+                && seen.insert(parent.id)
+            {
+                path.push(parent.name.clone());
+                current = parent;
+            }
+            path.reverse();
+            (
+                context.id,
+                ContextSummary {
+                    id: context.id,
+                    name: context.name.clone(),
+                    path,
+                    status: context.status,
+                    is_inbox: context.is_inbox,
+                },
+            )
+        })
+        .collect()
 }
 
 /// The markdown note of a context. Universal Inbox owns its body.
@@ -523,6 +597,7 @@ mod tests {
                 name: source_id.to_string(),
                 parent_source_id: parent.map(|id| ProjectId(id.to_string())),
                 is_archived: false,
+                is_inbox: false,
             }
         }
 

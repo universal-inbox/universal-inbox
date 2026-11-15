@@ -10,6 +10,7 @@ use crate::{
         config::IntegrationConnectionConfig,
         provider::{IntegrationProvider, IntegrationProviderKind},
     },
+    task::DefaultProjectIssue,
     user::UserId,
 };
 
@@ -63,6 +64,10 @@ pub struct IntegrationConnection {
     /// with `paused_at`.
     #[serde(default)]
     pub paused_reason: Option<IntegrationConnectionPausedReason>,
+    /// Why the default project of the config cannot be used: computed from the contexts when
+    /// the connection is read for the user, never stored.
+    #[serde(default)]
+    pub default_project_issue: Option<DefaultProjectIssue>,
 }
 
 impl IntegrationConnection {
@@ -100,6 +105,7 @@ impl IntegrationConnection {
             auto_paused_config_snapshot: None,
             paused_at: None,
             paused_reason: None,
+            default_project_issue: None,
         }
     }
 

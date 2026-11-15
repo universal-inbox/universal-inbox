@@ -201,18 +201,11 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         notifications[0].source_item.source_id,
         new_task.source_item.source_id
     );
-    // The task was created before its project's context existed: the sync binds it right after,
-    // so the stored task carries the context id the creation result did not have yet
+    // The contexts are mirrored before the tasks are synced: the task is bound to its project's
+    // context as it is created
     let stored_new_task = notifications[0].task.clone().unwrap();
-    assert!(new_task.context_id.is_none());
-    assert!(stored_new_task.context_id.is_some());
-    assert_eq!(
-        stored_new_task,
-        Task {
-            context_id: stored_new_task.context_id,
-            ..new_task.clone()
-        }
-    );
+    assert!(new_task.context_id.is_some());
+    assert_eq!(stored_new_task, *new_task);
     assert_eq!(
         Into::<Notification>::into(notifications[0].clone()),
         new_todoist_task_creation.notifications[0]
@@ -1031,6 +1024,7 @@ mod project_contexts {
             name: name.to_string(),
             parent_source_id: None,
             is_archived: false,
+            is_inbox: false,
         }
     }
 
@@ -1244,6 +1238,7 @@ mod project_contexts {
                 name: name.to_string(),
                 binding,
                 status: ContextStatus::Active,
+                is_inbox: false,
                 note_id: NoteId(Uuid::new_v4()),
                 created_at: now,
                 updated_at: now,
@@ -1685,7 +1680,7 @@ mod project_contexts {
                     tags: task.tags.clone(),
                     parent_id: task.parent_id,
                     project: DefaultValue::new(task.project.clone(), None),
-                    context_id: None,
+                    context_id: DefaultValue::new(None, None),
                     is_recurring: task.is_recurring,
                     created_at: task.created_at,
                     updated_at: Utc::now(),
@@ -1856,6 +1851,7 @@ mod project_contexts {
             name: "Mine".to_string(),
             binding: None,
             status: ContextStatus::Active,
+            is_inbox: false,
             note_id: NoteId(Uuid::new_v4()),
             created_at: now,
             updated_at: now,
@@ -1912,6 +1908,7 @@ mod project_contexts {
                 ContextBinding::new(IntegrationProviderKind::Todoist, "U".into(), false).unwrap(),
             ),
             status: ContextStatus::Active,
+            is_inbox: false,
             note_id: NoteId(Uuid::new_v4()),
             created_at: now,
             updated_at: now,
