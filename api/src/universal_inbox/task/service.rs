@@ -1564,10 +1564,18 @@ impl TaskService {
             ),
             None => None,
         };
-        let updated_task = self
+        let mut updated_task = self
             .repository
             .update_task(executor, task_id, patch, destination.as_ref(), for_user_id)
             .await?;
+        // The row keeps a TickTick project's name, not its id: a move between two projects
+        // sharing a name leaves the row as it is, and is still a change to send upstream.
+        // Remove once TickTick tasks are bound to contexts by id (qk5d.11).
+        if let Some(task) = &updated_task.result
+            && moves_to_another_ticktick_project(task, patch.destination.as_ref())
+        {
+            updated_task.updated = true;
+        }
         record_tasks_changed(updated_task.changed_value().map(|task| &**task));
 
         if let UpdateStatus {
@@ -1882,4 +1890,23 @@ fn record_tasks_changed<'a>(tasks: impl IntoIterator<Item = &'a Task>) {
             Some(task.id.0),
         );
     }
+}
+
+/// Whether `destination` moves `task` to another TickTick project. A TickTick destination binds by
+/// the provider project id, while the task row only keeps the project name: two TickTick projects
+/// can share a name, so the move is told from the task's TickTick item, not from the row.
+fn moves_to_another_ticktick_project(task: &Task, destination: Option<&TaskDestination>) -> bool {
+    let Some(TaskDestination::TickTickProject(project_id)) = destination else {
+        return false;
+    };
+    [Some(&task.source_item), task.sink_item.as_ref()]
+        .into_iter()
+        .flatten()
+        .find_map(|item| match &item.data {
+            ThirdPartyItemData::TickTickItem(ticktick_item) => {
+                Some(ticktick_item.project_id != project_id.0)
+            }
+            _ => None,
+        })
+        .unwrap_or(false)
 }

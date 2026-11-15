@@ -903,3 +903,100 @@ mod default_project {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }
+
+mod backfill {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    use graphql_client::Response;
+    use universal_inbox::third_party::integrations::linear::LinearIssue;
+    use universal_inbox_api::integrations::linear::graphql::assigned_issues_query;
+
+    use crate::helpers::{
+        notification::linear::sync_linear_tasks_response, task::linear::create_linear_task,
+    };
+
+    /// A Linear task synced to Todoist before tasks were bound to contexts gets bound by the
+    /// context sync, through its Todoist sink item: an incremental sync never rewrites an
+    /// unchanged sink, so the backfill is its only repair
+    #[rstest]
+    #[tokio::test]
+    async fn test_the_context_sync_binds_a_task_living_in_todoist_through_its_sink(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+        todoist_oauth_credential: OAuthCredentialFixture,
+        linear_oauth_credential: OAuthCredentialFixture,
+    ) {
+        let app = authenticated_app.await;
+        let todoist_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            todoist_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        let linear_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Linear(LinearConfig {
+                sync_notifications_enabled: true,
+                sync_task_config: LinearSyncTaskConfig {
+                    enabled: true,
+                    ..Default::default()
+                },
+            }),
+            &settings,
+            linear_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+            .data
+            .clone()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let task = create_linear_task(
+            &app.app,
+            &linear_issues[0],
+            ProjectSummary {
+                source_id: "2222".into(),
+                name: "Project2".to_string(),
+            },
+            app.user.id,
+            linear_connection.id,
+            todoist_connection.id,
+            "todoist_source_id".to_string(),
+        )
+        .await;
+        assert_eq!(task.kind, TaskSourceKind::Linear);
+        assert_eq!(task.context_id, None);
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        )
+        .await;
+        mock_todoist_no_project_add(&app.app.todoist_mock_server).await;
+
+        sync_todoist_contexts(&app).await;
+
+        let contexts = mirror_fixture_todoist_projects(&app.app, app.user.id).await;
+        let bound: Box<Task> =
+            get_resource(&app.client, &app.app.api_address, "tasks", task.id.into()).await;
+        assert_eq!(bound.context_id, Some(contexts["2222"]));
+
+        // A rerun changes nothing
+        sync_todoist_contexts(&app).await;
+        let rerun: Box<Task> =
+            get_resource(&app.client, &app.app.api_address, "tasks", task.id.into()).await;
+        assert_eq!(rerun, bound);
+    }
+}

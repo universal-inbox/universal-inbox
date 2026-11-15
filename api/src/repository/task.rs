@@ -37,7 +37,7 @@ pub struct TaskContextBackfill {
     pub bound: u64,
     /// Todoist tasks still without a context (project deleted upstream, or no context yet)
     pub unmatched: u64,
-    /// Todoist tasks whose source item could not be read
+    /// Todoist tasks whose Todoist item could not be read
     pub unreadable: u64,
 }
 
@@ -96,8 +96,9 @@ pub trait TaskRepository {
         executor: &mut Transaction<'_, Postgres>,
         task: Box<CreateOrUpdateTaskRequest>,
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError>;
-    /// Bind the user's Todoist tasks to the context of their project, by id: the task's source
-    /// item carries the Todoist `project_id` the context is bound on. A task's
+    /// Bind the user's tasks living in Todoist to the context of their project, by id: the
+    /// task's Todoist item (its sink, or its source for a Todoist task) carries the Todoist
+    /// `project_id` the context is bound on. A task's
     /// `context_id` is set or corrected, never cleared, so a rerun changes nothing. Never matches
     /// on a name.
     async fn backfill_todoist_task_context_ids(
@@ -1148,20 +1149,24 @@ impl TaskRepository for Repository {
         .map(|row| (row.binding_source_id, row.id))
         .collect();
 
-        // Every Todoist task is checked, not only the unbound ones: a task moved to a project
-        // whose context did not exist at the time keeps its old binding until the context
-        // appears. Bounded by the user's task count.
+        // Every task living in Todoist is checked, not only the unbound ones: a task moved to a
+        // project whose context did not exist at the time keeps its old binding until the
+        // context appears. A Linear or Slack task synced to Todoist lives there through its sink
+        // item, a Todoist task through its source item (also its sink): the sink is read first.
+        // Bounded by the user's task count.
         let candidates = sqlx::query!(
             r#"
-                SELECT
+                SELECT DISTINCT ON (task.id)
                   task.id as task_id,
                   task.context_id,
                   third_party_item.id as item_id,
                   third_party_item.data_enc as "data_enc!"
                 FROM task
-                JOIN third_party_item ON task.source_item_id = third_party_item.id
+                JOIN third_party_item
+                  ON third_party_item.id IN (task.sink_item_id, task.source_item_id)
                 WHERE task.user_id = $1
                   AND third_party_item.kind::TEXT = 'TodoistItem'
+                ORDER BY task.id, third_party_item.id = task.sink_item_id DESC NULLS LAST
             "#,
             user_id.0
         )
@@ -1182,7 +1187,7 @@ impl TaskRepository for Repository {
                     Err(err) => {
                         warn!(
                             { attr::USER_ID } = user_id.to_string(),
-                            "Cannot read the source item of task {}: {err}", candidate.task_id
+                            "Cannot read the Todoist item of task {}: {err}", candidate.task_id
                         );
                         backfill.unreadable += 1;
                         continue;
