@@ -18,4 +18,8 @@ pub struct TodoistProject {
     pub is_archived: bool,
     pub is_favorite: bool,
     pub view_style: String,
+    /// Todoist's flag on the user's inbox project: the only way to tell the inbox, a project
+    /// can be named "Inbox" without being it
+    #[serde(default)]
+    pub inbox_project: bool,
 }

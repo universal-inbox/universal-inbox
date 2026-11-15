@@ -77,7 +77,8 @@ pub async fn task_service(
                     &api_base_url,
                     &format!("tasks/{task_id}"),
                     Some(TaskPatch {
-                        project_name: Some(parameters.project_name),
+                        // `None`: the project was left as it is, the task is not moved
+                        destination: parameters.destination,
                         due_at: Some(parameters.due_at),
                         priority: Some(parameters.priority),
                         status: Some(TaskStatus::Active),

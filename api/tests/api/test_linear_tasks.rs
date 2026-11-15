@@ -5,6 +5,7 @@ use graphql_client::Response;
 use pretty_assertions::assert_eq;
 use rstest::*;
 
+use universal_inbox::task::ProjectReference;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
@@ -90,7 +91,7 @@ async fn test_sync_todoist_linear_task(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 default_due_at: Some(PresetDueDate::Today),
                 task_manager_provider_kind: None,
                 ..Default::default()
@@ -273,7 +274,7 @@ async fn test_sync_todoist_linear_task_should_adopt_the_sink_rename(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 default_due_at: Some(PresetDueDate::Today),
                 task_manager_provider_kind: None,
                 ..Default::default()

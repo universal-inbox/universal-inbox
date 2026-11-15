@@ -12,7 +12,8 @@
             "is_deleted": false,
             "is_archived": false,
             "is_favorite": false,
-            "view_style": "list"
+            "view_style": "list",
+            "inbox_project": true
         },
         {
             "id": "2222",

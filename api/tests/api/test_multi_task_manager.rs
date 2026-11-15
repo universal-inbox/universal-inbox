@@ -1,6 +1,7 @@
 use rstest::*;
 use serde_json::json;
 
+use universal_inbox::task::TaskDestination;
 use universal_inbox::{
     HasHtmlUrl,
     integration_connection::{
@@ -250,7 +251,7 @@ mod create_task_with_explicit_provider {
             Some(TaskCreation {
                 title: ticktick_item.title.clone(),
                 body,
-                project_name: Some("Project2".to_string()),
+                destination: Some(TaskDestination::TickTickProject(project_id.clone().into())),
                 due_at: ticktick_item.get_due_date(),
                 priority: ticktick_item.priority.into(),
                 task_provider_kind: Some(IntegrationProviderKind::TickTick),

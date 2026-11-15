@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                UPDATE context\n                SET name = $1, status = $2::context_status, updated_at = $3\n                WHERE id = $4\n            ",
+  "query": "\n                UPDATE context\n                SET name = $1, status = $2::context_status, is_inbox = $3, updated_at = $4\n                WHERE id = $5\n            ",
   "describe": {
     "columns": [],
     "parameters": {
@@ -18,11 +18,12 @@
             }
           }
         },
+        "Bool",
         "Timestamp",
         "Uuid"
       ]
     },
     "nullable": []
   },
-  "hash": "18a14c4e96d4510f954ea89d4436388f397397530dbe425e3021995525c85be9"
+  "hash": "730c73c1aecd4d98cdcca9acda20666cdc27998b0e1eb4a38a85565cc26ddc40"
 }

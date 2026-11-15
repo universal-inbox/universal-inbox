@@ -50,10 +50,10 @@ use crate::helpers::{
     task::{
         list_tasks_until, sync_tasks,
         todoist::{
-            mock_todoist_complete_item_service, mock_todoist_get_item_service,
-            mock_todoist_item_add_service, mock_todoist_no_sync_call,
-            mock_todoist_sync_resources_service, sync_todoist_items_response,
-            sync_todoist_projects_response, todoist_item,
+            mirror_fixture_todoist_projects, mock_todoist_complete_item_service,
+            mock_todoist_get_item_service, mock_todoist_item_add_service,
+            mock_todoist_no_sync_call, mock_todoist_sync_resources_service,
+            sync_todoist_items_response, sync_todoist_projects_response, todoist_item,
         },
     },
 };
@@ -152,6 +152,8 @@ async fn test_sync_todoist_slack_task(
         None,
     )
     .await;
+    // The Todoist projects are mirrored as contexts before any task is synced
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
     let todoist_item = &mut sync_todoist_items_response.items.as_mut().unwrap()[1];
     // First setting the status and project before the sync
     todoist_item.project_id = "1111".to_string();
@@ -371,6 +373,8 @@ async fn test_slack_task_should_not_overwrite_nor_push_the_title_of_a_mirrored_t
         None,
     )
     .await;
+    // The Todoist projects are mirrored as contexts before any task is synced
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
     mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
@@ -509,6 +513,8 @@ async fn test_patch_slack_task_status_as_done(
         None,
     )
     .await;
+    // The Todoist projects are mirrored as contexts before any task is synced
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
 
     mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
@@ -661,6 +667,8 @@ async fn test_patch_slack_task_status_as_done_with_completion_reaction(
         None,
     )
     .await;
+    // The Todoist projects are mirrored as contexts before any task is synced
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
 
     mock_todoist_item_add_service(
         &app.app.todoist_mock_server,

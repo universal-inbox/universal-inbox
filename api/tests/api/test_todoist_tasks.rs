@@ -1,6 +1,8 @@
 use chrono::{NaiveDate, TimeZone, Utc};
 use rstest::*;
 
+use universal_inbox::task::ProjectReference;
+use universal_inbox::task::TaskDestination;
 use universal_inbox::{
     HasHtmlUrl,
     integration_connection::{
@@ -47,11 +49,12 @@ use crate::helpers::{
     rest::{get_resource, patch_resource, patch_resource_response},
     settings,
     task::todoist::{
-        TodoistSyncPartialCommand, mock_todoist_complete_item_service,
-        mock_todoist_delete_item_service, mock_todoist_get_item_service,
-        mock_todoist_item_add_service, mock_todoist_no_sync_call, mock_todoist_sync_project_add,
-        mock_todoist_sync_resources_service, mock_todoist_sync_service,
+        TodoistSyncPartialCommand, mirror_fixture_todoist_projects, mirror_todoist_projects,
+        mock_todoist_complete_item_service, mock_todoist_delete_item_service,
+        mock_todoist_get_item_service, mock_todoist_item_add_service, mock_todoist_no_project_add,
+        mock_todoist_no_sync_call, mock_todoist_sync_resources_service, mock_todoist_sync_service,
         mock_todoist_sync_service_expecting_one_call, sync_todoist_projects_response, todoist_item,
+        todoist_project, todoist_projects_with,
     },
 };
 
@@ -247,6 +250,15 @@ mod patch_task {
             None,
         )
         .await;
+        // The projects are mirrored as contexts: a task is moved to a context, by id
+        let contexts = mirror_todoist_projects(
+            &app.app,
+            app.user.id,
+            &todoist_projects_with(vec![todoist_project("3333", "Project1", None)])
+                .projects
+                .unwrap(),
+        )
+        .await;
 
         let creation = create_task_third_party_item(
             &app.app,
@@ -272,12 +284,7 @@ mod patch_task {
         let new_project = "Project1".to_string();
         let new_project_id = "3333".to_string();
 
-        let _todoist_project_add_mock = mock_todoist_sync_project_add(
-            &app.app.todoist_mock_server,
-            &new_project,
-            &new_project_id,
-        )
-        .await;
+        mock_todoist_no_project_add(&app.app.todoist_mock_server).await;
         let _todoist_uncomplete_item_mock =
             mock_todoist_uncomplete_item_service(&app.app.todoist_mock_server, &todoist_item.id)
                 .await;
@@ -316,7 +323,7 @@ mod patch_task {
             "tasks",
             existing_todoist_task.id.into(),
             &TaskPatch {
-                project_name: Some(new_project.clone()),
+                destination: Some(TaskDestination::Context(contexts["3333"])),
                 due_at: Some(Some(new_due_at.clone())),
                 priority: Some(new_priority.into()),
                 status: Some(TaskStatus::Active),
@@ -329,6 +336,7 @@ mod patch_task {
             patched_task,
             Box::new(Task {
                 project: new_project,
+                context_id: Some(contexts["3333"]),
                 due_at: Some(new_due_at),
                 priority: new_priority.into(),
                 ..existing_todoist_task
@@ -577,6 +585,7 @@ mod patch_task {
         let _todoist_get_item_mock =
             mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone()).await;
 
+        let contexts = mirror_fixture_todoist_projects(&app.app, app.user.id).await;
         let notification_with_task = create_task_from_notification(
             &app.client,
             &app.app.api_address,
@@ -584,7 +593,7 @@ mod patch_task {
             Some(TaskCreation {
                 title: todoist_item.content.clone(),
                 body,
-                project_name: Some("Project2".to_string()),
+                destination: Some(TaskDestination::Context(contexts["2222"])),
                 due_at,
                 priority: todoist_item.priority.into(),
                 task_provider_kind: None,
@@ -612,6 +621,7 @@ mod patch_task {
                 },
                 Some(Task {
                     id: new_task_id,
+                    context_id: Some(contexts["2222"]),
                     updated_at: notification_with_task
                         .as_ref()
                         .unwrap()
@@ -719,14 +729,16 @@ mod patch_task {
             notification.title,
             notification.get_html_url().as_ref()
         ));
+        // A legacy default not migrated yet resolves by its project id, through its context
+        let contexts = mirror_fixture_todoist_projects(&app.app, app.user.id).await;
         let todoist_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
             IntegrationConnectionConfig::Todoist(TodoistConfig {
-                default_project: Some(ProjectSummary {
+                default_project: Some(ProjectReference::Project(ProjectSummary {
                     source_id: project_id.clone().into(),
                     name: project.clone(),
-                }),
+                })),
                 default_due_at: Some(PresetDueDate::Today),
                 default_priority: Some(TaskPriority::from(todoist_item.priority)),
                 ..TodoistConfig::enabled()
@@ -786,6 +798,7 @@ mod patch_task {
                 },
                 Some(Task {
                     id: new_task_id,
+                    context_id: Some(contexts["2222"]),
                     updated_at: notification_with_task
                         .as_ref()
                         .unwrap()

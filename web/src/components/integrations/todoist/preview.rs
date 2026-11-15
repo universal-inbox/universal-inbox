@@ -4,6 +4,7 @@ use chrono::{Local, NaiveDate};
 use dioxus::prelude::*;
 
 use universal_inbox::{
+    context::ContextStatus,
     task::{DueDate, Task},
     third_party::integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
 };
@@ -14,6 +15,7 @@ use crate::components::{
     markdown::Markdown,
     preview_card_header::PreviewCardHeader,
     priority_field::{PriorityField, PriorityLevel, priority_color_class},
+    ui::{Tag, TagVariant},
 };
 
 pub fn todoist_priority_level(priority: TodoistItemPriority) -> PriorityLevel {
@@ -63,7 +65,8 @@ pub fn TodoistTaskPreview(
     let mut expanded = use_signal(|| false);
     let has_body = !body_text.trim().is_empty();
 
-    let project = task().project.clone();
+    // The project is read through the context: the leaf name, the full path on hover
+    let context = task().context.clone();
     let project_link_for_sub = project_link.clone();
 
     let created_date = item.added_at.format("%Y-%m-%d").to_string();
@@ -80,11 +83,17 @@ pub fn TodoistTaskPreview(
                 title: task().title.clone(),
                 title_class: title_strike_class,
                 subline: rsx! {
-                    a {
-                        href: "{project_link_for_sub}",
-                        target: "_blank",
-                        rel: "noopener noreferrer",
-                        "#{project}"
+                    if let Some(context) = context {
+                        a {
+                            href: "{project_link_for_sub}",
+                            target: "_blank",
+                            rel: "noopener noreferrer",
+                            title: "{context.display_path()}",
+                            "#{context.name}"
+                        }
+                        if context.status == ContextStatus::Archived {
+                            Tag { variant: TagVariant::Muted, "Archived" }
+                        }
                     }
                 }
             }

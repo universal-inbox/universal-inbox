@@ -3,7 +3,8 @@ use chrono::{TimeDelta, Timelike, Utc};
 use universal_inbox::{
     integration_connection::{IntegrationConnectionId, provider::IntegrationProviderKind},
     task::{
-        PresetDueDate, ProjectSummary, Task, TaskCreationConfig, TaskPriority, service::TaskPatch,
+        PresetDueDate, ProjectReference, ProjectSummary, Task, TaskCreationConfig, TaskPriority,
+        TaskProject, service::TaskPatch,
     },
     third_party::{
         integrations::{
@@ -56,7 +57,12 @@ pub async fn create_linear_task(
             linear_issue,
             &source_third_party_item,
             Some(TaskCreationConfig {
-                project_name: Some(project.name.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
+                // What the task service seeds from `target_project`
+                project: Some(TaskProject {
+                    context_id: None,
+                    project_name: project.name.clone(),
+                }),
                 due_at: Some(PresetDueDate::Today.into()),
                 priority: TaskPriority::default(),
                 task_manager_provider_kind: None,
@@ -120,6 +126,7 @@ pub async fn create_linear_task(
                 sink_item_id: Some(task.sink_item.as_ref().unwrap().id),
                 ..Default::default()
             },
+            None,
             user_id,
         )
         .await
@@ -167,7 +174,12 @@ pub async fn create_linear_task_with_ticktick_sink(
             linear_issue,
             &source_third_party_item,
             Some(TaskCreationConfig {
-                project_name: Some(project.name.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
+                // What the task service seeds from `target_project`
+                project: Some(TaskProject {
+                    context_id: None,
+                    project_name: project.name.clone(),
+                }),
                 due_at: Some(PresetDueDate::Today.into()),
                 priority: TaskPriority::default(),
                 task_manager_provider_kind: Some(IntegrationProviderKind::TickTick),
@@ -225,6 +237,7 @@ pub async fn create_linear_task_with_ticktick_sink(
                 sink_item_id: Some(task.sink_item.as_ref().unwrap().id),
                 ..Default::default()
             },
+            None,
             user_id,
         )
         .await

@@ -21,14 +21,14 @@ use universal_inbox::{
         provider::IntegrationProviderKind,
     },
     slack_bridge::SlackBridgeStatus,
-    task::{PresetDueDate, ProjectSummary, TaskPriority},
+    task::{DefaultProjectIssue, PresetDueDate, ProjectReference, TaskPriority},
 };
 
 use crate::{
     components::{
         emoji_search_field::EmojiSearchField,
         flyonui::tooltip::{Tooltip, TooltipPlacement},
-        project_search_field::ProjectSearchField,
+        project_search_field::{ProjectChoice, ProjectSearchField},
         settings_controls::{SegmentedChoice, SegmentedChoiceOption, SettingRow},
         task_manager_picker::{ProviderIcon, resolve_task_manager_kind},
         task_time_config_row::TaskTimeConfigRow,
@@ -52,6 +52,7 @@ pub fn SlackProviderConfiguration(
     connection_id: ReadSignal<IntegrationConnectionId>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
+    #[props(default)] default_project_issue: ReadSignal<Option<DefaultProjectIssue>>,
 ) -> Element {
     let active_tab = use_signal(|| "reaction".to_string());
 
@@ -86,7 +87,13 @@ pub fn SlackProviderConfiguration(
 
             div {
                 class: if active_tab() == "reaction" { "settings-tab-panel" } else { "settings-tab-panel hidden" },
-                SlackReactionConfiguration { config, connection_id, ui_model, on_config_change }
+                SlackReactionConfiguration {
+                    config,
+                    connection_id,
+                    ui_model,
+                    on_config_change,
+                    default_project_issue,
+                }
             }
 
             div {
@@ -108,6 +115,7 @@ fn SlackReactionConfiguration(
     connection_id: ReadSignal<IntegrationConnectionId>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
+    #[props(default)] default_project_issue: ReadSignal<Option<DefaultProjectIssue>>,
 ) -> Element {
     let mut default_emoji = use_signal(|| "eyes".to_string());
     let mut default_completion_emoji: Signal<Option<String>> = use_signal(|| None);
@@ -144,7 +152,7 @@ fn SlackReactionConfiguration(
     });
     let mut default_priority = use_signal(|| Some(TaskPriority::P4));
     let mut default_due_at: Signal<Option<PresetDueDate>> = use_signal(|| None);
-    let mut default_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
+    let mut default_project: Signal<Option<ProjectReference>> = use_signal(|| None);
     let mut default_task_manager_provider_kind: Signal<Option<IntegrationProviderKind>> =
         use_signal(|| None);
     let mut default_time_config: Signal<Option<TaskTimeConfig>> = use_signal(|| None);
@@ -334,9 +342,11 @@ fn SlackReactionConfiguration(
                     rsx! {
                         ProjectSearchField {
                             api_base_url: api_base_url.clone(),
-                            selected_project: default_project,
+                            value: default_project(),
                             provider_kind: Some(resolve_task_manager_kind(default_task_manager_provider_kind())),
-                            on_change: move |project: Option<ProjectSummary>| {
+                            error: default_project_issue().map(|issue| issue.to_string()),
+                            on_change: move |choice: Option<ProjectChoice>| {
+                                let project = choice.map(|c| c.reference);
                                 on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
                                     reaction_config: SlackReactionConfig {
                                         sync_type: SlackSyncType::AsTasks(match &config().reaction_config.sync_type {

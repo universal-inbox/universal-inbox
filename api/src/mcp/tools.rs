@@ -15,6 +15,7 @@ use universal_inbox::{
     Page, PageToken,
     audit::{AuditActorKind, AuditChangeKind, AuditEntityKind, AuditEvent, AuditEventFilter},
     auth::oauth2::{OAUTH2_SCOPE_READ, OAUTH2_SCOPE_WRITE},
+    context::ContextSummary,
     notification::{
         Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
         NotificationStatus, NotificationSyncSourceKind, NotificationWithTask,
@@ -219,6 +220,14 @@ pub(crate) struct SearchTasksArgs {
 }
 
 #[derive(Deserialize, Serialize, JsonSchema)]
+pub(crate) struct SearchContextsArgs {
+    #[schemars(
+        description = "Text to find, case-insensitively, in the name of a project or of one of its parents. Omit it to list every project."
+    )]
+    matches: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub(crate) struct SearchAuditLogArgs {
     #[schemars(description = "Case-insensitive text to match in notification and task titles.")]
     query: Option<String>,
@@ -276,7 +285,7 @@ pub(crate) struct SyncTasksArgs {
 pub fn required_scope(tool_name: &str) -> &'static str {
     match tool_name {
         "list_notifications" | "get_notification" | "list_tasks" | "get_task" | "search_tasks"
-        | "search_audit_log" => OAUTH2_SCOPE_READ,
+        | "search_contexts" | "search_audit_log" => OAUTH2_SCOPE_READ,
         _ => OAUTH2_SCOPE_WRITE,
     }
 }
@@ -524,6 +533,24 @@ pub async fn execute_tool(
                 .await
                 .map_err(ToolCallError::execution)?;
             serialize_result(SearchTasksResult { tasks })
+        }
+        "search_contexts" => {
+            let args: SearchContextsArgs = parse_args(arguments)?;
+            let service = services.task_service.read().await;
+            let mut transaction = service.begin().await.map_err(ToolCallError::execution)?;
+            let contexts: Vec<ContextSummary> = service
+                .search_contexts(
+                    &mut transaction,
+                    args.matches.as_deref().unwrap_or_default(),
+                    user_id,
+                )
+                .await
+                .map_err(ToolCallError::execution)?;
+            transaction
+                .commit()
+                .await
+                .map_err(ToolCallError::execution)?;
+            serialize_result(SearchContextsResult { contexts })
         }
         "search_audit_log" => {
             let args: SearchAuditLogArgs = parse_args(arguments)?;
@@ -871,6 +898,12 @@ pub struct SearchTasksResult {
 }
 
 #[derive(Serialize, JsonSchema)]
+pub struct SearchContextsResult {
+    /// The projects a task can be created in or moved to, with their path from the root project
+    pub contexts: Vec<ContextSummary>,
+}
+
+#[derive(Serialize, JsonSchema)]
 pub struct SearchAuditLogResult {
     /// Number of events matching the filters, across all pages
     pub total: usize,
@@ -925,6 +958,10 @@ pub(crate) fn get_task_output_schema() -> Arc<JsonObject> {
 
 pub(crate) fn search_tasks_output_schema() -> Arc<JsonObject> {
     schema_for_output::<SearchTasksResult>()
+}
+
+pub(crate) fn search_contexts_output_schema() -> Arc<JsonObject> {
+    schema_for_output::<SearchContextsResult>()
 }
 
 pub(crate) fn search_audit_log_output_schema() -> Arc<JsonObject> {
@@ -1014,6 +1051,12 @@ mod output_schema_tests {
     fn search_tasks_output_schema_shape() {
         let schema = search_tasks_output_schema();
         assert_object_with_keys(&schema, &["tasks"]);
+    }
+
+    #[test]
+    fn search_contexts_output_schema_shape() {
+        let schema = search_contexts_output_schema();
+        assert_object_with_keys(&schema, &["contexts"]);
     }
 
     #[test]

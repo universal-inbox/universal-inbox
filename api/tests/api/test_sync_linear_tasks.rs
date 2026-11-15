@@ -3,6 +3,7 @@ use pretty_assertions::assert_ne;
 use rstest::*;
 use tokio::time::{Duration, sleep};
 
+use universal_inbox::task::ProjectReference;
 use universal_inbox::{
     HasHtmlUrl, Page,
     audit::AuditEvent,
@@ -18,7 +19,7 @@ use universal_inbox::{
     notification::{NotificationId, NotificationStatus},
     task::{
         DueDate, PresetDueDate, ProjectSummary, TaskCreationConfig, TaskCreationResult,
-        TaskPriority, TaskSourceKind, TaskStatus, service::TaskPatch,
+        TaskPriority, TaskProject, TaskSourceKind, TaskStatus, service::TaskPatch,
     },
     third_party::{
         integrations::{
@@ -62,11 +63,11 @@ use crate::helpers::{
         linear::create_linear_task,
         sync_tasks,
         todoist::{
-            TodoistSyncPartialCommand, mock_todoist_complete_item_service,
-            mock_todoist_get_item_service, mock_todoist_item_add_service,
-            mock_todoist_no_sync_call, mock_todoist_sync_resources_service,
-            mock_todoist_sync_service_with_command_error, sync_todoist_projects_response,
-            todoist_item,
+            TodoistSyncPartialCommand, mirror_fixture_todoist_projects,
+            mock_todoist_complete_item_service, mock_todoist_get_item_service,
+            mock_todoist_item_add_service, mock_todoist_no_sync_call,
+            mock_todoist_sync_resources_service, mock_todoist_sync_service_with_command_error,
+            sync_todoist_projects_response, todoist_item,
         },
     },
 };
@@ -100,10 +101,10 @@ async fn test_sync_tasks_should_create_new_task(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(ProjectSummary {
+                target_project: Some(ProjectReference::Project(ProjectSummary {
                     name: "Project2".to_string(),
                     source_id: "2222".into(),
-                }),
+                })),
                 default_due_at: Some(PresetDueDate::Today),
                 ..Default::default()
             },
@@ -132,6 +133,10 @@ async fn test_sync_tasks_should_create_new_task(
         None,
     )
     .await;
+
+    // The Todoist projects are mirrored as contexts before any task is synced
+
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
     let expected_task_title = format!(
         "[{}]({})",
         sync_linear_issues[0].title.clone(),
@@ -246,7 +251,7 @@ async fn test_sync_tasks_should_not_update_default_values(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 // Test will create a task with due date set to Today
                 default_due_at: Some(PresetDueDate::Tomorrow),
                 ..Default::default()
@@ -360,7 +365,7 @@ async fn test_sync_tasks_should_not_overwrite_nor_push_the_title_of_a_mirrored_t
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 default_due_at: Some(PresetDueDate::Today),
                 ..Default::default()
             },
@@ -475,7 +480,7 @@ async fn test_sync_tasks_should_not_overwrite_the_title_of_an_unmirrored_task(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 default_due_at: Some(PresetDueDate::Today),
                 ..Default::default()
             },
@@ -520,7 +525,12 @@ async fn test_sync_tasks_should_not_overwrite_the_title_of_an_unmirrored_task(
             linear_issue,
             &source_third_party_item,
             Some(TaskCreationConfig {
-                project_name: Some(project.name.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
+                // What the task service seeds from `target_project`
+                project: Some(TaskProject {
+                    context_id: None,
+                    project_name: project.name.clone(),
+                }),
                 due_at: Some(PresetDueDate::Today.into()),
                 priority: TaskPriority::default(),
                 task_manager_provider_kind: None,
@@ -619,7 +629,7 @@ async fn test_sync_tasks_should_complete_existing_task(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 default_due_at: None,
                 ..Default::default()
             },
@@ -668,6 +678,10 @@ async fn test_sync_tasks_should_complete_existing_task(
         None,
     )
     .await;
+
+    // The Todoist projects are mirrored as contexts before any task is synced
+
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
     let _todoist_complete_item_mock = mock_todoist_complete_item_service(
         &app.app.todoist_mock_server,
         &existing_task.sink_item.as_ref().unwrap().source_id,
@@ -721,7 +735,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 default_due_at: None,
                 ..Default::default()
             },
@@ -774,6 +788,10 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         None,
     )
     .await;
+
+    // The Todoist projects are mirrored as contexts before any task is synced
+
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
 
     let _todoist_complete_item_mock = mock_todoist_sync_service_with_command_error(
         &app.app.todoist_mock_server,
@@ -864,7 +882,7 @@ async fn test_sync_tasks_should_recreate_sink_task_with_the_renamed_title(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 default_due_at: None,
                 ..Default::default()
             },
@@ -911,6 +929,7 @@ async fn test_sync_tasks_should_recreate_sink_task_with_the_renamed_title(
                 title: Some(renamed_title.clone()),
                 ..Default::default()
             },
+            None,
             app.user.id,
         )
         .await
@@ -954,6 +973,10 @@ async fn test_sync_tasks_should_recreate_sink_task_with_the_renamed_title(
         None,
     )
     .await;
+
+    // The Todoist projects are mirrored as contexts before any task is synced
+
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
 
     // The mirrored item is gone from Todoist: the update fails with command
     // error 22, which is what triggers the recreation.
@@ -1051,7 +1074,7 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 default_due_at: None,
                 ..Default::default()
             },
@@ -1097,7 +1120,12 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
             linear_issue,
             &source_third_party_item,
             Some(TaskCreationConfig {
-                project_name: Some(project.name.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
+                // What the task service seeds from `target_project`
+                project: Some(TaskProject {
+                    context_id: None,
+                    project_name: project.name.clone(),
+                }),
                 due_at: Some(PresetDueDate::Today.into()),
                 priority: TaskPriority::default(),
                 task_manager_provider_kind: None,
@@ -1158,6 +1186,10 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
         None,
     )
     .await;
+
+    // The Todoist projects are mirrored as contexts before any task is synced
+
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
 
     let new_todoist_item_id = "new_todoist_id".to_string();
     let _todoist_item_add_mock = mock_todoist_item_add_service(
@@ -1230,10 +1262,10 @@ async fn test_sync_tasks_should_auto_delete_existing_linear_notification(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(ProjectSummary {
+                target_project: Some(ProjectReference::Project(ProjectSummary {
                     name: "Project2".to_string(),
                     source_id: "2222".into(),
-                }),
+                })),
                 default_due_at: Some(PresetDueDate::Today),
                 ..Default::default()
             },
@@ -1281,6 +1313,10 @@ async fn test_sync_tasks_should_auto_delete_existing_linear_notification(
         None,
     )
     .await;
+
+    // The Todoist projects are mirrored as contexts before any task is synced
+
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
     let expected_task_title = format!(
         "[{}]({})",
         sync_linear_issues[0].title.clone(),
@@ -1391,7 +1427,7 @@ async fn test_create_notification_should_auto_delete_when_task_already_exists(
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
-                target_project: Some(project.clone()),
+                target_project: Some(ProjectReference::Project(project.clone())),
                 default_due_at: Some(PresetDueDate::Today),
                 ..Default::default()
             },
@@ -1499,7 +1535,7 @@ mod resync_of_notification_for_issue_synced_as_task {
                 sync_notifications_enabled: true,
                 sync_task_config: LinearSyncTaskConfig {
                     enabled: true,
-                    target_project: Some(project.clone()),
+                    target_project: Some(ProjectReference::Project(project.clone())),
                     default_due_at: Some(PresetDueDate::Today),
                     ..Default::default()
                 },
@@ -1692,6 +1728,7 @@ mod resync_of_notification_for_issue_synced_as_task {
                     status: Some(TaskStatus::Deleted),
                     ..Default::default()
                 },
+                None,
                 app.user.id,
             )
             .await
@@ -1807,10 +1844,10 @@ mod sink_provider_resolution {
                 sync_notifications_enabled: true,
                 sync_task_config: LinearSyncTaskConfig {
                     enabled: true,
-                    target_project: Some(ProjectSummary {
+                    target_project: Some(ProjectReference::Project(ProjectSummary {
                         name: "Project2".to_string(),
                         source_id: "tt_proj_2222".into(),
-                    }),
+                    })),
                     default_due_at: Some(PresetDueDate::Today),
                     task_manager_provider_kind: Some(IntegrationProviderKind::TickTick),
                     ..Default::default()
@@ -1918,10 +1955,10 @@ mod sink_provider_resolution {
                 sync_notifications_enabled: true,
                 sync_task_config: LinearSyncTaskConfig {
                     enabled: true,
-                    target_project: Some(ProjectSummary {
+                    target_project: Some(ProjectReference::Project(ProjectSummary {
                         name: "Project2".to_string(),
                         source_id: "tt_proj_2222".into(),
-                    }),
+                    })),
                     default_due_at: Some(PresetDueDate::Today),
                     // No task_manager_provider_kind on the Linear config —
                     // we rely on user preferences below.

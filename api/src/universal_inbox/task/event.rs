@@ -18,7 +18,10 @@ use crate::{
     integrations::slack::{SlackFetchResult, SlackService},
     universal_inbox::{
         UniversalInboxError,
-        task::{TaskEventService, service::TaskService},
+        task::{
+            TaskEventService,
+            service::{ProjectSeeds, TaskService},
+        },
     },
 };
 
@@ -67,6 +70,7 @@ impl TaskEventService<SlackPushEventCallback> for TaskService {
                     executor,
                     *third_party_item,
                     self.slack_service.clone(),
+                    &mut ProjectSeeds::default(),
                     user_id,
                 )
                 .await?

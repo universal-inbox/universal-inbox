@@ -49,9 +49,10 @@ use crate::helpers::{
     task::{
         list_synced_tasks, list_tasks_until,
         todoist::{
-            mock_todoist_complete_item_service, mock_todoist_get_item_service,
-            mock_todoist_item_add_service, mock_todoist_sync_resources_service,
-            mock_todoist_uncomplete_item_service, sync_todoist_projects_response, todoist_item,
+            mirror_fixture_todoist_projects, mock_todoist_complete_item_service,
+            mock_todoist_get_item_service, mock_todoist_item_add_service,
+            mock_todoist_sync_resources_service, mock_todoist_uncomplete_item_service,
+            sync_todoist_projects_response, todoist_item,
         },
     },
 };
@@ -596,6 +597,8 @@ async fn test_receive_reaction_added_event_as_task(
         None,
     )
     .await;
+    // The Todoist projects are mirrored as contexts before any task is synced
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
     let _todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
@@ -763,6 +766,8 @@ async fn test_receive_reaction_removed_and_added_event_as_task(
         None,
     )
     .await;
+    // The Todoist projects are mirrored as contexts before any task is synced
+    mirror_fixture_todoist_projects(&app.app, app.user.id).await;
     let _todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,

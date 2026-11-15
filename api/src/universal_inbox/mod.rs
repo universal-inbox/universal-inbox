@@ -67,6 +67,11 @@ pub enum UniversalInboxError {
     Conflict(String),
     #[error("Unsupported action: {0}")]
     UnsupportedAction(String),
+    /// Mapped to HTTP 400. A task destination (or a stored default project) that does not
+    /// resolve to a project the task manager accepts: unknown, another user's, archived, or of
+    /// another task manager. It is never created instead.
+    #[error("{0}")]
+    UnresolvedTaskDestination(String),
     #[error("Item not found: {0}")]
     ItemNotFound(String),
     #[error("Database error: {message}")]
@@ -151,6 +156,7 @@ impl UniversalInboxError {
             Self::AlreadyExists { .. } => "AlreadyExists",
             Self::Conflict(_) => "Conflict",
             Self::UnsupportedAction(_) => "UnsupportedAction",
+            Self::UnresolvedTaskDestination(_) => "UnresolvedTaskDestination",
             Self::ItemNotFound(_) => "ItemNotFound",
             Self::DatabaseError { .. } => "DatabaseError",
             Self::DatabaseUnavailable { .. } => "DatabaseUnavailable",
@@ -199,6 +205,7 @@ impl UniversalInboxError {
             | UniversalInboxError::AlreadyExists { .. }
             | UniversalInboxError::Conflict(_)
             | UniversalInboxError::UnsupportedAction(_)
+            | UniversalInboxError::UnresolvedTaskDestination(_)
             | UniversalInboxError::ItemNotFound(_)
             | UniversalInboxError::Unauthorized(_)
             | UniversalInboxError::Forbidden(_)

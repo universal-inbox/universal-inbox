@@ -8,8 +8,8 @@ use uuid::Uuid;
 use universal_inbox::{
     context::{
         AttachableKind, Attachment, AttachmentId, AttachmentKind, Context, ContextBinding,
-        ContextError, ContextId, ContextStatus, ContextStatusChange, NOTE_BACKEND_LOCAL, Note,
-        NoteBackend, NoteBackendBinding, NoteId,
+        ContextError, ContextId, ContextStatus, ContextStatusChange, MirroredProject,
+        NOTE_BACKEND_LOCAL, Note, NoteBackend, NoteBackendBinding, NoteId,
     },
     integration_connection::provider::IntegrationProviderKind,
     task::ProjectId,
@@ -45,9 +45,9 @@ pub trait ContextRepository {
     ///
     /// - absent: created, mirrored and flat, `Archived` when `is_archived` else `Active`, with an
     ///   empty note (through `create_context_with_note`);
-    /// - mirrored and the name or the archive state differs: renamed and archived or unarchived
-    ///   (through [`ContextStatus::apply`]), upstream owns both;
-    /// - mirrored and both match: `Untouched`, nothing is written;
+    /// - mirrored and the name, the archive state or the inbox flag differs: renamed, archived or
+    ///   unarchived (through [`ContextStatus::apply`]) and flagged, upstream owns all three;
+    /// - mirrored and all match: `Untouched`, nothing is written;
     /// - not mirrored, or `Tombstoned`: `Untouched`.
     ///
     /// The parent and note are never changed here.
@@ -56,10 +56,15 @@ pub trait ContextRepository {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         provider: IntegrationProviderKind,
-        source_id: ProjectId,
-        name: String,
-        is_archived: bool,
+        project: &MirroredProject,
     ) -> Result<UpsertStatus<Box<Context>>, UniversalInboxError>;
+    /// Id of the mirrored inbox context of `provider`, if any. Read-only.
+    async fn get_inbox_context_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        provider: IntegrationProviderKind,
+    ) -> Result<Option<ContextId>, UniversalInboxError>;
     /// Set the parent of a mirrored, non-`Tombstoned` context. Writes only when the parent
     /// differs; returns whether it wrote.
     async fn set_mirrored_context_parent(
@@ -80,6 +85,13 @@ pub trait ContextRepository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
+    ) -> Result<Vec<Context>, UniversalInboxError>;
+    /// The contexts `ids` and all their ancestors, so that their paths can be computed, in one
+    /// query. Read-only.
+    async fn list_contexts_with_ancestors(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        ids: &[ContextId],
     ) -> Result<Vec<Context>, UniversalInboxError>;
     async fn get_note_for_context(
         &self,
@@ -151,10 +163,11 @@ impl ContextRepository for Repository {
                     status,
                     note_id,
                     created_at,
-                    updated_at
+                    updated_at,
+                    is_inbox
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5::integration_provider_kind, $6, $7, $8::context_status, $9, $10, $11)
+                  ($1, $2, $3, $4, $5::integration_provider_kind, $6, $7, $8::context_status, $9, $10, $11, $12)
             "#,
             context.id.0,
             context.user_id.0,
@@ -173,6 +186,7 @@ impl ContextRepository for Repository {
             context.note_id.0,
             context.created_at.naive_utc(),
             context.updated_at.naive_utc(),
+            context.is_inbox,
         )
         .execute(&mut **executor)
         .await
@@ -223,6 +237,7 @@ impl ContextRepository for Repository {
                   binding_source_id,
                   binding_mirrored,
                   status::TEXT as "status!",
+                  is_inbox,
                   note_id,
                   created_at,
                   updated_at
@@ -275,15 +290,50 @@ impl ContextRepository for Repository {
         skip_all,
         fields({ attr::USER_ID } = user_id.to_string())
     )]
+    async fn get_inbox_context_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        provider: IntegrationProviderKind,
+    ) -> Result<Option<ContextId>, UniversalInboxError> {
+        let id = sqlx::query_scalar!(
+            r#"
+                SELECT id
+                FROM context
+                WHERE user_id = $1
+                  AND binding_provider = $2::integration_provider_kind
+                  AND is_inbox
+            "#,
+            user_id.0,
+            provider.to_string() as _,
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .context("Failed to fetch the inbox context id from storage")?;
+
+        Ok(id.map(ContextId))
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = user_id.to_string())
+    )]
     async fn upsert_mirrored_context(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         provider: IntegrationProviderKind,
-        source_id: ProjectId,
-        name: String,
-        is_archived: bool,
+        project: &MirroredProject,
     ) -> Result<UpsertStatus<Box<Context>>, UniversalInboxError> {
+        let MirroredProject {
+            source_id,
+            name,
+            is_archived,
+            is_inbox,
+            // The parent is set by `set_mirrored_context_parent`, once every project exists
+            parent_source_id: _,
+        } = project.clone();
         let upstream_status = if is_archived {
             ContextStatus::Archived
         } else {
@@ -308,6 +358,7 @@ impl ContextRepository for Repository {
                   binding_source_id,
                   binding_mirrored,
                   status::TEXT as "status!",
+                  is_inbox,
                   note_id,
                   created_at,
                   updated_at
@@ -336,6 +387,7 @@ impl ContextRepository for Repository {
                 name,
                 binding: Some(binding),
                 status: upstream_status,
+                is_inbox,
                 note_id: NoteId(Uuid::new_v4()),
                 created_at: now,
                 updated_at: now,
@@ -352,7 +404,9 @@ impl ContextRepository for Repository {
             .is_some_and(|binding| binding.mirrored);
         if !owned_by_upstream
             || existing.status == ContextStatus::Tombstoned
-            || (existing.name == name && existing.status == upstream_status)
+            || (existing.name == name
+                && existing.status == upstream_status
+                && existing.is_inbox == is_inbox)
         {
             return Ok(UpsertStatus::Untouched(Box::new(existing)));
         }
@@ -369,11 +423,12 @@ impl ContextRepository for Repository {
         sqlx::query!(
             r#"
                 UPDATE context
-                SET name = $1, status = $2::context_status, updated_at = $3
-                WHERE id = $4
+                SET name = $1, status = $2::context_status, is_inbox = $3, updated_at = $4
+                WHERE id = $5
             "#,
             name,
             status.to_string() as _,
+            is_inbox,
             Utc::now().naive_utc(),
             existing.id.0
         )
@@ -442,6 +497,7 @@ impl ContextRepository for Repository {
                   binding_source_id,
                   binding_mirrored,
                   status::TEXT as "status!",
+                  is_inbox,
                   note_id,
                   created_at,
                   updated_at
@@ -454,6 +510,46 @@ impl ContextRepository for Repository {
         .fetch_all(&mut **executor)
         .await
         .context("Failed to fetch contexts from storage")?;
+
+        rows.into_iter().map(Context::try_from).collect()
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
+    async fn list_contexts_with_ancestors(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        ids: &[ContextId],
+    ) -> Result<Vec<Context>, UniversalInboxError> {
+        let ids: Vec<Uuid> = ids.iter().map(|id| id.0).collect();
+        // `UNION` (not `ALL`) stops on a context already found, so a parent cycle ends
+        let rows = sqlx::query_as!(
+            ContextRow,
+            r#"
+                WITH RECURSIVE tree AS (
+                  SELECT * FROM context WHERE id = ANY($1)
+                  UNION
+                  SELECT context.* FROM context JOIN tree ON context.id = tree.parent_id
+                )
+                SELECT
+                  id as "id!",
+                  user_id as "user_id!",
+                  parent_id,
+                  name as "name!",
+                  binding_provider::TEXT as "binding_provider?",
+                  binding_source_id,
+                  binding_mirrored,
+                  status::TEXT as "status!",
+                  is_inbox as "is_inbox!",
+                  note_id as "note_id!",
+                  created_at as "created_at!",
+                  updated_at as "updated_at!"
+                FROM tree
+            "#,
+            &ids
+        )
+        .fetch_all(&mut **executor)
+        .await
+        .context("Failed to fetch contexts and their ancestors from storage")?;
 
         rows.into_iter().map(Context::try_from).collect()
     }
@@ -766,6 +862,7 @@ struct ContextRow {
     binding_source_id: Option<String>,
     binding_mirrored: Option<bool>,
     status: String,
+    is_inbox: bool,
     note_id: Uuid,
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
@@ -801,6 +898,7 @@ impl TryFrom<ContextRow> for Context {
             name: row.name,
             binding,
             status: parse_status(&row.status)?,
+            is_inbox: row.is_inbox,
             note_id: row.note_id.into(),
             created_at: DateTime::<Utc>::from_naive_utc_and_offset(row.created_at, Utc),
             updated_at: DateTime::<Utc>::from_naive_utc_and_offset(row.updated_at, Utc),

@@ -1274,7 +1274,7 @@ mod create_task_from_notification_validation {
             Some(TaskCreation {
                 title: "a".repeat(TASK_TITLE_MAX_LENGTH as usize + 1),
                 body: None,
-                project_name: None,
+                destination: None,
                 due_at: None,
                 priority: TaskPriority::P4,
                 task_provider_kind: None,

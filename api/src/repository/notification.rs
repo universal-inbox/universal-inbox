@@ -295,8 +295,17 @@ impl NotificationRepository for Repository {
             UniversalInboxError::DatabaseError { source: err, message }
         })?;
 
-        row.map(|notification_row| (&notification_row).try_into())
-            .transpose()
+        let mut notification: Option<NotificationWithTask> = row
+            .map(|notification_row| (&notification_row).try_into())
+            .transpose()?;
+        self.hydrate_task_contexts(
+            executor,
+            notification
+                .iter_mut()
+                .filter_map(|notification| notification.task.as_mut()),
+        )
+        .await?;
+        Ok(notification)
     }
 
     #[tracing::instrument(
@@ -655,6 +664,13 @@ impl NotificationRepository for Repository {
         .iter()
         .map(|r| r.try_into())
         .collect::<Result<Vec<NotificationWithTask>, UniversalInboxError>>()?;
+        self.hydrate_task_contexts(
+            executor,
+            content
+                .iter_mut()
+                .filter_map(|notification| notification.task.as_mut()),
+        )
+        .await?;
         if reverse_order {
             content.reverse();
         }

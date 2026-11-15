@@ -10,13 +10,13 @@ use universal_inbox::{
         },
         provider::IntegrationProviderKind,
     },
-    task::{PresetDueDate, ProjectSummary},
+    task::{DefaultProjectIssue, PresetDueDate, ProjectReference},
 };
 
 use crate::{
     components::{
         flyonui::tooltip::{Tooltip, TooltipPlacement},
-        project_search_field::ProjectSearchField,
+        project_search_field::{ProjectChoice, ProjectSearchField},
         settings_controls::SettingRow,
         task_manager_picker::{ProviderIcon, resolve_task_manager_kind},
         task_time_config_row::TaskTimeConfigRow,
@@ -35,8 +35,9 @@ pub fn LinearProviderConfiguration(
     config: ReadSignal<LinearConfig>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
+    #[props(default)] default_project_issue: ReadSignal<Option<DefaultProjectIssue>>,
 ) -> Element {
-    let mut default_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
+    let mut default_project: Signal<Option<ProjectReference>> = use_signal(|| None);
     let mut default_due_at: Signal<Option<PresetDueDate>> = use_signal(|| None);
     let mut default_task_manager_provider_kind: Signal<Option<IntegrationProviderKind>> =
         use_signal(|| None);
@@ -123,17 +124,18 @@ pub fn LinearProviderConfiguration(
                 label: rsx! { "Project to assign synchronized tasks to" },
                 ProjectSearchField {
                     api_base_url: api_base_url.clone(),
-                    selected_project: default_project,
+                    value: default_project(),
                     provider_kind: Some(resolve_task_manager_kind(default_task_manager_provider_kind())),
-                    on_change: move |project: Option<ProjectSummary>| {
+                    on_change: move |choice: Option<ProjectChoice>| {
                         on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
                             sync_task_config: LinearSyncTaskConfig {
-                                target_project: project.clone(),
+                                target_project: choice.map(|c| c.reference),
                                 ..config().sync_task_config
                             },
                             ..config()
                         }))
                     },
+                    error: default_project_issue().map(|issue| issue.to_string()),
                     name: "linear-project-search-input".to_string(),
                     disabled: !ui_model.read().is_task_actions_enabled,
                     width: "260px".to_string(),

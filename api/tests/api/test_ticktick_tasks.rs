@@ -1,6 +1,7 @@
 use chrono::{NaiveTime, TimeZone, Utc};
 use rstest::*;
 
+use universal_inbox::task::TaskDestination;
 use universal_inbox::{
     HasHtmlUrl,
     integration_connection::{
@@ -73,7 +74,7 @@ mod patch_task {
         let creation = create_task_third_party_item(
             &app.app,
             ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
-                project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
+                project_id: "inbox1111".to_string(), // ie. "Inbox"
                 ..*ticktick_item.clone()
             })),
             app.user.id,
@@ -146,7 +147,7 @@ mod patch_task {
         let creation = create_task_third_party_item(
             &app.app,
             ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
-                project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
+                project_id: "inbox1111".to_string(), // ie. "Inbox"
                 ..*ticktick_item.clone()
             })),
             app.user.id,
@@ -223,7 +224,7 @@ mod patch_task {
         let creation = create_task_third_party_item(
             &app.app,
             ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
-                project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
+                project_id: "inbox1111".to_string(), // ie. "Inbox"
                 ..*ticktick_item.clone()
             })),
             app.user.id,
@@ -394,7 +395,7 @@ mod patch_task {
             Some(TaskCreation {
                 title: ticktick_item.title.clone(),
                 body,
-                project_name: Some("Project2".to_string()),
+                destination: Some(TaskDestination::TickTickProject(project_id.clone().into())),
                 due_at: ticktick_item.get_due_date(),
                 priority: ticktick_item.priority.into(),
                 task_provider_kind: Some(IntegrationProviderKind::TickTick),
@@ -521,7 +522,6 @@ mod patch_task {
         )
         .await;
 
-        let project = "Project2".to_string();
         let project_id = "tt_proj_2222".to_string();
         let ticktick_item = Box::new(TickTickItem {
             project_id: project_id.clone(),
@@ -606,7 +606,7 @@ mod patch_task {
             Some(TaskCreation {
                 title: ticktick_item.title.clone(),
                 body,
-                project_name: Some(project.clone()),
+                destination: Some(TaskDestination::TickTickProject(project_id.clone().into())),
                 due_at: Some(due_at),
                 priority: ticktick_item.priority.into(),
                 task_provider_kind: Some(IntegrationProviderKind::TickTick),

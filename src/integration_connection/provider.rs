@@ -501,7 +501,8 @@ impl IntegrationProvider {
             });
 
         Some(TaskCreationConfig {
-            project_name: target_project.map(|project| project.name.clone()),
+            target_project: target_project.cloned(),
+            project: None,
             due_at,
             priority: *default_priority,
             task_manager_provider_kind: task_manager_provider_kind.copied(),

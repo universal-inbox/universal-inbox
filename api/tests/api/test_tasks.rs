@@ -511,9 +511,7 @@ mod patch_task {
 mod patch_task_validation {
     use super::*;
     use pretty_assertions::assert_eq;
-    use universal_inbox::task::{
-        TASK_BODY_MAX_LENGTH, TASK_PROJECT_NAME_MAX_LENGTH, TASK_TITLE_MAX_LENGTH,
-    };
+    use universal_inbox::task::{TASK_BODY_MAX_LENGTH, TASK_TITLE_MAX_LENGTH};
 
     // Validation runs before the task lookup: an unknown task id is enough.
     #[rstest]
@@ -524,10 +522,6 @@ mod patch_task_validation {
     })]
     #[case::body_too_long(TaskPatch {
         body: Some("a".repeat(TASK_BODY_MAX_LENGTH as usize + 1)),
-        ..Default::default()
-    })]
-    #[case::project_name_too_long(TaskPatch {
-        project_name: Some("a".repeat(TASK_PROJECT_NAME_MAX_LENGTH as usize + 1)),
         ..Default::default()
     })]
     #[tokio::test]
@@ -560,6 +554,24 @@ mod patch_task_validation {
             "tasks",
             Uuid::new_v4(),
             &json!({ "status": "Done", "user_id": Uuid::new_v4() }),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // A project name is never a binding: the patch only takes a destination by id
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_task_rejects_a_project_name(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+
+        let response = patch_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "tasks",
+            Uuid::new_v4(),
+            &json!({ "project_name": "Project2" }),
         )
         .await;
 
@@ -756,7 +768,7 @@ mod search_tasks {
             &app.app,
             ThirdPartyItemData::TickTickItem(Box::new(TickTickItem {
                 title: "Universal ticktick task".to_string(),
-                project_id: "tt_proj_1111".to_string(),
+                project_id: "inbox1111".to_string(),
                 ..*ticktick_item.clone()
             })),
             app.user.id,
@@ -799,66 +811,83 @@ mod search_tasks {
 mod search_projects {
     use super::*;
     use pretty_assertions::assert_eq;
+    use universal_inbox::integration_connection::{
+        integrations::ticktick::TickTickConfig, provider::IntegrationProviderKind,
+    };
 
+    use crate::helpers::{
+        integration_connection::create_ticktick_integration_connection,
+        task::{
+            search_projects_response,
+            ticktick::{mock_ticktick_list_projects_service, ticktick_projects_response},
+        },
+    };
+
+    /// Todoist projects are mirrored as contexts: they are searched as contexts
+    /// (`test_task_contexts`), never upstream by name
     #[rstest]
     #[tokio::test]
-    async fn test_search_projects(
-        settings: Settings,
+    async fn test_todoist_projects_are_not_searched_upstream(
         #[future] authenticated_app: AuthenticatedApp,
-        sync_todoist_projects_response: TodoistSyncResponse,
-        todoist_oauth_credential: OAuthCredentialFixture,
     ) {
         let app = authenticated_app.await;
-        create_and_mock_integration_connection(
+
+        let response = search_projects_response(
+            &app.client,
+            &app.app.api_address,
+            "in",
+            Some(IntegrationProviderKind::Todoist),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    /// TickTick projects are not mirrored yet: they are searched upstream, the query being a
+    /// plain substring, never a pattern
+    #[rstest]
+    #[tokio::test]
+    async fn test_search_ticktick_projects(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        create_ticktick_integration_connection(
             &app.app,
             app.user.id,
-            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
-            todoist_oauth_credential,
-            None,
-            None,
-        )
-        .await;
-        let _todoist_projects_mock = mock_todoist_sync_resources_service(
-            &app.app.todoist_mock_server,
-            "projects",
-            &sync_todoist_projects_response,
+            IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
             None,
         )
         .await;
+        mock_ticktick_list_projects_service(
+            &app.app.ticktick_mock_server,
+            &ticktick_projects_response(),
+        )
+        .await;
 
-        let projects = search_projects(&app.client, &app.app.api_address, "in", None).await;
-
-        assert_eq!(projects.len(), 1);
+        let projects = search_projects(
+            &app.client,
+            &app.app.api_address,
+            "JEC",
+            Some(IntegrationProviderKind::TickTick),
+        )
+        .await;
         assert_eq!(
-            projects[0],
-            ProjectSummary {
-                source_id: "1111".into(),
-                name: "Inbox".to_string()
-            }
-        );
-        let projects = search_projects(&app.client, &app.app.api_address, "box", None).await;
-
-        assert_eq!(projects.len(), 1);
-        assert_eq!(
-            projects[0],
-            ProjectSummary {
-                source_id: "1111".into(),
-                name: "Inbox".to_string()
-            }
-        );
-
-        let projects = search_projects(&app.client, &app.app.api_address, "jec", None).await;
-
-        assert_eq!(projects.len(), 1);
-        assert_eq!(
-            projects[0],
-            ProjectSummary {
-                source_id: "2222".into(),
+            projects,
+            vec![ProjectSummary {
+                source_id: "tt_proj_2222".into(),
                 name: "Project2".to_string()
-            }
+            }]
         );
 
-        // Todoist API calls should have been cached
+        let projects = search_projects(
+            &app.client,
+            &app.app.api_address,
+            ".*",
+            Some(IntegrationProviderKind::TickTick),
+        )
+        .await;
+        assert!(projects.is_empty());
     }
 }

@@ -11,6 +11,7 @@ use serde::Serialize;
 use url::Url;
 
 use universal_inbox::{
+    context::ContextSummary,
     integration_connection::{
         IntegrationConnectionId, integrations::slack::SlackEmojiSuggestion,
         provider::IntegrationProviderKind,
@@ -57,7 +58,7 @@ pub async fn search_tasks(
         .into_iter()
         .map(|t| {
             let label = t.title.clone();
-            let search_text = format!("{} {}", t.title, t.project);
+            let search_text = format!("{} {}", t.title, t.context_name.as_deref().unwrap_or(""));
             UISelectOption::new(t, label).with_search_text(search_text)
         })
         .collect())
@@ -87,20 +88,25 @@ pub async fn search_slack_emojis(
         .collect())
 }
 
-/// Search projects via `GET /tasks/projects/search?matches=…&provider_kind=…`.
-pub async fn search_projects(
+/// Search TickTick projects via `GET /tasks/projects/search?matches=…&provider_kind=TickTick`.
+/// Todoist projects are contexts: [`search_contexts`].
+pub async fn search_ticktick_projects(
     api_base_url: &Url,
     query: &str,
-    provider_kind: Option<IntegrationProviderKind>,
-) -> Result<Vec<UISelectOption<ProjectSummary>>> {
-    let path = build_search_path("tasks/projects/search", query, provider_kind);
-    let projects: Vec<ProjectSummary> =
-        call_api::<Vec<ProjectSummary>, ()>(Method::GET, api_base_url, &path, None, None).await?;
-    Ok(projects
-        .into_iter()
-        .map(|p| {
-            let label = p.name.clone();
-            UISelectOption::new(p, label)
-        })
-        .collect())
+) -> Result<Vec<ProjectSummary>> {
+    let path = build_search_path(
+        "tasks/projects/search",
+        query,
+        Some(IntegrationProviderKind::TickTick),
+    );
+    call_api::<Vec<ProjectSummary>, ()>(Method::GET, api_base_url, &path, None, None).await
+}
+
+/// Search the contexts a task can be bound to (the Todoist projects) via
+/// `GET /contexts/search?matches=…`, each with its path. An empty `query` lists them all, the
+/// inbox first.
+pub async fn search_contexts(api_base_url: &Url, query: &str) -> Result<Vec<ContextSummary>> {
+    let qs = serde_urlencoded::to_string([("matches", query)]).unwrap_or_default();
+    let path = format!("contexts/search?{qs}");
+    call_api::<Vec<ContextSummary>, ()>(Method::GET, api_base_url, &path, None, None).await
 }

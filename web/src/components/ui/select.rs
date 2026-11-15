@@ -136,6 +136,7 @@ pub const SELECT_TRIGGER_CLASSES: &str = "group/select w-full h-9 flex items-cen
     aria-expanded:border-ui-primary aria-expanded:bg-ui-surface aria-expanded:shadow-[var(--ui-focus-ring)] \
     focus-visible:outline-none focus-visible:border-ui-primary focus-visible:bg-ui-surface \
     focus-visible:shadow-[var(--ui-focus-ring)] \
+    aria-invalid:border-ui-error \
     disabled:cursor-not-allowed disabled:opacity-[0.55] disabled:bg-ui-base-200";
 
 /// Chevron icon inside the trigger. Rotates 180° when the popover is open.
@@ -844,6 +845,17 @@ pub struct UISearchSelectProps<T: Clone + PartialEq + 'static> {
     pub name: Option<String>,
     #[props(default)]
     pub empty_hint: Option<String>,
+    /// Replaces the "No matches" content of the empty popover, given the current query (for
+    /// states the caller knows better: nothing synced yet, a failed search)
+    #[props(default)]
+    pub render_empty: Option<Callback<String, Element>>,
+    /// The option of `value` for the trigger when it is not among `options` (server-filtered
+    /// results that don't hold the selection). Never listed in the popover.
+    #[props(default)]
+    pub value_option: Option<UISelectOption<T>>,
+    /// Renders the trigger as invalid (`aria-invalid`, error border)
+    #[props(default = false)]
+    pub invalid: bool,
     #[props(default)]
     pub render_value: Option<RenderOption<T>>,
     #[props(default)]
@@ -868,6 +880,9 @@ impl<T: Clone + PartialEq + 'static> PartialEq for UISearchSelectProps<T> {
             && self.width == other.width
             && self.name == other.name
             && self.empty_hint == other.empty_hint
+            && self.render_empty == other.render_empty
+            && self.value_option == other.value_option
+            && self.invalid == other.invalid
             && self.render_value == other.render_value
             && self.render_option == other.render_option
     }
@@ -892,6 +907,7 @@ pub fn UISearchSelect<T: Clone + PartialEq + 'static>(props: UISearchSelectProps
     let placeholder = props.placeholder.clone();
     let search_placeholder = props.search_placeholder.clone();
     let empty_hint = props.empty_hint.clone();
+    let render_empty = props.render_empty;
     let disabled = props.disabled;
     let allow_clear = props.allow_clear;
     let render_value = props.render_value;
@@ -909,11 +925,18 @@ pub fn UISearchSelect<T: Clone + PartialEq + 'static>(props: UISearchSelectProps
         filter_local(&options_input, &query())
     };
 
+    // Arrow keys moved the active row since the popover opened or the query changed
+    let mut navigated = use_signal(|| false);
     // Reset active row when query/openness changes.
     use_effect(move || {
         let _ = (query(), is_open());
         active.set(0);
+        navigated.set(false);
     });
+    // Opened on a value with no query: no row is active until the arrow keys move, so Enter
+    // never replaces the value with the first row (the value may not be listed at all)
+    let keep_value = !navigated() && query().is_empty() && value().is_some();
+    let effective_active = if keep_value { usize::MAX } else { active() };
 
     // Focus the search input when opening.
     use_effect({
@@ -940,7 +963,14 @@ pub fn UISearchSelect<T: Clone + PartialEq + 'static>(props: UISearchSelectProps
     let selected = options_input
         .iter()
         .find(|o| Some(&o.value) == value().as_ref())
-        .cloned();
+        .cloned()
+        .or_else(|| {
+            props
+                .value_option
+                .clone()
+                .filter(|o| Some(&o.value) == value().as_ref())
+        });
+    let invalid = props.invalid;
     let pop_class = popover_classes(popover_placement);
     let style = width.map(|w| format!("width:{w};")).unwrap_or_default();
 
@@ -948,11 +978,15 @@ pub fn UISearchSelect<T: Clone + PartialEq + 'static>(props: UISearchSelectProps
         let len = filtered.len();
         let popover_id = popover_id.clone();
         move |delta: isize| {
-            let new = if delta > 0 {
+            // The first arrow press after opening on a value lands on the first row
+            let new = if keep_value {
+                0
+            } else if delta > 0 {
                 (active() + 1).min(len.saturating_sub(1))
             } else {
                 active().saturating_sub(1)
             };
+            navigated.set(true);
             active.set(new);
             scroll_active_into_view(&format!("{popover_id}-opt-{new}"));
         }
@@ -983,6 +1017,7 @@ pub fn UISearchSelect<T: Clone + PartialEq + 'static>(props: UISearchSelectProps
                 r#type: "button",
                 id: "{trigger_id}",
                 "data-ui-select-trigger": true,
+                "aria-invalid": invalid,
                 class: SELECT_TRIGGER_CLASSES,
                 disabled,
                 "aria-haspopup": "listbox",
@@ -1070,7 +1105,7 @@ pub fn UISearchSelect<T: Clone + PartialEq + 'static>(props: UISearchSelectProps
                                             Key::ArrowUp => { evt.prevent_default(); move_active_kd(-1); }
                                             Key::Enter => {
                                                 evt.prevent_default();
-                                                if let Some(opt) = filtered_kd.get(active()).cloned() {
+                                                if let Some(opt) = filtered_kd.get(effective_active).cloned() {
                                                     pick_kd(opt);
                                                 }
                                             }
@@ -1107,17 +1142,21 @@ pub fn UISearchSelect<T: Clone + PartialEq + 'static>(props: UISearchSelectProps
                             div { class: POP_SKELETON_ROW_CLASSES }
                         }
                     } else if filtered.is_empty() {
-                        div { class: POP_EMPTY_CLASSES,
-                            span {
-                                class: "icon-[lucide--search-x] size-5 opacity-50",
-                                "aria-hidden": "true",
-                            }
-                            div {
-                                "No matches for "
-                                mark { "\"{query}\"" }
-                            }
-                            if let Some(hint) = &empty_hint {
-                                div { class: POP_EMPTY_HINT_CLASSES, "{hint}" }
+                        if let Some(render_empty) = render_empty {
+                            div { class: POP_EMPTY_CLASSES, {render_empty.call(query())} }
+                        } else {
+                            div { class: POP_EMPTY_CLASSES,
+                                span {
+                                    class: "icon-[lucide--search-x] size-5 opacity-50",
+                                    "aria-hidden": "true",
+                                }
+                                div {
+                                    "No matches for "
+                                    mark { "\"{query}\"" }
+                                }
+                                if let Some(hint) = &empty_hint {
+                                    div { class: POP_EMPTY_HINT_CLASSES, "{hint}" }
+                                }
                             }
                         }
                     } else {
@@ -1125,7 +1164,7 @@ pub fn UISearchSelect<T: Clone + PartialEq + 'static>(props: UISearchSelectProps
                             {render_options_list_search(
                                 &filtered,
                                 value(),
-                                active(),
+                                effective_active,
                                 &popover_id,
                                 &query(),
                                 render_option,

@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::integration_connection::integrations::task_time_config::TaskTimeConfig;
-use crate::task::{PresetDueDate, ProjectSummary, TaskPriority};
+use crate::task::{PresetDueDate, ProjectReference, TaskPriority};
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct TickTickContext {
@@ -15,7 +15,7 @@ pub struct TickTickContext {
 pub struct TickTickConfig {
     pub sync_tasks_enabled: bool,
     pub create_notification_from_inbox_task: bool,
-    pub default_project: Option<ProjectSummary>,
+    pub default_project: Option<ProjectReference>,
     pub default_due_at: Option<PresetDueDate>,
     pub default_priority: Option<TaskPriority>,
     #[serde(default)]

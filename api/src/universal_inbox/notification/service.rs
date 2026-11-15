@@ -29,7 +29,7 @@ use universal_inbox::{
         service::{InvitationPatch, NotificationPatch},
     },
     realtime::RealtimeEventKind,
-    task::{DueDate, Task, TaskCreation, TaskId, TaskStatus, service::TaskPatch},
+    task::{DefaultProject, DueDate, Task, TaskCreation, TaskId, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::{
             google_calendar::{
@@ -47,6 +47,7 @@ use universal_inbox::{
 use crate::observability::RecordSpanError;
 use crate::observability::attr;
 use crate::universal_inbox::audit::actor_context::with_system_actor;
+use crate::universal_inbox::task::destination;
 use crate::{
     integrations::{
         github::GithubService, google_calendar::GoogleCalendarService,
@@ -56,8 +57,8 @@ use crate::{
     },
     jobs::{JobStorage, UniversalInboxJob, push_job},
     repository::{
-        Repository, notification::NotificationRepository, task::TaskRepository,
-        third_party::ThirdPartyItemRepository,
+        Repository, context::ContextRepository, notification::NotificationRepository,
+        task::TaskRepository, third_party::ThirdPartyItemRepository,
     },
     universal_inbox::{
         UniversalInboxError, UpdateStatus, UpsertStatus,
@@ -1235,10 +1236,21 @@ impl NotificationService {
                     None => due,
                 });
 
+            // The default project by id; a stale one fails here instead of using the inbox
+            let default_project = default_project
+                .map(|reference| DefaultProject::new(&reference, resolved_provider_kind));
+            let destination = destination::resolve_default_destination(
+                &self.repository,
+                executor,
+                for_user_id,
+                default_project.as_ref(),
+            )
+            .await?;
+
             TaskCreation {
                 title: notification.title.clone(),
                 body: None,
-                project_name: default_project.map(|p| p.name),
+                destination,
                 due_at,
                 priority: default_priority.unwrap_or_default(),
                 task_provider_kind: Some(resolved_provider_kind),
@@ -1858,7 +1870,12 @@ impl NotificationService {
 
         let notification_source_kind = third_party_task_service.get_notification_source_kind();
 
-        if task.is_in_inbox() {
+        // The inbox is told by its context id: one indexed lookup, no context hydration
+        let todoist_inbox = self
+            .repository
+            .get_inbox_context_id(executor, user_id, IntegrationProviderKind::Todoist)
+            .await?;
+        if task.is_in_inbox(todoist_inbox) {
             if !integration_connection_provider.should_create_notification_from_inbox_task() {
                 return Ok(None);
             }

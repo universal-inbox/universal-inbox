@@ -4,8 +4,8 @@ use validator::Validate;
 
 use crate::{
     task::{
-        DueDate, TASK_BODY_MAX_LENGTH, TASK_PROJECT_NAME_MAX_LENGTH, TASK_TITLE_MAX_LENGTH,
-        TaskPriority, TaskStatus, TaskSyncSourceKind,
+        DueDate, TASK_BODY_MAX_LENGTH, TASK_TITLE_MAX_LENGTH, TaskDestination, TaskPriority,
+        TaskStatus, TaskSyncSourceKind,
     },
     third_party::item::ThirdPartyItemId,
 };
@@ -22,8 +22,9 @@ pub struct SyncTasksParameters {
 #[serde(deny_unknown_fields)]
 pub struct TaskPatch {
     pub status: Option<TaskStatus>,
-    #[validate(length(max = TASK_PROJECT_NAME_MAX_LENGTH))]
-    pub project_name: Option<String>,
+    /// Move the task to this project, by id: a context id (see `search_contexts`) for Todoist,
+    /// a TickTick project id for TickTick
+    pub destination: Option<TaskDestination>,
     pub due_at: Option<Option<DueDate>>,
     pub priority: Option<TaskPriority>,
     #[validate(length(max = TASK_BODY_MAX_LENGTH))]

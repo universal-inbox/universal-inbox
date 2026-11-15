@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::integration_connection::integrations::task_time_config::TaskTimeConfig;
 use crate::integration_connection::provider::IntegrationProviderKind;
-use crate::task::{PresetDueDate, ProjectSummary};
+use crate::task::{PresetDueDate, ProjectReference};
 
 fn default_true() -> bool {
     true
@@ -42,7 +42,7 @@ impl LinearConfig {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct LinearSyncTaskConfig {
     pub enabled: bool,
-    pub target_project: Option<ProjectSummary>,
+    pub target_project: Option<ProjectReference>,
     pub default_due_at: Option<PresetDueDate>,
     #[serde(default = "default_true")]
     pub auto_delete_notifications: bool,

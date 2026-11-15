@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT id\n                FROM context\n                WHERE user_id = $1\n                  AND binding_provider = $2::integration_provider_kind\n                  AND is_inbox\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "context",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "integration_provider_kind",
+            "kind": {
+              "Enum": [
+                "Github",
+                "Todoist",
+                "Linear",
+                "GoogleMail",
+                "Slack",
+                "TickTick",
+                "GoogleCalendar",
+                "API",
+                "GoogleDrive",
+                "Notion"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "36c2eb6872499bf8fca0e4f2f886a247b5bee1cc648bbac6a6340d5476c9637e"
+}

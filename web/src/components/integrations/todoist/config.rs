@@ -8,13 +8,14 @@ use universal_inbox::{
         provider::IntegrationProviderKind,
     },
     task::{
-        PresetDueDate, ProjectSummary, TaskPriority, integrations::todoist::TODOIST_INBOX_PROJECT,
+        DefaultProjectIssue, PresetDueDate, ProjectReference, TaskPriority,
+        integrations::todoist::TODOIST_INBOX_PROJECT,
     },
 };
 
 use crate::{
     components::{
-        project_search_field::ProjectSearchField,
+        project_search_field::{ProjectChoice, ProjectSearchField},
         settings_controls::SettingRow,
         task_time_config_row::TaskTimeConfigRow,
         ui::{
@@ -29,10 +30,11 @@ use crate::{
 pub fn TodoistProviderConfiguration(
     config: ReadSignal<TodoistConfig>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
+    #[props(default)] default_project_issue: ReadSignal<Option<DefaultProjectIssue>>,
 ) -> Element {
     let mut default_priority = use_signal(|| Some(TaskPriority::P4));
     let mut default_due_at: Signal<Option<PresetDueDate>> = use_signal(|| None);
-    let mut default_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
+    let mut default_project: Signal<Option<ProjectReference>> = use_signal(|| None);
     let mut default_time_config: Signal<Option<TaskTimeConfig>> = use_signal(|| None);
 
     use_effect(move || {
@@ -91,14 +93,15 @@ pub fn TodoistProviderConfiguration(
                 label: rsx! { "Project to assign new tasks" },
                 ProjectSearchField {
                     api_base_url: api_base_url.clone(),
-                    selected_project: default_project,
+                    value: default_project(),
                     provider_kind: Some(IntegrationProviderKind::Todoist),
-                    on_change: move |default_project: Option<ProjectSummary>| {
+                    on_change: move |choice: Option<ProjectChoice>| {
                         on_config_change.call(IntegrationConnectionConfig::Todoist(TodoistConfig {
-                            default_project,
+                            default_project: choice.map(|c| c.reference),
                             ..config()
                         }))
                     },
+                    error: default_project_issue().map(|issue| issue.to_string()),
                     name: "star-project-search-input".to_string(),
                     width: "260px".to_string(),
                 }

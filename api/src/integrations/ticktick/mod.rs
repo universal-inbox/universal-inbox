@@ -11,7 +11,6 @@ use async_trait::async_trait;
 use cached::proc_macro::cached;
 use chrono::{DateTime, Timelike, Utc};
 use http::{HeaderMap, HeaderValue};
-use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
@@ -32,9 +31,10 @@ use universal_inbox::{
     },
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
-        CreateOrUpdateTaskRequest, DueDate, ProjectSummary, TaskCreation, TaskCreationConfig,
-        TaskSource, TaskSourceKind, TaskStatus,
+        CreateOrUpdateTaskRequest, DueDate, ProjectId, ProjectSummary, TaskCreation,
+        TaskCreationConfig, TaskDestination, TaskSource, TaskSourceKind, TaskStatus,
         integrations::ticktick::{TICKTICK_INBOX_PROJECT, TickTickProject},
+        is_ticktick_inbox_project_id,
         service::TaskPatch,
     },
     third_party::{
@@ -515,22 +515,6 @@ impl TickTickService {
         Ok(())
     }
 
-    /// Create a project in TickTick
-    pub async fn create_ticktick_project(
-        &self,
-        name: &str,
-        access_token: &AccessToken,
-    ) -> Result<TickTickProject, UniversalInboxError> {
-        Ok(self
-            .build_ticktick_client(access_token)?
-            .post(
-                format!("{}/project", self.ticktick_base_url),
-                Some(&json!({ "name": name })),
-            )
-            .await
-            .context("Failed to create TickTick project")?)
-    }
-
     #[allow(dead_code, clippy::blocks_in_conditions)]
     async fn fetch_task_by_source_id(
         &self,
@@ -572,7 +556,7 @@ impl TickTickService {
             tags: source.tag_names(),
             parent_id: None,
             project: DefaultValue::new(TICKTICK_INBOX_PROJECT.to_string(), Some(project_name)),
-            context_id: None,
+            context_id: DefaultValue::new(None, None),
             is_recurring: source.is_recurring(),
             created_at: source
                 .created_time
@@ -680,9 +664,9 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
             .ok_or_else(|| anyhow!("Cannot build a TickTick task without an access token"))?;
         let projects = self.fetch_all_projects(user_id, &access_token).await?;
         // Inbox tasks have projectId `inbox{userTickTickId}` and are not
-        // included in the /project list — map them to the canonical "Inbox"
-        // project name so `Task::is_in_inbox()` returns true for them.
-        let project_name = if source.project_id.starts_with("inbox") {
+        // included in the /project list: display them as "Inbox". The inbox is
+        // told by that id (`Task::is_in_inbox`), never by this display name.
+        let project_name = if is_ticktick_inbox_project_id(&source.project_id) {
             TICKTICK_INBOX_PROJECT.to_string()
         } else {
             projects
@@ -812,7 +796,7 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
             && patch.body.is_none()
             && patch.priority.is_none()
             && patch.due_at.is_none()
-            && patch.project_name.is_none()
+            && patch.destination.is_none()
         {
             return Ok(());
         }
@@ -828,16 +812,17 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
         // TickTick's `POST /open/v1/task/{taskId}` endpoint requires the task's
         // `projectId` in the body; sending an empty string makes the API create
         // a new task instead of updating the existing one. Resolve the
-        // project_id either from an explicit project-name change, or from the
-        // stored TickTickItem data on the third-party item.
+        // project_id either from an explicit move, or from the stored
+        // TickTickItem data on the third-party item.
         let ticktick_item: TickTickItem = third_party_item.clone().try_into()?;
-        let project_id = if let Some(ref project_name) = patch.project_name {
-            self.get_or_create_project(executor, project_name, user_id, Some(&access_token))
-                .await?
-                .source_id
-                .to_string()
-        } else {
-            ticktick_item.project_id.clone()
+        let project_id = match Self::destination_project_id(patch.destination.as_ref())? {
+            Some(project_id) => {
+                self.resolve_project(project_id, user_id, &access_token)
+                    .await?
+                    .source_id
+                    .0
+            }
+            None => ticktick_item.project_id.clone(),
         };
 
         let title = patch.title.clone();
@@ -886,15 +871,14 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
             .await?
             .ok_or_else(|| anyhow!("Cannot create a TickTick task without an access token"))?;
 
-        let project_id = if let Some(project_name) = &task.project_name {
-            Some(
-                self.get_or_create_project(executor, project_name, user_id, Some(&access_token))
+        let project_id = match Self::destination_project_id(task.destination.as_ref())? {
+            Some(project_id) => Some(
+                self.resolve_project(project_id, user_id, &access_token)
                     .await?
                     .source_id
-                    .to_string(),
-            )
-        } else {
-            None
+                    .0,
+            ),
+            None => None,
         };
 
         // Only attach the timezone when the due is a timezone-aware datetime
@@ -940,14 +924,18 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
         self.create_ticktick_task(&create_request, &access_token)
             .await
     }
+}
 
+impl TickTickService {
+    /// The user's TickTick projects whose name contains `matches`. TickTick projects are not
+    /// mirrored as contexts yet: the TickTick picker searches them upstream.
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
         skip_all,
         fields({ attr::USER_ID } = user_id.to_string())
     )]
-    async fn search_projects(
+    pub async fn search_projects(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         matches: &str,
@@ -963,18 +951,12 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
             return Ok(vec![]);
         };
 
+        // A plain, case-insensitive substring: the user's input is never a pattern
+        let matches = matches.to_lowercase();
         let projects = self.fetch_all_projects(user_id, &access_token).await?;
-        let search_regex = RegexBuilder::new(matches)
-            .case_insensitive(true)
-            .size_limit(100_000)
-            .build()
-            .context(format!(
-                "Failed to build regular expression from `{matches}`"
-            ))?;
-
         Ok(projects
             .into_iter()
-            .filter(|ticktick_project| search_regex.is_match(&ticktick_project.name))
+            .filter(|ticktick_project| ticktick_project.name.to_lowercase().contains(&matches))
             .map(|ticktick_project| ProjectSummary {
                 source_id: ticktick_project.id.into(),
                 name: ticktick_project.name,
@@ -982,56 +964,68 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
             .collect())
     }
 
-    #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields({ attr::USER_ID } = user_id.to_string())
-    )]
-    async fn get_or_create_project(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        project_name: &str,
-        user_id: UserId,
-        access_token: Option<&AccessToken>,
-    ) -> Result<ProjectSummary, UniversalInboxError> {
-        let access_token = match access_token {
-            Some(access_token) => access_token.clone(),
-            None => {
-                self.integration_connection_service
-                    .read()
-                    .await
-                    .find_access_token(executor, IntegrationProviderKind::TickTick, user_id)
-                    .await?
-                    .ok_or_else(|| {
-                        anyhow!(
-                            "Cannot create TickTick project {project_name} without an access token"
-                        )
-                    })?
-                    .0
+    /// The TickTick project id of `destination`. `None` without a destination. A context is
+    /// refused: TickTick projects are not mirrored as contexts yet.
+    fn destination_project_id(
+        destination: Option<&TaskDestination>,
+    ) -> Result<Option<&ProjectId>, UniversalInboxError> {
+        match destination {
+            None => Ok(None),
+            Some(TaskDestination::TickTickProject(project_id)) => Ok(Some(project_id)),
+            Some(destination @ TaskDestination::Context(_)) => {
+                Err(UniversalInboxError::UnresolvedTaskDestination(format!(
+                    "A TickTick task cannot go to {destination}"
+                )))
             }
-        };
+        }
+    }
 
-        let projects = self.fetch_all_projects(user_id, &access_token).await?;
-        if let Some(project) = projects
-            .iter()
-            .find(|project| project.name == *project_name)
-        {
+    /// The TickTick project `project_id` (TickTick projects are not mirrored as contexts yet).
+    /// An id TickTick does not know is an error: no project is ever created.
+    pub async fn resolve_project(
+        &self,
+        project_id: &ProjectId,
+        user_id: UserId,
+        access_token: &AccessToken,
+    ) -> Result<ProjectSummary, UniversalInboxError> {
+        // The inbox is not in the project list
+        if is_ticktick_inbox_project_id(&project_id.0) {
             return Ok(ProjectSummary {
-                source_id: project.id.clone().into(),
-                name: project.name.clone(),
+                source_id: project_id.clone(),
+                name: TICKTICK_INBOX_PROJECT.to_string(),
             });
         }
+        self.fetch_all_projects(user_id, access_token)
+            .await?
+            .into_iter()
+            .find(|project| project.id == project_id.0)
+            .map(|project| ProjectSummary {
+                source_id: project.id.into(),
+                name: project.name,
+            })
+            .ok_or_else(|| {
+                UniversalInboxError::UnresolvedTaskDestination(format!(
+                    "TickTick project {project_id} does not exist"
+                ))
+            })
+    }
 
-        let new_project = self
-            .create_ticktick_project(project_name, &access_token)
-            .await?;
-        self.projects_cache_index.fetch_add(1, Ordering::Relaxed);
-
-        Ok(ProjectSummary {
-            source_id: new_project.id.into(),
-            name: new_project.name,
-        })
+    /// [`Self::resolve_project`], with the user's access token
+    pub async fn resolve_project_for_user(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        project_id: &ProjectId,
+        user_id: UserId,
+    ) -> Result<ProjectSummary, UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::TickTick, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot find a TickTick project without an access token"))?;
+        self.resolve_project(project_id, user_id, &access_token)
+            .await
     }
 }
 

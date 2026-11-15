@@ -9,10 +9,11 @@ use uuid::Uuid;
 
 use universal_inbox::{
     DEFAULT_PAGE_SIZE, Page, PageToken,
+    context::{ContextId, summarize_contexts},
     integration_connection::provider::IntegrationProviderKind,
     task::{
-        CreateOrUpdateTaskRequest, DueDate, Task, TaskId, TaskPriority, TaskSourceKind, TaskStatus,
-        TaskSummary, service::TaskPatch,
+        CreateOrUpdateTaskRequest, DueDate, Task, TaskId, TaskPriority, TaskProject,
+        TaskSourceKind, TaskStatus, TaskSummary, service::TaskPatch,
     },
     third_party::item::ThirdPartyItemData,
     user::UserId,
@@ -23,7 +24,9 @@ use crate::universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus};
 use crate::utils::crypto::{aad, data_keyring};
 
 use super::{
-    FromRowWithPrefix, Repository, decode_rows_skipping_invalid,
+    FromRowWithPrefix, Repository,
+    context::ContextRepository,
+    decode_rows_skipping_invalid,
     third_party::{ThirdPartyItemRow, decrypt_third_party_item_data},
 };
 
@@ -102,11 +105,14 @@ pub trait TaskRepository {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<TaskContextBackfill, UniversalInboxError>;
+    /// `project`: the project to move the task to, resolved by the service from
+    /// `patch.destination`, which the repository does not read
     async fn update_task(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         task_id: TaskId,
         patch: &TaskPatch,
+        project: Option<&TaskProject>,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Task>>, UniversalInboxError>;
     async fn get_task_for_source_item_id(
@@ -115,6 +121,51 @@ pub trait TaskRepository {
         source_item_id: Uuid,
         user_id: UserId,
     ) -> Result<Option<Task>, UniversalInboxError>;
+}
+
+impl Repository {
+    /// Fill `task.context` (name, path, status, inbox flag) from the context `task.context_id`
+    /// points to, for the reads served to clients. One query for all the tasks: their contexts
+    /// and the ancestors of those, never the whole tree. A context of another user is ignored.
+    pub(crate) async fn hydrate_task_contexts<'a>(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        tasks: impl IntoIterator<Item = &'a mut Task>,
+    ) -> Result<(), UniversalInboxError> {
+        let tasks: Vec<&mut Task> = tasks.into_iter().collect();
+        let mut context_ids: Vec<ContextId> =
+            tasks.iter().filter_map(|task| task.context_id).collect();
+        if context_ids.is_empty() {
+            return Ok(());
+        }
+        context_ids.sort_by_key(|id| id.0);
+        context_ids.dedup();
+
+        let contexts = self
+            .list_contexts_with_ancestors(executor, &context_ids)
+            .await?;
+        let summaries = summarize_contexts(&contexts);
+        let owners: HashMap<ContextId, UserId> = contexts
+            .iter()
+            .map(|context| (context.id, context.user_id))
+            .collect();
+        for task in tasks {
+            task.context = task
+                .context_id
+                .filter(|id| owners.get(id) == Some(&task.user_id))
+                .and_then(|id| summaries.get(&id).cloned());
+        }
+        Ok(())
+    }
+
+    async fn hydrate_task_context(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        mut task: Task,
+    ) -> Result<Task, UniversalInboxError> {
+        self.hydrate_task_contexts(executor, [&mut task]).await?;
+        Ok(task)
+    }
 }
 
 #[async_trait]
@@ -179,7 +230,11 @@ impl TaskRepository for Repository {
             UniversalInboxError::DatabaseError { source: err, message }
         })?;
 
-        row.map(|task_row| task_row.try_into()).transpose()
+        let task: Option<Task> = row.map(|task_row| task_row.try_into()).transpose()?;
+        match task {
+            Some(task) => Ok(Some(self.hydrate_task_context(executor, task).await?)),
+            None => Ok(None),
+        }
     }
 
     #[tracing::instrument(
@@ -268,9 +323,13 @@ impl TaskRepository for Repository {
             UniversalInboxError::DatabaseError { source: err, message }
         })?;
 
-        rows.iter()
+        let mut tasks = rows
+            .iter()
             .map(|r| r.try_into())
-            .collect::<Result<Vec<Task>, UniversalInboxError>>()
+            .collect::<Result<Vec<Task>, UniversalInboxError>>()?;
+        self.hydrate_task_contexts(executor, tasks.iter_mut())
+            .await?;
+        Ok(tasks)
     }
 
     #[tracing::instrument(
@@ -386,10 +445,12 @@ impl TaskRepository for Repository {
             })?;
 
         let total: usize = count.try_into().unwrap(); // count(*) cannot be negative
-        let content = decode_rows_skipping_invalid::<TaskRow>(&rows, "task__id", "task")
+        let mut content = decode_rows_skipping_invalid::<TaskRow>(&rows, "task__id", "task")
             .iter()
             .map(|r| r.try_into())
             .collect::<Result<Vec<Task>, UniversalInboxError>>()?;
+        self.hydrate_task_contexts(executor, content.iter_mut())
+            .await?;
         Ok(Page {
             per_page: DEFAULT_PAGE_SIZE,
             pages_count: total.div_ceil(DEFAULT_PAGE_SIZE),
@@ -469,10 +530,13 @@ impl TaskRepository for Repository {
                 }
             })?;
 
-        decode_rows_skipping_invalid::<TaskRow>(&rows, "task__id", "task")
+        let mut tasks = decode_rows_skipping_invalid::<TaskRow>(&rows, "task__id", "task")
             .iter()
             .map(|r| r.try_into())
-            .collect::<Result<Vec<Task>, UniversalInboxError>>()
+            .collect::<Result<Vec<Task>, UniversalInboxError>>()?;
+        self.hydrate_task_contexts(executor, tasks.iter_mut())
+            .await?;
+        Ok(tasks)
     }
 
     #[tracing::instrument(
@@ -507,9 +571,12 @@ impl TaskRepository for Repository {
                   task.priority,
                   task.due_at as "due_at: Json<Option<DueDate>>",
                   task.tags,
-                  task.project
+                  task.context_id,
+                  context.name as "context_name?"
                 FROM
-                  task,
+                  task
+                  LEFT JOIN context
+                    ON context.id = task.context_id AND context.user_id = task.user_id,
                   to_tsquery('english', $1) query,
                   third_party_item sink_item
                 WHERE
@@ -857,8 +924,11 @@ impl TaskRepository for Repository {
                     .project
                     .clone()
                     .value_or(existing_task.project.clone()),
-                // A request without a binding never clears an existing one.
-                context_id: task_request.context_id.or(existing_task.context_id),
+                // Only the integration owning the binding changes it
+                context_id: task_request
+                    .context_id
+                    .clone()
+                    .value_or(existing_task.context_id),
                 ..(*task_request.clone()).into()
             };
 
@@ -932,10 +1002,10 @@ impl TaskRepository for Repository {
                     .push("project = ")
                     .push_bind_unseparated(task_request.project.clone().into_value());
             }
-            if let Some(context_id) = task_request.context_id {
+            if let Some(context_id) = &task_request.context_id.value {
                 separated
                     .push("context_id = ")
-                    .push_bind_unseparated(context_id.0);
+                    .push_bind_unseparated(context_id.map(|id| id.0));
             }
             separated
                 .push("is_recurring = ")
@@ -1030,7 +1100,7 @@ impl TaskRepository for Repository {
                     task_request.source_item.id.0,
                     task_request.sink_item.as_ref().map(|item| item.id.0),
                     task_request.user_id.0,
-                    task_request.context_id.map(|id| id.0)
+                    task_request.context_id.clone().into_value().map(|id| id.0)
                 )
                 .fetch_one(&mut **executor)
                 .await
@@ -1160,6 +1230,7 @@ impl TaskRepository for Repository {
         executor: &mut Transaction<'_, Postgres>,
         task_id: TaskId,
         patch: &TaskPatch,
+        project: Option<&TaskProject>,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Task>>, UniversalInboxError> {
         if *patch == Default::default() {
@@ -1207,10 +1278,14 @@ impl TaskRepository for Repository {
             }
         }
 
-        if let Some(project) = &patch.project_name {
+        if let Some(project) = project {
+            separated
+                .push(" context_id = ")
+                .push_bind_unseparated(project.context_id.map(|id| id.0));
+            // Deprecated column, kept filled until it is dropped
             separated
                 .push(" project = ")
-                .push_bind_unseparated(project.to_string());
+                .push_bind_unseparated(project.project_name.clone());
         }
 
         if let Some(due_at) = &patch.due_at {
@@ -1303,10 +1378,13 @@ impl TaskRepository for Repository {
                 .push_bind_unseparated(status.to_string());
         }
 
-        if let Some(project) = &patch.project_name {
+        if let Some(project) = project {
+            separated
+                .push(" context_id IS DISTINCT FROM ")
+                .push_bind_unseparated(project.context_id.map(|id| id.0));
             separated
                 .push(" project != ")
-                .push_bind_unseparated(project.to_string());
+                .push_bind_unseparated(project.project_name.clone());
         }
 
         if let Some(sink_item_id) = &patch.sink_item_id {
@@ -1359,9 +1437,10 @@ impl TaskRepository for Repository {
             })?;
 
         if let Some(updated_task_row) = row {
+            let task: Task = updated_task_row.task_row.try_into()?;
             Ok(UpdateStatus {
                 updated: updated_task_row.is_updated,
-                result: Some(Box::new(updated_task_row.task_row.try_into().unwrap())),
+                result: Some(Box::new(self.hydrate_task_context(executor, task).await?)),
             })
         } else {
             Ok(UpdateStatus {
@@ -1592,6 +1671,8 @@ impl TryFrom<&TaskRow> for Task {
             parent_id: row.parent_id.map(|id| id.into()),
             project: row.project.to_string(),
             context_id: row.context_id.map(|id| id.into()),
+            // Filled by `Repository::hydrate_task_contexts`
+            context: None,
             is_recurring: row.is_recurring,
             created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
             updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
@@ -1616,7 +1697,8 @@ pub struct TaskSummaryRow {
     priority: i32,
     due_at: Json<Option<DueDate>>,
     tags: Vec<String>,
-    project: String,
+    context_id: Option<Uuid>,
+    context_name: Option<String>,
 }
 
 impl TryFrom<&TaskSummaryRow> for TaskSummary {
@@ -1634,7 +1716,8 @@ impl TryFrom<&TaskSummaryRow> for TaskSummary {
             priority,
             due_at: row.due_at.0.clone(),
             tags: row.tags.clone(),
-            project: row.project.to_string(),
+            context_id: row.context_id.map(Into::into),
+            context_name: row.context_name.clone(),
         })
     }
 }

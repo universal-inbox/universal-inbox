@@ -7,14 +7,20 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
 use uuid::Uuid;
-use wiremock::matchers::{body_json, body_partial_json, header, method, path, path_regex};
+use wiremock::matchers::{
+    body_json, body_partial_json, body_string_contains, header, method, path, path_regex,
+};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use universal_inbox::{
     HasHtmlUrl,
-    integration_connection::integrations::todoist::SyncToken,
+    audit::{AuditActor, AuditUserChannel},
+    context::{ContextId, MirroredProject},
+    integration_connection::{integrations::todoist::SyncToken, provider::IntegrationProviderKind},
     notification::{NotificationSourceKind, NotificationStatus},
-    task::{DueDate, TaskCreationResult, TaskStatus},
+    task::{
+        DueDate, ProjectId, TaskCreationResult, TaskStatus, integrations::todoist::TodoistProject,
+    },
     third_party::{
         integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
         item::ThirdPartyItemData,
@@ -30,7 +36,7 @@ use universal_inbox_api::integrations::todoist::{
     TodoistSyncStatusResponse,
 };
 
-use crate::helpers::load_json_fixture_file;
+use crate::helpers::{TestedApp, load_json_fixture_file, set_audit_actor};
 
 #[fixture]
 pub fn sync_todoist_items_response() -> TodoistSyncResponse {
@@ -128,30 +134,6 @@ pub async fn mock_todoist_uncomplete_item_service(todoist_mock_server: &MockServ
             },
         }],
         None,
-    )
-    .await;
-}
-
-pub async fn mock_todoist_sync_project_add(
-    todoist_mock_server: &MockServer,
-    new_project: &str,
-    new_project_id: &str,
-) {
-    let sync_project_add_todoist_response = TodoistSyncStatusResponse {
-        sync_status: HashMap::from([(Uuid::new_v4(), TodoistCommandStatus::Ok("ok".to_string()))]),
-        full_sync: false,
-        temp_id_mapping: HashMap::from([(Uuid::new_v4().to_string(), new_project_id.to_string())]),
-        sync_token: SyncToken("sync token".to_string()),
-    };
-
-    mock_todoist_sync_service(
-        todoist_mock_server,
-        vec![TodoistSyncPartialCommand::ProjectAdd {
-            args: TodoistSyncCommandProjectAddArgs {
-                name: new_project.to_string(),
-            },
-        }],
-        Some(sync_project_add_todoist_response),
     )
     .await;
 }
@@ -443,4 +425,101 @@ pub enum TodoistSyncPartialCommand {
     ProjectAdd {
         args: TodoistSyncCommandProjectAddArgs,
     },
+}
+
+/// Mirror the Todoist `projects` of `user_id` as contexts, as the Todoist sync does, and return
+/// the context id of each project `source_id`.
+pub async fn mirror_todoist_projects(
+    app: &TestedApp,
+    user_id: UserId,
+    projects: &[TodoistProject],
+) -> HashMap<String, ContextId> {
+    let mut transaction = app.repository.begin().await.unwrap();
+    set_audit_actor(
+        &mut transaction,
+        &AuditActor::User {
+            via: AuditUserChannel::Web,
+        },
+    )
+    .await;
+    let upserts = app
+        .task_service
+        .read()
+        .await
+        .upsert_mirrored_contexts(
+            &mut transaction,
+            user_id,
+            IntegrationProviderKind::Todoist,
+            projects
+                .iter()
+                .map(|project| MirroredProject {
+                    source_id: ProjectId(project.id.clone()),
+                    name: project.name.clone(),
+                    parent_source_id: project.parent_id.clone().map(ProjectId),
+                    is_archived: project.is_archived,
+                    is_inbox: project.inbox_project,
+                })
+                .collect(),
+        )
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    projects
+        .iter()
+        .zip(upserts)
+        .map(|(project, upsert)| (project.id.clone(), upsert.value_ref().id))
+        .collect()
+}
+
+/// Mirror the projects of `sync_todoist_projects_response` as contexts: `1111` (the inbox) and
+/// `2222` ("Project2")
+pub async fn mirror_fixture_todoist_projects(
+    app: &TestedApp,
+    user_id: UserId,
+) -> HashMap<String, ContextId> {
+    mirror_todoist_projects(
+        app,
+        user_id,
+        &sync_todoist_projects_response().projects.unwrap(),
+    )
+    .await
+}
+
+/// Fail the test (when the `MockServer` is dropped) if any Todoist sync command adds a project:
+/// a project is never created from a name.
+pub async fn mock_todoist_no_project_add(todoist_mock_server: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path("/sync"))
+        .and(body_string_contains("project_add"))
+        .respond_with(ResponseTemplate::new(500))
+        .with_priority(1)
+        .expect(0)
+        .mount(todoist_mock_server)
+        .await;
+}
+
+/// The Todoist projects of `sync_todoist_projects_response` plus `extra` ones
+pub fn todoist_projects_with(extra: Vec<TodoistProject>) -> TodoistSyncResponse {
+    let mut response = sync_todoist_projects_response();
+    response.projects.get_or_insert_with(Vec::new).extend(extra);
+    response
+}
+
+/// A Todoist project as the sync API returns it
+pub fn todoist_project(id: &str, name: &str, parent_id: Option<&str>) -> TodoistProject {
+    TodoistProject {
+        id: id.to_string(),
+        name: name.to_string(),
+        color: "grey".to_string(),
+        parent_id: parent_id.map(str::to_string),
+        child_order: 0,
+        collapsed: false,
+        is_shared: false,
+        sync_id: None,
+        is_deleted: false,
+        is_archived: false,
+        is_favorite: false,
+        view_style: "list".to_string(),
+        inbox_project: false,
+    }
 }
