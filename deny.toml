@@ -59,3 +59,9 @@ allow = [
   "Unlicense",
   "Zlib",
 ]
+
+# ical 0.11.0 ships its Apache-2.0 text as license-file without a license field.
+[[licenses.clarify]]
+crate = "ical"
+expression = "Apache-2.0"
+license-files = [{ path = "LICENSE", hash = 0x5115d0f9 }]
