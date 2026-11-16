@@ -86,6 +86,22 @@ pub trait ContextRepository {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Vec<Context>, UniversalInboxError>;
+    /// Serialize the moves in the context tree of `user_id` until the transaction ends, so that
+    /// two concurrent moves cannot close a parent cycle
+    async fn lock_context_tree(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError>;
+    /// Rename and move a context Universal Inbox owns. A mirrored context is never written:
+    /// `Conflict`.
+    async fn update_owned_context(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        id: ContextId,
+        name: &str,
+        parent_id: Option<ContextId>,
+    ) -> Result<Context, UniversalInboxError>;
     /// The contexts `ids` and all their ancestors, so that their paths can be computed, in one
     /// query. Read-only.
     async fn list_contexts_with_ancestors(
@@ -512,6 +528,78 @@ impl ContextRepository for Repository {
         .context("Failed to fetch contexts from storage")?;
 
         rows.into_iter().map(Context::try_from).collect()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = user_id.to_string())
+    )]
+    async fn lock_context_tree(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0::bigint))")
+            .bind(format!("context-tree:{user_id}"))
+            .execute(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!("Failed to lock the context tree of user {user_id}: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::CONTEXT_ID } = id.to_string())
+    )]
+    async fn update_owned_context(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        id: ContextId,
+        name: &str,
+        parent_id: Option<ContextId>,
+    ) -> Result<Context, UniversalInboxError> {
+        sqlx::query_as!(
+            ContextRow,
+            r#"
+                UPDATE context
+                SET name = $1, parent_id = $2, updated_at = $3
+                WHERE id = $4
+                  AND binding_mirrored IS NOT TRUE
+                RETURNING
+                  id,
+                  user_id,
+                  parent_id,
+                  name,
+                  binding_provider::TEXT as "binding_provider?",
+                  binding_source_id,
+                  binding_mirrored,
+                  status::TEXT as "status!",
+                  is_inbox,
+                  note_id,
+                  created_at,
+                  updated_at
+            "#,
+            name,
+            parent_id.map(|id| id.0),
+            Utc::now().naive_utc(),
+            id.0
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .context("Failed to update context in storage")?
+        .map(Context::try_from)
+        .transpose()?
+        .ok_or_else(|| {
+            UniversalInboxError::Conflict(format!("Context {id} is not owned by Universal Inbox"))
+        })
     }
 
     #[tracing::instrument(level = "debug", skip_all)]

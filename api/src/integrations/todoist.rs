@@ -160,6 +160,11 @@ pub enum TodoistSyncCommand {
         temp_id: Uuid,
         args: TodoistSyncCommandProjectAddArgs,
     },
+    #[serde(rename = "project_delete")]
+    ProjectDelete {
+        uuid: Uuid,
+        args: TodoistSyncCommandProjectDeleteArgs,
+    },
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -230,6 +235,13 @@ pub struct TodoistSyncCommandItemMoveArgs {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct TodoistSyncCommandProjectAddArgs {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistSyncCommandProjectDeleteArgs {
+    pub id: String,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -851,6 +863,75 @@ impl TodoistService {
                 is_inbox: todoist_project.inbox_project,
             })
             .collect())
+    }
+
+    pub async fn find_access_token(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<AccessToken, UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot write to Todoist without an access token"))?;
+        Ok(access_token)
+    }
+
+    /// Create the Todoist project `name` under `parent_source_id` and return the id Todoist gave
+    /// it. The next project fetch sees it.
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub async fn create_project(
+        &self,
+        access_token: &AccessToken,
+        name: &str,
+        parent_source_id: &ProjectId,
+    ) -> Result<ProjectId, UniversalInboxError> {
+        let sync_result = self
+            .send_sync_commands(
+                vec![TodoistSyncCommand::ProjectAdd {
+                    uuid: Uuid::new_v4(),
+                    temp_id: Uuid::new_v4(),
+                    args: TodoistSyncCommandProjectAddArgs {
+                        name: name.to_string(),
+                        parent_id: Some(parent_source_id.0.clone()),
+                    },
+                }],
+                access_token,
+            )
+            .await?;
+        self.projects_cache_index.fetch_add(1, Ordering::Relaxed);
+
+        let project_id = sync_result
+            .temp_id_mapping
+            .into_values()
+            .next()
+            .context("Cannot find the id of the newly created Todoist project")?;
+        Ok(ProjectId(project_id))
+    }
+
+    /// Delete the Todoist project `source_id`: only to undo a [`TodoistService::create_project`]
+    /// whose context could not be stored
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub async fn delete_project(
+        &self,
+        access_token: &AccessToken,
+        source_id: &ProjectId,
+    ) -> Result<(), UniversalInboxError> {
+        self.send_sync_commands(
+            vec![TodoistSyncCommand::ProjectDelete {
+                uuid: Uuid::new_v4(),
+                args: TodoistSyncCommandProjectDeleteArgs {
+                    id: source_id.0.clone(),
+                },
+            }],
+            access_token,
+        )
+        .await?;
+        self.projects_cache_index.fetch_add(1, Ordering::Relaxed);
+        Ok(())
     }
 
     #[allow(clippy::blocks_in_conditions)]

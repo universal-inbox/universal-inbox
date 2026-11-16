@@ -14,6 +14,10 @@ use crate::{
     integration_connection::provider::IntegrationProviderKind, task::ProjectId, user::UserId,
 };
 
+mod ownership;
+
+pub use ownership::*;
+
 /// A named place work belongs to. Contexts form a tree and each has exactly one [`Note`].
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct Context {
@@ -45,6 +49,23 @@ impl Context {
     /// takes no new task in an archived project)
     pub fn is_todoist_destination(&self) -> bool {
         self.is_todoist_bound() && self.status == ContextStatus::Active
+    }
+
+    /// The provider that owns the `name` and `parent_id` of the context, if any. A `Tombstoned`
+    /// mirrored context keeps it: nothing can rename or move it any more.
+    pub fn mirrored_from(&self) -> Option<IntegrationProviderKind> {
+        self.binding
+            .as_ref()
+            .filter(|binding| binding.mirrored)
+            .map(|binding| binding.provider)
+    }
+
+    /// The provider that owns the children created under the context, if any: a mirrored context
+    /// whose upstream project still exists
+    fn upstream_parent_of(&self) -> Option<&ContextBinding> {
+        self.binding
+            .as_ref()
+            .filter(|binding| binding.mirrored && self.status != ContextStatus::Tombstoned)
     }
 }
 
@@ -260,6 +281,9 @@ pub struct ContextSummary {
     pub path: Vec<String>,
     pub status: ContextStatus,
     pub is_inbox: bool,
+    /// The provider that owns the name and the parent of the context, which are then read-only
+    /// in Universal Inbox. `None`: Universal Inbox owns both.
+    pub mirrored_from: Option<IntegrationProviderKind>,
 }
 
 impl ContextSummary {
@@ -297,6 +321,7 @@ pub fn summarize_contexts(contexts: &[Context]) -> HashMap<ContextId, ContextSum
                     path,
                     status: context.status,
                     is_inbox: context.is_inbox,
+                    mirrored_from: context.mirrored_from(),
                 },
             )
         })

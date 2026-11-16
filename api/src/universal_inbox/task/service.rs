@@ -77,7 +77,7 @@ pub struct ProjectSeeds(
 );
 
 pub struct TaskService {
-    repository: Arc<Repository>,
+    pub(super) repository: Arc<Repository>,
     pub todoist_service: Arc<TodoistService>,
     pub ticktick_service: Arc<TickTickService>,
     pub linear_service: Arc<LinearService>,
