@@ -9,7 +9,10 @@ use anyhow::Context;
 use serde::Deserialize;
 use tokio::sync::RwLock;
 
-use universal_inbox::{context::ContextSummary, user::UserId};
+use universal_inbox::{
+    context::{ContextId, ContextSummary},
+    user::UserId,
+};
 
 use crate::{
     middlewares::jwt_auth::Authenticated,
@@ -18,7 +21,10 @@ use crate::{
 };
 
 pub fn scope() -> Scope {
-    web::scope("/contexts").route("/search", web::get().to(search_contexts))
+    web::scope("/contexts")
+        .route("/search", web::get().to(search_contexts))
+        .service(web::resource("").route(web::post().to(create_context)))
+        .service(web::resource("/{context_id}").route(web::patch().to(patch_context)))
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,4 +69,91 @@ pub async fn search_contexts(
             CacheDirective::NoStore,
         ]))
         .body(serde_json::to_string(&contexts).context("Cannot serialize contexts")?))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateContextRequest {
+    name: String,
+    /// Absent or `null`: at the root
+    #[serde(default)]
+    parent_id: Option<ContextId>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PatchContextRequest {
+    name: Option<String>,
+    /// Absent: unchanged; `null`: to the root
+    #[serde(default, with = "::serde_with::rust::double_option")]
+    parent_id: Option<Option<ContextId>>,
+}
+
+/// Create a context. Under a parent synced from a provider, the project is created in the
+/// provider too.
+pub async fn create_context(
+    request: web::Json<CreateContextRequest>,
+    task_service: web::Data<Arc<RwLock<TaskService>>>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let request = request.into_inner();
+
+    let service = task_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while creating a context")?;
+    let context = service
+        .create_context(&mut transaction, user_id, &request.name, request.parent_id)
+        .await?;
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while creating a context")?;
+
+    Ok(HttpResponse::Created()
+        .content_type("application/json")
+        .body(serde_json::to_string(&context).context("Cannot serialize context")?))
+}
+
+/// Rename or move a context Universal Inbox owns
+pub async fn patch_context(
+    path: web::Path<ContextId>,
+    patch: web::Json<PatchContextRequest>,
+    task_service: web::Data<Arc<RwLock<TaskService>>>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let context_id = path.into_inner();
+    let patch = patch.into_inner();
+
+    let service = task_service.read().await;
+    let mut transaction = service.begin().await.context(format!(
+        "Failed to create new transaction while patching context {context_id}"
+    ))?;
+    let context = service
+        .update_context(
+            &mut transaction,
+            user_id,
+            context_id,
+            patch.name.as_deref(),
+            patch.parent_id,
+        )
+        .await?;
+    transaction.commit().await.context(format!(
+        "Failed to commit while patching context {context_id}"
+    ))?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&context).context("Cannot serialize context")?))
 }

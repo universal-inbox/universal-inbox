@@ -72,6 +72,10 @@ pub enum UniversalInboxError {
     /// another task manager. It is never created instead.
     #[error("{0}")]
     UnresolvedTaskDestination(String),
+    /// Mapped to HTTP 400. A request the caller cannot make, with a message written for the
+    /// user and shown as is (unlike `InvalidInputData`, which prefixes it).
+    #[error("{0}")]
+    InvalidRequest(String),
     #[error("Item not found: {0}")]
     ItemNotFound(String),
     #[error("Database error: {message}")]
@@ -134,12 +138,22 @@ pub enum UniversalInboxError {
     /// collapsing to 500. `kind` selects the status; `code` is a stable,
     /// machine-readable string for the web UI; `message` is human-readable.
     /// Provider-agnostic on purpose so the core error type carries no
-    /// dependency on any optional subsystem.
+    /// dependency on any optional subsystem. The `message` is never shown to the
+    /// user: for a message written for the user, see `UpstreamWriteFailed`.
     #[error("{message}")]
     UpstreamServiceError {
         kind: UpstreamErrorKind,
         code: &'static str,
         message: String,
+    },
+    /// Mapped to HTTP 502. A write the provider refused or could not take: `message` is shown
+    /// to the user as is, never the cause, which is logged. For a generic message keyed on the
+    /// status class instead, see `UpstreamServiceError`.
+    #[error("{message}")]
+    UpstreamWriteFailed {
+        message: String,
+        #[source]
+        source: Box<UniversalInboxError>,
     },
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
@@ -157,6 +171,7 @@ impl UniversalInboxError {
             Self::Conflict(_) => "Conflict",
             Self::UnsupportedAction(_) => "UnsupportedAction",
             Self::UnresolvedTaskDestination(_) => "UnresolvedTaskDestination",
+            Self::InvalidRequest(_) => "InvalidRequest",
             Self::ItemNotFound(_) => "ItemNotFound",
             Self::DatabaseError { .. } => "DatabaseError",
             Self::DatabaseUnavailable { .. } => "DatabaseUnavailable",
@@ -171,6 +186,7 @@ impl UniversalInboxError {
             Self::OAuth2InvalidGrant(_) => "OAuth2InvalidGrant",
             Self::PaymentRequired { .. } => "PaymentRequired",
             Self::UpstreamServiceError { .. } => "UpstreamServiceError",
+            Self::UpstreamWriteFailed { .. } => "UpstreamWriteFailed",
             Self::Unexpected(_) => "Unexpected",
         }
     }
@@ -206,6 +222,7 @@ impl UniversalInboxError {
             | UniversalInboxError::Conflict(_)
             | UniversalInboxError::UnsupportedAction(_)
             | UniversalInboxError::UnresolvedTaskDestination(_)
+            | UniversalInboxError::InvalidRequest(_)
             | UniversalInboxError::ItemNotFound(_)
             | UniversalInboxError::Unauthorized(_)
             | UniversalInboxError::Forbidden(_)
@@ -221,6 +238,7 @@ impl UniversalInboxError {
             | UniversalInboxError::Recoverable(_)
             | UniversalInboxError::OAuth2InvalidGrant(_)
             | UniversalInboxError::EmailDisabled
+            | UniversalInboxError::UpstreamWriteFailed { .. }
             | UniversalInboxError::Unexpected(_) => false,
         }
     }

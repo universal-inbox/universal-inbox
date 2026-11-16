@@ -5,6 +5,7 @@ use universal_inbox::{task::Task, user::UserId};
 
 use crate::universal_inbox::UniversalInboxError;
 
+pub mod context;
 pub mod destination;
 pub mod event;
 pub mod service;

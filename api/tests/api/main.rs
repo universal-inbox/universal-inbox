@@ -9,6 +9,7 @@ mod test_auth_methods;
 mod test_billing;
 mod test_cache;
 mod test_change_password;
+mod test_contexts;
 mod test_cron;
 mod test_data_encryption;
 mod test_dead_letter;

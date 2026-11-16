@@ -75,12 +75,14 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
             UniversalInboxError::UnsupportedAction(_) => StatusCode::BAD_REQUEST,
             UniversalInboxError::UnresolvedTaskDestination(_) => StatusCode::BAD_REQUEST,
+            UniversalInboxError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
             UniversalInboxError::DatabaseError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::DatabaseUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
             UniversalInboxError::SessionStoreUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             UniversalInboxError::OAuth2InvalidGrant(_) => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::PaymentRequired { .. } => StatusCode::PAYMENT_REQUIRED,
             UniversalInboxError::EmailDisabled => StatusCode::NOT_IMPLEMENTED,
+            UniversalInboxError::UpstreamWriteFailed { .. } => StatusCode::BAD_GATEWAY,
         }
     }
 
@@ -179,6 +181,10 @@ impl ResponseError for UniversalInboxError {
             }
             // A deployment choice, not an internal failure: say so.
             UniversalInboxError::EmailDisabled => json!({ "message": format!("{self}") }),
+            // Written for the user, unlike the cause it hides
+            UniversalInboxError::UpstreamWriteFailed { message, .. } => {
+                json!({ "message": message })
+            }
             _ if self.status_code().is_server_error() => {
                 json!({ "message": INTERNAL_ERROR_MESSAGE })
             }
@@ -261,6 +267,7 @@ mod tests {
             UniversalInboxError::Conflict(String::new()),
             UniversalInboxError::UnsupportedAction(String::new()),
             UniversalInboxError::UnresolvedTaskDestination(String::new()),
+            UniversalInboxError::InvalidRequest(String::new()),
             UniversalInboxError::ItemNotFound(String::new()),
             UniversalInboxError::DatabaseError {
                 source: sqlx::Error::PoolTimedOut,
@@ -287,6 +294,10 @@ mod tests {
                 details: json!({}),
             },
             UniversalInboxError::EmailDisabled,
+            UniversalInboxError::UpstreamWriteFailed {
+                message: String::new(),
+                source: Box::new(UniversalInboxError::Unexpected(anyhow::anyhow!(""))),
+            },
             UniversalInboxError::Unexpected(anyhow::anyhow!("")),
         ]
         .into_iter()
