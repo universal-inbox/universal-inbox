@@ -39,6 +39,27 @@ pub async fn resolve_todoist_context(
     user_id: UserId,
     context_id: ContextId,
 ) -> Result<(Context, ProjectId), UniversalInboxError> {
+    resolve_context(
+        repository,
+        executor,
+        user_id,
+        context_id,
+        Some(IntegrationProviderKind::Todoist),
+    )
+    .await
+}
+
+/// The context `context_id` of the user a task can be created in or moved to (see
+/// [`Context::task_destination_provider`]), with the project id it is bound to: a Todoist
+/// project, or a TickTick list (`inbox` for the inbox). A TickTick folder holds no task.
+/// `task_manager`: the task manager the task lives in, if known; otherwise the context's own.
+pub async fn resolve_context(
+    repository: &Repository,
+    executor: &mut Transaction<'_, Postgres>,
+    user_id: UserId,
+    context_id: ContextId,
+    task_manager: Option<IntegrationProviderKind>,
+) -> Result<(Context, ProjectId), UniversalInboxError> {
     let context = repository
         .get_context(executor, context_id)
         .await?
@@ -49,14 +70,27 @@ pub async fn resolve_todoist_context(
             ))
         })?;
     let name = &context.name;
+    let bound_to = context.binding.as_ref().map(|binding| binding.provider);
+    let Some(task_manager) = task_manager.or(bound_to) else {
+        return Err(UniversalInboxError::UnresolvedTaskDestination(format!(
+            "Project \"{name}\" is not synced from a task manager"
+        )));
+    };
     let reason = match (&context.binding, context.status) {
-        (Some(binding), ContextStatus::Active) if context.is_todoist_destination() => {
+        (Some(binding), ContextStatus::Active)
+            if context.task_destination_provider() == Some(task_manager) =>
+        {
             let source_id = binding.source_id.clone();
             return Ok((context, source_id));
         }
-        _ if !context.is_todoist_bound() => format!("Project \"{name}\" is not a Todoist project"),
-        (_, ContextStatus::Archived) => format!("Project \"{name}\" is archived in Todoist"),
-        _ => format!("Project \"{name}\" no longer exists in Todoist"),
+        _ if bound_to != Some(task_manager) => {
+            format!("Project \"{name}\" is not a {task_manager} project")
+        }
+        _ if context.is_ticktick_folder() => format!(
+            "‘{name}’ is a TickTick folder, which holds lists, not tasks. Choose one of its lists."
+        ),
+        (_, ContextStatus::Archived) => format!("Project \"{name}\" is archived in {task_manager}"),
+        _ => format!("Project \"{name}\" no longer exists in {task_manager}"),
     };
     Err(UniversalInboxError::UnresolvedTaskDestination(reason))
 }

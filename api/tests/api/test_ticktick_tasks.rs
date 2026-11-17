@@ -482,6 +482,7 @@ mod patch_task {
                 priority: ticktick_item.priority.into(),
                 task_provider_kind: Some(IntegrationProviderKind::TickTick),
                 time_config: None,
+                parent_id: None,
             }),
         )
         .await;
@@ -693,6 +694,7 @@ mod patch_task {
                 priority: ticktick_item.priority.into(),
                 task_provider_kind: Some(IntegrationProviderKind::TickTick),
                 time_config: Some(time_config),
+                parent_id: None,
             }),
         )
         .await;

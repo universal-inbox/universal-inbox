@@ -25,12 +25,14 @@ pub enum ContextCreation {
 #[derive(Debug, PartialEq, Clone, Copy, Eq)]
 pub enum UpstreamProvider {
     Todoist,
+    TickTick,
 }
 
 impl From<UpstreamProvider> for IntegrationProviderKind {
     fn from(provider: UpstreamProvider) -> Self {
         match provider {
             UpstreamProvider::Todoist => IntegrationProviderKind::Todoist,
+            UpstreamProvider::TickTick => IntegrationProviderKind::TickTick,
         }
     }
 }
@@ -39,17 +41,40 @@ impl UpstreamProvider {
     fn of(provider: IntegrationProviderKind) -> Option<Self> {
         match provider {
             IntegrationProviderKind::Todoist => Some(UpstreamProvider::Todoist),
+            IntegrationProviderKind::TickTick => Some(UpstreamProvider::TickTick),
             _ => None,
         }
     }
 }
 
+/// Why a provider could not create a project
+#[derive(Debug, PartialEq, Clone, Copy, Eq)]
+pub enum UpstreamCreationFailure {
+    /// Any failure the provider does not tell apart
+    Unknown,
+    /// TickTick answered a list creation with its unspecific server error, which is what it
+    /// answers once the plan's list limit is reached. The limit depends on the plan: it is never
+    /// assumed.
+    ListLimitReachedMaybe,
+}
+
 /// The message shown when `provider` could not create the project `name`: nothing was stored
-pub fn upstream_creation_failed_message(name: &str, provider: UpstreamProvider) -> String {
+pub fn upstream_creation_failed_message(
+    name: &str,
+    provider: UpstreamProvider,
+    failure: UpstreamCreationFailure,
+) -> String {
     let provider = IntegrationProviderKind::from(provider);
-    format!(
-        "Couldn’t create ‘{name}’ in {provider}, so nothing was created here. Please try again."
-    )
+    match failure {
+        UpstreamCreationFailure::Unknown => format!(
+            "Couldn’t create ‘{name}’ in {provider}, so nothing was created here. Please try again."
+        ),
+        UpstreamCreationFailure::ListLimitReachedMaybe => format!(
+            "Couldn’t create ‘{name}’ in {provider}, so nothing was created here. Your \
+             {provider} plan may have reached its list limit: if so, remove a list in \
+             {provider} first. Otherwise, please try again."
+        ),
+    }
 }
 
 /// A write to a context refused by its ownership. The message is shown to the user as is.
@@ -85,6 +110,11 @@ pub enum ContextWriteError {
     ParentIsDescendant {
         name: String,
         parent: String,
+    },
+    /// TickTick lists do not nest. `folder`: the folder holding the list, if any.
+    UnderTickTickList {
+        list: String,
+        folder: Option<String>,
     },
 }
 
@@ -135,6 +165,20 @@ impl fmt::Display for ContextWriteError {
                 "‘{name}’ can’t be moved under ‘{parent}’, because ‘{parent}’ is inside it. \
                  Choose another parent."
             ),
+            ContextWriteError::UnderTickTickList {
+                list,
+                folder: Some(folder),
+            } => write!(
+                f,
+                "‘{list}’ is a TickTick list, and TickTick lists can’t hold other lists. Create \
+                 the new list under its folder ‘{folder}’ instead."
+            ),
+            ContextWriteError::UnderTickTickList { list, folder: None } => write!(
+                f,
+                "‘{list}’ is a TickTick list, and TickTick lists can’t hold other lists. Create \
+                 the new list under a TickTick folder, or create it in TickTick and it will show \
+                 here after the next sync."
+            ),
         }
     }
 }
@@ -142,9 +186,12 @@ impl fmt::Display for ContextWriteError {
 impl std::error::Error for ContextWriteError {}
 
 /// Where a context is created under `parent` (`None`: at the root): the provider owns the
-/// children of a mirrored parent. An archived parent takes no child.
+/// children of a mirrored parent. An archived parent takes no child, and a TickTick list none
+/// either: TickTick lists only sit in folders. `parent_of_parent` names the folder holding such a
+/// list.
 pub fn plan_context_creation(
     parent: Option<&Context>,
+    parent_of_parent: Option<&Context>,
 ) -> Result<ContextCreation, ContextWriteError> {
     let Some(parent) = parent else {
         return Ok(ContextCreation::Local);
@@ -164,6 +211,14 @@ pub fn plan_context_creation(
     let Some(binding) = upstream else {
         return Ok(ContextCreation::Local);
     };
+    if parent.is_ticktick_list() {
+        return Err(ContextWriteError::UnderTickTickList {
+            list: parent.name.clone(),
+            folder: parent_of_parent
+                .filter(|folder| folder.is_ticktick_folder())
+                .map(|folder| folder.name.clone()),
+        });
+    }
     match UpstreamProvider::of(binding.provider) {
         Some(provider) => Ok(ContextCreation::Upstream {
             provider,
@@ -295,7 +350,10 @@ mod tests {
 
     #[test]
     fn test_a_root_context_is_created_locally() {
-        assert_eq!(plan_context_creation(None), Ok(ContextCreation::Local));
+        assert_eq!(
+            plan_context_creation(None, None),
+            Ok(ContextCreation::Local)
+        );
     }
 
     #[rstest]
@@ -304,7 +362,7 @@ mod tests {
     fn test_a_child_of_a_local_parent_is_created_locally(#[case] status: ContextStatus) {
         let parent = with_status(unbound("Home"), status);
         assert_eq!(
-            plan_context_creation(Some(&parent)),
+            plan_context_creation(Some(&parent), None),
             Ok(ContextCreation::Local)
         );
     }
@@ -313,7 +371,7 @@ mod tests {
     fn test_a_child_of_a_tombstoned_mirrored_parent_is_created_locally() {
         let parent = with_status(mirrored("Gone"), ContextStatus::Tombstoned);
         assert_eq!(
-            plan_context_creation(Some(&parent)),
+            plan_context_creation(Some(&parent), None),
             Ok(ContextCreation::Local)
         );
     }
@@ -322,7 +380,7 @@ mod tests {
     fn test_a_child_of_a_not_mirrored_bound_parent_is_created_locally() {
         let parent = context("Shared", Some((TODOIST, false)));
         assert_eq!(
-            plan_context_creation(Some(&parent)),
+            plan_context_creation(Some(&parent), None),
             Ok(ContextCreation::Local)
         );
     }
@@ -331,7 +389,7 @@ mod tests {
     fn test_a_child_of_an_active_mirrored_parent_is_created_upstream() {
         let parent = mirrored("Work");
         assert_eq!(
-            plan_context_creation(Some(&parent)),
+            plan_context_creation(Some(&parent), None),
             Ok(ContextCreation::Upstream {
                 provider: UpstreamProvider::Todoist,
                 parent_source_id: "Work-id".into(),
@@ -342,7 +400,7 @@ mod tests {
     #[test]
     fn test_an_archived_parent_takes_no_child() {
         let parent = with_status(mirrored("Old"), ContextStatus::Archived);
-        let err = plan_context_creation(Some(&parent)).unwrap_err();
+        let err = plan_context_creation(Some(&parent), None).unwrap_err();
         assert_eq!(
             err,
             ContextWriteError::ArchivedMirroredParent {
@@ -357,7 +415,7 @@ mod tests {
         );
 
         let parent = with_status(unbound("Old"), ContextStatus::Archived);
-        let err = plan_context_creation(Some(&parent)).unwrap_err();
+        let err = plan_context_creation(Some(&parent), None).unwrap_err();
         assert_eq!(
             err.to_string(),
             "‘Old’ is archived, so nothing can be added under it. Choose another parent."
@@ -367,28 +425,101 @@ mod tests {
     #[test]
     fn test_a_failed_upstream_creation_names_the_provider() {
         assert_eq!(
-            upstream_creation_failed_message("Launch", UpstreamProvider::Todoist),
+            upstream_creation_failed_message(
+                "Launch",
+                UpstreamProvider::Todoist,
+                UpstreamCreationFailure::Unknown
+            ),
             "Couldn’t create ‘Launch’ in Todoist, so nothing was created here. Please try again."
         );
     }
 
     #[test]
-    fn test_a_child_of_a_ticktick_mirrored_parent_cannot_be_created() {
-        let parent = context("Errands", Some((IntegrationProviderKind::TickTick, true)));
-        let err = plan_context_creation(Some(&parent)).unwrap_err();
+    fn test_a_list_limit_failure_names_the_limit_without_a_number() {
+        assert_eq!(
+            upstream_creation_failed_message(
+                "Trips",
+                UpstreamProvider::TickTick,
+                UpstreamCreationFailure::ListLimitReachedMaybe
+            ),
+            "Couldn’t create ‘Trips’ in TickTick, so nothing was created here. Your TickTick \
+             plan may have reached its list limit: if so, remove a list in TickTick first. \
+             Otherwise, please try again."
+        );
+    }
+
+    fn ticktick(name: &str, source_id: &str) -> Context {
+        let mut context = context(name, None);
+        context.binding = Some(
+            ContextBinding::new(
+                IntegrationProviderKind::TickTick,
+                source_id.to_string().into(),
+                true,
+            )
+            .unwrap(),
+        );
+        context
+    }
+
+    #[test]
+    fn test_a_child_of_a_ticktick_folder_is_created_upstream() {
+        let folder = ticktick("Personal", "group:f1");
+        assert_eq!(
+            plan_context_creation(Some(&folder), None),
+            Ok(ContextCreation::Upstream {
+                provider: UpstreamProvider::TickTick,
+                parent_source_id: "group:f1".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn test_a_ticktick_list_in_a_folder_takes_no_child() {
+        let folder = ticktick("Personal", "group:f1");
+        let list = under(ticktick("Errands", "l1"), &folder);
+        let err = plan_context_creation(Some(&list), Some(&folder)).unwrap_err();
         assert_eq!(
             err,
-            ContextWriteError::UpstreamCreationUnsupported {
-                parent: "Errands".to_string(),
-                provider: IntegrationProviderKind::TickTick
+            ContextWriteError::UnderTickTickList {
+                list: "Errands".to_string(),
+                folder: Some("Personal".to_string())
             }
         );
         assert_eq!(
             err.to_string(),
-            "‘Errands’ is synced from TickTick, and Universal Inbox can’t add projects to \
-             TickTick yet. Create the project under ‘Errands’ in TickTick and it will show here \
+            "‘Errands’ is a TickTick list, and TickTick lists can’t hold other lists. Create the \
+             new list under its folder ‘Personal’ instead."
+        );
+    }
+
+    #[rstest]
+    #[case::at_the_root(None)]
+    #[case::under_a_local_context(Some(unbound("Home")))]
+    fn test_a_ticktick_list_without_a_folder_takes_no_child(#[case] above: Option<Context>) {
+        let list = ticktick("Errands", "l1");
+        let err = plan_context_creation(Some(&list), above.as_ref()).unwrap_err();
+        assert_eq!(
+            err,
+            ContextWriteError::UnderTickTickList {
+                list: "Errands".to_string(),
+                folder: None
+            }
+        );
+        assert_eq!(
+            err.to_string(),
+            "‘Errands’ is a TickTick list, and TickTick lists can’t hold other lists. Create the \
+             new list under a TickTick folder, or create it in TickTick and it will show here \
              after the next sync."
         );
+    }
+
+    #[test]
+    fn test_the_ticktick_inbox_takes_no_child() {
+        let inbox = ticktick("Inbox", "inbox");
+        assert!(matches!(
+            plan_context_creation(Some(&inbox), None),
+            Err(ContextWriteError::UnderTickTickList { folder: None, .. })
+        ));
     }
 
     #[rstest]

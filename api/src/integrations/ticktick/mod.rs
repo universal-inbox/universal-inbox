@@ -32,16 +32,19 @@ use universal_inbox::{
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
         CreateOrUpdateTaskRequest, DueDate, ProjectId, ProjectSummary, TaskCreation,
-        TaskCreationConfig, TaskDestination, TaskSource, TaskSourceKind, TaskStatus,
+        TaskCreationConfig, TaskDestination, TaskId, TaskSource, TaskSourceKind, TaskStatus,
         integrations::ticktick::{TICKTICK_INBOX_PROJECT, TickTickProject},
         is_ticktick_inbox_project_id,
         service::TaskPatch,
     },
     third_party::{
         integrations::ticktick::{
-            TickTickItem, TickTickItemPriority, TickTickTag, TickTickTaskStatus,
+            TickTickItem, TickTickItemPriority, TickTickList, TickTickProjectGroup, TickTickTag,
+            TickTickTaskStatus,
         },
-        item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
+        item::{
+            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemSourceKind,
+        },
     },
     user::UserId,
     utils::default_value::DefaultValue,
@@ -56,12 +59,15 @@ use crate::{
         task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
         third_party::ThirdPartyItemSourceService,
     },
+    repository::{Repository, context::ContextRepository, task::TaskRepository},
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+        task::destination,
     },
     utils::api::{ApiClient, ApiClientError},
 };
 
+pub mod contexts;
 pub mod oauth;
 
 #[derive(Clone)]
@@ -69,6 +75,7 @@ pub struct TickTickService {
     pub ticktick_base_url: String,
     pub ticktick_base_path: String,
     pub projects_cache_index: Arc<AtomicU64>,
+    pub repository: Arc<Repository>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     pub max_retry_duration: Duration,
 }
@@ -131,6 +138,9 @@ pub struct TickTickCreateTaskRequest {
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
+    /// Undocumented upstream, kept by TickTick
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub start_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -161,7 +171,6 @@ pub struct TickTickUpdateTaskRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<TickTickItemPriority>,
 }
-
 /// Request body for completing a task via TickTick API
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -223,6 +232,7 @@ impl TickTickService {
 
     pub fn new(
         ticktick_base_url: Option<String>,
+        repository: Arc<Repository>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         max_retry_duration: Duration,
     ) -> Result<TickTickService, UniversalInboxError> {
@@ -240,6 +250,7 @@ impl TickTickService {
                 ticktick_base_path
             },
             projects_cache_index: Arc::new(AtomicU64::new(0)),
+            repository,
             integration_connection_service,
             max_retry_duration,
         })
@@ -256,11 +267,20 @@ impl TickTickService {
                 group_id: None,
                 sort_order: None,
                 view_mode: None,
+                closed: None,
             })
             .collect();
         Mock::given(method("GET"))
             .and(path("/project"))
             .respond_with(ResponseTemplate::new(200).set_body_json(mock_projects))
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/project/group"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json::<Vec<TickTickProjectGroup>>(vec![]),
+            )
             .mount(mock_server)
             .await;
 
@@ -307,6 +327,23 @@ impl TickTickService {
         &self,
         access_token: &AccessToken,
     ) -> Result<ApiClient, UniversalInboxError> {
+        self.build_ticktick_client_with_retries(access_token, self.max_retry_duration)
+    }
+
+    /// A client that never retries: for a write that is not idempotent, such as a list creation,
+    /// which a retried server error could create twice
+    fn build_ticktick_client_without_retries(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<ApiClient, UniversalInboxError> {
+        self.build_ticktick_client_with_retries(access_token, Duration::ZERO)
+    }
+
+    fn build_ticktick_client_with_retries(
+        &self,
+        access_token: &AccessToken,
+        max_retry_duration: Duration,
+    ) -> Result<ApiClient, UniversalInboxError> {
         let mut headers = HeaderMap::new();
 
         let mut auth_header_value: HeaderValue =
@@ -321,8 +358,34 @@ impl TickTickService {
         ApiClient::build(
             headers,
             otel_known_paths(&self.ticktick_base_path),
-            self.max_retry_duration,
+            max_retry_duration,
         )
+    }
+
+    /// The user's TickTick access token, `None` without a TickTick connection
+    pub async fn optional_access_token(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Option<AccessToken>, UniversalInboxError> {
+        Ok(self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::TickTick, user_id)
+            .await?
+            .map(|(access_token, _)| access_token))
+    }
+
+    /// The user's TickTick access token, which a call to TickTick needs
+    pub async fn find_access_token(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<AccessToken, UniversalInboxError> {
+        self.optional_access_token(executor, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot call TickTick without an access token").into())
     }
 
     /// List all projects for the authenticated user
@@ -554,7 +617,6 @@ impl TickTickService {
             priority: source.priority.into(),
             due_at: DefaultValue::new(None, Some(source.get_due_date())),
             tags: source.tag_names(),
-            parent_id: None,
             project: DefaultValue::new(TICKTICK_INBOX_PROJECT.to_string(), Some(project_name)),
             context_id: DefaultValue::new(None, None),
             is_recurring: source.is_recurring(),
@@ -676,13 +738,26 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
                 .unwrap_or_else(|| "No project".to_string())
         };
 
-        Ok(TickTickService::build_task_with_project_name(
+        let mut task_request = TickTickService::build_task_with_project_name(
             source,
             project_name,
             source_third_party_item,
             user_id,
         )
-        .await)
+        .await;
+        // Bound by id, never by name: TickTick owns the binding, so a move in TickTick rebinds
+        // the task; no context yet leaves the binding as it is, the next sync's backfill binds it
+        let context_id = self
+            .repository
+            .get_mirrored_context_id(
+                executor,
+                user_id,
+                IntegrationProviderKind::TickTick,
+                &TickTickList::of_project_id(&source.project_id).source_id(),
+            )
+            .await?;
+        task_request.context_id = DefaultValue::new(context_id, context_id.map(Some));
+        Ok(task_request)
     }
 
     #[allow(clippy::blocks_in_conditions)]
@@ -801,13 +876,7 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
             return Ok(());
         }
 
-        let (access_token, _) = self
-            .integration_connection_service
-            .read()
-            .await
-            .find_access_token(executor, IntegrationProviderKind::TickTick, user_id)
-            .await?
-            .ok_or_else(|| anyhow!("Cannot update a TickTick task without an access token"))?;
+        let access_token = self.find_access_token(executor, user_id).await?;
 
         // TickTick's `POST /open/v1/task/{taskId}` endpoint requires the task's
         // `projectId` in the body; sending an empty string makes the API create
@@ -815,12 +884,13 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
         // project_id either from an explicit move, or from the stored
         // TickTickItem data on the third-party item.
         let ticktick_item: TickTickItem = third_party_item.clone().try_into()?;
-        let project_id = match Self::destination_project_id(patch.destination.as_ref())? {
-            Some(project_id) => {
-                self.resolve_project(project_id, user_id, &access_token)
+        let project_id = match self
+            .resolve_destination(executor, patch.destination.as_ref(), user_id, &access_token)
+            .await?
+        {
+            Some(list) => {
+                self.project_id_to_move_to(list, &ticktick_item.project_id, &access_token)
                     .await?
-                    .source_id
-                    .0
             }
             None => ticktick_item.project_id.clone(),
         };
@@ -863,22 +933,29 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
         task: &TaskCreation,
         user_id: UserId,
     ) -> Result<TickTickItem, UniversalInboxError> {
-        let (access_token, _) = self
-            .integration_connection_service
-            .read()
-            .await
-            .find_access_token(executor, IntegrationProviderKind::TickTick, user_id)
-            .await?
-            .ok_or_else(|| anyhow!("Cannot create a TickTick task without an access token"))?;
+        let access_token = self.find_access_token(executor, user_id).await?;
 
-        let project_id = match Self::destination_project_id(task.destination.as_ref())? {
-            Some(project_id) => Some(
-                self.resolve_project(project_id, user_id, &access_token)
-                    .await?
-                    .source_id
-                    .0,
-            ),
+        let list = self
+            .resolve_destination(executor, task.destination.as_ref(), user_id, &access_token)
+            .await?;
+        let parent = match task.parent_id {
+            Some(parent_id) => Some(self.parent_item(executor, parent_id, user_id).await?),
             None => None,
+        };
+        // A subtask lives in its parent's list
+        let project_id = match (list, &parent) {
+            (Some(list), Some(parent))
+                if list != TickTickList::of_project_id(&parent.project_id) =>
+            {
+                return Err(UniversalInboxError::UnresolvedTaskDestination(format!(
+                    "A subtask goes in the list of its parent ‘{}’",
+                    parent.title
+                )));
+            }
+            (_, Some(parent)) => Some(parent.project_id.clone()),
+            // TickTick creates a task without a list in the inbox
+            (Some(TickTickList::Inbox) | None, None) => None,
+            (Some(TickTickList::List(id)), None) => Some(id.0),
         };
 
         // Only attach the timezone when the due is a timezone-aware datetime
@@ -914,6 +991,7 @@ impl ThirdPartyTaskSourceService<TickTickItem> for TickTickService {
             title: task.title.clone(),
             content: task.body.clone(),
             project_id,
+            parent_id: parent.map(|parent| parent.id),
             start_date,
             due_date,
             all_day,
@@ -964,20 +1042,96 @@ impl TickTickService {
             .collect())
     }
 
-    /// The TickTick project id of `destination`. `None` without a destination. A context is
-    /// refused: TickTick projects are not mirrored as contexts yet.
-    fn destination_project_id(
+    /// The TickTick list `destination` points to, by id: a TickTick project id, or the list a
+    /// context mirrors. `None` without a destination. A TickTick folder holds no task.
+    async fn resolve_destination(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
         destination: Option<&TaskDestination>,
-    ) -> Result<Option<&ProjectId>, UniversalInboxError> {
+        user_id: UserId,
+        access_token: &AccessToken,
+    ) -> Result<Option<TickTickList>, UniversalInboxError> {
         match destination {
             None => Ok(None),
-            Some(TaskDestination::TickTickProject(project_id)) => Ok(Some(project_id)),
-            Some(destination @ TaskDestination::Context(_)) => {
-                Err(UniversalInboxError::UnresolvedTaskDestination(format!(
-                    "A TickTick task cannot go to {destination}"
-                )))
+            Some(TaskDestination::TickTickProject(project_id)) => {
+                let project = self
+                    .resolve_project(project_id, user_id, access_token)
+                    .await?;
+                Ok(Some(TickTickList::of_project_id(&project.source_id.0)))
+            }
+            Some(TaskDestination::Context(context_id)) => {
+                let (_, source_id) = destination::resolve_context(
+                    &self.repository,
+                    executor,
+                    user_id,
+                    *context_id,
+                    Some(IntegrationProviderKind::TickTick),
+                )
+                .await?;
+                Ok(Some(TickTickList::of_source_id(&source_id)))
             }
         }
+    }
+
+    /// The project id to move a task to `list`: TickTick wants the user's own inbox id
+    /// (`inbox<digits>`), read from a task already in it, `current_project_id` first. TickTick
+    /// lists no inbox: an empty inbox gives TickTick's `inbox` alias.
+    async fn project_id_to_move_to(
+        &self,
+        list: TickTickList,
+        current_project_id: &str,
+        access_token: &AccessToken,
+    ) -> Result<String, UniversalInboxError> {
+        let TickTickList::List(id) = list else {
+            if is_ticktick_inbox_project_id(current_project_id) {
+                return Ok(current_project_id.to_string());
+            }
+            let inbox_alias = TickTickList::Inbox.source_id().0;
+            let inbox_data: TickTickProjectData = self
+                .build_ticktick_client(access_token)?
+                .get(self.endpoint(&["project", &inbox_alias, "data"])?)
+                .await
+                .context("Failed to read the TickTick inbox")?;
+            return Ok(inbox_data
+                .tasks
+                .into_iter()
+                .map(|task| task.project_id)
+                .find(|project_id| is_ticktick_inbox_project_id(project_id))
+                .unwrap_or(inbox_alias));
+        };
+        Ok(id.0)
+    }
+
+    /// The TickTick task behind the user's task `parent_id`: its own, or the one it was synced to
+    async fn parent_item(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        parent_id: TaskId,
+        user_id: UserId,
+    ) -> Result<TickTickItem, UniversalInboxError> {
+        let parent = self
+            .repository
+            .get_one_task(executor, parent_id)
+            .await?
+            .filter(|task| task.user_id == user_id)
+            .ok_or_else(|| {
+                UniversalInboxError::UnresolvedTaskDestination(format!(
+                    "Task {parent_id} does not exist"
+                ))
+            })?;
+        [Some(&parent.source_item), parent.sink_item.as_ref()]
+            .into_iter()
+            .flatten()
+            .find_map(|item| match &item.data {
+                ThirdPartyItemData::TickTickItem(ticktick_item) => Some(*ticktick_item.clone()),
+                _ => None,
+            })
+            .ok_or_else(|| {
+                UniversalInboxError::UnresolvedTaskDestination(format!(
+                    "‘{}’ is not a TickTick task, so a TickTick task can’t go under it",
+                    parent.title
+                ))
+            })
     }
 
     /// The TickTick project `project_id` (TickTick projects are not mirrored as contexts yet).
@@ -1147,6 +1301,8 @@ mod tests {
             tags,
             created_time: None,
             modified_time: None,
+            parent_id: None,
+            child_ids: None,
         }
     }
 
@@ -1231,6 +1387,8 @@ fn otel_known_paths(base_path: &str) -> Vec<String> {
         "/task/{task_id}",
         "/tag",
         "/project",
+        "/project/group",
+        "/project/{project_id}",
         "/project/{project_id}/data",
         "/project/{project_id}/task/{task_id}",
         "/project/{project_id}/task/{task_id}/complete",
@@ -1261,6 +1419,8 @@ mod endpoint_tests {
     #[case("/open/v1/task/t1", "/open/v1/task/{task_id}")]
     #[case("/open/v1/tag", "/open/v1/tag")]
     #[case("/open/v1/project", "/open/v1/project")]
+    #[case("/open/v1/project/group", "/open/v1/project/group")]
+    #[case("/open/v1/project/p1", "/open/v1/project/{project_id}")]
     #[case("/open/v1/project/inbox/data", "/open/v1/project/{project_id}/data")]
     #[case("/open/v1/project/p1/data", "/open/v1/project/{project_id}/data")]
     #[case(

@@ -80,7 +80,7 @@ async fn sync_todoist_contexts(app: &AuthenticatedApp) {
     with_system_actor(
         "SyncTasks",
         Some(IntegrationProviderKind::Todoist),
-        task_service.sync_todoist_project_contexts(app.user.id),
+        task_service.sync_project_contexts(app.user.id, IntegrationProviderKind::Todoist),
     )
     .await
     .unwrap();
@@ -173,6 +173,7 @@ fn task_creation(destination: Option<TaskDestination>) -> TaskCreation {
         priority: TaskPriority::P4,
         task_provider_kind: Some(IntegrationProviderKind::Todoist),
         time_config: None,
+        parent_id: None,
     }
 }
 

@@ -11,6 +11,7 @@ use tokio::sync::RwLock;
 
 use universal_inbox::{
     context::{ContextId, ContextSummary},
+    integration_connection::provider::IntegrationProviderKind,
     user::UserId,
 };
 
@@ -32,6 +33,9 @@ pub struct SearchContextsRequest {
     /// Matched as a plain, case-insensitive substring on each segment of the path. Absent or
     /// empty: every context.
     matches: Option<String>,
+    /// Only the contexts a task of this task manager can go to. Absent: those of every task
+    /// manager.
+    provider_kind: Option<IntegrationProviderKind>,
 }
 
 /// The contexts a task can be bound to, with their path: what the project picker lists
@@ -58,6 +62,7 @@ pub async fn search_contexts(
                 .matches
                 .as_deref()
                 .unwrap_or_default(),
+            search_contexts_request.provider_kind,
             user_id,
         )
         .await?;

@@ -1316,7 +1316,7 @@ mod project_contexts {
         with_system_actor(
             "SyncTasks",
             Some(IntegrationProviderKind::Todoist),
-            task_service.sync_todoist_project_contexts(app.user.id),
+            task_service.sync_project_contexts(app.user.id, IntegrationProviderKind::Todoist),
         )
         .await
         .unwrap();
@@ -1411,7 +1411,11 @@ mod project_contexts {
         let result = app
             .app
             .repository
-            .backfill_todoist_task_context_ids(&mut transaction, app.user.id)
+            .backfill_task_context_ids(
+                &mut transaction,
+                app.user.id,
+                IntegrationProviderKind::Todoist,
+            )
             .await
             .unwrap();
         transaction.commit().await.unwrap();
@@ -1678,7 +1682,6 @@ mod project_contexts {
                     priority: task.priority,
                     due_at: DefaultValue::new(task.due_at.clone(), None),
                     tags: task.tags.clone(),
-                    parent_id: task.parent_id,
                     project: DefaultValue::new(task.project.clone(), None),
                     context_id: DefaultValue::new(None, None),
                     is_recurring: task.is_recurring,

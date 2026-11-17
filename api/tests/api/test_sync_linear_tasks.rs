@@ -1811,6 +1811,8 @@ mod sink_provider_resolution {
             tags: None,
             created_time: None,
             modified_time: None,
+            parent_id: None,
+            child_ids: None,
         }
     }
 

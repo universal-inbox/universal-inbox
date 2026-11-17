@@ -15,7 +15,10 @@ use universal_inbox::{
         CreateOrUpdateTaskRequest, DueDate, Task, TaskId, TaskPriority, TaskProject,
         TaskSourceKind, TaskStatus, TaskSummary, service::TaskPatch,
     },
-    third_party::item::ThirdPartyItemData,
+    third_party::{
+        integrations::ticktick::TickTickList,
+        item::{ThirdPartyItemData, ThirdPartyItemKind},
+    },
     user::UserId,
 };
 
@@ -96,16 +99,31 @@ pub trait TaskRepository {
         executor: &mut Transaction<'_, Postgres>,
         task: Box<CreateOrUpdateTaskRequest>,
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError>;
-    /// Bind the user's tasks living in Todoist to the context of their project, by id: the
-    /// task's Todoist item (its sink, or its source for a Todoist task) carries the Todoist
-    /// `project_id` the context is bound on. A task's
-    /// `context_id` is set or corrected, never cleared, so a rerun changes nothing. Never matches
-    /// on a name.
-    async fn backfill_todoist_task_context_ids(
+    /// Bind the user's tasks living in `task_manager` (Todoist or TickTick) to the context of
+    /// their project, by id: the task's item in it (its sink, or its source for a task of that
+    /// task manager) carries the `project_id` the context is bound on. A task's `context_id` is
+    /// set or corrected, never cleared, so a rerun changes nothing. Never matches on a name.
+    async fn backfill_task_context_ids(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
+        task_manager: IntegrationProviderKind,
     ) -> Result<TaskContextBackfill, UniversalInboxError>;
+    /// The user's tasks synced from `kind`, by the id of their source item upstream
+    async fn find_task_ids_by_source_ids(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        kind: TaskSourceKind,
+        source_ids: &[String],
+    ) -> Result<HashMap<String, TaskId>, UniversalInboxError>;
+    /// Set the parent of the task `task_id`. `false`: it already had that parent.
+    async fn set_task_parent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        task_id: TaskId,
+        parent_id: Option<TaskId>,
+    ) -> Result<bool, UniversalInboxError>;
     /// `project`: the project to move the task to, resolved by the service from
     /// `patch.destination`, which the repository does not read
     async fn update_task(
@@ -903,7 +921,6 @@ impl TaskRepository for Repository {
         let completed_at = task_request
             .completed_at
             .map(|completed_at| completed_at.naive_utc());
-        let parent_id = task_request.parent_id.map(|id| id.0);
 
         if let Some(existing_task) = existing_task {
             // The request only *asserts* the fields the integration owns. For the
@@ -930,6 +947,8 @@ impl TaskRepository for Repository {
                     .context_id
                     .clone()
                     .value_or(existing_task.context_id),
+                // Set by the parent pass of the sync once the batch is stored, never here
+                parent_id: existing_task.parent_id,
                 ..(*task_request.clone()).into()
             };
 
@@ -995,9 +1014,6 @@ impl TaskRepository for Repository {
             separated
                 .push("tags = ")
                 .push_bind_unseparated(&task_request.tags);
-            separated
-                .push("parent_id = ")
-                .push_bind_unseparated(parent_id);
             if task_request.project.has_value() {
                 separated
                     .push("project = ")
@@ -1092,7 +1108,8 @@ impl TaskRepository for Repository {
                     priority as i32,
                     Json(task_request.due_at.clone().into_value()) as Json<Option<DueDate>>,
                     &task_request.tags,
-                    parent_id,
+                    // A new task starts at the top level: the nest pass of the sync sets its parent
+                    None::<Uuid>,
                     task_request.project.clone().into_value(),
                     task_request.is_recurring,
                     task_request.created_at.naive_utc(),
@@ -1125,11 +1142,21 @@ impl TaskRepository for Repository {
         skip_all,
         fields({ attr::USER_ID } = user_id.to_string())
     )]
-    async fn backfill_todoist_task_context_ids(
+    async fn backfill_task_context_ids(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
+        task_manager: IntegrationProviderKind,
     ) -> Result<TaskContextBackfill, UniversalInboxError> {
+        let item_kind = match task_manager {
+            IntegrationProviderKind::Todoist => ThirdPartyItemKind::TodoistItem,
+            IntegrationProviderKind::TickTick => ThirdPartyItemKind::TickTickItem,
+            _ => {
+                return Err(UniversalInboxError::Unexpected(anyhow!(
+                    "{task_manager} tasks are not bound to contexts"
+                )));
+            }
+        };
         // The project id sits in the encrypted item data, out of SQL's reach: decrypt in
         // application code and match on the id only.
         let contexts: HashMap<String, Uuid> = sqlx::query!(
@@ -1137,23 +1164,24 @@ impl TaskRepository for Repository {
                 SELECT id, binding_source_id as "binding_source_id!"
                 FROM context
                 WHERE user_id = $1
-                  AND binding_provider = 'Todoist'
+                  AND binding_provider = $2::integration_provider_kind
                   AND binding_mirrored
             "#,
-            user_id.0
+            user_id.0,
+            task_manager.to_string() as _
         )
         .fetch_all(&mut **executor)
         .await
-        .context("Failed to fetch Todoist contexts from storage")?
+        .with_context(|| format!("Failed to fetch {task_manager} contexts from storage"))?
         .into_iter()
         .map(|row| (row.binding_source_id, row.id))
         .collect();
 
-        // Every task living in Todoist is checked, not only the unbound ones: a task moved to a
-        // project whose context did not exist at the time keeps its old binding until the
-        // context appears. A Linear or Slack task synced to Todoist lives there through its sink
-        // item, a Todoist task through its source item (also its sink): the sink is read first.
-        // Bounded by the user's task count.
+        // Every task living in the task manager is checked, not only the unbound ones: a task
+        // moved to a project whose context did not exist at the time keeps its old binding until
+        // the context appears. A Linear or Slack task synced to it lives there through its sink
+        // item, a task of the task manager through its source item (also its sink): the sink is
+        // read first. Bounded by the user's task count.
         let candidates = sqlx::query!(
             r#"
                 SELECT DISTINCT ON (task.id)
@@ -1165,14 +1193,15 @@ impl TaskRepository for Repository {
                 JOIN third_party_item
                   ON third_party_item.id IN (task.sink_item_id, task.source_item_id)
                 WHERE task.user_id = $1
-                  AND third_party_item.kind::TEXT = 'TodoistItem'
+                  AND third_party_item.kind::TEXT = $2
                 ORDER BY task.id, third_party_item.id = task.sink_item_id DESC NULLS LAST
             "#,
-            user_id.0
+            user_id.0,
+            item_kind.to_string()
         )
         .fetch_all(&mut **executor)
         .await
-        .context("Failed to fetch Todoist tasks from storage")?;
+        .with_context(|| format!("Failed to fetch {task_manager} tasks from storage"))?;
 
         let mut backfill = TaskContextBackfill {
             bound: 0,
@@ -1183,11 +1212,15 @@ impl TaskRepository for Repository {
             let project_id =
                 match decrypt_third_party_item_data(&candidate.data_enc, candidate.item_id) {
                     Ok(ThirdPartyItemData::TodoistItem(item)) => Some(item.project_id),
+                    Ok(ThirdPartyItemData::TickTickItem(item)) => {
+                        Some(TickTickList::of_project_id(&item.project_id).source_id().0)
+                    }
                     Ok(_) => None,
                     Err(err) => {
                         warn!(
                             { attr::USER_ID } = user_id.to_string(),
-                            "Cannot read the Todoist item of task {}: {err}", candidate.task_id
+                            "Cannot read the {task_manager} item of task {}: {err}",
+                            candidate.task_id
                         );
                         backfill.unreadable += 1;
                         continue;
@@ -1204,7 +1237,9 @@ impl TaskRepository for Repository {
                     )
                     .execute(&mut **executor)
                     .await
-                    .context("Failed to bind a Todoist task to its context")?
+                    .with_context(|| {
+                        format!("Failed to bind a {task_manager} task to its context")
+                    })?
                     .rows_affected();
                 }
                 (None, None) => backfill.unmatched += 1,
@@ -1215,11 +1250,73 @@ impl TaskRepository for Repository {
         if backfill.unmatched > 0 {
             warn!(
                 { attr::USER_ID } = user_id.to_string(),
-                "{} Todoist task(s) have no context for their project and stay unbound",
+                "{} {task_manager} task(s) have no context for their project and stay unbound",
                 backfill.unmatched
             );
         }
         Ok(backfill)
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::USER_ID } = user_id.to_string())
+    )]
+    async fn find_task_ids_by_source_ids(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        kind: TaskSourceKind,
+        source_ids: &[String],
+    ) -> Result<HashMap<String, TaskId>, UniversalInboxError> {
+        if source_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        Ok(sqlx::query!(
+            r#"
+                SELECT task.id, third_party_item.source_id
+                FROM task
+                JOIN third_party_item ON third_party_item.id = task.source_item_id
+                WHERE task.user_id = $1
+                  AND task.kind::TEXT = $2
+                  AND third_party_item.source_id = ANY($3)
+            "#,
+            user_id.0,
+            kind.to_string(),
+            source_ids
+        )
+        .fetch_all(&mut **executor)
+        .await
+        .context("Failed to fetch tasks by source id from storage")?
+        .into_iter()
+        .map(|row| (row.source_id, TaskId(row.id)))
+        .collect())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields({ attr::TASK_ID } = task_id.to_string())
+    )]
+    async fn set_task_parent(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        task_id: TaskId,
+        parent_id: Option<TaskId>,
+    ) -> Result<bool, UniversalInboxError> {
+        Ok(sqlx::query!(
+            r#"
+                UPDATE task SET parent_id = $1
+                WHERE id = $2 AND parent_id IS DISTINCT FROM $1
+            "#,
+            parent_id.map(|id| id.0),
+            task_id.0
+        )
+        .execute(&mut **executor)
+        .await
+        .context("Failed to set the parent of a task")?
+        .rows_affected()
+            > 0)
     }
 
     #[tracing::instrument(

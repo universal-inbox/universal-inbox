@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE task SET parent_id = $1\n                WHERE id = $2 AND parent_id IS DISTINCT FROM $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "876717b2296978f05413c96659c2c8a3e52cea84acc18cadb129a5574dd1c313"
+}

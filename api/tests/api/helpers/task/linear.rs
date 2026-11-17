@@ -209,6 +209,8 @@ pub async fn create_linear_task_with_ticktick_sink(
         tags: None,
         created_time: Some(Utc::now().with_nanosecond(0).unwrap()),
         modified_time: Some(Utc::now().with_nanosecond(0).unwrap()),
+        parent_id: None,
+        child_ids: None,
     };
 
     let upsert_task = app

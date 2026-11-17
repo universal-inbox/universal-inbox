@@ -256,6 +256,7 @@ mod create_task_with_explicit_provider {
                 priority: ticktick_item.priority.into(),
                 task_provider_kind: Some(IntegrationProviderKind::TickTick),
                 time_config: None,
+                parent_id: None,
             }),
         )
         .await;

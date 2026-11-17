@@ -158,7 +158,7 @@ async fn sync_todoist_contexts(app: &AuthenticatedApp, projects: &TodoistSyncRes
     with_system_actor(
         "SyncTasks",
         Some(IntegrationProviderKind::Todoist),
-        task_service.sync_todoist_project_contexts(app.user.id),
+        task_service.sync_project_contexts(app.user.id, IntegrationProviderKind::Todoist),
     )
     .await
     .unwrap();

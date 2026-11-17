@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::{
     HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
-    task::{DueDate, TaskPriority},
+    task::{DueDate, ProjectId, TaskPriority, is_ticktick_inbox_project_id},
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
 };
@@ -197,6 +197,13 @@ pub struct TickTickItem {
     pub created_time: Option<DateTime<Utc>>,
     #[serde(default)]
     pub modified_time: Option<DateTime<Utc>>,
+    /// The parent task (undocumented upstream). Absent: a top-level task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// The child tasks (undocumented upstream), informative only: the nesting is read from each
+    /// child's `parent_id`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_ids: Option<Vec<String>>,
 }
 
 impl HasHtmlUrl for TickTickItem {
@@ -283,6 +290,70 @@ pub struct TickTickProject {
     pub sort_order: Option<i64>,
     #[serde(default)]
     pub view_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed: Option<bool>,
+}
+
+/// A TickTick folder (`GET /open/v1/project/group`, undocumented): it holds lists, never tasks
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TickTickProjectGroup {
+    pub id: String,
+    pub name: String,
+}
+
+/// Prefix of the binding `source_id` of a context mirroring a TickTick folder. Folder and list
+/// ids come from two endpoints: the prefix keeps them apart.
+pub static TICKTICK_FOLDER_SOURCE_ID_PREFIX: &str = "group:";
+
+/// Binding `source_id` of the context mirroring the TickTick inbox, and TickTick's own alias for
+/// it in paths
+static TICKTICK_INBOX_SOURCE_ID: &str = "inbox";
+
+/// A TickTick list a task lives in: the inbox, or a list by its id. TickTick lists no inbox: each
+/// user's own inbox id (`inbox<digits>`) is only seen on tasks, so the inbox is told apart by type.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum TickTickList {
+    Inbox,
+    List(ProjectId),
+}
+
+impl TickTickList {
+    /// The list of a task's `project_id`
+    pub fn of_project_id(project_id: &str) -> Self {
+        if is_ticktick_inbox_project_id(project_id) {
+            TickTickList::Inbox
+        } else {
+            TickTickList::List(ProjectId(project_id.to_string()))
+        }
+    }
+
+    /// The list a context binding's `source_id` names
+    pub fn of_source_id(source_id: &ProjectId) -> Self {
+        if source_id.0 == TICKTICK_INBOX_SOURCE_ID {
+            TickTickList::Inbox
+        } else {
+            TickTickList::List(source_id.clone())
+        }
+    }
+
+    /// The `source_id` a context mirroring this list is bound on
+    pub fn source_id(&self) -> ProjectId {
+        match self {
+            TickTickList::Inbox => ProjectId(TICKTICK_INBOX_SOURCE_ID.to_string()),
+            TickTickList::List(id) => id.clone(),
+        }
+    }
+}
+
+/// The binding `source_id` of the TickTick folder `group_id`
+pub fn ticktick_folder_source_id(group_id: &str) -> String {
+    format!("{TICKTICK_FOLDER_SOURCE_ID_PREFIX}{group_id}")
+}
+
+/// Whether `source_id` binds a TickTick folder rather than a list
+pub fn is_ticktick_folder_source_id(source_id: &str) -> bool {
+    source_id.starts_with(TICKTICK_FOLDER_SOURCE_ID_PREFIX)
 }
 
 #[cfg(test)]
@@ -380,6 +451,8 @@ mod tests {
             ]),
             created_time: None,
             modified_time: None,
+            parent_id: None,
+            child_ids: None,
         };
 
         let serialized = serde_json::to_value(&item).unwrap();
@@ -504,6 +577,8 @@ mod tests {
             tags: None,
             created_time: None,
             modified_time: None,
+            parent_id: None,
+            child_ids: None,
         };
 
         assert_eq!(

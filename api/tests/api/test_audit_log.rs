@@ -463,6 +463,7 @@ mod changes {
                 priority: todoist_item.priority.into(),
                 task_provider_kind: None,
                 time_config: None,
+                parent_id: None,
             }),
         )
         .await
