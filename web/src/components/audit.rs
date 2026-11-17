@@ -291,6 +291,8 @@ pub fn entity_route(entity_kind: AuditEntityKind, entity_id: Uuid) -> Route {
         AuditEntityKind::Task => Route::SyncedTaskPage {
             task_id: TaskId(entity_id),
         },
+        // No page for a context yet
+        AuditEntityKind::Context => Route::NotificationsPage {},
     }
 }
 
@@ -453,6 +455,7 @@ pub fn HistoryDrawer(
     let entity_label = match entity_kind {
         AuditEntityKind::Notification => "notification",
         AuditEntityKind::Task => "task",
+        AuditEntityKind::Context => "context",
     };
 
     rsx! {

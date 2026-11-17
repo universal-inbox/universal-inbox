@@ -8,6 +8,7 @@ use crate::universal_inbox::{UniversalInboxError, audit::actor_context::current_
 
 pub mod audit_event;
 pub mod auth_token;
+pub mod context;
 pub mod data_encryption;
 pub mod integration_connection;
 pub mod notification;

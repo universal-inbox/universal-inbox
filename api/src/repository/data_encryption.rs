@@ -91,6 +91,15 @@ pub const ENCRYPTED_COLUMNS: &[EncryptedColumn] = &[
         },
     },
     EncryptedColumn {
+        table: "note",
+        id_column: "id",
+        column: "body_enc",
+        format: EncryptedColumnFormat::Envelope {
+            aad_name: "note.body",
+            compressed: false,
+        },
+    },
+    EncryptedColumn {
         table: "task",
         id_column: "id",
         column: "body_enc",
