@@ -1,11 +1,21 @@
-use std::collections::HashMap;
+use std::{
+    cell::RefCell,
+    collections::{HashMap, VecDeque},
+    rc::Rc,
+};
 
 use anyhow::Result;
 use chrono::{DateTime, Local, TimeDelta, TimeZone, Timelike, Utc};
 use dioxus::prelude::*;
-use futures_util::StreamExt;
+use futures_util::{
+    FutureExt, StreamExt,
+    future::{Fuse, FusedFuture, LocalBoxFuture},
+    select,
+    stream::FuturesUnordered,
+};
 use js_sys::Date;
 use reqwest::Method;
+use serde::{Serialize, de::DeserializeOwned};
 use strum::IntoEnumIterator;
 use url::Url;
 
@@ -131,6 +141,7 @@ struct LocalChanges {
     notifications: HashMap<NotificationId, f64>,
     /// Expiry time of a change of too many notifications for its event to carry their ids
     bulk_change: Option<f64>,
+    pending: PendingChanges,
 }
 
 impl LocalChanges {
@@ -141,11 +152,22 @@ impl LocalChanges {
 
     /// Record the notifications this tab just changed on the server.
     fn record(&mut self, ids: &[NotificationId], now: f64) {
+        self.record_changes(ids, ids.len() > MAX_EVENT_IDS, now);
+    }
+
+    /// Settle a change this tab started, recording the notifications it changed. The echo of
+    /// a bulk change seen while it ran is not awaited again.
+    fn settle(&mut self, change: u64, succeeded: bool, ids: &[NotificationId], now: f64) {
+        let bulk_echo_seen = self.pending.settle(change, succeeded);
+        self.record_changes(ids, ids.len() > MAX_EVENT_IDS && !bulk_echo_seen, now);
+    }
+
+    fn record_changes(&mut self, ids: &[NotificationId], is_bulk_change: bool, now: f64) {
         self.prune(now);
         for id in ids {
             self.notifications.insert(*id, now + LOCAL_CHANGE_TTL_MS);
         }
-        if ids.len() > MAX_EVENT_IDS {
+        if is_bulk_change {
             self.bulk_change = Some(now + LOCAL_CHANGE_TTL_MS);
         }
     }
@@ -156,10 +178,144 @@ impl LocalChanges {
         self.prune(now);
         match ids {
             Some(ids) => {
-                !ids.is_empty() && ids.iter().all(|id| self.notifications.contains_key(id))
+                !ids.is_empty()
+                    && ids.iter().all(|id| {
+                        self.notifications.contains_key(id) || self.pending.is_running(*id)
+                    })
             }
-            None => self.bulk_change.take().is_some(),
+            None => self.pending.take_running_bulk_echo() || self.bulk_change.take().is_some(),
         }
+    }
+}
+
+/// The local effect of a change this tab started, kept on the lists fetched while it runs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PendingEffect {
+    Removed(NotificationId, NotificationSection),
+    RemovedAll(NotificationSection),
+    Read(NotificationId),
+}
+
+#[derive(Debug)]
+struct PendingChange {
+    effect: PendingEffect,
+    /// The last list fetch started before the change's API call returned, `None` while it runs
+    settled_after: Option<u64>,
+    bulk_echo_seen: bool,
+}
+
+impl PendingChange {
+    fn applies_to(&self, list_fetch: u64) -> bool {
+        self.settled_after
+            .is_none_or(|settled_after| settled_after >= list_fetch)
+    }
+}
+
+/// The changes this tab started whose effect a fetched list may not reflect yet.
+#[derive(Debug, Default)]
+struct PendingChanges {
+    changes: HashMap<u64, PendingChange>,
+    last_change: u64,
+    list_fetches: u64,
+}
+
+impl PendingChanges {
+    fn start(&mut self, effect: PendingEffect) -> u64 {
+        self.last_change += 1;
+        self.changes.insert(
+            self.last_change,
+            PendingChange {
+                effect,
+                settled_after: None,
+                bulk_echo_seen: false,
+            },
+        );
+        self.last_change
+    }
+
+    /// Settle a change, returning whether the echo of its bulk change was seen while it ran.
+    fn settle(&mut self, change: u64, succeeded: bool) -> bool {
+        let bulk_echo_seen = self
+            .changes
+            .get(&change)
+            .is_some_and(|pending_change| pending_change.bulk_echo_seen);
+        if !succeeded {
+            self.changes.remove(&change);
+        } else if let Some(pending_change) = self.changes.get_mut(&change) {
+            pending_change.settled_after = Some(self.list_fetches);
+        }
+        bulk_echo_seen
+    }
+
+    fn start_list_fetch(&mut self) -> u64 {
+        self.list_fetches += 1;
+        let list_fetch = self.list_fetches;
+        self.changes
+            .retain(|_, pending_change| pending_change.applies_to(list_fetch));
+        list_fetch
+    }
+
+    fn effects_on(&self, list_fetch: u64, section: NotificationSection) -> Vec<PendingEffect> {
+        self.changes
+            .values()
+            .filter(|pending_change| pending_change.applies_to(list_fetch))
+            .map(|pending_change| pending_change.effect)
+            .filter(|effect| match effect {
+                PendingEffect::Removed(_, removed_from)
+                | PendingEffect::RemovedAll(removed_from) => *removed_from == section,
+                PendingEffect::Read(_) => true,
+            })
+            .collect()
+    }
+
+    fn apply(
+        &self,
+        list_fetch: u64,
+        section: NotificationSection,
+        page: &mut Page<NotificationWithTask>,
+    ) {
+        for effect in self.effects_on(list_fetch, section) {
+            match effect {
+                PendingEffect::Removed(id, _) => {
+                    page.remove_element(|notification| notification.id != id)
+                }
+                PendingEffect::RemovedAll(_) => page.content.clear(),
+                PendingEffect::Read(id) => {
+                    if let Some(notification) = page.content.iter_mut().find(|notification| {
+                        notification.id == id && notification.status == NotificationStatus::Unread
+                    }) {
+                        notification.status = NotificationStatus::Read;
+                        notification.last_read_at = Some(Utc::now());
+                    }
+                }
+            }
+        }
+    }
+
+    fn running_effects(&self) -> impl Iterator<Item = PendingEffect> + '_ {
+        self.changes
+            .values()
+            .filter(|pending_change| pending_change.settled_after.is_none())
+            .map(|pending_change| pending_change.effect)
+    }
+
+    fn is_running(&self, id: NotificationId) -> bool {
+        self.running_effects().any(|effect| {
+            matches!(effect, PendingEffect::Removed(changed_id, _) | PendingEffect::Read(changed_id) if changed_id == id)
+        })
+    }
+
+    /// Whether a running bulk change awaits its echo, which this call consumes.
+    fn take_running_bulk_echo(&mut self) -> bool {
+        self.changes
+            .values_mut()
+            .find(|pending_change| {
+                pending_change.settled_after.is_none()
+                    && !pending_change.bulk_echo_seen
+                    && matches!(pending_change.effect, PendingEffect::RemovedAll(_))
+            })
+            .map(|pending_change| pending_change.bulk_echo_seen = true)
+            .is_some()
     }
 }
 
@@ -178,397 +334,473 @@ impl FetchedList {
     }
 }
 
+#[derive(Clone)]
+struct NotificationServiceContext {
+    api_base_url: Url,
+    notifications_page: Signal<Page<NotificationWithTask>>,
+    notification_filters: Signal<NotificationFilters>,
+    ui_model: Signal<UniversalInboxUIModel>,
+    task_service: Coroutine<TaskCommand>,
+    toast_service: Coroutine<ToastCommand>,
+    local_changes: Rc<RefCell<LocalChanges>>,
+}
+
+/// Work on the displayed list and the badge counts, run one at a time in order.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ListJob {
+    Refresh { refresh_counts: bool },
+    LoadAndSelect(NotificationId),
+    Sync(Option<NotificationSyncSourceKind>),
+    RefreshCounts,
+}
+
+impl ListJob {
+    fn refreshes_counts(&self) -> bool {
+        matches!(
+            self,
+            ListJob::Refresh {
+                refresh_counts: true
+            } | ListJob::Sync(_)
+                | ListJob::RefreshCounts
+        )
+    }
+}
+
+fn enqueue_list_job(list_jobs: &mut VecDeque<ListJob>, list_job: ListJob) {
+    if list_job == ListJob::RefreshCounts && list_jobs.iter().any(ListJob::refreshes_counts) {
+        return;
+    }
+    list_jobs.push_back(list_job);
+}
+
+enum StartedCommand {
+    /// An API call, returning the job it leaves on the displayed list
+    Action(LocalBoxFuture<'static, Option<ListJob>>),
+    ListJob(ListJob),
+    Nothing,
+}
+
 pub async fn notification_service(
     mut rx: UnboundedReceiver<NotificationCommand>,
     api_base_url: Url,
-    mut notifications_page: Signal<Page<NotificationWithTask>>,
+    notifications_page: Signal<Page<NotificationWithTask>>,
     notification_filters: Signal<NotificationFilters>,
     ui_model: Signal<UniversalInboxUIModel>,
     task_service: Coroutine<TaskCommand>,
     toast_service: Coroutine<ToastCommand>,
 ) {
-    let mut local_changes = LocalChanges::default();
+    let context = NotificationServiceContext {
+        api_base_url,
+        notifications_page,
+        notification_filters,
+        ui_model,
+        task_service,
+        toast_service,
+        local_changes: Rc::default(),
+    };
+    let mut actions: FuturesUnordered<LocalBoxFuture<'static, Option<ListJob>>> =
+        FuturesUnordered::new();
+    let mut list_jobs: VecDeque<ListJob> = VecDeque::new();
+    let mut running_list_job: Fuse<LocalBoxFuture<'static, ()>> = Fuse::terminated();
+
     loop {
-        let msg = rx.next().await;
-        // Most commands change the inbox/snoozed badge counts: explicit refreshes (initial
-        // load + periodic tick), syncs, and any action moving a notification between
-        // sections. Pure navigation (LoadAndSelect, RefreshList) and read-state (MarkAsRead,
-        // which keeps the notification in the inbox) do not.
-        // The list and the counts already reflect this tab's own changes
-        let is_own_change_event = matches!(
-            msg,
-            Some(NotificationCommand::RefreshFromEvent(ref ids))
-                if local_changes.is_own_change(ids.as_deref(), Date::now())
-        );
-        let refresh_counts = !is_own_change_event
-            && !matches!(
-                msg,
-                None | Some(NotificationCommand::LoadAndSelect(_))
-                    | Some(NotificationCommand::MarkAsRead(_))
-                    | Some(NotificationCommand::RefreshList)
-            );
-        // The displayed list, when refetched: its total is up to date
-        let mut fetched_list = None;
-        // The notifications the command changed on the server
-        let mut changed_ids: Vec<NotificationId> = vec![];
-        match msg {
-            Some(NotificationCommand::RefreshFromEvent(_)) if is_own_change_event => {}
-            Some(NotificationCommand::Refresh)
-            | Some(NotificationCommand::RefreshList)
-            | Some(NotificationCommand::RefreshFromEvent(_)) => {
-                fetched_list = refresh_notifications(
-                    &api_base_url,
-                    notifications_page,
-                    notification_filters,
-                    ui_model,
-                )
-                .await;
-            }
-            Some(NotificationCommand::Sync(source)) => {
-                let result: Result<Vec<Notification>> = call_api_and_notify(
-                    Method::POST,
-                    &api_base_url,
-                    "notifications/sync",
-                    Some(SyncNotificationsParameters {
-                        source,
-                        asynchronous: Some(false),
-                    }),
-                    Some(ui_model),
-                    &toast_service,
-                    "Syncing notifications...",
-                    "Successfully synced notifications",
-                )
-                .await;
-                if let Ok(notifications) = result {
-                    changed_ids = notifications.iter().map(|notif| notif.id).collect();
-                    fetched_list = refresh_notifications(
-                        &api_base_url,
-                        notifications_page,
-                        notification_filters,
-                        ui_model,
-                    )
-                    .await;
+        select! {
+            command = rx.next() => match command {
+                Some(command) => match start_command(&context, command) {
+                    StartedCommand::Action(action) => actions.push(action),
+                    StartedCommand::ListJob(list_job) => enqueue_list_job(&mut list_jobs, list_job),
+                    StartedCommand::Nothing => {}
+                },
+                None => break,
+            },
+            follow_up = actions.select_next_some() => {
+                if let Some(list_job) = follow_up {
+                    enqueue_list_job(&mut list_jobs, list_job);
                 }
-            }
-            Some(NotificationCommand::DeleteFromNotification(ref notification)) => {
-                if let Some(ref task) = notification.task
-                    && notification.is_built_from_task()
-                {
-                    delete_task(notification.id, task.id, notifications_page, &task_service).await;
-                    // The task service deletes it: assume it succeeds
-                    changed_ids.push(notification.id);
-                } else if delete_notification(
-                    &api_base_url,
-                    notification.id,
-                    notifications_page,
-                    ui_model,
-                    &toast_service,
-                )
-                .await
-                {
-                    changed_ids.push(notification.id);
-                }
-            }
-            Some(NotificationCommand::DeleteAll) => {
-                (changed_ids, fetched_list) = delete_all_notifications(
-                    &api_base_url,
-                    notifications_page,
-                    notification_filters,
-                    ui_model,
-                    &toast_service,
-                )
-                .await;
-            }
-            Some(NotificationCommand::Unsubscribe(notification_id)) => {
-                notifications_page
-                    .write()
-                    .remove_element(|notif| notif.id != notification_id);
-
-                let result: Result<Option<Notification>> = call_api_and_notify(
-                    Method::PATCH,
-                    &api_base_url,
-                    &format!("notifications/{notification_id}"),
-                    Some(NotificationPatch {
-                        status: Some(NotificationStatus::Unsubscribed),
-                        ..Default::default()
-                    }),
-                    Some(ui_model),
-                    &toast_service,
-                    "Unsubscribing from notification...",
-                    "Successfully unsubscribed from notification",
-                )
-                .await;
-                if result.is_ok() {
-                    changed_ids.push(notification_id);
-                }
-            }
-            Some(NotificationCommand::Snooze(notification_id)) => {
-                let snoozed_time = compute_snoozed_until(Local::now(), 1, 6);
-
-                notifications_page
-                    .write()
-                    .remove_element(|notif| notif.id != notification_id);
-
-                let result: Result<Option<Notification>> = call_api_and_notify(
-                    Method::PATCH,
-                    &api_base_url,
-                    &format!("notifications/{notification_id}"),
-                    Some(NotificationPatch {
-                        snoozed_until: Some(snoozed_time),
-                        ..Default::default()
-                    }),
-                    Some(ui_model),
-                    &toast_service,
-                    "Snoozing notification...",
-                    "Successfully snoozed notification",
-                )
-                .await;
-                if result.is_ok() {
-                    changed_ids.push(notification_id);
-                }
-            }
-            Some(NotificationCommand::Unsnooze(notification_id)) => {
-                notifications_page
-                    .write()
-                    .remove_element(|notif| notif.id != notification_id);
-
-                // Setting `snoozed_until` to the past brings the notification back into
-                // the inbox (the inbox filter keeps `snoozed_until <= now`) and out of
-                // the snoozed list (which keeps `snoozed_until > now`).
-                let result: Result<Option<Notification>> = call_api_and_notify(
-                    Method::PATCH,
-                    &api_base_url,
-                    &format!("notifications/{notification_id}"),
-                    Some(NotificationPatch {
-                        snoozed_until: Some(Utc::now()),
-                        ..Default::default()
-                    }),
-                    Some(ui_model),
-                    &toast_service,
-                    "Unsnoozing notification...",
-                    "Successfully unsnoozed notification",
-                )
-                .await;
-                if result.is_ok() {
-                    changed_ids.push(notification_id);
-                }
-            }
-            Some(NotificationCommand::Undelete(notification_id)) => {
-                notifications_page
-                    .write()
-                    .remove_element(|notif| notif.id != notification_id);
-
-                let result: Result<Option<Notification>> = call_api_and_notify(
-                    Method::PATCH,
-                    &api_base_url,
-                    &format!("notifications/{notification_id}"),
-                    Some(NotificationPatch {
-                        status: Some(NotificationStatus::Unread),
-                        ..Default::default()
-                    }),
-                    Some(ui_model),
-                    &toast_service,
-                    "Restoring notification...",
-                    "Successfully restored notification",
-                )
-                .await;
-                if result.is_ok() {
-                    changed_ids.push(notification_id);
-                }
-            }
-            Some(NotificationCommand::LoadAndSelect(notification_id)) => {
-                load_and_select_notification(
-                    &api_base_url,
-                    notification_id,
-                    notifications_page,
-                    notification_filters,
-                    ui_model,
-                )
-                .await;
-            }
-            Some(NotificationCommand::MarkAsRead(notification_id)) => {
-                let result: Result<Option<Notification>> = call_api(
-                    Method::PATCH,
-                    &api_base_url,
-                    &format!("notifications/{notification_id}"),
-                    Some(NotificationPatch {
-                        status: Some(NotificationStatus::Read),
-                        ..Default::default()
-                    }),
-                    Some(ui_model),
-                )
-                .await;
-                if result.is_ok() {
-                    changed_ids.push(notification_id);
-                    let mut page = notifications_page.write();
-                    if let Some(notif) = page.content.iter_mut().find(|n| n.id == notification_id) {
-                        notif.status = NotificationStatus::Read;
-                        notif.last_read_at = Some(Utc::now());
-                    }
-                }
-            }
-            Some(NotificationCommand::CompleteTaskFromNotification(ref notification)) => {
-                if let Some(ref task) = notification.task
-                    && notification.is_built_from_task()
-                {
-                    notifications_page
-                        .write()
-                        .remove_element(|notif| notif.id != notification.id);
-
-                    task_service.send(TaskCommand::Complete(task.id));
-                    // The task service completes it: assume it succeeds
-                    changed_ids.push(notification.id);
-                }
-            }
-            Some(NotificationCommand::PlanTask(ref notification, task_id, parameters)) => {
-                notifications_page
-                    .write()
-                    .remove_element(|notif| notif.id != notification.id);
-
-                task_service.send(TaskCommand::Plan(task_id, parameters));
-                // The task service plans it: assume it succeeds
-                changed_ids.push(notification.id);
-            }
-            Some(NotificationCommand::CreateTaskWithDetaultsFromNotification(ref notification)) => {
-                notifications_page
-                    .write()
-                    .remove_element(|notif| notif.id != notification.id);
-
-                let result: Result<Option<NotificationWithTask>> = call_api_and_notify(
-                    Method::POST,
-                    &api_base_url,
-                    &format!("notifications/{}/task", notification.id),
-                    None::<TaskCreation>,
-                    Some(ui_model),
-                    &toast_service,
-                    "Creating task with default settings from notification...",
-                    "Task successfully created",
-                )
-                .await;
-                if result.is_ok() {
-                    changed_ids.push(notification.id);
-                }
-            }
-            Some(NotificationCommand::CreateTaskFromNotification(ref notification, parameters)) => {
-                notifications_page
-                    .write()
-                    .remove_element(|notif| notif.id != notification.id);
-
-                let result: Result<Option<NotificationWithTask>> = call_api_and_notify(
-                    Method::POST,
-                    &api_base_url,
-                    &format!("notifications/{}/task", notification.id),
-                    Some(parameters),
-                    Some(ui_model),
-                    &toast_service,
-                    "Creating task from notification...",
-                    "Task successfully created",
-                )
-                .await;
-                if result.is_ok() {
-                    changed_ids.push(notification.id);
-                }
-            }
-            Some(NotificationCommand::LinkNotificationWithTask(notification_id, task_id)) => {
-                notifications_page
-                    .write()
-                    .remove_element(|notif| notif.id != notification_id);
-
-                let result: Result<Option<NotificationWithTask>> = call_api_and_notify(
-                    Method::PATCH,
-                    &api_base_url,
-                    &format!("notifications/{notification_id}"),
-                    Some(NotificationPatch {
-                        status: Some(NotificationStatus::Deleted),
-                        task_id: Some(task_id),
-                        ..Default::default()
-                    }),
-                    Some(ui_model),
-                    &toast_service,
-                    "Linking notification...",
-                    "Notification successfully linked",
-                )
-                .await;
-                if result.is_ok() {
-                    changed_ids.push(notification_id);
-                }
-            }
-            Some(NotificationCommand::AcceptInvitation(notification_id)) => {
-                let answered = patch_invitation(
-                    notifications_page,
-                    notification_id,
-                    &api_base_url,
-                    GoogleCalendarEventAttendeeResponseStatus::Accepted,
-                    ui_model,
-                    toast_service,
-                )
-                .await;
-                changed_ids.extend(answered.then_some(notification_id));
-            }
-            Some(NotificationCommand::DeclineInvitation(notification_id)) => {
-                let answered = patch_invitation(
-                    notifications_page,
-                    notification_id,
-                    &api_base_url,
-                    GoogleCalendarEventAttendeeResponseStatus::Declined,
-                    ui_model,
-                    toast_service,
-                )
-                .await;
-                changed_ids.extend(answered.then_some(notification_id));
-            }
-            Some(NotificationCommand::TentativelyAcceptInvitation(notification_id)) => {
-                let answered = patch_invitation(
-                    notifications_page,
-                    notification_id,
-                    &api_base_url,
-                    GoogleCalendarEventAttendeeResponseStatus::Tentative,
-                    ui_model,
-                    toast_service,
-                )
-                .await;
-                changed_ids.extend(answered.then_some(notification_id));
-            }
-            None => {}
+            },
+            _ = &mut running_list_job => {},
         }
-        local_changes.record(&changed_ids, Date::now());
-
-        if refresh_counts {
-            if let Some(refilled_list) = maybe_refill_current_page(
-                &api_base_url,
-                notifications_page,
-                notification_filters,
-                ui_model,
-            )
-            .await
-            {
-                fetched_list = Some(refilled_list);
-            }
-            let section_count = fetched_list.as_ref().and_then(FetchedList::section_count);
-            refresh_notification_counts(&api_base_url, ui_model, section_count).await;
+        if running_list_job.is_terminated()
+            && let Some(list_job) = list_jobs.pop_front()
+        {
+            running_list_job = run_list_job(context.clone(), list_job).boxed_local().fuse();
         }
     }
+}
+
+/// Apply a command's local change at once and return the work it leaves: an API call run
+/// alongside the other commands' ones, or a job on the displayed list.
+fn start_command(
+    context: &NotificationServiceContext,
+    command: NotificationCommand,
+) -> StartedCommand {
+    let mut notifications_page = context.notifications_page;
+    match command {
+        NotificationCommand::Refresh => StartedCommand::ListJob(ListJob::Refresh {
+            refresh_counts: true,
+        }),
+        NotificationCommand::RefreshList => StartedCommand::ListJob(ListJob::Refresh {
+            refresh_counts: false,
+        }),
+        NotificationCommand::RefreshFromEvent(ids) => {
+            if context
+                .local_changes
+                .borrow_mut()
+                .is_own_change(ids.as_deref(), Date::now())
+            {
+                StartedCommand::Nothing
+            } else {
+                StartedCommand::ListJob(ListJob::Refresh {
+                    refresh_counts: true,
+                })
+            }
+        }
+        NotificationCommand::Sync(source) => StartedCommand::ListJob(ListJob::Sync(source)),
+        NotificationCommand::LoadAndSelect(notification_id) => {
+            StartedCommand::ListJob(ListJob::LoadAndSelect(notification_id))
+        }
+        NotificationCommand::DeleteFromNotification(notification) => {
+            if let Some(ref task) = notification.task
+                && notification.is_built_from_task()
+            {
+                delete_task(
+                    notification.id,
+                    task.id,
+                    notifications_page,
+                    &context.task_service,
+                );
+                completed(context, notification.id)
+            } else {
+                remove_and_call::<_, Option<Notification>>(
+                    context,
+                    notification.id,
+                    Method::PATCH,
+                    format!("notifications/{}", notification.id),
+                    Some(NotificationPatch {
+                        status: Some(NotificationStatus::Deleted),
+                        ..Default::default()
+                    }),
+                    "Deleting notification...",
+                    "Successfully deleted notification",
+                )
+            }
+        }
+        NotificationCommand::DeleteAll => delete_all_notifications(context),
+        NotificationCommand::Unsubscribe(notification_id) => {
+            remove_and_call::<_, Option<Notification>>(
+                context,
+                notification_id,
+                Method::PATCH,
+                format!("notifications/{notification_id}"),
+                Some(NotificationPatch {
+                    status: Some(NotificationStatus::Unsubscribed),
+                    ..Default::default()
+                }),
+                "Unsubscribing from notification...",
+                "Successfully unsubscribed from notification",
+            )
+        }
+        NotificationCommand::Snooze(notification_id) => {
+            let snoozed_time = compute_snoozed_until(Local::now(), 1, 6);
+            remove_and_call::<_, Option<Notification>>(
+                context,
+                notification_id,
+                Method::PATCH,
+                format!("notifications/{notification_id}"),
+                Some(NotificationPatch {
+                    snoozed_until: Some(snoozed_time),
+                    ..Default::default()
+                }),
+                "Snoozing notification...",
+                "Successfully snoozed notification",
+            )
+        }
+        // Setting `snoozed_until` to the past brings the notification back into the inbox
+        // (the inbox filter keeps `snoozed_until <= now`) and out of the snoozed list
+        // (which keeps `snoozed_until > now`).
+        NotificationCommand::Unsnooze(notification_id) => {
+            remove_and_call::<_, Option<Notification>>(
+                context,
+                notification_id,
+                Method::PATCH,
+                format!("notifications/{notification_id}"),
+                Some(NotificationPatch {
+                    snoozed_until: Some(Utc::now()),
+                    ..Default::default()
+                }),
+                "Unsnoozing notification...",
+                "Successfully unsnoozed notification",
+            )
+        }
+        NotificationCommand::Undelete(notification_id) => {
+            remove_and_call::<_, Option<Notification>>(
+                context,
+                notification_id,
+                Method::PATCH,
+                format!("notifications/{notification_id}"),
+                Some(NotificationPatch {
+                    status: Some(NotificationStatus::Unread),
+                    ..Default::default()
+                }),
+                "Restoring notification...",
+                "Successfully restored notification",
+            )
+        }
+        NotificationCommand::MarkAsRead(notification_id) => {
+            mark_notification_as_read(context, notification_id)
+        }
+        NotificationCommand::CompleteTaskFromNotification(notification) => {
+            if let Some(ref task) = notification.task
+                && notification.is_built_from_task()
+            {
+                notifications_page
+                    .write()
+                    .remove_element(|notif| notif.id != notification.id);
+
+                context.task_service.send(TaskCommand::Complete(task.id));
+                completed(context, notification.id)
+            } else {
+                StartedCommand::ListJob(ListJob::RefreshCounts)
+            }
+        }
+        NotificationCommand::PlanTask(notification, task_id, parameters) => {
+            notifications_page
+                .write()
+                .remove_element(|notif| notif.id != notification.id);
+
+            context
+                .task_service
+                .send(TaskCommand::Plan(task_id, parameters));
+            completed(context, notification.id)
+        }
+        NotificationCommand::CreateTaskWithDetaultsFromNotification(notification) => {
+            remove_and_call::<_, Option<NotificationWithTask>>(
+                context,
+                notification.id,
+                Method::POST,
+                format!("notifications/{}/task", notification.id),
+                None::<TaskCreation>,
+                "Creating task with default settings from notification...",
+                "Task successfully created",
+            )
+        }
+        NotificationCommand::CreateTaskFromNotification(notification, parameters) => {
+            remove_and_call::<_, Option<NotificationWithTask>>(
+                context,
+                notification.id,
+                Method::POST,
+                format!("notifications/{}/task", notification.id),
+                Some(parameters),
+                "Creating task from notification...",
+                "Task successfully created",
+            )
+        }
+        NotificationCommand::LinkNotificationWithTask(notification_id, task_id) => {
+            remove_and_call::<_, Option<NotificationWithTask>>(
+                context,
+                notification_id,
+                Method::PATCH,
+                format!("notifications/{notification_id}"),
+                Some(NotificationPatch {
+                    status: Some(NotificationStatus::Deleted),
+                    task_id: Some(task_id),
+                    ..Default::default()
+                }),
+                "Linking notification...",
+                "Notification successfully linked",
+            )
+        }
+        NotificationCommand::AcceptInvitation(notification_id) => answer_invitation(
+            context,
+            notification_id,
+            GoogleCalendarEventAttendeeResponseStatus::Accepted,
+        ),
+        NotificationCommand::DeclineInvitation(notification_id) => answer_invitation(
+            context,
+            notification_id,
+            GoogleCalendarEventAttendeeResponseStatus::Declined,
+        ),
+        NotificationCommand::TentativelyAcceptInvitation(notification_id) => answer_invitation(
+            context,
+            notification_id,
+            GoogleCalendarEventAttendeeResponseStatus::Tentative,
+        ),
+    }
+}
+
+/// A change another service makes: assume it succeeds.
+fn completed(
+    context: &NotificationServiceContext,
+    notification_id: NotificationId,
+) -> StartedCommand {
+    context
+        .local_changes
+        .borrow_mut()
+        .record(&[notification_id], Date::now());
+    StartedCommand::ListJob(ListJob::RefreshCounts)
+}
+
+/// Settle a change to a notification once its API call returned.
+fn settle(
+    context: &NotificationServiceContext,
+    change: u64,
+    notification_id: NotificationId,
+    succeeded: bool,
+) {
+    context.local_changes.borrow_mut().settle(
+        change,
+        succeeded,
+        succeeded.then_some(notification_id).as_slice(),
+        Date::now(),
+    );
+}
+
+/// Remove a notification from the displayed list, then call the API to change it.
+fn remove_and_call<B, R>(
+    context: &NotificationServiceContext,
+    notification_id: NotificationId,
+    method: Method,
+    path: String,
+    body: Option<B>,
+    loading_message: &'static str,
+    success_message: &'static str,
+) -> StartedCommand
+where
+    B: Serialize + 'static,
+    R: DeserializeOwned + 'static,
+{
+    let section = *CURRENT_NOTIFICATION_SECTION.peek();
+    let mut notifications_page = context.notifications_page;
+    notifications_page
+        .write()
+        .remove_element(|notif| notif.id != notification_id);
+    let change = context
+        .local_changes
+        .borrow_mut()
+        .pending
+        .start(PendingEffect::Removed(notification_id, section));
+
+    let context = context.clone();
+    StartedCommand::Action(
+        async move {
+            let result: Result<R> = call_api_and_notify(
+                method,
+                &context.api_base_url,
+                &path,
+                body,
+                Some(context.ui_model),
+                &context.toast_service,
+                loading_message,
+                success_message,
+            )
+            .await;
+            settle(&context, change, notification_id, result.is_ok());
+            Some(ListJob::RefreshCounts)
+        }
+        .boxed_local(),
+    )
+}
+
+fn mark_notification_as_read(
+    context: &NotificationServiceContext,
+    notification_id: NotificationId,
+) -> StartedCommand {
+    let change = context
+        .local_changes
+        .borrow_mut()
+        .pending
+        .start(PendingEffect::Read(notification_id));
+
+    let context = context.clone();
+    StartedCommand::Action(
+        async move {
+            let result: Result<Option<Notification>> = call_api(
+                Method::PATCH,
+                &context.api_base_url,
+                &format!("notifications/{notification_id}"),
+                Some(NotificationPatch {
+                    status: Some(NotificationStatus::Read),
+                    ..Default::default()
+                }),
+                Some(context.ui_model),
+            )
+            .await;
+            if result.is_ok() {
+                let mut notifications_page = context.notifications_page;
+                let mut page = notifications_page.write();
+                if let Some(notif) = page.content.iter_mut().find(|n| n.id == notification_id) {
+                    notif.status = NotificationStatus::Read;
+                    notif.last_read_at = Some(Utc::now());
+                }
+            }
+            settle(&context, change, notification_id, result.is_ok());
+            None
+        }
+        .boxed_local(),
+    )
+}
+
+/// Run a job on the displayed list, then refresh the badge counts when the job changes them.
+async fn run_list_job(context: NotificationServiceContext, list_job: ListJob) {
+    let fetched_list = match list_job {
+        ListJob::Refresh { .. } => refresh_notifications(&context).await,
+        ListJob::LoadAndSelect(notification_id) => {
+            load_and_select_notification(&context, notification_id).await;
+            None
+        }
+        ListJob::Sync(source) => sync_notifications(&context, source).await,
+        ListJob::RefreshCounts => None,
+    };
+
+    if list_job.refreshes_counts() {
+        let fetched_list = maybe_refill_current_page(&context).await.or(fetched_list);
+        let section_count = fetched_list.as_ref().and_then(FetchedList::section_count);
+        refresh_notification_counts(&context.api_base_url, context.ui_model, section_count).await;
+    }
+}
+
+/// Sync notifications, returning the list refetched after.
+async fn sync_notifications(
+    context: &NotificationServiceContext,
+    source: Option<NotificationSyncSourceKind>,
+) -> Option<FetchedList> {
+    let result: Result<Vec<Notification>> = call_api_and_notify(
+        Method::POST,
+        &context.api_base_url,
+        "notifications/sync",
+        Some(SyncNotificationsParameters {
+            source,
+            asynchronous: Some(false),
+        }),
+        Some(context.ui_model),
+        &context.toast_service,
+        "Syncing notifications...",
+        "Successfully synced notifications",
+    )
+    .await;
+    let notifications = result.ok()?;
+    let changed_ids: Vec<NotificationId> = notifications.iter().map(|notif| notif.id).collect();
+    context
+        .local_changes
+        .borrow_mut()
+        .record(&changed_ids, Date::now());
+    refresh_notifications(context).await
 }
 
 /// When more than half of the current page's notifications have been removed (deleted,
 /// snoozed, ...) and there are further pages to pull from, refetch the current page to
 /// refill the list. Skips the last page (nothing to pull up) and keeps the currently
 /// selected notification selected across the refetch. Returns the list it refetched.
-async fn maybe_refill_current_page(
-    api_base_url: &Url,
-    notifications_page: Signal<Page<NotificationWithTask>>,
-    notification_filters: Signal<NotificationFilters>,
-    ui_model: Signal<UniversalInboxUIModel>,
-) -> Option<FetchedList> {
+async fn maybe_refill_current_page(context: &NotificationServiceContext) -> Option<FetchedList> {
     let (per_page, pages_count, len) = {
-        let page = notifications_page.read();
+        let page = context.notifications_page.read();
         (page.per_page, page.pages_count, page.content.len())
     };
     if per_page == 0 || pages_count <= 1 {
         return None;
     }
 
-    let offset = match notification_filters.read().current_page_token {
+    let offset = match context.notification_filters.read().current_page_token {
         PageToken::Offset(offset) => offset,
         // Offset is the only token kind pagination produces; treat anything else as page 1.
         _ => 0,
@@ -582,13 +814,7 @@ async fn maybe_refill_current_page(
         return None;
     }
 
-    refresh_notifications(
-        api_base_url,
-        notifications_page,
-        notification_filters,
-        ui_model,
-    )
-    .await
+    refresh_notifications(context).await
 }
 
 /// Build the status / snooze query parameters for a section's notification list.
@@ -619,13 +845,12 @@ fn selected_index_after_refresh(
 }
 
 /// Fetch the displayed list, returning it when it succeeded. The selected notification
-/// stays selected when it is still in the list.
-async fn refresh_notifications(
-    api_base_url: &Url,
-    mut notifications_page: Signal<Page<NotificationWithTask>>,
-    notification_filters: Signal<NotificationFilters>,
-    mut ui_model: Signal<UniversalInboxUIModel>,
-) -> Option<FetchedList> {
+/// stays selected when it is still in the list, and the changes this tab started that the
+/// fetched list may not reflect yet are applied to it.
+async fn refresh_notifications(context: &NotificationServiceContext) -> Option<FetchedList> {
+    let mut notifications_page = context.notifications_page;
+    let notification_filters = context.notification_filters;
+    let mut ui_model = context.ui_model;
     let section = CURRENT_NOTIFICATION_SECTION();
     let is_filtered = notification_filters().is_filtered();
     let source_filters: Vec<String> = notification_filters()
@@ -644,9 +869,14 @@ async fn refresh_notifications(
     }
 
     let filters = serde_urlencoded::to_string(parameters).unwrap_or_default();
+    let list_fetch = context
+        .local_changes
+        .borrow_mut()
+        .pending
+        .start_list_fetch();
     let result: Result<Page<NotificationWithTask>> = call_api(
         Method::GET,
-        api_base_url,
+        &context.api_base_url,
         &format!("notifications?{filters}"),
         // random type as we don't care about the body's type
         None::<i32>,
@@ -654,7 +884,12 @@ async fn refresh_notifications(
     )
     .await;
 
-    let new_notifications_page = result.ok()?;
+    let mut new_notifications_page = result.ok()?;
+    context
+        .local_changes
+        .borrow()
+        .pending
+        .apply(list_fetch, section, &mut new_notifications_page);
     let total = new_notifications_page.total;
     let selected_id = ui_model
         .peek()
@@ -728,12 +963,11 @@ async fn refresh_notification_counts(
 /// otherwise fetch it, switch to its section, and prepend it when it is off the first
 /// page so it can be selected and previewed.
 async fn load_and_select_notification(
-    api_base_url: &Url,
+    context: &NotificationServiceContext,
     notification_id: NotificationId,
-    mut notifications_page: Signal<Page<NotificationWithTask>>,
-    notification_filters: Signal<NotificationFilters>,
-    mut ui_model: Signal<UniversalInboxUIModel>,
 ) {
+    let mut notifications_page = context.notifications_page;
+    let mut ui_model = context.ui_model;
     if let Some(index) = notifications_page
         .read()
         .content
@@ -746,7 +980,7 @@ async fn load_and_select_notification(
 
     let result: Result<NotificationWithTask> = call_api(
         Method::GET,
-        api_base_url,
+        &context.api_base_url,
         &format!("notifications/{notification_id}"),
         None::<i32>,
         Some(ui_model),
@@ -759,13 +993,7 @@ async fn load_and_select_notification(
     let section = section_of(&notification);
     if CURRENT_NOTIFICATION_SECTION() != section {
         *CURRENT_NOTIFICATION_SECTION.write() = section;
-        refresh_notifications(
-            api_base_url,
-            notifications_page,
-            notification_filters,
-            ui_model,
-        )
-        .await;
+        refresh_notifications(context).await;
     }
 
     if let Some(index) = notifications_page
@@ -781,36 +1009,7 @@ async fn load_and_select_notification(
     }
 }
 
-/// Delete a notification, returning whether it succeeded.
-async fn delete_notification(
-    api_base_url: &Url,
-    notification_id: NotificationId,
-    mut notifications_page: Signal<Page<NotificationWithTask>>,
-    ui_model: Signal<UniversalInboxUIModel>,
-    toast_service: &Coroutine<ToastCommand>,
-) -> bool {
-    notifications_page
-        .write()
-        .remove_element(|notif| notif.id != notification_id);
-
-    let result: Result<Option<Notification>, anyhow::Error> = call_api_and_notify(
-        Method::PATCH,
-        api_base_url,
-        &format!("notifications/{notification_id}"),
-        Some(NotificationPatch {
-            status: Some(NotificationStatus::Deleted),
-            ..Default::default()
-        }),
-        Some(ui_model),
-        toast_service,
-        "Deleting notification...",
-        "Successfully deleted notification",
-    )
-    .await;
-    result.is_ok()
-}
-
-async fn delete_task(
+fn delete_task(
     notification_id: NotificationId,
     task_id: TaskId,
     mut notifications_page: Signal<Page<NotificationWithTask>>,
@@ -848,16 +1047,11 @@ where
         .into()
 }
 
-/// Delete the inbox notifications, returning the deleted ones and the list refetched after.
-async fn delete_all_notifications(
-    api_base_url: &Url,
-    mut notifications_page: Signal<Page<NotificationWithTask>>,
-    notification_filters: Signal<NotificationFilters>,
-    ui_model: Signal<UniversalInboxUIModel>,
-    toast_service: &Coroutine<ToastCommand>,
-) -> (Vec<NotificationId>, Option<FetchedList>) {
+/// Delete the inbox notifications, then refetch the list.
+fn delete_all_notifications(context: &NotificationServiceContext) -> StartedCommand {
+    let mut notifications_page = context.notifications_page;
     // Get current filter parameters to match what's currently visible
-    let source_filters = notification_filters().selected();
+    let source_filters = context.notification_filters.peek().selected();
 
     let patch_request = PatchNotificationsRequest {
         status: vec![NotificationStatus::Unread, NotificationStatus::Read],
@@ -871,48 +1065,65 @@ async fn delete_all_notifications(
 
     // Clear the UI immediately for better UX
     notifications_page.write().content.clear();
+    let change = context
+        .local_changes
+        .borrow_mut()
+        .pending
+        .start(PendingEffect::RemovedAll(
+            *CURRENT_NOTIFICATION_SECTION.peek(),
+        ));
 
-    let result: Result<Vec<Notification>> = call_api_and_notify(
-        Method::PATCH,
-        api_base_url,
-        "notifications",
-        Some(patch_request),
-        Some(ui_model),
-        toast_service,
-        "Deleting all notifications...",
-        "All notifications have been deleted",
-    )
-    .await;
+    let context = context.clone();
+    StartedCommand::Action(
+        async move {
+            let result: Result<Vec<Notification>> = call_api_and_notify(
+                Method::PATCH,
+                &context.api_base_url,
+                "notifications",
+                Some(patch_request),
+                Some(context.ui_model),
+                &context.toast_service,
+                "Deleting all notifications...",
+                "All notifications have been deleted",
+            )
+            .await;
 
-    let Ok(deleted_notifications) = result else {
-        return (vec![], None);
-    };
-    let deleted_ids = deleted_notifications
-        .into_iter()
-        .map(|notification| notification.id)
-        .collect();
-    // Refresh to make sure UI is in sync
-    let fetched_list = refresh_notifications(
-        api_base_url,
-        notifications_page,
-        notification_filters,
-        ui_model,
+            let deleted_ids: Vec<NotificationId> = result
+                .as_ref()
+                .map(|deleted_notifications| {
+                    deleted_notifications
+                        .iter()
+                        .map(|notification| notification.id)
+                        .collect()
+                })
+                .unwrap_or_default();
+            context.local_changes.borrow_mut().settle(
+                change,
+                result.is_ok(),
+                &deleted_ids,
+                Date::now(),
+            );
+            if result.is_ok() {
+                // Refresh to make sure UI is in sync
+                Some(ListJob::Refresh {
+                    refresh_counts: true,
+                })
+            } else {
+                Some(ListJob::RefreshCounts)
+            }
+        }
+        .boxed_local(),
     )
-    .await;
-    (deleted_ids, fetched_list)
 }
 
-/// Answer an invitation, returning whether it succeeded.
-async fn patch_invitation(
-    mut notifications_page: Signal<Page<NotificationWithTask>>,
+/// Answer an invitation.
+fn answer_invitation(
+    context: &NotificationServiceContext,
     notification_id: NotificationId,
-    api_base_url: &Url,
     response_status: GoogleCalendarEventAttendeeResponseStatus,
-    ui_model: Signal<UniversalInboxUIModel>,
-    toast_service: Coroutine<ToastCommand>,
-) -> bool {
+) -> StartedCommand {
     // An attendee reply (METHOD:REPLY) is not an invitation to answer
-    let has_invitation = notifications_page.read().content.iter().any(|notif| {
+    let has_invitation = context.notifications_page.read().content.iter().any(|notif| {
         notif.id == notification_id
             && matches!(
                 &notif.source_item.data,
@@ -920,12 +1131,8 @@ async fn patch_invitation(
             )
     });
     if !has_invitation {
-        return false;
+        return StartedCommand::ListJob(ListJob::RefreshCounts);
     }
-
-    notifications_page
-        .write()
-        .remove_element(|notif| notif.id != notification_id);
 
     let (loading_message, success_message) = match response_status {
         GoogleCalendarEventAttendeeResponseStatus::Accepted => (
@@ -945,18 +1152,15 @@ async fn patch_invitation(
         }
     };
 
-    let result: Result<Option<Notification>> = call_api_and_notify(
+    remove_and_call::<_, Option<Notification>>(
+        context,
+        notification_id,
         Method::PATCH,
-        api_base_url,
-        &format!("notifications/{notification_id}/invitation"),
+        format!("notifications/{notification_id}/invitation"),
         Some(InvitationPatch { response_status }),
-        Some(ui_model),
-        &toast_service,
         loading_message,
         success_message,
     )
-    .await;
-    result.is_ok()
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -1252,5 +1456,151 @@ mod tests {
             .collect();
 
         assert_eq!(selected_index_after_refresh(ids[0], [ids[1], ids[2]]), None);
+    }
+
+    fn removed_from_inbox(n: u128) -> PendingEffect {
+        PendingEffect::Removed(notification_id(n), NotificationSection::Inbox)
+    }
+
+    #[wasm_bindgen_test]
+    fn test_pending_changes_running_change_applies_to_fetched_list() {
+        let mut pending = PendingChanges::default();
+        pending.start(removed_from_inbox(1));
+        pending.start(PendingEffect::Read(notification_id(2)));
+        let list_fetch = pending.start_list_fetch();
+
+        let effects = pending.effects_on(list_fetch, NotificationSection::Inbox);
+        assert_eq!(effects.len(), 2);
+        assert!(effects.contains(&removed_from_inbox(1)));
+        assert!(effects.contains(&PendingEffect::Read(notification_id(2))));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_pending_changes_removal_applies_only_to_its_section() {
+        let mut pending = PendingChanges::default();
+        pending.start(removed_from_inbox(1));
+        pending.start(PendingEffect::RemovedAll(NotificationSection::Inbox));
+        let list_fetch = pending.start_list_fetch();
+
+        assert!(
+            pending
+                .effects_on(list_fetch, NotificationSection::Deleted)
+                .is_empty()
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_pending_changes_settled_change_applies_to_lists_fetched_before_it_settled() {
+        let mut pending = PendingChanges::default();
+        let change = pending.start(removed_from_inbox(1));
+        let list_fetch_before = pending.start_list_fetch();
+        pending.settle(change, true);
+
+        assert_eq!(
+            pending.effects_on(list_fetch_before, NotificationSection::Inbox),
+            vec![removed_from_inbox(1)]
+        );
+        assert!(!pending.is_running(notification_id(1)));
+
+        let list_fetch_after = pending.start_list_fetch();
+        assert!(
+            pending
+                .effects_on(list_fetch_after, NotificationSection::Inbox)
+                .is_empty()
+        );
+        assert!(pending.changes.is_empty());
+    }
+
+    #[wasm_bindgen_test]
+    fn test_pending_changes_failed_change_is_dropped() {
+        let mut pending = PendingChanges::default();
+        let change = pending.start(removed_from_inbox(1));
+        let list_fetch = pending.start_list_fetch();
+        pending.settle(change, false);
+
+        assert!(
+            pending
+                .effects_on(list_fetch, NotificationSection::Inbox)
+                .is_empty()
+        );
+        assert!(!pending.is_running(notification_id(1)));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_local_changes_skip_echo_of_running_changes() {
+        let mut local_changes = LocalChanges::default();
+        let change = local_changes.pending.start(removed_from_inbox(1));
+
+        assert!(local_changes.is_own_change(Some(&[notification_id(1)]), 0.0));
+        assert!(!local_changes.is_own_change(Some(&[notification_id(2)]), 0.0));
+
+        local_changes.pending.settle(change, false);
+        assert!(!local_changes.is_own_change(Some(&[notification_id(1)]), 0.0));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_local_changes_skip_events_without_ids_while_delete_all_runs() {
+        let mut local_changes = LocalChanges::default();
+        let change = local_changes
+            .pending
+            .start(PendingEffect::RemovedAll(NotificationSection::Inbox));
+
+        assert!(local_changes.is_own_change(None, 0.0));
+
+        local_changes.pending.settle(change, true);
+        assert!(!local_changes.is_own_change(None, 0.0));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_enqueue_list_job_skips_counts_refresh_already_queued() {
+        let mut list_jobs = VecDeque::new();
+        enqueue_list_job(&mut list_jobs, ListJob::RefreshCounts);
+        enqueue_list_job(&mut list_jobs, ListJob::RefreshCounts);
+        enqueue_list_job(
+            &mut list_jobs,
+            ListJob::Refresh {
+                refresh_counts: false,
+            },
+        );
+
+        assert_eq!(
+            list_jobs,
+            VecDeque::from([
+                ListJob::RefreshCounts,
+                ListJob::Refresh {
+                    refresh_counts: false
+                },
+            ])
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_local_changes_bulk_echo_seen_while_running_is_not_awaited_again() {
+        let ids: Vec<NotificationId> = (0..=MAX_EVENT_IDS as u128).map(notification_id).collect();
+        let mut local_changes = LocalChanges::default();
+        let change = local_changes
+            .pending
+            .start(PendingEffect::RemovedAll(NotificationSection::Inbox));
+
+        assert!(local_changes.is_own_change(None, 0.0));
+        assert!(!local_changes.is_own_change(None, 0.0));
+
+        local_changes.settle(change, true, &ids, 0.0);
+        assert!(!local_changes.is_own_change(None, 1_000.0));
+        assert!(local_changes.is_own_change(Some(&ids), 1_000.0));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_local_changes_bulk_echo_after_settle_is_skipped_once() {
+        let ids: Vec<NotificationId> = (0..=MAX_EVENT_IDS as u128).map(notification_id).collect();
+        let mut local_changes = LocalChanges::default();
+        let change = local_changes
+            .pending
+            .start(PendingEffect::RemovedAll(NotificationSection::Inbox));
+
+        local_changes.settle(change, true, &ids, 0.0);
+
+        assert!(local_changes.is_own_change(None, 1_000.0));
+        assert!(!local_changes.is_own_change(None, 1_000.0));
     }
 }
