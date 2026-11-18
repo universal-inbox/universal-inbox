@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     fmt::Debug,
     panic::AssertUnwindSafe,
     sync::{Arc, Weak},
@@ -32,8 +32,8 @@ use universal_inbox::{
     third_party::{
         integrations::{slack::SlackReaction, ticktick::TickTickList},
         item::{
-            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemSource,
-            ThirdPartyItemSourceKind,
+            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemKind,
+            ThirdPartyItemSource, ThirdPartyItemSourceKind,
         },
     },
     user::UserId,
@@ -628,7 +628,7 @@ impl TaskService {
         let updated_third_party_item = upsert_item.value();
         let source_id = updated_third_party_item.source_id.clone();
 
-        if let Some(TaskCreationResult { task, .. }) = self
+        if let Some(TaskCreationResult { mut task, .. }) = self
             .create_task_from_third_party_item(
                 executor,
                 *updated_third_party_item,
@@ -638,19 +638,9 @@ impl TaskService {
             )
             .await?
         {
-            if task_creation.parent_id.is_none() {
-                return Ok(Box::new(task));
-            }
-            self.nest_tasks_under_upstream_parents(executor, user_id, [&task])
+            self.nest_tasks_under_upstream_parents(executor, user_id, [&mut task])
                 .await?;
-            let nested = self
-                .repository
-                .get_one_task(executor, task.id)
-                .await?
-                .ok_or_else(|| {
-                    UniversalInboxError::ItemNotFound(format!("Task {} not found", task.id))
-                })?;
-            Ok(Box::new(nested))
+            Ok(Box::new(task))
         } else {
             Err(UniversalInboxError::Unexpected(anyhow!(
                 "A task should have been created from the {integration_provider_kind} task {source_id}",
@@ -884,44 +874,53 @@ impl TaskService {
     }
 
     /// Nest each of the user's `tasks` under the parent its upstream item names, matched on the
-    /// parent's upstream id: the task manager owns the nesting. A parent that is not synced
-    /// leaves the task at the top level, never drops it. The order of `tasks` does not matter, as
-    /// long as every task of the batch is stored. Only TickTick nests for now (Todoist: qk5d.3).
+    /// parent's item in that task manager, whether it is the parent's source or its sink (a
+    /// Linear task synced to TickTick can hold TickTick subtasks): the task manager owns the
+    /// nesting. A parent that is not synced leaves the task at the top level, never drops it. The
+    /// order of `tasks` does not matter, as long as every task of the batch is stored. Each task
+    /// is updated in place, so what the caller returns carries the stored parent. Only TickTick
+    /// nests for now (Todoist: qk5d.3).
     pub async fn nest_tasks_under_upstream_parents<'a>(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-        tasks: impl IntoIterator<Item = &'a Task>,
+        tasks: impl IntoIterator<Item = &'a mut Task>,
     ) -> Result<(), UniversalInboxError> {
-        let nested: Vec<(&Task, UpstreamNesting)> = tasks
+        let mut nested: Vec<(&mut Task, UpstreamNesting)> = tasks
             .into_iter()
             .filter_map(|task| UpstreamNesting::of(task).map(|nesting| (task, nesting)))
             .collect();
-        let mut kinds: Vec<TaskSourceKind> =
-            nested.iter().map(|(_, nesting)| nesting.kind).collect();
-        kinds.sort();
-        kinds.dedup();
-        let mut parents = BTreeMap::new();
+        let mut kinds: Vec<ThirdPartyItemKind> = vec![];
+        for (_, nesting) in &nested {
+            if !kinds.contains(&nesting.item_kind) {
+                kinds.push(nesting.item_kind);
+            }
+        }
+        let mut parents: Vec<(ThirdPartyItemKind, HashMap<String, TaskId>)> = vec![];
         for kind in kinds {
             let parent_source_ids: Vec<String> = nested
                 .iter()
-                .filter(|(_, nesting)| nesting.kind == kind)
-                .filter_map(|(_, nesting)| nesting.parent_source_id.cloned())
+                .filter(|(_, nesting)| nesting.item_kind == kind)
+                .filter_map(|(_, nesting)| nesting.parent_source_id.clone())
                 .collect();
-            for (source_id, task_id) in self
+            let found = self
                 .repository
-                .find_task_ids_by_source_ids(executor, user_id, kind, &parent_source_ids)
-                .await?
-            {
-                parents.insert((kind, source_id), task_id);
-            }
+                .find_task_ids_by_item_source_ids(executor, user_id, kind, &parent_source_ids)
+                .await?;
+            parents.push((kind, found));
         }
-        for (task, nesting) in nested {
-            let parent_source_id = nesting.parent_source_id;
+        for (task, nesting) in nested.iter_mut() {
+            let parent_source_id = nesting.parent_source_id.take();
             let parent_id = parent_source_id
-                .and_then(|source_id| parents.get(&(nesting.kind, source_id.clone())).copied())
+                .as_ref()
+                .and_then(|source_id| {
+                    parents
+                        .iter()
+                        .find(|(kind, _)| *kind == nesting.item_kind)
+                        .and_then(|(_, found)| found.get(source_id).copied())
+                })
                 .filter(|parent_id| *parent_id != task.id);
-            if let (Some(source_id), None) = (parent_source_id, parent_id) {
+            if let (Some(source_id), None) = (&parent_source_id, parent_id) {
                 debug!(
                     { attr::USER_ID } = user_id.to_string(),
                     "Task {} stays at the top level: its parent {source_id} is not synced", task.id
@@ -931,6 +930,7 @@ impl TaskService {
                 self.repository
                     .set_task_parent(executor, task.id, parent_id)
                     .await?;
+                task.parent_id = parent_id;
             }
         }
         Ok(())
@@ -1103,7 +1103,9 @@ impl TaskService {
                 .nest_tasks_under_upstream_parents(
                     executor,
                     user_id,
-                    task_creation_results.iter().map(|result| &result.task),
+                    task_creation_results
+                        .iter_mut()
+                        .map(|result| &mut result.task),
                 )
                 .await?;
             Ok(task_creation_results)
@@ -2004,25 +2006,23 @@ fn moves_to_another_ticktick_project(task: &Task, destination: Option<&TaskDesti
         .unwrap_or(false)
 }
 
-/// How a task manager owning the nesting of its tasks nests one: under the task it names, among the
-/// tasks of the same kind
-struct UpstreamNesting<'a> {
-    /// The tasks the parent is looked for among
-    kind: TaskSourceKind,
+/// How a task manager owning the nesting of its tasks nests one: under the task whose item of the
+/// same kind it names
+struct UpstreamNesting {
+    /// The kind of item the parent is looked up by, as the parent's source or sink
+    item_kind: ThirdPartyItemKind,
     /// `None`: a top-level task
-    parent_source_id: Option<&'a String>,
+    parent_source_id: Option<String>,
 }
 
-impl<'a> UpstreamNesting<'a> {
+impl UpstreamNesting {
     /// How the task manager of `task` nests it, if it owns its nesting
-    fn of(task: &'a Task) -> Option<Self> {
+    fn of(task: &Task) -> Option<Self> {
         match (task.kind, &task.source_item.data) {
-            (kind @ TaskSourceKind::TickTick, ThirdPartyItemData::TickTickItem(item)) => {
-                Some(Self {
-                    kind,
-                    parent_source_id: item.parent_id.as_ref(),
-                })
-            }
+            (TaskSourceKind::TickTick, ThirdPartyItemData::TickTickItem(item)) => Some(Self {
+                item_kind: ThirdPartyItemKind::TickTickItem,
+                parent_source_id: item.parent_id.clone(),
+            }),
             _ => None,
         }
     }

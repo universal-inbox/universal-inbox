@@ -2,6 +2,7 @@
 //! bound to their list and nested by `parentId`, and lists created in a folder. Every TickTick
 //! call is a wiremock: the folder, list creation and nesting endpoints are undocumented upstream.
 
+use graphql_client::Response;
 use http::StatusCode;
 use rstest::{fixture, rstest};
 use serde_json::{Value, json};
@@ -15,22 +16,32 @@ use universal_inbox::{
     context::{Context, ContextBinding, ContextSummary},
     integration_connection::{
         config::IntegrationConnectionConfig,
-        integrations::{github::GithubConfig, ticktick::TickTickConfig},
+        integrations::{
+            github::GithubConfig,
+            linear::{LinearConfig, LinearSyncTaskConfig},
+            ticktick::TickTickConfig,
+        },
         provider::IntegrationProviderKind,
     },
     notification::Notification,
     task::{
-        Task, TaskCreation, TaskCreationResult, TaskDestination, TaskPriority, TaskStatus,
-        TaskSyncSourceKind, integrations::ticktick::TickTickProject,
+        ProjectReference, ProjectSummary, Task, TaskCreation, TaskCreationResult, TaskDestination,
+        TaskId, TaskPriority, TaskStatus, TaskSyncSourceKind,
+        integrations::ticktick::TickTickProject,
     },
-    third_party::integrations::{
-        github::GithubNotification,
-        ticktick::{TickTickItem, TickTickProjectGroup},
+    third_party::{
+        integrations::{
+            github::GithubNotification,
+            linear::LinearIssue,
+            ticktick::{TickTickItem, TickTickProjectGroup},
+        },
+        item::ThirdPartyItemData,
     },
 };
 
 use universal_inbox_api::{
-    configuration::Settings, repository::context::ContextRepository,
+    configuration::Settings, integrations::linear::graphql::assigned_issues_query,
+    repository::context::ContextRepository,
     universal_inbox::audit::actor_context::with_system_actor,
 };
 
@@ -38,17 +49,21 @@ use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         OAuthCredentialFixture, create_and_mock_integration_connection,
-        create_ticktick_integration_connection, github_oauth_credential,
+        create_ticktick_integration_connection, github_oauth_credential, linear_oauth_credential,
     },
     notification::{
         create_task_from_notification_response,
         github::{create_notification_from_github_notification, github_notification},
+        linear::sync_linear_tasks_response,
     },
     rest::get_resource,
     settings,
-    task::ticktick::{
-        mock_ticktick_inbox_data_service, mock_ticktick_list_projects_service,
-        mock_ticktick_list_tasks_service, ticktick_item,
+    task::{
+        linear::create_linear_task_with_ticktick_sink,
+        ticktick::{
+            mock_ticktick_inbox_data_service, mock_ticktick_list_projects_service,
+            mock_ticktick_list_tasks_service, ticktick_item,
+        },
     },
 };
 
@@ -202,6 +217,16 @@ async fn task_of(app: &AuthenticatedApp, results: &[TaskCreationResult], source_
     *get_resource::<Task>(&app.client, &app.app.api_address, "tasks", task_id.into()).await
 }
 
+/// The parent of the task synced from `source_id`, as the sync returned it
+fn returned_parent(results: &[TaskCreationResult], source_id: &str) -> Option<TaskId> {
+    results
+        .iter()
+        .find(|result| result.task.source_item.source_id == source_id)
+        .unwrap_or_else(|| panic!("No task synced from {source_id}"))
+        .task
+        .parent_id
+}
+
 async fn post_context(app: &AuthenticatedApp, body: Value) -> reqwest::Response {
     app.client
         .post(format!("{}contexts", app.app.api_address))
@@ -316,6 +341,9 @@ mod mirror {
         assert_eq!(child.parent_id, Some(parent.id));
         assert_eq!(grandchild.parent_id, Some(child.id));
         assert_eq!(task_of(&app, &results, "t_orphan").await.parent_id, None);
+        // The sync response carries the stored parents, not the ones before the nest pass
+        assert_eq!(returned_parent(&results, "t_child"), Some(parent.id));
+        assert_eq!(returned_parent(&results, "t_grandchild"), Some(child.id));
 
         // A subtask moved to the top level in TickTick is adopted on the next sync
         let tasks = vec![
@@ -339,6 +367,89 @@ mod mirror {
         assert_eq!(
             task_of(&app, &results, "t_child").await.parent_id,
             Some(parent.id)
+        );
+    }
+
+    /// A TickTick subtask of a Linear task synced to TickTick nests under that Linear task: the
+    /// parent is found by its TickTick item, which is the Linear task's sink
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_subtask_of_a_task_synced_to_ticktick_nests_under_it(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+        linear_oauth_credential: OAuthCredentialFixture,
+        task_template: TickTickItem,
+    ) {
+        let app = authenticated_app.await;
+        let ticktick_connection = create_ticktick_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings,
+            IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+            None,
+        )
+        .await;
+        let errands = ProjectSummary {
+            name: "Errands".to_string(),
+            source_id: "l1".into(),
+        };
+        let linear_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            IntegrationConnectionConfig::Linear(LinearConfig {
+                sync_notifications_enabled: true,
+                sync_task_config: LinearSyncTaskConfig {
+                    enabled: true,
+                    target_project: Some(ProjectReference::Project(errands.clone())),
+                    task_manager_provider_kind: Some(IntegrationProviderKind::TickTick),
+                    ..Default::default()
+                },
+            }),
+            &settings,
+            linear_oauth_credential,
+            None,
+            None,
+        )
+        .await;
+        let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+            .data
+            .clone()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let linear_task = create_linear_task_with_ticktick_sink(
+            &app.app,
+            &linear_issues[0],
+            errands,
+            app.user.id,
+            linear_connection.id,
+            ticktick_connection.id,
+            "tt_linear_sink".to_string(),
+            "l1".to_string(),
+        )
+        .await;
+        let ThirdPartyItemData::TickTickItem(sink_item) =
+            linear_task.sink_item.as_ref().unwrap().data.clone()
+        else {
+            panic!("Expected the sink item to be a TickTick item");
+        };
+        let subtask = item(&task_template, "t_sub", "l1", Some("tt_linear_sink"));
+        serve_ticktick(
+            &app,
+            &personal_lists(),
+            folders_ok(&personal_folders()),
+            &[],
+            &[*sink_item, subtask],
+        )
+        .await;
+
+        let results = sync(&app).await;
+
+        assert_eq!(returned_parent(&results, "t_sub"), Some(linear_task.id));
+        assert_eq!(
+            task_of(&app, &results, "t_sub").await.parent_id,
+            Some(linear_task.id)
         );
     }
 
@@ -564,6 +675,55 @@ mod creation {
         let contexts = stored_contexts(&app).await;
         let trips = bound_to(&contexts, "l9");
         assert_eq!((trips.id, trips.parent_id), (context.id, Some(personal)));
+    }
+
+    /// A list just created is found right away by a project lookup, not once the cached
+    /// projects expire
+    #[rstest]
+    #[tokio::test]
+    async fn test_a_created_list_is_found_at_once(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = mirrored_user(&settings, authenticated_app.await).await;
+        let personal = bound_to(&stored_contexts(&app).await, "group:f1").id;
+        Mock::given(method("POST"))
+            .and(path("/project"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(list("l9", "Trips", Some("f1"))))
+            .mount(&app.app.ticktick_mock_server)
+            .await;
+        let mut lists = personal_lists();
+        lists.push(list("l9", "Trips", Some("f1")));
+        // TickTick lists the new list from now on; the cached projects do not have it yet
+        Mock::given(method("GET"))
+            .and(path("/project"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&lists))
+            .with_priority(1)
+            .mount(&app.app.ticktick_mock_server)
+            .await;
+
+        let response = post_context(&app, json!({ "name": "Trips", "parent_id": personal })).await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let found: Vec<ProjectSummary> = app
+            .client
+            .get(format!(
+                "{}tasks/projects/search?matches=Trips&provider_kind=TickTick",
+                app.app.api_address
+            ))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(
+            found,
+            vec![ProjectSummary {
+                source_id: "l9".into(),
+                name: "Trips".to_string(),
+            }]
+        );
     }
 
     /// TickTick's answer to a list creation at the plan's list limit is a bare server error: it

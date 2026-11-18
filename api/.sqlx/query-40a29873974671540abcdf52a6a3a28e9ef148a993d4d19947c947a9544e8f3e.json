@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT task.id, third_party_item.source_id\n                FROM task\n                JOIN third_party_item ON third_party_item.id = task.source_item_id\n                WHERE task.user_id = $1\n                  AND task.kind::TEXT = $2\n                  AND third_party_item.source_id = ANY($3)\n            ",
+  "query": "\n                SELECT DISTINCT task.id, third_party_item.source_id\n                FROM task\n                JOIN third_party_item\n                  ON third_party_item.id IN (task.source_item_id, task.sink_item_id)\n                WHERE task.user_id = $1\n                  AND third_party_item.kind::TEXT = $2\n                  AND third_party_item.source_id = ANY($3)\n            ",
   "describe": {
     "columns": [
       {
@@ -38,5 +38,5 @@
       false
     ]
   },
-  "hash": "c3cdeef549d936beb4e428e175358010e6ab01388067794d42af0d40ae6cb245"
+  "hash": "40a29873974671540abcdf52a6a3a28e9ef148a993d4d19947c947a9544e8f3e"
 }

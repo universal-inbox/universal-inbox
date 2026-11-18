@@ -109,12 +109,13 @@ pub trait TaskRepository {
         user_id: UserId,
         task_manager: IntegrationProviderKind,
     ) -> Result<TaskContextBackfill, UniversalInboxError>;
-    /// The user's tasks synced from `kind`, by the id of their source item upstream
-    async fn find_task_ids_by_source_ids(
+    /// The user's tasks whose item of `item_kind` (their source or their sink, e.g. a Linear task
+    /// synced to TickTick) has one of `source_ids` upstream, by that id
+    async fn find_task_ids_by_item_source_ids(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-        kind: TaskSourceKind,
+        item_kind: ThirdPartyItemKind,
         source_ids: &[String],
     ) -> Result<HashMap<String, TaskId>, UniversalInboxError>;
     /// Set the parent of the task `task_id`. `false`: it already had that parent.
@@ -1262,11 +1263,11 @@ impl TaskRepository for Repository {
         skip_all,
         fields({ attr::USER_ID } = user_id.to_string())
     )]
-    async fn find_task_ids_by_source_ids(
+    async fn find_task_ids_by_item_source_ids(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-        kind: TaskSourceKind,
+        item_kind: ThirdPartyItemKind,
         source_ids: &[String],
     ) -> Result<HashMap<String, TaskId>, UniversalInboxError> {
         if source_ids.is_empty() {
@@ -1274,15 +1275,16 @@ impl TaskRepository for Repository {
         }
         Ok(sqlx::query!(
             r#"
-                SELECT task.id, third_party_item.source_id
+                SELECT DISTINCT task.id, third_party_item.source_id
                 FROM task
-                JOIN third_party_item ON third_party_item.id = task.source_item_id
+                JOIN third_party_item
+                  ON third_party_item.id IN (task.source_item_id, task.sink_item_id)
                 WHERE task.user_id = $1
-                  AND task.kind::TEXT = $2
+                  AND third_party_item.kind::TEXT = $2
                   AND third_party_item.source_id = ANY($3)
             "#,
             user_id.0,
-            kind.to_string(),
+            item_kind.to_string(),
             source_ids
         )
         .fetch_all(&mut **executor)

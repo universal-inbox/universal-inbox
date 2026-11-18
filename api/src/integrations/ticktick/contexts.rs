@@ -53,8 +53,9 @@ impl TickTickService {
     }
 
     /// Create the TickTick list `name` in the folder bound to `folder_source_id` and return its
-    /// id. Sent once, never retried. TickTick's unspecific server error is what it answers once
-    /// the plan's list limit is reached: it is told apart, any other failure is not.
+    /// id; the cached projects are refreshed so the new list resolves at once. Sent once, never
+    /// retried. TickTick's unspecific server error is what it answers once the plan's list limit
+    /// is reached: it is told apart, any other failure is not.
     pub async fn create_list_in_folder(
         &self,
         access_token: &AccessToken,
@@ -77,7 +78,11 @@ impl TickTickService {
             .post::<TickTickProject, _, _>(self.endpoint(&["project"])?, Some(&request))
             .await
         {
-            Ok(project) => Ok(ProjectId(project.id)),
+            Ok(project) => {
+                // The cached list of projects predates the new list: refetch it on the next read
+                self.projects_cache_index.fetch_add(1, Ordering::Relaxed);
+                Ok(ProjectId(project.id))
+            }
             Err(ApiClientError::NetworkError(err))
                 if err.status()
                     == Some(reqwest_middleware::reqwest::StatusCode::INTERNAL_SERVER_ERROR) =>
