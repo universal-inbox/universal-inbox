@@ -721,7 +721,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "search_contexts",
         title = "Search projects",
-        description = "Find the projects a task can be created in or moved to (Todoist projects, mirrored by Universal Inbox), each with its id and its path from the root project. Matches the name of the project or of one of its parents. Pass a project's id as the destination when creating or updating a task: a project is never chosen by its name. Archived projects are not listed.",
+        description = "Find the projects a task can be created in or moved to (Todoist projects and TickTick lists, mirrored by Universal Inbox; a TickTick folder holds no task), each with its id and its path from the root project. Matches the name of the project or of one of its parents. Pass a project's id as the destination when creating or updating a task: a project is never chosen by its name. Archived projects are not listed.",
         output_schema = search_contexts_output_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]

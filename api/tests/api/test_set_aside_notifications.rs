@@ -912,7 +912,6 @@ async fn triage_notification(
                 priority: TaskPriority::P4,
                 due_at: DefaultValue::new(None, None),
                 tags: vec![],
-                parent_id: None,
                 project: DefaultValue::new("Inbox".to_string(), None),
                 context_id: DefaultValue::new(None, None),
                 is_recurring: false,

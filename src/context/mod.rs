@@ -11,7 +11,8 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    integration_connection::provider::IntegrationProviderKind, task::ProjectId, user::UserId,
+    integration_connection::provider::IntegrationProviderKind, task::ProjectId,
+    third_party::integrations::ticktick::is_ticktick_folder_source_id, user::UserId,
 };
 
 mod ownership;
@@ -49,6 +50,37 @@ impl Context {
     /// takes no new task in an archived project)
     pub fn is_todoist_destination(&self) -> bool {
         self.is_todoist_bound() && self.status == ContextStatus::Active
+    }
+
+    /// Bound to a TickTick folder, which holds lists, never tasks
+    pub fn is_ticktick_folder(&self) -> bool {
+        self.binding.as_ref().is_some_and(|binding| {
+            binding.provider == IntegrationProviderKind::TickTick
+                && is_ticktick_folder_source_id(&binding.source_id.0)
+        })
+    }
+
+    /// Bound to a TickTick list (the inbox included), which holds tasks
+    pub fn is_ticktick_list(&self) -> bool {
+        self.binding.as_ref().is_some_and(|binding| {
+            binding.provider == IntegrationProviderKind::TickTick
+                && !is_ticktick_folder_source_id(&binding.source_id.0)
+        })
+    }
+
+    /// The task manager a task can be created in or moved to through this context: `Active`,
+    /// bound to a Todoist project or a TickTick list. `None` for any other context.
+    pub fn task_destination_provider(&self) -> Option<IntegrationProviderKind> {
+        if self.status != ContextStatus::Active {
+            return None;
+        }
+        if self.is_todoist_bound() {
+            Some(IntegrationProviderKind::Todoist)
+        } else if self.is_ticktick_list() {
+            Some(IntegrationProviderKind::TickTick)
+        } else {
+            None
+        }
     }
 
     /// The provider that owns the `name` and `parent_id` of the context, if any. A `Tombstoned`

@@ -16,6 +16,7 @@ use universal_inbox::{
     audit::{AuditActorKind, AuditChangeKind, AuditEntityKind, AuditEvent, AuditEventFilter},
     auth::oauth2::{OAUTH2_SCOPE_READ, OAUTH2_SCOPE_WRITE},
     context::ContextSummary,
+    integration_connection::provider::IntegrationProviderKind,
     notification::{
         Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
         NotificationStatus, NotificationSyncSourceKind, NotificationWithTask,
@@ -225,6 +226,11 @@ pub(crate) struct SearchContextsArgs {
         description = "Text to find, case-insensitively, in the name of a project or of one of its parents. Omit it to list every project."
     )]
     matches: Option<String>,
+    #[schemars(
+        description = "Only the projects a task of this task manager (Todoist or TickTick) can go to. Omit it for every task manager."
+    )]
+    #[serde(default)]
+    provider_kind: Option<IntegrationProviderKind>,
 }
 
 #[derive(Deserialize, Serialize, JsonSchema)]
@@ -542,6 +548,7 @@ pub async fn execute_tool(
                 .search_contexts(
                     &mut transaction,
                     args.matches.as_deref().unwrap_or_default(),
+                    args.provider_kind,
                     user_id,
                 )
                 .await

@@ -1255,6 +1255,7 @@ impl NotificationService {
                 priority: default_priority.unwrap_or_default(),
                 task_provider_kind: Some(resolved_provider_kind),
                 time_config: default_time_config,
+                parent_id: None,
             }
         };
 

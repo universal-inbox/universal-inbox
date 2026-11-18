@@ -102,11 +102,18 @@ pub async fn search_ticktick_projects(
     call_api::<Vec<ProjectSummary>, ()>(Method::GET, api_base_url, &path, None, None).await
 }
 
-/// Search the contexts a task can be bound to (the Todoist projects) via
-/// `GET /contexts/search?matches=…`, each with its path. An empty `query` lists them all, the
-/// inbox first.
+/// Search the contexts a Todoist task can be bound to (the Todoist projects) via
+/// `GET /contexts/search?matches=…&provider_kind=Todoist`, each with its path. An empty `query`
+/// lists them all, the inbox first.
 pub async fn search_contexts(api_base_url: &Url, query: &str) -> Result<Vec<ContextSummary>> {
-    let qs = serde_urlencoded::to_string([("matches", query)]).unwrap_or_default();
+    let qs = serde_urlencoded::to_string([
+        ("matches", query),
+        (
+            "provider_kind",
+            &IntegrationProviderKind::Todoist.to_string(),
+        ),
+    ])
+    .unwrap_or_default();
     let path = format!("contexts/search?{qs}");
     call_api::<Vec<ContextSummary>, ()>(Method::GET, api_base_url, &path, None, None).await
 }

@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
+    context::{Context, MirroredProject},
     notification::{Notification, NotificationSource},
     task::{CreateOrUpdateTaskRequest, TaskCreation, TaskCreationConfig, service::TaskPatch},
     third_party::item::{ThirdPartyItem, ThirdPartyItemSourceKind},
@@ -130,5 +131,19 @@ pub mod task {
             task: &TaskCreation,
             user_id: UserId,
         ) -> Result<T, UniversalInboxError>;
+    }
+
+    /// A task manager whose projects are mirrored as contexts
+    #[async_trait]
+    pub trait ContextMirrorSource: Send + Sync {
+        /// The user's projects to mirror, bound on the ids the task manager gives them. Empty
+        /// without an access token. `mirrored`: the contexts already mirroring this task
+        /// manager, for a provider that needs them to keep its tree when a read fails.
+        async fn list_mirrored_projects(
+            &self,
+            executor: &mut Transaction<'_, Postgres>,
+            user_id: UserId,
+            mirrored: &[Context],
+        ) -> Result<Vec<MirroredProject>, UniversalInboxError>;
     }
 }

@@ -24,7 +24,7 @@ use wiremock::{
 };
 
 use universal_inbox::{
-    context::MirroredProject,
+    context::{Context as UiContext, MirroredProject},
     integration_connection::{
         integrations::todoist::{SyncToken, TodoistContext},
         provider::{
@@ -57,7 +57,7 @@ use crate::{
         mock::MOCK_PROJECT_NAMES,
         notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
-        task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
+        task::{ContextMirrorSource, ThirdPartyTaskService, ThirdPartyTaskSourceService},
         third_party::ThirdPartyItemSourceService,
     },
     repository::{
@@ -822,20 +822,25 @@ impl TodoistService {
             }
         }
     }
+}
 
+#[async_trait]
+impl ContextMirrorSource for TodoistService {
     /// The user's Todoist projects, with the id Todoist gives them and the id of their parent, so
     /// that they can be bound on it instead of on their name. Deleted projects are left out.
-    /// Empty without a Todoist access token.
+    /// Empty without a Todoist access token. Todoist always returns the whole tree: `mirrored`
+    /// is not needed.
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
         skip_all,
         fields({ attr::USER_ID } = user_id.to_string())
     )]
-    pub async fn list_mirrored_projects(
+    async fn list_mirrored_projects(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
+        _mirrored: &[UiContext],
     ) -> Result<Vec<MirroredProject>, UniversalInboxError> {
         let Some((access_token, _)) = self
             .integration_connection_service
@@ -864,7 +869,9 @@ impl TodoistService {
             })
             .collect())
     }
+}
 
+impl TodoistService {
     pub async fn find_access_token(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -978,7 +985,6 @@ impl TodoistService {
                 .iter()
                 .map(|label| label.name.clone())
                 .collect(),
-            parent_id: None, // Unsupported for now
             project: DefaultValue::new(TODOIST_INBOX_PROJECT.to_string(), Some(project_name)),
             context_id: DefaultValue::new(None, None),
             is_recurring: source
@@ -1373,6 +1379,11 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
         task: &TaskCreation,
         user_id: UserId,
     ) -> Result<TodoistItem, UniversalInboxError> {
+        if task.parent_id.is_some() {
+            return Err(UniversalInboxError::UnsupportedAction(
+                "Universal Inbox can’t create Todoist subtasks yet".to_string(),
+            ));
+        }
         let (access_token, _) = self
             .integration_connection_service
             .read()

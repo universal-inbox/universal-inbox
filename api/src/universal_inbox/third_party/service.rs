@@ -549,6 +549,7 @@ impl ThirdPartyItemService {
             // The source task's `due_at` already carries any time-of-day; there
             // is no separate time config to apply when mirroring to a sink.
             time_config: None,
+            parent_id: None,
         };
 
         let third_party_task = third_party_task_service

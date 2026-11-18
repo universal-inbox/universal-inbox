@@ -1279,6 +1279,7 @@ mod create_task_from_notification_validation {
                 priority: TaskPriority::P4,
                 task_provider_kind: None,
                 time_config: None,
+                parent_id: None,
             }),
         )
         .await;

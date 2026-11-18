@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT DISTINCT task.id, third_party_item.source_id\n                FROM task\n                JOIN third_party_item\n                  ON third_party_item.id IN (task.source_item_id, task.sink_item_id)\n                WHERE task.user_id = $1\n                  AND third_party_item.kind::TEXT = $2\n                  AND third_party_item.source_id = ANY($3)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "task",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "source_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "third_party_item",
+            "name": "source_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "40a29873974671540abcdf52a6a3a28e9ef148a993d4d19947c947a9544e8f3e"
+}

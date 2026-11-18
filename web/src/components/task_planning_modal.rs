@@ -570,6 +570,7 @@ fn build_creation(
         priority,
         task_provider_kind,
         time_config,
+        parent_id: None,
     })
 }
 

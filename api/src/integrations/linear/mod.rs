@@ -811,7 +811,6 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
                 .iter()
                 .map(|label| label.name.clone())
                 .collect(),
-            parent_id: None,
             // Only seeded, like the title: a move in the task manager stays
             project: DefaultValue::new(project.project_name, None),
             context_id: DefaultValue::new(project.context_id, None),

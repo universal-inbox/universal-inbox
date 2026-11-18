@@ -441,14 +441,18 @@ pub struct TaskCreation {
     pub title: String,
     #[validate(length(max = TASK_BODY_MAX_LENGTH))]
     pub body: Option<String>,
-    /// The project to create the task in, by id: a context id (see `search_contexts`) for
-    /// Todoist, a TickTick project id for TickTick. Omitted: the task manager's inbox.
+    /// The project to create the task in, by id: a context id (see `search_contexts`), or a
+    /// TickTick project id for TickTick. Omitted: the task manager's inbox, or the parent's
+    /// project.
     pub destination: Option<TaskDestination>,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
     pub task_provider_kind: Option<IntegrationProviderKind>,
     #[serde(default)]
     pub time_config: Option<TaskTimeConfig>,
+    /// The task to create this one under, in the parent's project. TickTick only.
+    #[serde(default)]
+    pub parent_id: Option<TaskId>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -483,7 +487,6 @@ pub struct CreateOrUpdateTaskRequest {
     pub priority: TaskPriority,
     pub due_at: DefaultValue<Option<DueDate>>,
     pub tags: Vec<String>,
-    pub parent_id: Option<TaskId>,
     /// Deprecated, display only (see [`Task::project`])
     pub project: DefaultValue<String>,
     /// The binding to the task's context, same ownership as `title`: the `default_value` seeds
@@ -510,7 +513,7 @@ impl From<CreateOrUpdateTaskRequest> for Task {
             priority: request.priority,
             due_at: request.due_at.into_value(),
             tags: request.tags,
-            parent_id: request.parent_id,
+            parent_id: None,
             project: request.project.into_value(),
             context_id: request.context_id.into_value(),
             context: None,
@@ -687,6 +690,7 @@ mod tests {
                 priority: TaskPriority::P4,
                 task_provider_kind: None,
                 time_config: None,
+                parent_id: None,
             }
         }
 

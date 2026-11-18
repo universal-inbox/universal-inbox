@@ -30,10 +30,10 @@ use universal_inbox::{
         service::TaskPatch,
     },
     third_party::{
-        integrations::slack::SlackReaction,
+        integrations::{slack::SlackReaction, ticktick::TickTickList},
         item::{
-            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemSource,
-            ThirdPartyItemSourceKind,
+            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemKind,
+            ThirdPartyItemSource, ThirdPartyItemSourceKind,
         },
     },
     user::UserId,
@@ -47,7 +47,7 @@ use crate::{
     integrations::{
         linear::LinearService,
         slack::SlackService,
-        task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
+        task::{ContextMirrorSource, ThirdPartyTaskService, ThirdPartyTaskSourceService},
         third_party::ThirdPartyItemSourceService,
         ticktick::TickTickService,
         todoist::TodoistService,
@@ -628,7 +628,7 @@ impl TaskService {
         let updated_third_party_item = upsert_item.value();
         let source_id = updated_third_party_item.source_id.clone();
 
-        if let Some(TaskCreationResult { task, .. }) = self
+        if let Some(TaskCreationResult { mut task, .. }) = self
             .create_task_from_third_party_item(
                 executor,
                 *updated_third_party_item,
@@ -638,6 +638,8 @@ impl TaskService {
             )
             .await?
         {
+            self.nest_tasks_under_upstream_parents(executor, user_id, [&mut task])
+                .await?;
             Ok(Box::new(task))
         } else {
             Err(UniversalInboxError::Unexpected(anyhow!(
@@ -796,76 +798,142 @@ impl TaskService {
     {
         let integration_provider_kind = third_party_task_service.get_integration_provider_kind();
         with_system_actor("SyncTasks", Some(integration_provider_kind), async {
-            self.run_sync_third_party_tasks(third_party_task_service, user_id, force_sync, false)
+            self.run_sync_third_party_tasks(third_party_task_service, user_id, force_sync)
                 .await
         })
         .await
     }
 
-    /// Synchronize the contexts mirroring the Todoist projects, then the Todoist tasks. Same
-    /// system job as `sync_third_party_tasks`.
-    ///
-    /// The contexts go first, once the sync is claimed: a task is bound to its context as it is
-    /// synced, and the inbox is told by its context, so the tasks of a first sync are bound and
-    /// their inbox notifications created in that very sync.
-    async fn sync_todoist_tasks_and_contexts(
+    /// The task manager `provider` as a source of contexts, if its projects are mirrored
+    fn context_mirror_source(
         &self,
-        user_id: UserId,
-        force_sync: bool,
-    ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
-        with_system_actor("SyncTasks", Some(IntegrationProviderKind::Todoist), async {
-            self.run_sync_third_party_tasks(self.todoist_service.clone(), user_id, force_sync, true)
-                .await
-        })
-        .await
+        provider: IntegrationProviderKind,
+    ) -> Option<Arc<dyn ContextMirrorSource>> {
+        match provider {
+            IntegrationProviderKind::Todoist => Some(self.todoist_service.clone()),
+            IntegrationProviderKind::TickTick => Some(self.ticktick_service.clone()),
+            _ => None,
+        }
     }
 
-    /// Fetch the Todoist projects of the user, mirror them as contexts, bind the user's Todoist
-    /// tasks to them, then migrate the stored default projects to contexts.
-    pub async fn sync_todoist_project_contexts(
+    /// Fetch the projects of the task manager `provider` (Todoist projects, TickTick folders and
+    /// lists), mirror them as contexts and bind the user's tasks living there to them, in one
+    /// transaction. For Todoist, the stored default projects then migrate to contexts. Nothing
+    /// for a task manager whose projects are not mirrored.
+    pub async fn sync_project_contexts(
         &self,
         user_id: UserId,
+        provider: IntegrationProviderKind,
     ) -> Result<Vec<UpsertStatus<Box<UiContext>>>, UniversalInboxError> {
+        let Some(source) = self.context_mirror_source(provider) else {
+            return Ok(vec![]);
+        };
         let mut transaction = self.begin().await.context(format!(
-            "Failed to create new transaction while syncing Todoist project contexts for user {user_id}"
+            "Failed to create new transaction while syncing {provider} contexts for user {user_id}"
         ))?;
-        let projects = self
-            .todoist_service
-            .list_mirrored_projects(&mut transaction, user_id)
+        let mirrored: Vec<UiContext> = self
+            .repository
+            .list_contexts_for_user(&mut transaction, user_id)
+            .await?
+            .into_iter()
+            .filter(|context| context.mirrored_from() == Some(provider))
+            .collect();
+        let projects = source
+            .list_mirrored_projects(&mut transaction, user_id, &mirrored)
             .await?;
         let upserts = self
-            .upsert_mirrored_contexts(
-                &mut transaction,
-                user_id,
-                IntegrationProviderKind::Todoist,
-                projects,
-            )
+            .upsert_mirrored_contexts(&mut transaction, user_id, provider, projects)
             .await?;
         // Tasks synced before their context existed (first sync, new project) are bound by id
         // now, in the same transaction as the contexts.
         let backfill = self
             .repository
-            .backfill_todoist_task_context_ids(&mut transaction, user_id)
+            .backfill_task_context_ids(&mut transaction, user_id, provider)
             .await?;
         debug!(
             bound = backfill.bound,
             unmatched = backfill.unmatched,
-            "Bound Todoist tasks to their project contexts for user {user_id}"
+            "Bound {provider} tasks to their contexts for user {user_id}"
         );
-        // The stored default projects bind by id too, once their contexts exist
-        let migrated = destination::migrate_todoist_default_projects(
-            &self.repository,
-            &mut transaction,
-            user_id,
-        )
-        .await?;
-        if migrated > 0 {
-            debug!("Migrated {migrated} default project(s) to contexts for user {user_id}");
+        if provider == IntegrationProviderKind::Todoist {
+            // The stored default projects bind by id too, once their contexts exist
+            let migrated = destination::migrate_todoist_default_projects(
+                &self.repository,
+                &mut transaction,
+                user_id,
+            )
+            .await?;
+            if migrated > 0 {
+                debug!("Migrated {migrated} default project(s) to contexts for user {user_id}");
+            }
         }
         transaction.commit().await.context(format!(
-            "Failed to commit while syncing Todoist project contexts for user {user_id}"
+            "Failed to commit while syncing {provider} contexts for user {user_id}"
         ))?;
         Ok(upserts)
+    }
+
+    /// Nest each of the user's `tasks` under the parent its upstream item names, matched on the
+    /// parent's item in that task manager, whether it is the parent's source or its sink (a
+    /// Linear task synced to TickTick can hold TickTick subtasks): the task manager owns the
+    /// nesting. A parent that is not synced leaves the task at the top level, never drops it. The
+    /// order of `tasks` does not matter, as long as every task of the batch is stored. Each task
+    /// is updated in place, so what the caller returns carries the stored parent. Only TickTick
+    /// nests for now (Todoist: qk5d.3).
+    pub async fn nest_tasks_under_upstream_parents<'a>(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        tasks: impl IntoIterator<Item = &'a mut Task>,
+    ) -> Result<(), UniversalInboxError> {
+        let mut nested: Vec<(&mut Task, UpstreamNesting)> = tasks
+            .into_iter()
+            .filter_map(|task| UpstreamNesting::of(task).map(|nesting| (task, nesting)))
+            .collect();
+        let mut kinds: Vec<ThirdPartyItemKind> = vec![];
+        for (_, nesting) in &nested {
+            if !kinds.contains(&nesting.item_kind) {
+                kinds.push(nesting.item_kind);
+            }
+        }
+        let mut parents: Vec<(ThirdPartyItemKind, HashMap<String, TaskId>)> = vec![];
+        for kind in kinds {
+            let parent_source_ids: Vec<String> = nested
+                .iter()
+                .filter(|(_, nesting)| nesting.item_kind == kind)
+                .filter_map(|(_, nesting)| nesting.parent_source_id.clone())
+                .collect();
+            let found = self
+                .repository
+                .find_task_ids_by_item_source_ids(executor, user_id, kind, &parent_source_ids)
+                .await?;
+            parents.push((kind, found));
+        }
+        for (task, nesting) in nested.iter_mut() {
+            let parent_source_id = nesting.parent_source_id.take();
+            let parent_id = parent_source_id
+                .as_ref()
+                .and_then(|source_id| {
+                    parents
+                        .iter()
+                        .find(|(kind, _)| *kind == nesting.item_kind)
+                        .and_then(|(_, found)| found.get(source_id).copied())
+                })
+                .filter(|parent_id| *parent_id != task.id);
+            if let (Some(source_id), None) = (&parent_source_id, parent_id) {
+                debug!(
+                    { attr::USER_ID } = user_id.to_string(),
+                    "Task {} stays at the top level: its parent {source_id} is not synced", task.id
+                );
+            }
+            if task.parent_id != parent_id {
+                self.repository
+                    .set_task_parent(executor, task.id, parent_id)
+                    .await?;
+                task.parent_id = parent_id;
+            }
+        }
+        Ok(())
     }
 
     /// Mirror each upstream project as a context bound on its `source_id`, with its parent.
@@ -961,15 +1029,16 @@ impl TaskService {
     /// The task creation results. Nothing is synced when there is no validated and enabled
     /// integration, or when another sync is in flight.
     ///
-    /// `mirror_todoist_contexts`: once the sync is claimed, mirror the Todoist projects as
-    /// contexts before fetching the tasks. Best effort: a failure is logged and the tasks are
-    /// still synced, the next sync retries the contexts.
+    /// Once the sync is claimed, a task manager whose projects are mirrored has them mirrored as
+    /// contexts before its tasks are fetched: a task is bound to its context as it is synced, and
+    /// the inbox is told by its context, so the tasks of a first sync are bound and their inbox
+    /// notifications created in that very sync. Best effort: a failure is logged and the tasks
+    /// are still synced, the next sync retries the contexts.
     async fn run_sync_third_party_tasks<T, U>(
         &self,
         third_party_task_service: Arc<U>,
         user_id: UserId,
         force_sync: bool,
-        mirror_todoist_contexts: bool,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
@@ -1029,6 +1098,16 @@ impl TaskService {
                     task_creation_results.push(task_creation_result);
                 }
             }
+            // Once the whole batch is stored, so a parent synced after its child is found
+            task_service
+                .nest_tasks_under_upstream_parents(
+                    executor,
+                    user_id,
+                    task_creation_results
+                        .iter_mut()
+                        .map(|result| &mut result.task),
+                )
+                .await?;
             Ok(task_creation_results)
         }
 
@@ -1117,12 +1196,13 @@ impl TaskService {
 
         info!("Syncing {integration_provider_kind} tasks for user {user_id}");
 
-        if mirror_todoist_contexts
-            && let Err(err) = self.sync_todoist_project_contexts(user_id).await
+        if let Err(err) = self
+            .sync_project_contexts(user_id, integration_provider_kind)
+            .await
         {
             warn!(
                 { attr::USER_ID } = user_id.to_string(),
-                "Failed to synchronize the Todoist project contexts: {err}"
+                "Failed to synchronize the {integration_provider_kind} project contexts: {err}"
             );
         }
 
@@ -1411,7 +1491,7 @@ impl TaskService {
         let result: Result<Vec<TaskCreationResult>, UniversalInboxError> = async move {
             match source {
                 TaskSyncSourceKind::Todoist => {
-                    self.sync_todoist_tasks_and_contexts(user_id, force_sync)
+                    self.sync_third_party_tasks(self.todoist_service.clone(), user_id, force_sync)
                         .await
                 }
                 TaskSyncSourceKind::Linear => {
@@ -1568,9 +1648,9 @@ impl TaskService {
             .repository
             .update_task(executor, task_id, patch, destination.as_ref(), for_user_id)
             .await?;
-        // The row keeps a TickTick project's name, not its id: a move between two projects
-        // sharing a name leaves the row as it is, and is still a change to send upstream.
-        // Remove once TickTick tasks are bound to contexts by id (qk5d.11).
+        // A TickTick project id destination to a list not mirrored yet leaves no context id to
+        // compare: a move between two lists sharing a name leaves the row as it is, and is still
+        // a change to send upstream. Remove once the picker sends contexts only (qk5d.14).
         if let Some(task) = &updated_task.result
             && moves_to_another_ticktick_project(task, patch.destination.as_ref())
         {
@@ -1741,6 +1821,7 @@ impl TaskService {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         matches: &str,
+        task_manager: Option<IntegrationProviderKind>,
         user_id: UserId,
     ) -> Result<Vec<ContextSummary>, UniversalInboxError> {
         let contexts = self
@@ -1751,7 +1832,11 @@ impl TaskService {
         let matches = matches.trim().to_lowercase();
         let mut found: Vec<(bool, ContextSummary)> = contexts
             .iter()
-            .filter(|context| context.is_todoist_destination())
+            .filter(|context| {
+                context
+                    .task_destination_provider()
+                    .is_some_and(|provider| task_manager.is_none_or(|wanted| wanted == provider))
+            })
             .filter_map(|context| summaries.get(&context.id).cloned())
             .filter_map(|summary| {
                 let name_matches = summary.name.to_lowercase().contains(&matches);
@@ -1784,11 +1869,12 @@ impl TaskService {
     ) -> Result<TaskProject, UniversalInboxError> {
         match destination {
             TaskDestination::Context(context_id) => {
-                let (context, _) = destination::resolve_todoist_context(
+                let (context, _) = destination::resolve_context(
                     &self.repository,
                     executor,
                     user_id,
                     *context_id,
+                    None,
                 )
                 .await?;
                 Ok(TaskProject {
@@ -1801,8 +1887,18 @@ impl TaskService {
                     .ticktick_service
                     .resolve_project_for_user(executor, project_id, user_id)
                     .await?;
+                // Bound by id like a context destination, once the list is mirrored
+                let context_id = self
+                    .repository
+                    .get_mirrored_context_id(
+                        executor,
+                        user_id,
+                        IntegrationProviderKind::TickTick,
+                        &TickTickList::of_project_id(&project_id.0).source_id(),
+                    )
+                    .await?;
                 Ok(TaskProject {
-                    context_id: None,
+                    context_id,
                     project_name: project.name,
                 })
             }
@@ -1892,9 +1988,8 @@ fn record_tasks_changed<'a>(tasks: impl IntoIterator<Item = &'a Task>) {
     }
 }
 
-/// Whether `destination` moves `task` to another TickTick project. A TickTick destination binds by
-/// the provider project id, while the task row only keeps the project name: two TickTick projects
-/// can share a name, so the move is told from the task's TickTick item, not from the row.
+/// Whether `destination` moves `task` to another TickTick project, told from the task's TickTick
+/// item: the row keeps the project name only, and two TickTick lists can share a name
 fn moves_to_another_ticktick_project(task: &Task, destination: Option<&TaskDestination>) -> bool {
     let Some(TaskDestination::TickTickProject(project_id)) = destination else {
         return false;
@@ -1909,4 +2004,26 @@ fn moves_to_another_ticktick_project(task: &Task, destination: Option<&TaskDesti
             _ => None,
         })
         .unwrap_or(false)
+}
+
+/// How a task manager owning the nesting of its tasks nests one: under the task whose item of the
+/// same kind it names
+struct UpstreamNesting {
+    /// The kind of item the parent is looked up by, as the parent's source or sink
+    item_kind: ThirdPartyItemKind,
+    /// `None`: a top-level task
+    parent_source_id: Option<String>,
+}
+
+impl UpstreamNesting {
+    /// How the task manager of `task` nests it, if it owns its nesting
+    fn of(task: &Task) -> Option<Self> {
+        match (task.kind, &task.source_item.data) {
+            (TaskSourceKind::TickTick, ThirdPartyItemData::TickTickItem(item)) => Some(Self {
+                item_kind: ThirdPartyItemKind::TickTickItem,
+                parent_source_id: item.parent_id.clone(),
+            }),
+            _ => None,
+        }
+    }
 }

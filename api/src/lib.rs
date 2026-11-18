@@ -1230,6 +1230,7 @@ pub async fn build_services(
     let ticktick_service = Arc::new(
         TickTickService::new(
             ticktick_address,
+            repository.clone(),
             integration_connection_service.clone(),
             settings.get_integration_max_retry_duration(execution_context, "ticktick"),
         )

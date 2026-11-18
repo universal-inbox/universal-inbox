@@ -12,8 +12,8 @@ use uuid::Uuid;
 use universal_inbox::{
     context::{
         Context, ContextBinding, ContextCreation, ContextId, ContextStatus, ContextWriteError,
-        NoteId, UpstreamProvider, check_context_rename, check_context_reparent,
-        plan_context_creation, upstream_creation_failed_message,
+        NoteId, UpstreamCreationFailure, UpstreamProvider, check_context_rename,
+        check_context_reparent, plan_context_creation, upstream_creation_failed_message,
     },
     integration_connection::provider::IntegrationProviderKind,
     task::ProjectId,
@@ -26,6 +26,21 @@ use crate::{
     repository::context::ContextRepository,
     universal_inbox::{UniversalInboxError, task::service::TaskService},
 };
+
+/// Why a provider could not create the project of a new context, with its cause
+pub struct UpstreamCreationError {
+    pub failure: UpstreamCreationFailure,
+    pub source: UniversalInboxError,
+}
+
+impl From<UniversalInboxError> for UpstreamCreationError {
+    fn from(source: UniversalInboxError) -> Self {
+        Self {
+            failure: UpstreamCreationFailure::Unknown,
+            source,
+        }
+    }
+}
 
 /// A project just created in the provider for a new context
 struct UpstreamProject {
@@ -68,7 +83,14 @@ impl TaskService {
             None => None,
         };
 
-        let upstream = match plan_context_creation(parent.as_ref()).map_err(ownership_error)? {
+        let parent_of_parent = match parent.as_ref().and_then(|parent| parent.parent_id) {
+            Some(id) => self.repository.get_context(executor, id).await?,
+            None => None,
+        };
+
+        let upstream = match plan_context_creation(parent.as_ref(), parent_of_parent.as_ref())
+            .map_err(ownership_error)?
+        {
             ContextCreation::Local => None,
             ContextCreation::Upstream {
                 provider,
@@ -76,9 +98,9 @@ impl TaskService {
             } => Some(
                 self.create_upstream_project(executor, user_id, provider, &name, &parent_source_id)
                     .await
-                    .map_err(|source| UniversalInboxError::UpstreamWriteFailed {
-                        message: upstream_creation_failed_message(&name, provider),
-                        source: Box::new(source),
+                    .map_err(|err| UniversalInboxError::UpstreamWriteFailed {
+                        message: upstream_creation_failed_message(&name, provider, err.failure),
+                        source: Box::new(err.source),
                     })?,
             ),
         };
@@ -208,7 +230,7 @@ impl TaskService {
         provider: UpstreamProvider,
         name: &str,
         parent_source_id: &ProjectId,
-    ) -> Result<UpstreamProject, UniversalInboxError> {
+    ) -> Result<UpstreamProject, UpstreamCreationError> {
         let (source_id, access_token) = match provider {
             UpstreamProvider::Todoist => {
                 let access_token = self
@@ -218,6 +240,17 @@ impl TaskService {
                 let source_id = self
                     .todoist_service
                     .create_project(&access_token, name, parent_source_id)
+                    .await?;
+                (source_id, access_token)
+            }
+            UpstreamProvider::TickTick => {
+                let access_token = self
+                    .ticktick_service
+                    .find_access_token(executor, user_id)
+                    .await?;
+                let source_id = self
+                    .ticktick_service
+                    .create_list_in_folder(&access_token, name, parent_source_id)
                     .await?;
                 (source_id, access_token)
             }
@@ -236,6 +269,11 @@ impl TaskService {
             UpstreamProvider::Todoist => {
                 self.todoist_service
                     .delete_project(&upstream.access_token, &upstream.source_id)
+                    .await
+            }
+            UpstreamProvider::TickTick => {
+                self.ticktick_service
+                    .delete_list(&upstream.access_token, &upstream.source_id)
                     .await
             }
         };

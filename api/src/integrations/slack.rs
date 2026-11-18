@@ -2045,7 +2045,6 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
             priority: task_creation_config.priority,
             due_at: DefaultValue::new(task_creation_config.due_at.clone(), None),
             tags: vec![],
-            parent_id: None,
             // Only seeded, like the title: a move in the task manager stays
             project: DefaultValue::new(project.project_name, None),
             context_id: DefaultValue::new(project.context_id, None),

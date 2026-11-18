@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT DISTINCT ON (task.id)\n                  task.id as task_id,\n                  task.context_id,\n                  third_party_item.id as item_id,\n                  third_party_item.data_enc as \"data_enc!\"\n                FROM task\n                JOIN third_party_item\n                  ON third_party_item.id IN (task.sink_item_id, task.source_item_id)\n                WHERE task.user_id = $1\n                  AND third_party_item.kind::TEXT = 'TodoistItem'\n                ORDER BY task.id, third_party_item.id = task.sink_item_id DESC NULLS LAST\n            ",
+  "query": "\n                SELECT DISTINCT ON (task.id)\n                  task.id as task_id,\n                  task.context_id,\n                  third_party_item.id as item_id,\n                  third_party_item.data_enc as \"data_enc!\"\n                FROM task\n                JOIN third_party_item\n                  ON third_party_item.id IN (task.sink_item_id, task.source_item_id)\n                WHERE task.user_id = $1\n                  AND third_party_item.kind::TEXT = $2\n                ORDER BY task.id, third_party_item.id = task.sink_item_id DESC NULLS LAST\n            ",
   "describe": {
     "columns": [
       {
@@ -50,7 +50,8 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
@@ -60,5 +61,5 @@
       false
     ]
   },
-  "hash": "91679f00f2921fb3153062f31cb8d7d623aadcf99178aa96bcf0aa8e1d5ba6b6"
+  "hash": "8dc67950a17cebef27846dc25b90e66132f0f349b281af8f87e63deca1db5dbd"
 }
