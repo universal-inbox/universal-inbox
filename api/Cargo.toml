@@ -239,5 +239,10 @@ name = "api_features"
 path = "tests/api_features/main.rs"
 harness = false
 
+[[test]]
+name = "browser_features"
+path = "tests/browser_features/main.rs"
+harness = false
+
 [package.metadata.cargo-machete]
 ignored = ["opentelemetry-http", "opentelemetry_http"]
