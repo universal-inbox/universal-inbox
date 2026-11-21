@@ -44,7 +44,7 @@ clean-test-db:
     echo "🧹 Dropped the test databases"
 
 test test-filter="" $RUST_LOG="info": check-legacy-mapping
-    cargo nextest run -E 'not (binary(browser) | binary(browser_features))' --color always {{test-filter}}
+    cargo nextest run -E 'not binary(browser_features)' --color always {{test-filter}}
 
 # Every legacy API/browser test is still a test, a `@legacy:` tagged scenario or a kept plain test.
 check-legacy-mapping:
@@ -58,7 +58,7 @@ test-browser test-filter="" $RUST_LOG="info":
     cd ..
     just web build-ci
     cd -
-    cargo nextest run -E 'binary(browser) | binary(browser_features)' --color always {{test-filter}}
+    cargo nextest run -E 'binary(browser_features)' --color always {{test-filter}}
 
 ## Run recipes
 run *command="serve --embed-async-workers": ensure-db
@@ -128,7 +128,7 @@ anonymize-db:
     cargo run -- test anonymize-db
     
 test-ci:
-    cargo nextest run --profile ci -E 'not (binary(browser) | binary(browser_features))'
+    cargo nextest run --profile ci -E 'not binary(browser_features)'
 
 test-ci-browser:
-    cargo nextest run --profile ci-browser -E 'binary(browser) | binary(browser_features)'
+    cargo nextest run --profile ci-browser -E 'binary(browser_features)'
