@@ -17,7 +17,6 @@ mod test_github_notifications;
 mod test_google_calendar_notifications;
 mod test_google_drive_notifications;
 mod test_google_mail_notifications;
-mod test_health_check;
 mod test_integration_connections;
 mod test_job_metrics;
 mod test_linear_notifications;

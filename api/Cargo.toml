@@ -216,6 +216,8 @@ default = []
 screenshots = ["dep:playwright-rs"]
 
 [dev-dependencies]
+cucumber = "0.23.0"
+libtest-mimic = "0.8.2"
 lzma-rust2 = "0.21"
 opentelemetry_sdk = { version = "0.32", features = ["testing"] }
 playwright-rs = "0.20.1"
@@ -231,6 +233,11 @@ webauthn-authenticator-rs = { version = "0.5.4", features = ["softpasskey"] }
 [[test]]
 name = "browser"
 path = "tests/browser/main.rs"
+
+[[test]]
+name = "api_features"
+path = "tests/api_features/main.rs"
+harness = false
 
 [package.metadata.cargo-machete]
 ignored = ["opentelemetry-http", "opentelemetry_http"]

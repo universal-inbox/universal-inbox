@@ -49,6 +49,7 @@ use universal_inbox_api::{
 use crate::common::mailer::MailerStub;
 
 pub mod mailer;
+pub mod scenarios;
 pub mod test_db;
 
 // ---------------------------------------------------------------------------
@@ -58,6 +59,10 @@ pub mod test_db;
 #[fixture]
 #[once]
 pub fn tracing_setup(settings: Settings) {
+    init_tracing(&settings);
+}
+
+pub fn init_tracing(settings: &Settings) {
     info!("Setting up tracing");
 
     let subscriber = get_subscriber(

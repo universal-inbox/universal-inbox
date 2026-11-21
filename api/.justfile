@@ -43,8 +43,12 @@ clean-test-db:
       | psql -q "$server_url"
     echo "🧹 Dropped the test databases"
 
-test test-filter="" $RUST_LOG="info":
+test test-filter="" $RUST_LOG="info": check-legacy-mapping
     cargo nextest run -E 'not binary(browser)' --color always {{test-filter}}
+
+# Every legacy API/browser test is still a test, a `@legacy:` tagged scenario or a kept plain test.
+check-legacy-mapping:
+    scripts/check-legacy-mapping.sh
 
 test-browser test-filter="" $RUST_LOG="info":
     #!/usr/bin/env bash
