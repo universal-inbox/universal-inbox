@@ -1,6 +1,6 @@
 use cucumber::World;
 use futures::future::LocalBoxFuture;
-use reqwest::StatusCode;
+use reqwest::{Client, StatusCode, header::HeaderMap};
 
 use crate::{
     common::{
@@ -13,6 +13,7 @@ use crate::{
 #[derive(Debug, Default, World)]
 pub struct ApiWorld {
     pub app: AppUnderTest<TestedApp>,
+    pub session: Option<Session>,
     pub http: HttpExchanges,
 }
 
@@ -48,6 +49,12 @@ impl ScenarioWorld for ApiWorld {
     }
 }
 
+/// The HTTP client that holds the session of the user the scenario is signed in as.
+#[derive(Debug)]
+pub struct Session {
+    pub client: Client,
+}
+
 /// The HTTP requests a scenario sent to the app, and their responses.
 #[derive(Debug, Default)]
 pub struct HttpExchanges {
@@ -57,7 +64,37 @@ pub struct HttpExchanges {
 #[derive(Debug)]
 pub struct Response {
     pub status: StatusCode,
-    pub body: String,
+    pub headers: HeaderMap,
+    pub body: Vec<u8>,
+}
+
+impl Response {
+    pub async fn read(response: reqwest::Response) -> Self {
+        let status = response.status();
+        let headers = response.headers().clone();
+        let body = response
+            .bytes()
+            .await
+            .unwrap_or_else(|err| panic!("Failed to read the response body: {err}"))
+            .to_vec();
+        Self {
+            status,
+            headers,
+            body,
+        }
+    }
+
+    pub fn text(&self) -> String {
+        String::from_utf8_lossy(&self.body).into_owned()
+    }
+
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.get(name).map(|value| {
+            value
+                .to_str()
+                .unwrap_or_else(|err| panic!("The header {name} is not text: {err}"))
+        })
+    }
 }
 
 impl HttpExchanges {
