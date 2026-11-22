@@ -38,7 +38,9 @@ impl fmt::Debug for BrowserWorld {
 
 impl ScenarioApp for BrowserTestedApp {
     fn start(config: AppConfig) -> LocalBoxFuture<'static, Self> {
-        let AppConfig { settings, billing } = config;
+        let AppConfig {
+            settings, billing, ..
+        } = config;
         Box::pin(async move {
             let db = db_connection(settings.clone());
             let redis = redis_storage(settings.clone());

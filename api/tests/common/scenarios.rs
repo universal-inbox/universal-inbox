@@ -39,6 +39,17 @@ pub trait ScenarioWorld: World + Debug + WorldInventory {
 pub struct AppConfig {
     pub settings: Settings,
     pub billing: bool,
+    pub sign_in: SignInMode,
+}
+
+/// How the users of the app can sign in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SignInMode {
+    /// Single sign-on with an identity provider.
+    #[default]
+    SingleSignOn,
+    /// Email and password, or a passkey. There is no identity provider.
+    PasswordAndPasskey,
 }
 
 impl Default for AppConfig {
@@ -46,6 +57,7 @@ impl Default for AppConfig {
         Self {
             settings: settings(),
             billing: false,
+            sign_in: SignInMode::default(),
         }
     }
 }

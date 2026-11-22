@@ -1,20 +1,43 @@
+use std::{fmt, time::SystemTime};
+
 use cucumber::World;
 use futures::future::LocalBoxFuture;
 use reqwest::{Client, StatusCode, header::HeaderMap};
 
+use universal_inbox::user::User;
+
 use crate::{
     common::{
         db_connection, redis_storage,
-        scenarios::{AppConfig, AppUnderTest, ScenarioApp, ScenarioWorld},
+        scenarios::{AppConfig, AppUnderTest, ScenarioApp, ScenarioWorld, SignInMode},
     },
-    helpers::{TestedApp, tested_app},
+    helpers::{TestedApp, tested_app, tested_app_with_local_auth},
+    state::{Account, Authorizations, Browser, Passkeys, Sessions},
 };
 
-#[derive(Debug, Default, World)]
+#[derive(Default, World)]
 pub struct ApiWorld {
     pub app: AppUnderTest<TestedApp>,
     pub session: Option<Session>,
+    pub browser: Browser,
+    pub account: Account,
+    pub sessions: Sessions,
+    pub authorizations: Authorizations,
+    pub passkeys: Passkeys,
     pub http: HttpExchanges,
+}
+
+impl fmt::Debug for ApiWorld {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ApiWorld")
+            .field("app", &self.app)
+            .field("signed_in", &self.session.is_some())
+            .field("account", &self.account)
+            .field("sessions", &self.sessions)
+            .field("passkeys", &self.passkeys)
+            .field("http", &self.http)
+            .finish()
+    }
 }
 
 impl ScenarioApp for TestedApp {
@@ -23,16 +46,18 @@ impl ScenarioApp for TestedApp {
             !config.billing,
             "Billing is not available to API scenarios yet"
         );
-        let AppConfig { settings, .. } = config;
+        let AppConfig {
+            settings, sign_in, ..
+        } = config;
         Box::pin(async move {
-            let db_settings = settings.clone();
-            tested_app(
-                settings,
-                (),
-                db_connection(db_settings.clone()),
-                redis_storage(db_settings),
-            )
-            .await
+            let db = db_connection(settings.clone());
+            let redis = redis_storage(settings.clone());
+            match sign_in {
+                SignInMode::SingleSignOn => tested_app(settings, (), db, redis).await,
+                SignInMode::PasswordAndPasskey => {
+                    tested_app_with_local_auth(settings, (), db, redis).await
+                }
+            }
         })
     }
 
@@ -53,6 +78,7 @@ impl ScenarioWorld for ApiWorld {
 #[derive(Debug)]
 pub struct Session {
     pub client: Client,
+    pub user: User,
 }
 
 /// The HTTP requests a scenario sent to the app, and their responses.
@@ -62,9 +88,17 @@ pub struct HttpExchanges {
 }
 
 #[derive(Debug)]
+pub struct Cookie {
+    pub name: String,
+    pub value: String,
+    pub expires: Option<SystemTime>,
+}
+
+#[derive(Debug)]
 pub struct Response {
     pub status: StatusCode,
     pub headers: HeaderMap,
+    pub cookies: Vec<Cookie>,
     pub body: Vec<u8>,
 }
 
@@ -72,6 +106,14 @@ impl Response {
     pub async fn read(response: reqwest::Response) -> Self {
         let status = response.status();
         let headers = response.headers().clone();
+        let cookies = response
+            .cookies()
+            .map(|cookie| Cookie {
+                name: cookie.name().to_string(),
+                value: cookie.value().to_string(),
+                expires: cookie.expires(),
+            })
+            .collect();
         let body = response
             .bytes()
             .await
@@ -80,12 +122,22 @@ impl Response {
         Self {
             status,
             headers,
+            cookies,
             body,
         }
     }
 
     pub fn text(&self) -> String {
         String::from_utf8_lossy(&self.body).into_owned()
+    }
+
+    pub fn json<T: serde::de::DeserializeOwned>(&self) -> T {
+        serde_json::from_slice(&self.body).unwrap_or_else(|err| {
+            panic!(
+                "The response body is not the expected JSON: {err}\n{}",
+                self.text()
+            )
+        })
     }
 
     pub fn header(&self, name: &str) -> Option<&str> {

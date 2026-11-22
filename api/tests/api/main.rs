@@ -1,10 +1,10 @@
 #![recursion_limit = "256"]
 #[path = "../common/mod.rs"]
 mod common;
+#[allow(dead_code)]
 mod helpers;
 mod test_api_notification;
 mod test_audit_log;
-mod test_auth;
 mod test_auth_methods;
 mod test_billing;
 mod test_cache;
@@ -30,7 +30,6 @@ mod test_notion_webhook;
 mod test_oauth2_cimd;
 mod test_oauth2_revocation;
 mod test_oauth_callback;
-mod test_passkey_login;
 mod test_pause_integration_connections;
 mod test_realtime_events;
 mod test_realtime_stream;
