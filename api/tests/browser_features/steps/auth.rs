@@ -11,8 +11,8 @@ use crate::{
 
 #[given("I have an account with sample notifications and integrations")]
 async fn i_am_a_user_with_sample_data(world: &mut BrowserWorld) {
-    let email = generate_test_user(world.app().await).await;
-    world.set_email(email);
+    let email = generate_test_user(world.app.get().await).await;
+    world.account.set_email(email);
 }
 
 #[when("I register with a new email address")]
@@ -20,18 +20,18 @@ async fn i_register_with_a_new_email_address(world: &mut BrowserWorld) {
     let email = format!("browser-test+{}@test.com", uuid::Uuid::new_v4());
     let (app, page) = world.app_and_page().await;
     register(page, &app.app_url, &email).await;
-    world.set_email(email);
+    world.account.set_email(email);
 }
 
 #[when("I verify my email address")]
 async fn i_verify_my_email_address(world: &mut BrowserWorld) {
-    let email = world.email();
-    verify_user_email(world.app().await, &email).await;
+    let email = world.account.email();
+    verify_user_email(world.app.get().await, &email).await;
 }
 
 #[when("I sign in from the login page")]
 async fn i_sign_in_from_the_login_page(world: &mut BrowserWorld) {
-    let email = world.email();
+    let email = world.account.email();
     let (app, page) = world.app_and_page().await;
     login(page, &app.app_url, &email).await;
 }
@@ -46,7 +46,7 @@ async fn i_open_the_login_page(world: &mut BrowserWorld) {
 
 #[when(expr = "I sign in with the password {string}")]
 async fn i_sign_in_with_the_password(world: &mut BrowserWorld, password: String) {
-    let email = world.email();
+    let email = world.account.email();
     fill_and_submit_credentials(world.page().await, &email, &password, "login").await;
 }
 
@@ -56,7 +56,7 @@ async fn i_sign_in_with_the_password_several_times(
     password: String,
     attempts: usize,
 ) {
-    let email = world.email();
+    let email = world.account.email();
     let page = world.page().await;
     for attempt in 1..=attempts {
         fill_and_submit_credentials(page, &email, &password, "login").await;

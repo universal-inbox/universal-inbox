@@ -127,7 +127,7 @@ record-landing-screencast output="./screen.webm" base-url="http://localhost:8080
 anonymize-db:
     cargo run -- test anonymize-db
     
-test-ci:
+test-ci: check-legacy-mapping
     cargo nextest run --profile ci -E 'not binary(browser_features)'
 
 test-ci-browser:

@@ -5,10 +5,11 @@
 //! never share the process-wide state of the app under test (cache namespace, tracing, rustls).
 
 use std::{
-    collections::HashMap,
-    fmt::Debug,
+    collections::{HashMap, HashSet},
+    fmt::{self, Debug},
     fs,
     path::{Path, PathBuf},
+    sync::Once,
 };
 
 use cucumber::{
@@ -16,6 +17,10 @@ use cucumber::{
 };
 use futures::future::LocalBoxFuture;
 use libtest_mimic::{Arguments, Failed, Trial};
+
+use universal_inbox_api::configuration::Settings;
+
+use crate::common::{init_tracing, settings};
 
 pub const FEATURES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/features");
 
@@ -25,14 +30,88 @@ const LEGACY_REPORT_ENV: &str = "UI_SCENARIOS_LEGACY_REPORT";
 const LEGACY_TAG_PREFIX: &str = "legacy:";
 
 pub trait ScenarioWorld: World + Debug + WorldInventory {
-    fn set_up(&mut self) -> LocalBoxFuture<'_, ()>;
+    /// Stops what the scenario started, once its steps ran.
     fn tear_down(&mut self) -> LocalBoxFuture<'_, ()>;
+}
+
+/// How the app under test is started. Given steps that configure the app change it before the
+/// app starts; they compose, whatever their order.
+pub struct AppConfig {
+    pub settings: Settings,
+    pub billing: bool,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            settings: settings(),
+            billing: false,
+        }
+    }
+}
+
+/// An app a scenario can start from an [`AppConfig`] and stop.
+pub trait ScenarioApp: Sized {
+    fn start(config: AppConfig) -> LocalBoxFuture<'static, Self>;
+    fn stop(self) -> LocalBoxFuture<'static, ()>;
+}
+
+/// The app under test of a scenario, started on first use.
+pub struct AppUnderTest<A> {
+    config: Option<AppConfig>,
+    app: Option<A>,
+}
+
+impl<A> Default for AppUnderTest<A> {
+    fn default() -> Self {
+        Self {
+            config: Some(AppConfig::default()),
+            app: None,
+        }
+    }
+}
+
+impl<A> Debug for AppUnderTest<A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let state = if self.app.is_some() {
+            "started"
+        } else {
+            "not started"
+        };
+        f.write_str(state)
+    }
+}
+
+impl<A: ScenarioApp> AppUnderTest<A> {
+    /// The configuration of the app, for a step that configures it.
+    pub fn configure(&mut self) -> &mut AppConfig {
+        self.config.as_mut().expect(
+            "This step configures the app: it must come before the first step that uses the app",
+        )
+    }
+
+    pub async fn get(&mut self) -> &A {
+        if let Some(config) = self.config.take() {
+            self.app = Some(A::start(config).await);
+        }
+        self.app
+            .as_ref()
+            .expect("The app could not be started earlier in this scenario")
+    }
+
+    pub async fn stop(&mut self) {
+        if let Some(app) = self.app.take() {
+            app.stop().await;
+        }
+    }
 }
 
 pub struct Scenario {
     pub name: String,
     pub path: PathBuf,
     pub line: usize,
+    /// Name of the expanded scenario, as cucumber knows it.
+    pub scenario_name: String,
     pub legacy_tags: Vec<String>,
 }
 
@@ -100,7 +179,7 @@ fn feature_scenarios(root: &Path, path: &Path) -> Vec<Scenario> {
             .iter()
             .map(move |scenario| (Some(rule), scenario))
     });
-    feature
+    let scenarios: Vec<Scenario> = feature
         .scenarios
         .iter()
         .map(|scenario| (None, scenario))
@@ -125,10 +204,21 @@ fn feature_scenarios(root: &Path, path: &Path) -> Vec<Scenario> {
                 name,
                 path: path.to_path_buf(),
                 line: scenario.position.line,
+                scenario_name: scenario.name.clone(),
                 legacy_tags,
             }
         })
-        .collect()
+        .collect();
+
+    let mut lines = HashSet::new();
+    for scenario in &scenarios {
+        assert!(
+            lines.insert(scenario.line),
+            "Two scenarios of {path:?} expand to line {}: a scenario must be found by its line",
+            scenario.line
+        );
+    }
+    scenarios
 }
 
 /// Entry point of a scenarios test binary.
@@ -155,16 +245,19 @@ pub fn main<W: ScenarioWorld>(include: fn(&Path) -> bool) {
 }
 
 fn run<W: ScenarioWorld>(scenario: &Scenario) -> Result<(), Failed> {
+    static TRACING: Once = Once::new();
+    TRACING.call_once(|| init_tracing(&settings()));
+
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|err| format!("Cannot build the scenario runtime: {err}"))?;
     let line = scenario.line;
+    let scenario_name = scenario.scenario_name.clone();
     let writer = runtime.block_on(
         W::cucumber()
             .with_cli(cli::Opts::<_, _, _, cli::Empty>::default())
             .fail_on_skipped()
-            .before(|_, _, _, world| world.set_up())
             .after(|_, _, _, _: &event::ScenarioFinished, world| {
                 Box::pin(async move {
                     if let Some(world) = world {
@@ -173,7 +266,7 @@ fn run<W: ScenarioWorld>(scenario: &Scenario) -> Result<(), Failed> {
                 })
             })
             .filter_run(scenario.path.clone(), move |_, _, candidate| {
-                candidate.position.line == line
+                candidate.position.line == line && candidate.name == scenario_name
             }),
     );
 

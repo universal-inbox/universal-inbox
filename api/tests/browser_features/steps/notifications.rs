@@ -48,7 +48,7 @@ async fn wait_for_notification_url_change(page: &Page, previous_url: &str) -> St
 
 #[given("I am signed in with my notifications listed")]
 async fn i_am_signed_in_with_my_notifications_listed(world: &mut BrowserWorld) {
-    let email = world.email();
+    let email = world.account.email();
     let (app, page) = world.app_and_page().await;
     login(page, &app.app_url, &email).await;
     wait_for_notification_rows(page).await;
@@ -67,7 +67,7 @@ async fn i_have_at_least_notifications_listed(world: &mut BrowserWorld, expected
         count >= expected,
         "Expected at least {expected} notifications to act on, but found {count}"
     );
-    world.row_count = Some(count);
+    world.list.set_row_count(count);
 }
 
 #[when(regex = r"^I click the (first|second) notification$")]
@@ -80,7 +80,7 @@ async fn i_click_a_notification(world: &mut BrowserWorld, ordinal: String) {
         .click(None)
         .await
         .unwrap_or_else(|_| panic!("Failed to click notification row {nth}"));
-    world.clicked_row = Some(nth);
+    world.list.set_clicked_row(nth);
 }
 
 #[then("a notification is selected")]
@@ -94,7 +94,7 @@ async fn a_notification_is_selected(world: &mut BrowserWorld) {
 
 #[then("it is selected")]
 async fn it_is_selected(world: &mut BrowserWorld) {
-    let nth = world.clicked_row.expect("No notification was clicked");
+    let nth = world.list.clicked_row();
     expect(world.page().await.locator(format!("{ROWS} >> nth={nth}")))
         .with_timeout(EXPECT_TIMEOUT)
         .to_have_class_regex(r"\bselected\b")
@@ -111,14 +111,15 @@ async fn it_is_selected_and_the_address_bar_shows_it(world: &mut BrowserWorld) {
         .to_have_url_regex(NOTIFICATION_URL_PATTERN)
         .await
         .expect("URL should target the selected notification");
-    world.notification_url = Some(page.url());
+    let url = page.url();
+    world.list.set_notification_url(url);
 }
 
 #[then("the address bar moves to another notification")]
 async fn the_address_bar_moves_to_another_notification(world: &mut BrowserWorld) {
-    let previous_url = world.notification_url();
+    let previous_url = world.list.notification_url();
     let url = wait_for_notification_url_change(world.page().await, &previous_url).await;
-    world.notification_url = Some(url);
+    world.list.set_notification_url(url);
 }
 
 #[then("the address bar shows a notification")]
@@ -132,7 +133,7 @@ async fn the_address_bar_shows_a_notification(world: &mut BrowserWorld) {
 
 #[then("the address bar still shows its address")]
 async fn the_address_bar_still_shows_its_address(world: &mut BrowserWorld) {
-    let deep_url = world.notification_url();
+    let deep_url = world.list.notification_url();
     assert_eq!(
         world.page().await.url(),
         deep_url,
@@ -163,13 +164,13 @@ async fn i_press(world: &mut BrowserWorld, key: String, intent: String) {
 
 #[then("it disappears from the list")]
 async fn it_disappears_from_the_list(world: &mut BrowserWorld) {
-    let count = world.row_count.expect("The notifications were not counted") - 1;
+    let count = world.list.row_count() - 1;
     expect(world.page().await.locator(ROWS))
         .with_timeout(EXPECT_TIMEOUT)
         .to_have_count(count)
         .await
         .expect("The action should remove the notification from the list");
-    world.row_count = Some(count);
+    world.list.set_row_count(count);
 }
 
 #[then(regex = r"^the server has (deleted|unsubscribed from|snoozed) it$")]
@@ -182,13 +183,13 @@ async fn the_server_has_persisted_the_action(world: &mut BrowserWorld, action: S
         "snoozed" => ("snoozed", |n| n.snoozed_until.is_some()),
         _ => unreachable!(),
     };
-    let notification_id = notification_id_from_url(&world.notification_url());
-    wait_for_notification(world.app().await, notification_id, is_persisted, what).await;
+    let notification_id = notification_id_from_url(&world.list.notification_url());
+    wait_for_notification(world.app.get().await, notification_id, is_persisted, what).await;
 }
 
 #[when("I open its address directly")]
 async fn i_open_its_address_directly(world: &mut BrowserWorld) {
-    let deep_url = world.notification_url();
+    let deep_url = world.list.notification_url();
     world
         .page()
         .await
@@ -219,12 +220,12 @@ async fn i_open_my_inbox_in_a_second_tab(world: &mut BrowserWorld) {
         .goto(&format!("{app_url}/"), None)
         .await
         .expect("Failed to open the second tab");
-    world.second_tab = Some(other_page);
+    world.list.second_tab = Some(other_page);
 }
 
 #[then("the second tab lists my notifications and is connected for live updates")]
 async fn the_second_tab_listens_to_realtime_updates(world: &mut BrowserWorld) {
-    let other_page = world.second_tab.as_ref().expect("No second tab is open");
+    let other_page = world.list.second_tab();
     wait_for_notification_rows(other_page).await;
     let count = other_page
         .locator(ROWS)
@@ -236,13 +237,13 @@ async fn the_second_tab_listens_to_realtime_updates(world: &mut BrowserWorld) {
         .to_have_count(1)
         .await
         .expect("The second tab should open its realtime event stream");
-    world.row_count = Some(count);
+    world.list.set_row_count(count);
 }
 
 #[then("the second tab shows one fewer notification within 3 seconds")]
 async fn the_second_tab_shows_one_notification_less(world: &mut BrowserWorld) {
-    let count = world.row_count.expect("The notifications were not counted");
-    let other_page = world.second_tab.as_ref().expect("No second tab is open");
+    let count = world.list.row_count();
+    let other_page = world.list.second_tab();
     expect(other_page.locator(ROWS))
         .with_timeout(PUSHED_UPDATE_TIMEOUT)
         .to_have_count(count - 1)

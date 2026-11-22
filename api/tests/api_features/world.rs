@@ -1,80 +1,77 @@
-use std::{fmt, sync::Once};
-
 use cucumber::World;
 use futures::future::LocalBoxFuture;
 use reqwest::StatusCode;
 
 use crate::{
-    common::{db_connection, init_tracing, redis_storage, scenarios::ScenarioWorld, settings},
+    common::{
+        db_connection, redis_storage,
+        scenarios::{AppConfig, AppUnderTest, ScenarioApp, ScenarioWorld},
+    },
     helpers::{TestedApp, tested_app},
 };
 
-#[derive(Default, World)]
+#[derive(Debug, Default, World)]
 pub struct ApiWorld {
-    app: Option<TestedApp>,
-    pub responses: Vec<Response>,
+    pub app: AppUnderTest<TestedApp>,
+    pub http: HttpExchanges,
 }
 
+impl ScenarioApp for TestedApp {
+    fn start(config: AppConfig) -> LocalBoxFuture<'static, Self> {
+        assert!(
+            !config.billing,
+            "Billing is not available to API scenarios yet"
+        );
+        let AppConfig { settings, .. } = config;
+        Box::pin(async move {
+            let db_settings = settings.clone();
+            tested_app(
+                settings,
+                (),
+                db_connection(db_settings.clone()),
+                redis_storage(db_settings),
+            )
+            .await
+        })
+    }
+
+    fn stop(self) -> LocalBoxFuture<'static, ()> {
+        Box::pin(async move {
+            let _ = self.cache.clear(&None).await;
+        })
+    }
+}
+
+impl ScenarioWorld for ApiWorld {
+    fn tear_down(&mut self) -> LocalBoxFuture<'_, ()> {
+        Box::pin(self.app.stop())
+    }
+}
+
+/// The HTTP requests a scenario sent to the app, and their responses.
+#[derive(Debug, Default)]
+pub struct HttpExchanges {
+    responses: Vec<Response>,
+}
+
+#[derive(Debug)]
 pub struct Response {
     pub status: StatusCode,
     pub body: String,
 }
 
-impl fmt::Debug for ApiWorld {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ApiWorld")
-            .field(
-                "app_address",
-                &self.app.as_ref().map(|app| &app.app_address),
-            )
-            .field(
-                "responses",
-                &self
-                    .responses
-                    .iter()
-                    .map(|response| response.status)
-                    .collect::<Vec<_>>(),
-            )
-            .finish()
-    }
-}
-
-impl ApiWorld {
-    /// The app under test, started with the default settings unless a step started a variant.
-    pub async fn app(&mut self) -> &TestedApp {
-        if self.app.is_none() {
-            self.app = Some(
-                tested_app(
-                    settings(),
-                    (),
-                    db_connection(settings()),
-                    redis_storage(settings()),
-                )
-                .await,
-            );
-        }
-        self.app.as_ref().unwrap()
+impl HttpExchanges {
+    pub fn record(&mut self, response: Response) {
+        self.responses.push(response);
     }
 
-    pub fn last_response(&self) -> &Response {
+    pub fn last(&self) -> &Response {
         self.responses
             .last()
             .expect("No request was sent to the app in this scenario")
     }
-}
 
-impl ScenarioWorld for ApiWorld {
-    fn set_up(&mut self) -> LocalBoxFuture<'_, ()> {
-        static TRACING: Once = Once::new();
-        TRACING.call_once(|| init_tracing(&settings()));
-        Box::pin(async {})
-    }
-
-    fn tear_down(&mut self) -> LocalBoxFuture<'_, ()> {
-        Box::pin(async move {
-            if let Some(app) = self.app.take() {
-                let _ = app.cache.clear(&None).await;
-            }
-        })
+    pub fn all(&self) -> &[Response] {
+        &self.responses
     }
 }

@@ -43,7 +43,7 @@ async fn i_see_at_least_notifications(world: &mut BrowserWorld, expected: usize)
         count >= expected,
         "Expected at least {expected} notification rows, but found {count}"
     );
-    world.row_count = Some(count);
+    world.list.set_row_count(count);
 }
 
 #[then("the first notification is not blank")]

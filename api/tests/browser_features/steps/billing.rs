@@ -8,8 +8,8 @@ use universal_inbox::pii::Pii;
 use crate::{common::fake_checkout_url, helpers::EXPECT_TIMEOUT, world::BrowserWorld};
 
 #[given("billing with Stripe is enabled")]
-async fn billing_with_stripe_is_enabled(world: &mut BrowserWorld) {
-    world.start_app_with_billing().await;
+fn billing_with_stripe_is_enabled(world: &mut BrowserWorld) {
+    world.app.configure().billing = true;
 }
 
 #[when("I open the billing page")]
@@ -76,8 +76,8 @@ async fn i_am_sent_to_stripe_checkout(world: &mut BrowserWorld) {
 /// metadata. The fake Stripe client parses this plain JSON envelope without a signature.
 #[when("Stripe reports that my checkout is completed")]
 async fn stripe_reports_that_my_checkout_is_completed(world: &mut BrowserWorld) {
-    let email: Pii<EmailAddress> = world.email().parse().expect("valid test email");
-    let app = world.app().await;
+    let email: Pii<EmailAddress> = world.account.email().parse().expect("valid test email");
+    let app = world.app.get().await;
     let mut transaction = app.repository.begin().await.expect("begin transaction");
     let user = app
         .user_service
