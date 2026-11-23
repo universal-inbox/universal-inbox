@@ -188,7 +188,7 @@ async fn i_ask_for_my_password_to_be_reset(world: &mut ApiWorld) {
     if sent {
         let user_id = world.account.user().id;
         let app = world.app.get().await;
-        world.verification.reset_token = get_password_reset_token(app, user_id).await;
+        world.reset.token = get_password_reset_token(app, user_id).await;
     }
 }
 
@@ -196,7 +196,7 @@ async fn i_ask_for_my_password_to_be_reset(world: &mut ApiWorld) {
 async fn i_reset_my_password(world: &mut ApiWorld, new_password: String) {
     let user_id = world.account.user().id;
     let client = world.browser.client().clone();
-    let token = match world.verification.reset_token.take() {
+    let token = match world.reset.token.take() {
         Some(token) => token,
         None => {
             let app = world.app.get().await;
@@ -214,8 +214,8 @@ async fn i_reset_my_password(world: &mut ApiWorld, new_password: String) {
 async fn the_latest_email_is_the_password_reset_email(world: &mut ApiWorld) {
     let user_id = world.account.user().id;
     let token = world
-        .verification
-        .reset_token
+        .reset
+        .token
         .clone()
         .expect("No password reset email was asked for");
     let app = world.app.get().await;
@@ -245,8 +245,8 @@ async fn i_send_the_new_password_to_an_address_with_the_token(
 ) {
     let user_id = world.account.user().id;
     let token = world
-        .verification
-        .reset_token
+        .reset
+        .token
         .clone()
         .expect("No password reset email was asked for");
     let client = world.browser.client().clone();
@@ -303,10 +303,10 @@ async fn my_account_records_the_password_reset(world: &mut ApiWorld) {
 )]
 async fn i_reset_my_password_with_another_users_id(world: &mut ApiWorld, new_password: String) {
     let other_user_id = UserId(Uuid::new_v4());
-    world.verification.link_user_id = Some(other_user_id);
+    world.reset.link_user_id = Some(other_user_id);
     let token = world
-        .verification
-        .reset_token
+        .reset
+        .token
         .take()
         .expect("No password reset email was asked for");
     let client = world.browser.client().clone();
@@ -318,7 +318,7 @@ async fn i_reset_my_password_with_another_users_id(world: &mut ApiWorld, new_pas
 #[when(expr = "I reset my password to {string} with a token I was never sent")]
 async fn i_reset_my_password_with_an_unknown_token(world: &mut ApiWorld, new_password: String) {
     let user_id = world.user().id;
-    world.verification.link_user_id = Some(user_id);
+    world.reset.link_user_id = Some(user_id);
     let client = world.browser.client().clone();
     let app = world.app.get().await;
     let response = reset_password_response(
@@ -335,7 +335,7 @@ async fn i_reset_my_password_with_an_unknown_token(world: &mut ApiWorld, new_pas
 #[then("the error message says the password reset token is invalid for the user in the link")]
 fn the_error_says_the_reset_token_is_invalid(world: &mut ApiWorld) {
     let user_id = world
-        .verification
+        .reset
         .link_user_id
         .expect("No password reset was tried");
     let body: std::collections::HashMap<String, String> = world.http.last().json();

@@ -43,7 +43,6 @@ async fn create_api_token(client: &Client, app: &TestedApp) -> reqwest::Response
         .unwrap()
 }
 
-/// Runs a sensitive operation as the signed-in user, from their browser session.
 async fn run_sensitive_operation(world: &mut ApiWorld, operation: &str) -> reqwest::Response {
     let client = world.client();
     let app = world.app.get().await;

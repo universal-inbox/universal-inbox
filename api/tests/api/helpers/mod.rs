@@ -394,6 +394,115 @@ pub async fn setup_tested_app_with_local_auth(
     }
 }
 
+/// Starts an app from independent settings: single sign-on with a test identity provider, local
+/// auth (password, with or without passkey) and the domains that cannot register.
+pub async fn build_tested_app(
+    mut settings: Settings,
+    identity_provider: bool,
+    local_auth: Option<(LocalAuthenticationSettings, bool)>,
+    blocked_domains: &[String],
+    test_db: TestDb,
+    redis_storage: JobStorage,
+) -> TestedApp {
+    info!("Setting up server");
+
+    let (listener, port, cache, mock_servers) = setup_test_env(&settings).await;
+
+    let oidc_issuer_mock_server = identity_provider.then(LazyMockServer::new);
+    if let Some(oidc_issuer_mock_server) = &oidc_issuer_mock_server {
+        let oidc_issuer_mock_server_url = oidc_issuer_mock_server.uri();
+        if let AuthenticationSettings::OpenIDConnect(oidc_settings) =
+            &mut settings.application.security.authentication[0]
+        {
+            oidc_settings.oidc_issuer_url =
+                IssuerUrl::new(oidc_issuer_mock_server_url.to_string()).unwrap();
+            if let OIDCFlowSettings::AuthorizationCodePKCEFlow(ref mut flow_settings) =
+                oidc_settings.oidc_flow_settings
+            {
+                flow_settings.introspection_url =
+                    IntrospectionUrl::new(format!("{oidc_issuer_mock_server_url}/introspect"))
+                        .unwrap();
+                flow_settings.front_client_id = ClientId::new("12345".to_string());
+            }
+        }
+    } else {
+        settings.application.security.authentication = vec![];
+    }
+    if let Some((local_auth_settings, passkey)) = local_auth {
+        settings
+            .application
+            .security
+            .authentication
+            .push(AuthenticationSettings::Local(local_auth_settings));
+        if passkey {
+            settings
+                .application
+                .security
+                .authentication
+                .push(AuthenticationSettings::Passkey);
+        }
+    }
+    assert!(
+        !settings.application.security.authentication.is_empty(),
+        "The app has no way to sign in"
+    );
+    settings.application.security.email_domain_blacklist = blocked_domains
+        .iter()
+        .map(|domain| {
+            (
+                domain.clone(),
+                "Registration is not allowed from this domain".to_string(),
+            )
+        })
+        .collect();
+
+    let pool: Arc<PgPool> = test_db.pool.clone();
+
+    let (services, mailer_stub, redis_storage) = build_and_spawn(
+        listener,
+        pool.clone(),
+        settings.clone(),
+        cache.clone(),
+        &mock_servers,
+        redis_storage,
+    )
+    .await;
+
+    let app_address = format!("http://127.0.0.1:{port}");
+    let api_address = format!("{app_address}{}", settings.application.api_path);
+    let front_base_url = settings.application.front_base_url.clone();
+    let repository = Arc::new(Repository::new(pool.clone()));
+
+    TestedApp {
+        app_address,
+        api_address,
+        front_base_url,
+        repository,
+        user_service: services.user_service,
+        task_service: services.task_service,
+        notification_service: services.notification_service,
+        integration_connection_service: services.integration_connection_service,
+        third_party_item_service: services.third_party_item_service,
+        slack_service: services.slack_service,
+        oauth2_service: services.oauth2_service.clone(),
+        audit_service: services.audit_service.clone(),
+        github_mock_server: mock_servers.github,
+        linear_mock_server: mock_servers.linear,
+        google_calendar_mock_server: mock_servers.google_calendar,
+        google_mail_mock_server: mock_servers.google_mail,
+        google_drive_mock_server: mock_servers.google_drive,
+        notion_mock_server: mock_servers.notion,
+        slack_mock_server: mock_servers.slack,
+        todoist_mock_server: mock_servers.todoist,
+        ticktick_mock_server: mock_servers.ticktick,
+        oidc_issuer_mock_server,
+        mailer_stub,
+        redis_storage,
+        cache,
+        _test_db: test_db,
+    }
+}
+
 #[fixture]
 pub async fn tested_app_with_domain_blacklist(
     mut settings: Settings,

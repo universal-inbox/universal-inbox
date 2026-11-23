@@ -81,7 +81,8 @@ Feature: Changing the profile
 
     @legacy:test_users::patch_user::test_patch_user_blacklisted_email_domain
     Scenario: A refused change leaves the account untouched
-      Given the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com
+      Given the app lets users sign in with single sign-on, a password and a passkey
+      And the app refuses registrations from the domain blocked.com
       And I have signed up with the email "john@allowed.com" and a password
       When I request the change of my email address to "john@blocked.com"
       Then the app answers 403

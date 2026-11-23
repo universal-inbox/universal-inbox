@@ -96,7 +96,8 @@ Feature: Registering an account
   Rule: Some email domains cannot register
 
     Background:
-      Given the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com
+      Given the app lets users sign in with single sign-on, a password and a passkey
+      And the app refuses registrations from the domain blocked.com
 
     @legacy:test_users::email_domain_blacklist::test_register_user_with_blacklisted_domain
     Scenario: A visitor cannot register with an address of a refused domain

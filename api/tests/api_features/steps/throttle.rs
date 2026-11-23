@@ -29,7 +29,7 @@ fn unique_email() -> Pii<EmailAddress> {
     expr = "each account may make {int} login requests and each email address may receive {int} account emails in a period"
 )]
 fn each_account_has_a_budget(world: &mut ApiWorld, login_requests: u32, emails: u32) {
-    world.app.configure().local_auth = Some(LocalAuthenticationSettings {
+    world.app.configure().local_auth_policy = Some(LocalAuthenticationSettings {
         max_login_requests_per_account: login_requests,
         max_account_emails_per_address: emails,
         ..local_auth_settings()
@@ -47,13 +47,13 @@ fn an_email_address_that_no_account_uses(world: &mut ApiWorld) {
 }
 
 async fn observe(response: reqwest::Response) -> Observed {
-    (
-        response.status(),
-        response
+    Observed {
+        status: response.status(),
+        has_retry_after: response
             .headers()
             .contains_key(reqwest::header::RETRY_AFTER),
-        response.text().await.unwrap(),
-    )
+        body: response.text().await.unwrap(),
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -158,13 +158,13 @@ async fn i_request_registrations_for_both_addresses(world: &mut ApiWorld, count:
 )]
 fn the_first_requests_succeeded_and_the_next_was_throttled(world: &mut ApiWorld, allowed: usize) {
     for observed in &world.probe.series {
-        for (status, _, _) in &observed[..allowed] {
-            assert_eq!(*status, StatusCode::OK);
+        for answer in &observed[..allowed] {
+            assert_eq!(answer.status, StatusCode::OK);
         }
-        let (status, has_retry_after, _) = observed.last().unwrap();
-        assert_eq!(*status, StatusCode::TOO_MANY_REQUESTS);
+        let last = observed.last().unwrap();
+        assert_eq!(last.status, StatusCode::TOO_MANY_REQUESTS);
         assert!(
-            has_retry_after,
+            last.has_retry_after,
             "429 response must carry a Retry-After header"
         );
     }

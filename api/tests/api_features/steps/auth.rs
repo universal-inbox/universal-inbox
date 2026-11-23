@@ -16,7 +16,7 @@ use universal_inbox::{
 use universal_inbox_api::universal_inbox::user::model::UserAuth;
 
 use crate::{
-    common::scenarios::SignInMode,
+    common::scenarios::LocalAuth,
     helpers::{
         auth::{
             fetch_auth_tokens_for_user, get_user_auth, mock_oidc_introspection, mock_oidc_keys,
@@ -51,7 +51,9 @@ fn id_token(which: &str) -> &'static str {
 
 #[given("the app lets users sign in with a password or a passkey")]
 fn the_app_lets_users_sign_in_with_a_password_or_a_passkey(world: &mut ApiWorld) {
-    world.app.configure().sign_in = SignInMode::Local { passkey: true };
+    let config = world.app.configure();
+    config.identity_provider = false;
+    config.local_auth = Some(LocalAuth { passkey: true });
 }
 
 #[given("the identity provider is available")]

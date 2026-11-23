@@ -7,7 +7,8 @@ use playwright_rs::{BrowserContext, Page};
 use crate::{
     common::{
         db_connection, redis_storage,
-        scenarios::{AppConfig, AppUnderTest, ScenarioApp, ScenarioWorld},
+        scenarios::{AppConfig, AppUnderTest, LocalAuth, ScenarioApp, ScenarioWorld},
+        settings,
     },
     helpers::{
         BrowserTestedApp, browser_tested_app, browser_tested_app_with_billing, launch_browser,
@@ -37,10 +38,35 @@ impl fmt::Debug for BrowserWorld {
 }
 
 impl ScenarioApp for BrowserTestedApp {
+    /// Users sign in with a password, without a passkey and without an identity provider.
+    fn default_config() -> AppConfig {
+        AppConfig {
+            settings: settings(),
+            billing: false,
+            identity_provider: false,
+            local_auth: Some(LocalAuth { passkey: false }),
+            local_auth_policy: None,
+            blocked_domains: vec![],
+        }
+    }
+
     fn start(config: AppConfig) -> LocalBoxFuture<'static, Self> {
         let AppConfig {
-            settings, billing, ..
+            settings,
+            billing,
+            identity_provider,
+            local_auth,
+            local_auth_policy,
+            blocked_domains,
         } = config;
+        assert!(
+            !identity_provider
+                && local_auth == Some(LocalAuth { passkey: false })
+                && local_auth_policy.is_none()
+                && blocked_domains.is_empty(),
+            "The browser app only supports users who sign in with a password, without a passkey, \
+             with the default password policy and no blocked domain"
+        );
         Box::pin(async move {
             let db = db_connection(settings.clone());
             let redis = redis_storage(settings.clone());

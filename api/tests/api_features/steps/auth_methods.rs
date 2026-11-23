@@ -17,7 +17,7 @@ use universal_inbox_api::{
 };
 
 use crate::{
-    common::scenarios::SignInMode,
+    common::scenarios::LocalAuth,
     helpers::{
         TestedApp,
         auth::{
@@ -33,7 +33,7 @@ use crate::{
             start_passkey_registration_response, with_discoverable_credential,
         },
     },
-    state::{ForeignPasskey, cookie_client},
+    state::{VisitorPasskey, cookie_client},
     steps::id_tokens::signed_id_token,
     steps::passkey::start_and_finish_adding_a_passkey,
     world::{ApiWorld, Response},
@@ -65,21 +65,34 @@ fn plain_display_of(kind: UserAuthKind) -> Option<UserAuthMethodDisplayInfo> {
     }
 }
 
-#[given(
-    "the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com"
-)]
+#[given("the app lets users sign in with single sign-on, a password and a passkey")]
 fn the_app_lets_users_sign_in_with_every_method(world: &mut ApiWorld) {
-    world.app.configure().sign_in = SignInMode::SingleSignOnPasswordAndPasskey;
+    let config = world.app.configure();
+    config.identity_provider = true;
+    config.local_auth = Some(LocalAuth { passkey: true });
+}
+
+#[given("the app refuses registrations from the domain blocked.com")]
+fn the_app_refuses_registrations_from_a_domain(world: &mut ApiWorld) {
+    world
+        .app
+        .configure()
+        .blocked_domains
+        .push("blocked.com".to_string());
 }
 
 #[given("the app lets users sign in with a password but not with a passkey")]
 fn the_app_lets_users_sign_in_with_a_password_only(world: &mut ApiWorld) {
-    world.app.configure().sign_in = SignInMode::Local { passkey: false };
+    let config = world.app.configure();
+    config.identity_provider = false;
+    config.local_auth = Some(LocalAuth { passkey: false });
 }
 
 #[given("another app lets users sign in with a password or a passkey")]
 fn another_app_lets_users_sign_in_with_a_password_or_a_passkey(world: &mut ApiWorld) {
-    world.other_app.configure().sign_in = SignInMode::Local { passkey: true };
+    let config = world.other_app.configure();
+    config.identity_provider = false;
+    config.local_auth = Some(LocalAuth { passkey: true });
 }
 
 #[when("I list my sign-in methods")]
@@ -388,7 +401,7 @@ async fn a_visitor_registered_a_passkey_on_the_other_app(world: &mut ApiWorld, u
         finish_passkey_registration_response_unauthenticated(&client, app, &credential, &nonce)
             .await;
     assert_eq!(finish.status(), StatusCode::OK);
-    world.passkeys.foreign = Some(ForeignPasskey {
+    world.passkeys.visitor = Some(VisitorPasskey {
         authenticator,
         credential,
         nonce,
@@ -398,7 +411,7 @@ async fn a_visitor_registered_a_passkey_on_the_other_app(world: &mut ApiWorld, u
 
 #[when("that visitor replays the passkey registration on this app")]
 async fn the_visitor_replays_the_passkey_registration(world: &mut ApiWorld) {
-    let foreign = world.passkeys.foreign.as_ref().expect("No visitor passkey");
+    let foreign = world.passkeys.visitor.as_ref().expect("No visitor passkey");
     let app = world.app.get().await;
     let client = cookie_client();
     let response = finish_passkey_registration_response_unauthenticated(
@@ -418,7 +431,7 @@ async fn the_visitor_replays_a_passkey_sign_in(world: &mut ApiWorld) {
     let origin = other.front_base_url.clone();
     let username = world
         .passkeys
-        .foreign
+        .visitor
         .as_ref()
         .expect("No visitor passkey")
         .username
@@ -426,7 +439,7 @@ async fn the_visitor_replays_a_passkey_sign_in(world: &mut ApiWorld) {
     let enabled_login = cookie_client();
     let start = start_passkey_authentication_response(&enabled_login, other, &username).await;
     let body = start.text().await.unwrap();
-    let foreign = world.passkeys.foreign.as_mut().expect("No visitor passkey");
+    let foreign = world.passkeys.visitor.as_mut().expect("No visitor passkey");
     let request_challenge = with_discoverable_credential(
         serde_json::from_str::<RequestChallengeResponse>(&body).unwrap(),
         &foreign.credential.raw_id,
@@ -457,7 +470,7 @@ async fn the_visitor_replays_a_passkey_sign_in(world: &mut ApiWorld) {
 #[when("I replay that passkey registration to add it to my account on this app")]
 async fn i_replay_that_passkey_registration_on_my_account(world: &mut ApiWorld) {
     let client = world.client();
-    let foreign = world.passkeys.foreign.as_ref().expect("No visitor passkey");
+    let foreign = world.passkeys.visitor.as_ref().expect("No visitor passkey");
     let app: &TestedApp = world.app.get().await;
     let response =
         finish_add_passkey_registration_response(&client, app, &foreign.credential, &foreign.nonce)

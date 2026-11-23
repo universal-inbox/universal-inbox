@@ -35,41 +35,32 @@ pub trait ScenarioWorld: World + Debug + WorldInventory {
 }
 
 /// How the app under test is started. Given steps that configure the app change it before the
-/// app starts; they compose, whatever their order.
+/// app starts. Each setting is independent of the others, so they compose whatever their order;
+/// an app refuses to start on a combination it cannot honour.
 pub struct AppConfig {
     pub settings: Settings,
     pub billing: bool,
-    pub sign_in: SignInMode,
+    /// Whether users can sign in with single sign-on, with a test identity provider.
+    pub identity_provider: bool,
+    /// Whether users can sign in with an email address and a password, and with a passkey.
+    pub local_auth: Option<LocalAuth>,
     /// The password policy and the per-account limits, when a scenario changes the app's own.
-    pub local_auth: Option<LocalAuthenticationSettings>,
+    /// Needs `local_auth`.
+    pub local_auth_policy: Option<LocalAuthenticationSettings>,
+    /// Email domains that cannot register.
+    pub blocked_domains: Vec<String>,
 }
 
-/// How the users of the app can sign in.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum SignInMode {
-    /// Single sign-on with an identity provider.
-    #[default]
-    SingleSignOn,
-    /// Email and password, with or without passkeys. There is no identity provider.
-    Local { passkey: bool },
-    /// Single sign-on, email and password, and passkeys. Emails of the `blocked.com` domain
-    /// cannot register.
-    SingleSignOnPasswordAndPasskey,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            settings: settings(),
-            billing: false,
-            sign_in: SignInMode::default(),
-            local_auth: None,
-        }
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LocalAuth {
+    pub passkey: bool,
 }
 
 /// An app a scenario can start from an [`AppConfig`] and stop.
 pub trait ScenarioApp: Sized {
+    /// The configuration of the app when no step changes it.
+    fn default_config() -> AppConfig;
+
     fn start(config: AppConfig) -> LocalBoxFuture<'static, Self>;
     fn stop(self) -> LocalBoxFuture<'static, ()>;
 }
@@ -80,10 +71,10 @@ pub struct AppUnderTest<A> {
     app: Option<A>,
 }
 
-impl<A> Default for AppUnderTest<A> {
+impl<A: ScenarioApp> Default for AppUnderTest<A> {
     fn default() -> Self {
         Self {
-            config: Some(AppConfig::default()),
+            config: Some(A::default_config()),
             app: None,
         }
     }

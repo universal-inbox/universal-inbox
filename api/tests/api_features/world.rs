@@ -11,15 +11,13 @@ use universal_inbox::{pii::Pii, user::User};
 use crate::{
     common::{
         db_connection, redis_storage,
-        scenarios::{AppConfig, AppUnderTest, ScenarioApp, ScenarioWorld, SignInMode},
+        scenarios::{AppConfig, AppUnderTest, ScenarioApp, ScenarioWorld},
+        settings,
     },
-    helpers::{
-        TestedApp, local_auth_settings, setup_tested_app_with_local_auth, tested_app,
-        tested_app_with_domain_blacklist,
-    },
+    helpers::{TestedApp, build_tested_app, local_auth_settings},
     state::{
-        Account, Authorizations, Browser, EmailVerification, LinkedMethod, Passkeys, Probe,
-        Sessions,
+        Account, Authorizations, Browser, EmailVerification, LinkedMethod, Passkeys, PasswordReset,
+        Probe, Sessions,
     },
 };
 
@@ -36,6 +34,7 @@ pub struct ApiWorld {
     pub passkeys: Passkeys,
     pub probe: Probe,
     pub verification: EmailVerification,
+    pub reset: PasswordReset,
     pub linked: LinkedMethod,
     pub http: HttpExchanges,
 }
@@ -54,36 +53,49 @@ impl fmt::Debug for ApiWorld {
 }
 
 impl ScenarioApp for TestedApp {
+    fn default_config() -> AppConfig {
+        AppConfig {
+            settings: settings(),
+            billing: false,
+            identity_provider: true,
+            local_auth: None,
+            local_auth_policy: None,
+            blocked_domains: vec![],
+        }
+    }
+
     fn start(config: AppConfig) -> LocalBoxFuture<'static, Self> {
-        assert!(
-            !config.billing,
-            "Billing is not available to API scenarios yet"
-        );
         let AppConfig {
             settings,
-            sign_in,
+            billing,
+            identity_provider,
             local_auth,
-            ..
+            local_auth_policy,
+            blocked_domains,
         } = config;
+        assert!(!billing, "Billing is not available to API scenarios yet");
+        assert!(
+            local_auth_policy.is_none() || local_auth.is_some(),
+            "The password policy and the account limits need an app where users sign in with a password"
+        );
         Box::pin(async move {
-            let db = db_connection(settings.clone());
-            let redis = redis_storage(settings.clone());
-            match sign_in {
-                SignInMode::SingleSignOn => tested_app(settings, (), db, redis).await,
-                SignInMode::Local { passkey } => {
-                    setup_tested_app_with_local_auth(
-                        settings,
-                        local_auth.unwrap_or_else(local_auth_settings),
-                        passkey,
-                        db.await,
-                        redis.await,
-                    )
-                    .await
-                }
-                SignInMode::SingleSignOnPasswordAndPasskey => {
-                    tested_app_with_domain_blacklist(settings, (), db, redis).await
-                }
-            }
+            let db = db_connection(settings.clone()).await;
+            let redis = redis_storage(settings.clone()).await;
+            let local_auth = local_auth.map(|local_auth| {
+                (
+                    local_auth_policy.unwrap_or_else(local_auth_settings),
+                    local_auth.passkey,
+                )
+            });
+            build_tested_app(
+                settings,
+                identity_provider,
+                local_auth,
+                &blocked_domains,
+                db,
+                redis,
+            )
+            .await
         })
     }
 

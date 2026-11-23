@@ -1,17 +1,14 @@
-//! What the scenarios of the authentication features keep between their steps.
+//! What the scenarios of the account, session and email features keep between their steps.
 
 use std::fmt;
 
 use email_address::EmailAddress;
 use reqwest::Client;
-use serde_json::Value;
 use url::Url;
-use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
-use webauthn_rs::prelude::{RegisterPublicKeyCredential, RequestChallengeResponse};
 
 use universal_inbox::{
     pii::Pii,
-    user::{User, UserAuthMethod},
+    user::{EmailValidationToken, PasswordResetToken, User, UserAuthMethod, UserId},
 };
 
 use crate::helpers::user::CopiedSession;
@@ -133,93 +130,28 @@ pub struct Authorizations {
     pub urls: Vec<Url>,
 }
 
-/// A device holding a passkey of the account.
-pub struct Device {
-    pub authenticator: WebauthnAuthenticator<SoftPasskey>,
-    pub username: String,
-    pub credential_id: Value,
-}
-
-/// A passkey sign-in started from a signed-out browser, waiting for a device to answer it.
-pub struct PendingSignIn {
-    pub browser: Client,
-    pub challenge: RequestChallengeResponse,
-    pub nonce: String,
-}
-
-#[derive(Default)]
-pub struct Passkeys {
-    pub devices: Vec<Device>,
-    pub pending: Option<PendingSignIn>,
-    /// The browser that finished a passkey sign-in.
-    pub signed_in_browser: Option<Client>,
-    /// The passkey a visitor registered on another instance of the app.
-    pub foreign: Option<ForeignPasskey>,
-    /// A passkey re-authentication that was started and waits for a device to answer it.
-    pub reauth: Option<(RequestChallengeResponse, String)>,
-}
-
-impl fmt::Debug for Passkeys {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} device(s), sign-in {}",
-            self.devices.len(),
-            if self.pending.is_some() {
-                "pending"
-            } else {
-                "not started"
-            }
-        )
-    }
-}
-
 /// What linking an authentication method through the app's services answered.
 #[derive(Debug, Default)]
 pub struct LinkedMethod {
     pub result: Option<Result<UserAuthMethod, String>>,
 }
 
-/// A passkey a visitor registered on another instance of the app, kept to be replayed.
-pub struct ForeignPasskey {
-    pub authenticator: WebauthnAuthenticator<SoftPasskey>,
-    pub credential: RegisterPublicKeyCredential,
-    pub nonce: String,
-    pub username: String,
-}
-
-/// Status, `Retry-After` presence and body of a response, to compare the answers served for
-/// registered and unregistered email addresses.
-pub type Observed = (reqwest::StatusCode, bool, String);
-
-/// Requests a scenario sends from a different network address each time, to show that only the
-/// email address, not the address of the sender, is throttled.
-#[derive(Debug, Default)]
-pub struct Probe {
-    /// Index of the next network address to send from.
-    pub next: u32,
-    /// What each series of requests got, one series per email address.
-    pub series: Vec<Vec<Observed>>,
-}
-
-impl Probe {
-    /// A network address of its own for each request.
-    pub fn next_address(&mut self) -> String {
-        let address = format!("198.51.100.{}", self.next % 250 + 1);
-        self.next += 1;
-        address
-    }
-}
-
 /// What the scenario knows about the verification of the account's email address.
 #[derive(Debug, Default)]
 pub struct EmailVerification {
     /// The verification token the account had before a new email was asked for.
-    pub previous_token: Option<universal_inbox::user::EmailValidationToken>,
+    pub previous_token: Option<EmailValidationToken>,
     /// The verification link that was last opened.
     pub link: Option<String>,
     /// The user a verification link named, when it is not the account's.
-    pub link_user_id: Option<universal_inbox::user::UserId>,
-    /// The password reset token of the last reset email.
-    pub reset_token: Option<universal_inbox::user::PasswordResetToken>,
+    pub link_user_id: Option<UserId>,
+}
+
+/// What the scenario knows about the password reset of the account.
+#[derive(Debug, Default)]
+pub struct PasswordReset {
+    /// The token of the last reset email.
+    pub token: Option<PasswordResetToken>,
+    /// The user a reset link named, when it is not the account's.
+    pub link_user_id: Option<UserId>,
 }

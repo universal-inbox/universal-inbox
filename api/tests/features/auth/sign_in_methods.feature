@@ -30,7 +30,7 @@ Feature: Managing the ways to sign in
 
     @legacy:test_auth_methods::add_local_auth_method::test_add_local_auth_to_oidc_user
     Scenario: A user who signed in with single sign-on adds a password
-      Given the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com
+      Given the app lets users sign in with single sign-on, a password and a passkey
       And I am signed in
       When I list my sign-in methods
       Then I have these sign-in methods:
@@ -74,7 +74,7 @@ Feature: Managing the ways to sign in
 
     @legacy:test_auth_methods::add_passkey_auth_method::test_add_passkey_auth_to_oidc_user
     Scenario: A user who signed in with single sign-on adds a passkey
-      Given the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com
+      Given the app lets users sign in with single sign-on, a password and a passkey
       And I am signed in
       When I list my sign-in methods
       Then I have these sign-in methods:
@@ -92,7 +92,7 @@ Feature: Managing the ways to sign in
 
     @legacy:test_auth_methods::add_oidc_auth_method::test_add_oidc_pkce_auth_to_local_user
     Scenario: A user who signed up with a password adds single sign-on
-      Given the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com
+      Given the app lets users sign in with single sign-on, a password and a passkey
       And I have signed up with the email "john@doe.name" and a password
       When I list my sign-in methods
       Then I have these sign-in methods:
@@ -110,7 +110,7 @@ Feature: Managing the ways to sign in
 
     @legacy:test_auth_methods::add_oidc_auth_method::test_add_duplicate_oidc_pkce_auth
     Scenario: A user who already has single sign-on cannot add it again
-      Given the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com
+      Given the app lets users sign in with single sign-on, a password and a passkey
       And I am signed in
       When I link single sign-on to my account with an identity token for "test@example.com"
       Then the app answers 409
@@ -122,7 +122,7 @@ Feature: Managing the ways to sign in
       Linking goes through the app's service directly: the full redirect flow
       needs the identity provider to sign real RSA identity tokens.
 
-      Given the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com
+      Given the app lets users sign in with single sign-on, a password and a passkey
       And I have signed up with the email "john@doe.name" and a password
       When I list my sign-in methods
       Then I have these sign-in methods:
@@ -137,7 +137,7 @@ Feature: Managing the ways to sign in
 
     @legacy:test_auth_methods::add_google_auth_method::test_add_duplicate_google_auth
     Scenario: A user who already linked a Google account cannot link another
-      Given the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com
+      Given the app lets users sign in with single sign-on, a password and a passkey
       And I have signed up with the email "john@doe.name" and a password
       And my account is linked to the Google account "google-user-12345"
       When I link the Google account "google-user-67890" to my account
@@ -147,7 +147,7 @@ Feature: Managing the ways to sign in
 
     @legacy:test_auth_methods::remove_auth_method::test_remove_auth_method_with_multiple_methods
     Scenario: A user with two sign-in methods removes one
-      Given the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com
+      Given the app lets users sign in with single sign-on, a password and a passkey
       And I am signed in
       And I have added a password to my account
       When I list my sign-in methods

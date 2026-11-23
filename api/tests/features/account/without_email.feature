@@ -13,14 +13,16 @@ Feature: Running the app without email
 
     @legacy:test_users::without_email::test_front_config_reports_email_disabled
     Scenario: An app that cannot send emails says so
-      Given the app does not send emails
+      Given the app lets users sign in with a password or a passkey
+      And the app does not send emails
       When I ask how the app is configured
       Then the app reports that email is disabled
 
   Rule: Without email, nothing waits for an email
 
     Background:
-      Given the app does not send emails
+      Given the app lets users sign in with a password or a passkey
+      And the app does not send emails
 
     @legacy:test_users::without_email::test_register_user_validates_email
     Scenario: A new address is verified as soon as the user signs up

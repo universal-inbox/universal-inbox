@@ -13,7 +13,6 @@ use universal_inbox::{
 use universal_inbox_api::mailer::EmailTemplate;
 
 use crate::{
-    common::scenarios::SignInMode,
     helpers::user::{
         emails_sent_to, get_current_user, get_pending_email_change_token, patch_user_response,
         register_user,
@@ -31,14 +30,14 @@ fn email_of(email: &str) -> Pii<EmailAddress> {
 
 #[given("the app does not send emails")]
 fn the_app_does_not_send_emails(world: &mut ApiWorld) {
-    let config = world.app.configure();
-    config.settings.application.email = None;
-    config.sign_in = SignInMode::Local { passkey: true };
+    world.app.configure().settings.application.email = None;
 }
 
 #[given("the app only lets users sign in with single sign-on")]
 fn the_app_only_lets_users_sign_in_with_single_sign_on(world: &mut ApiWorld) {
-    world.app.configure().sign_in = SignInMode::SingleSignOn;
+    let config = world.app.configure();
+    config.identity_provider = true;
+    config.local_auth = None;
 }
 
 #[given(expr = "another user signed up with the email {string}")]
