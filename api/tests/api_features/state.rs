@@ -31,6 +31,7 @@ pub struct Account {
     email: Option<Pii<EmailAddress>>,
     password: Option<String>,
     user: Option<User>,
+    unregistered: Option<Pii<EmailAddress>>,
 }
 
 impl Account {
@@ -38,6 +39,22 @@ impl Account {
         self.email = Some(email);
         self.password = Some(password.to_string());
         self.user = Some(user);
+    }
+
+    /// An email address and password nobody registered.
+    pub fn set_without_account(&mut self, email: Pii<EmailAddress>, password: &str) {
+        self.email = Some(email);
+        self.password = Some(password.to_string());
+    }
+
+    pub fn set_unregistered(&mut self, email: Pii<EmailAddress>) {
+        self.unregistered = Some(email);
+    }
+
+    pub fn unregistered(&self) -> Pii<EmailAddress> {
+        self.unregistered
+            .clone()
+            .expect("No unregistered email address was chosen in this scenario")
     }
 
     pub fn email(&self) -> Pii<EmailAddress> {
@@ -165,4 +182,27 @@ pub struct ForeignPasskey {
     pub credential: RegisterPublicKeyCredential,
     pub nonce: String,
     pub username: String,
+}
+
+/// Status, `Retry-After` presence and body of a response, to compare the answers served for
+/// registered and unregistered email addresses.
+pub type Observed = (reqwest::StatusCode, bool, String);
+
+/// Requests a scenario sends from a different network address each time, to show that only the
+/// email address, not the address of the sender, is throttled.
+#[derive(Debug, Default)]
+pub struct Probe {
+    /// Index of the next network address to send from.
+    pub next: u32,
+    /// What each series of requests got, one series per email address.
+    pub series: Vec<Vec<Observed>>,
+}
+
+impl Probe {
+    /// A network address of its own for each request.
+    pub fn next_address(&mut self) -> String {
+        let address = format!("198.51.100.{}", self.next % 250 + 1);
+        self.next += 1;
+        address
+    }
 }

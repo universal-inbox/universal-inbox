@@ -17,7 +17,7 @@ use crate::{
         TestedApp, local_auth_settings, setup_tested_app_with_local_auth, tested_app,
         tested_app_with_domain_blacklist,
     },
-    state::{Account, Authorizations, Browser, LinkedMethod, Passkeys, Sessions},
+    state::{Account, Authorizations, Browser, LinkedMethod, Passkeys, Probe, Sessions},
 };
 
 #[derive(Default, World)]
@@ -31,6 +31,7 @@ pub struct ApiWorld {
     pub sessions: Sessions,
     pub authorizations: Authorizations,
     pub passkeys: Passkeys,
+    pub probe: Probe,
     pub linked: LinkedMethod,
     pub http: HttpExchanges,
 }
