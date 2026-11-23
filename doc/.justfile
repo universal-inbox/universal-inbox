@@ -22,10 +22,10 @@ test:
 # up (`just start ui-api`, `just start ui-workers`, `just start ui-web`) and
 # Playwright Chromium installed (`mise install`).
 #
-# Devbox assigns random ports to every service so the recipe relies on the env
-# vars exposed by `.envrc` (API_PORT, DX_SERVE_PORT, UNIVERSAL_INBOX__*). If
-# direnv is installed but the recipe is invoked from a shell where the vars
-# aren't loaded, we auto-source them from the worktree root.
+# Every worktree gets its own hashed ports so the recipe relies on the env
+# vars exposed by `mise.toml` and `mise.local.toml` (API_PORT, DX_SERVE_PORT,
+# UNIVERSAL_INBOX__*). If mise is installed but the recipe is invoked from a
+# shell where the vars aren't loaded, we auto-source them from the worktree root.
 #
 # Usage:
 #   just doc::update-screenshots                   # regenerate everything
@@ -35,17 +35,17 @@ update-screenshots only="":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    # Auto-load env vars from the worktree's .envrc if they're missing. The dev
-    # stack uses random ports (devbox) — without these we'd hit the wrong host.
+    # Auto-load env vars from the worktree's mise config if they're missing. The dev
+    # stack uses hashed ports per worktree — without these we'd hit the wrong host.
     if [ -z "${API_PORT:-}" ] || [ -z "${DX_SERVE_PORT:-}" ]; then
-        if command -v direnv >/dev/null 2>&1; then
-            eval "$(direnv export bash 2>/dev/null || true)"
+        if command -v mise >/dev/null 2>&1; then
+            eval "$(mise env -s bash 2>/dev/null || true)"
         fi
     fi
 
     if [ -z "${API_PORT:-}" ] || [ -z "${DX_SERVE_PORT:-}" ]; then
         echo "ERROR: API_PORT and/or DX_SERVE_PORT are not set."
-        echo "Run from a devbox shell, or 'direnv allow' the worktree, before invoking this recipe."
+        echo "Run from a shell with 'mise activate', or through 'mise exec --', before invoking this recipe."
         exit 1
     fi
 

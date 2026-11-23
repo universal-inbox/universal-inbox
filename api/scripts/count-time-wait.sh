@@ -4,7 +4,7 @@
 # probes, mock server calls) on loopback. Each one held an ephemeral port that macOS only
 # frees after 2 x net.inet.tcp.msl (30 s by default), see .claude/QUICK_START.md.
 #
-# Usage (from api/, with pg + redis up): direnv exec . scripts/count-time-wait.sh [filterset]
+# Usage (from api/, with pg + redis up): mise exec -- scripts/count-time-wait.sh [filterset]
 #   scripts/count-time-wait.sh 'test(=test_health_check::health_check_works)'
 # The filterset defaults to the whole API suite, 'not binary(browser)'.
 #

@@ -2,7 +2,7 @@
 api/config/local.*
 web/public
 web/dist
-.local_envrc
+mise.local.toml
 node_modules
 .DS_Store
 lcov.info

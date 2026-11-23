@@ -63,7 +63,7 @@ run interactive="true": clear-dev-assets build-assets
     set -euo pipefail
 
     # dx serve has no flag for the proxy backend, so patch Dioxus.toml in place
-    # with the API_PORT from direnv (each worktree gets its own hashed port).
+    # with the API_PORT from mise (each worktree gets its own hashed port).
     API_PORT_VALUE=${API_PORT:-8000}
     tmp=$(mktemp)
     sed -E 's#^backend = "http://localhost:[0-9]+/api/"#backend = "http://localhost:'"$API_PORT_VALUE"'/api/"#' \

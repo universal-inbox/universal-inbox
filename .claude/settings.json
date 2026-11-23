@@ -21,7 +21,7 @@
           },
           {
             "type": "command",
-            "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/direnv-session-start.sh\""
+            "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/mise-session-start.sh\""
           }
         ]
       }

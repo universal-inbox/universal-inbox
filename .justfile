@@ -117,7 +117,7 @@ run:
         exec process-compose -p "$PC_PORT" attach
     fi
     exec process-compose \
-        -f .devbox/virtenv/redis/process-compose.yaml \
+        -f process-compose-redis.yaml \
         -f process-compose-pg.yaml \
         -f process-compose.yaml \
         -p "$PC_PORT"
@@ -133,7 +133,7 @@ run-detached:
         exit 0
     fi
     process-compose \
-        -f .devbox/virtenv/redis/process-compose.yaml \
+        -f process-compose-redis.yaml \
         -f process-compose-pg.yaml \
         -f process-compose.yaml \
         -p "$PC_PORT" up -D -t=false

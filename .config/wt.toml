@@ -15,33 +15,34 @@ fix_permissions = "chmod -R og-rwx .devbox/virtenv/postgresql_17"
 
 [[pre-start]]
 env = """
-cat >> .local_envrc << EOF
-export PGPORT={{ ('db-' ~ branch) | hash_port }}
-export REDIS_PORT={{ ('redis-' ~ branch) | hash_port }}
-export DX_SERVE_PORT={{ ('web-' ~ branch) | hash_port }}
-export API_PORT={{ ('api-' ~ branch) | hash_port }}
-export PROCESS_COMPOSE_PORT={{ ('pc-' ~ branch) | hash_port }}
+cat > mise.local.toml << EOF
+[env]
+PGPORT = "{{ ('db-' ~ branch) | hash_port }}"
+REDIS_PORT = "{{ ('redis-' ~ branch) | hash_port }}"
+DX_SERVE_PORT = "{{ ('web-' ~ branch) | hash_port }}"
+API_PORT = "{{ ('api-' ~ branch) | hash_port }}"
+PROCESS_COMPOSE_PORT = "{{ ('pc-' ~ branch) | hash_port }}"
 
-export DATABASE_URL="postgres://postgres:password@127.0.0.1:{{ ('db-' ~ branch) | hash_port }}/universal-inbox"
-export UNIVERSAL_INBOX__DATABASE__PORT={{ ('db-' ~ branch) | hash_port }}
-export UNIVERSAL_INBOX__REDIS__PORT={{ ('redis-' ~ branch) | hash_port }}
-export UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL=http://localhost:{{ ('web-' ~ branch) | hash_port }}
-export UNIVERSAL_INBOX__APPLICATION__LISTEN_PORT={{ ('api-' ~ branch) | hash_port }}
-export UNIVERSAL_INBOX__APPLICATION__WORKER_LISTEN_PORT={{ ('worker-' ~ branch) | hash_port }}
+DATABASE_URL = "postgres://postgres:password@127.0.0.1:{{ ('db-' ~ branch) | hash_port }}/universal-inbox"
+UNIVERSAL_INBOX__DATABASE__PORT = "{{ ('db-' ~ branch) | hash_port }}"
+UNIVERSAL_INBOX__REDIS__PORT = "{{ ('redis-' ~ branch) | hash_port }}"
+UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL = "http://localhost:{{ ('web-' ~ branch) | hash_port }}"
+UNIVERSAL_INBOX__APPLICATION__LISTEN_PORT = "{{ ('api-' ~ branch) | hash_port }}"
+UNIVERSAL_INBOX__APPLICATION__WORKER_LISTEN_PORT = "{{ ('worker-' ~ branch) | hash_port }}"
 
 # default PGHOST can became too long
-export PGHOST=/tmp
+PGHOST = "/tmp"
 EOF
 """
 
 [[pre-start]]
-setup = "direnv allow"
+setup = "mise trust"
 
 [[pre-start]]
 web_install = "cd web && npm install"
 
 [pre-remove]
-stop_services = "direnv exec . process-compose down -p ${PROCESS_COMPOSE_PORT:-9999} || true"
+stop_services = "mise exec -- process-compose down -p ${PROCESS_COMPOSE_PORT:-9999} || true"
 
 [pre-commit]
 check = "just check-commit"

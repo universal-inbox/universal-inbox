@@ -5,8 +5,40 @@ experimental = true
 lockfile = true
 lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64"]
 
+[env]
+_.file = ".env"
+DATABASE_URL = "postgres://postgres:password@127.0.0.1:5432/universal-inbox"
+SQLX_OFFLINE = "true"
+RUST_MIN_STACK = "104857600"
+RUST_BACKTRACE = "full"
+PLAYWRIGHT_DRIVER_CACHE_DIR = "{{ get_env(name='PLAYWRIGHT_DRIVER_CACHE_DIR', default=get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') ~ '/playwright-rs/drivers') }}"
+VERSION = "{{ get_env(name='VERSION', default='dev') }}"
+API_PORT = "8000"
+DX_SERVE_PORT = "8080"
+TARGET_CC = "cc"
+COREPACK_ENABLE_AUTO_PIN = "0"
+PGPORT = "5432"
+REDIS_PORT = "6379"
+REDIS_CONF = "{{ config_root }}/devbox.d/redis/redis.conf"
+CADDY_CONFIG = "{{ config_root }}/devbox.d/caddy/Caddyfile"
+CADDY_ROOT_DIR = "{{ config_root }}/devbox.d/web"
+PGDATA = "{{ config_root }}/.devbox/virtenv/postgresql_17/data"
+PGHOST = "{{ config_root }}/.devbox/virtenv/postgresql_17/data"
+
+[[hooks.enter]]
+shell = "bash"
+script = 'if [ -n "$WORKTRUNK_ZELLIJ_SESSION" ] && [ -z "$ZELLIJ" ]; then zellij attach "$WORKTRUNK_ZELLIJ_SESSION"; fi'
+
+[[hooks.enter]]
+shell = "zsh"
+script = 'if [ -n "$WORKTRUNK_ZELLIJ_SESSION" ] && [ -z "$ZELLIJ" ]; then zellij attach "$WORKTRUNK_ZELLIJ_SESSION"; fi'
+
+[[hooks.enter]]
+shell = "fish"
+script = 'if test -n "$WORKTRUNK_ZELLIJ_SESSION"; and test -z "$ZELLIJ"; zellij attach "$WORKTRUNK_ZELLIJ_SESSION"; end'
+
 [tools]
-rust = { version = "1.98", components = "rust-analyzer,llvm-tools,clippy,rustfmt", targets = "wasm32-unknown-unknown", profile = "minimal" }
+rust ={ version = "1.98", components = "rust-analyzer,llvm-tools,clippy,rustfmt", targets = "wasm32-unknown-unknown", profile = "minimal" }
 node = "22"
 just = "latest"
 watchexec = "latest"
@@ -40,6 +72,9 @@ cargo-nextest = "latest"
 "aqua:taiki-e/cargo-llvm-cov" = "0.6.16"
 stripe = "latest"
 pitchfork = "latest"
+process-compose = "latest"
+postgres = "17"
+redis = "latest"
 
 # Playwright version must match the playwright-rs crate (1.64.0 = Chromium 1248)
 [tools."npm:playwright"]

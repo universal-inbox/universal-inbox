@@ -5,7 +5,7 @@ api/config/local.*
 api/tests
 web/public
 web/node_modules
-.local_envrc
+mise.local.toml
 node_modules
 .DS_Store
 tests/
