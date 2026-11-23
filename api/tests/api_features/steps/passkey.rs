@@ -22,7 +22,7 @@ use crate::{
     world::{ApiWorld, Response},
 };
 
-fn split_request_challenge(body: &str) -> (RequestChallengeResponse, String) {
+pub(super) fn split_request_challenge(body: &str) -> (RequestChallengeResponse, String) {
     let value: Value = serde_json::from_str(body).unwrap();
     let nonce = value["nonce"].as_str().unwrap().to_string();
     (serde_json::from_str(body).unwrap(), nonce)

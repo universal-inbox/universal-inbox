@@ -6,5 +6,5 @@ pub use account::{
     Account, Authorizations, Browser, EmailVerification, LinkedMethod, PasswordReset, Sessions,
     cookie_client, ordinal,
 };
-pub use passkey::{Device, Passkeys, PendingSignIn, VisitorPasskey};
+pub use passkey::{Device, Passkeys, PendingSignIn, Registration, VisitorPasskey};
 pub use throttle::{Observed, Probe};
