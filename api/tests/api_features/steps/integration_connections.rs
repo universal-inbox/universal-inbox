@@ -4,7 +4,8 @@ use pretty_assertions::assert_eq;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionStatus,
+        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
+        IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::{github::GithubConfig, google_calendar::GoogleCalendarConfig},
         provider::IntegrationProviderKind,
@@ -250,8 +251,10 @@ fn the_lookup_fails_with_a_recoverable_error(world: &mut ApiWorld) {
     );
 }
 
-async fn refetched_google_calendar(world: &mut ApiWorld) -> IntegrationConnection {
-    let id = world.connections.google_calendar.as_ref().unwrap().id;
+pub async fn stored_connection(
+    world: &mut ApiWorld,
+    id: IntegrationConnectionId,
+) -> IntegrationConnection {
     let app = world.app.get().await;
     let mut transaction = app.repository.begin().await.unwrap();
     let connection = app
@@ -262,6 +265,11 @@ async fn refetched_google_calendar(world: &mut ApiWorld) -> IntegrationConnectio
         .expect("integration connection should still exist");
     transaction.commit().await.unwrap();
     connection
+}
+
+async fn refetched_google_calendar(world: &mut ApiWorld) -> IntegrationConnection {
+    let id = world.connections.google_calendar.as_ref().unwrap().id;
+    stored_connection(world, id).await
 }
 
 #[then("my Google Calendar connection is failing, because the refresh token is missing")]
