@@ -1,12 +1,7 @@
 use std::collections::HashMap;
 
-use chrono::{TimeDelta, Utc};
 use cucumber::{gherkin::Step, given, then, when};
-use openidconnect::{
-    AccessToken, Audience, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, StandardClaims,
-    SubjectIdentifier,
-    core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
-};
+use openidconnect::AccessToken;
 use pretty_assertions::assert_eq;
 use reqwest::StatusCode;
 use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
@@ -39,6 +34,7 @@ use crate::{
         },
     },
     state::{ForeignPasskey, cookie_client},
+    steps::id_tokens::signed_id_token,
     steps::passkey::start_and_finish_adding_a_passkey,
     world::{ApiWorld, Response},
 };
@@ -69,7 +65,9 @@ fn plain_display_of(kind: UserAuthKind) -> Option<UserAuthMethodDisplayInfo> {
     }
 }
 
-#[given("the app lets users sign in with single sign-on, a password or a passkey")]
+#[given(
+    "the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com"
+)]
 fn the_app_lets_users_sign_in_with_every_method(world: &mut ApiWorld) {
     world.app.configure().sign_in = SignInMode::SingleSignOnPasswordAndPasskey;
 }
@@ -238,27 +236,12 @@ async fn i_link_single_sign_on_to_my_account(world: &mut ApiWorld, email: String
     let client = world.client();
     let app = world.app.get().await;
     let issuer = app.oidc_issuer_mock_server.as_ref().unwrap().uri();
-    let id_token = CoreIdToken::new(
-        CoreIdTokenClaims::new(
-            IssuerUrl::new(issuer).unwrap(),
-            vec![Audience::new(format!("{email}-client-id-123"))],
-            Utc::now() + TimeDelta::try_seconds(120).unwrap(),
-            Utc::now(),
-            StandardClaims::new(SubjectIdentifier::new("John-Doe".to_string()))
-                .set_email(Some(EndUserEmail::new(email))),
-            EmptyAdditionalClaims {},
-        ),
-        &CoreHmacKey::new("secret".as_bytes()),
-        CoreJwsSigningAlgorithm::HmacSha256,
-        None,
-        None,
-    )
-    .unwrap();
+    let id_token = signed_id_token(issuer, &email);
     let response = link_oidc_pkce_session_response(
         &client,
         app,
         &SessionAuthValidationParameters {
-            auth_id_token: id_token.to_string().into(),
+            auth_id_token: id_token.into(),
             access_token: AccessToken::new("fake_token".to_string()),
         },
     )

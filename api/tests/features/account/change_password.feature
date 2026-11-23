@@ -111,7 +111,7 @@ Feature: Changing and resetting a password
 
     @legacy:test_change_password::test_change_password_without_local_auth
     Scenario: A user who signs in with single sign-on has no password to change
-      Given the app lets users sign in with single sign-on, a password or a passkey
+      Given the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com
       And I am signed in
       When I change my password from "Very-harD-pasSword-5" to "New-very-harD-pasSword-5"
       Then the app answers 400

@@ -210,3 +210,14 @@ impl Probe {
         address
     }
 }
+
+/// What the scenario knows about the verification of the account's email address.
+#[derive(Debug, Default)]
+pub struct EmailVerification {
+    /// The verification token the account had before a new email was asked for.
+    pub previous_token: Option<universal_inbox::user::EmailValidationToken>,
+    /// The verification link that was last opened.
+    pub link: Option<String>,
+    /// The user a verification link named, when it is not the account's.
+    pub link_user_id: Option<universal_inbox::user::UserId>,
+}

@@ -81,7 +81,7 @@ Feature: Confirming your identity before sensitive changes
 
     @legacy:test_reauthentication::test_google_reauthentication_redirects_to_google
     Scenario: Confirming an identity sends the user to the identity provider to pick an account
-      Given the app lets users sign in with single sign-on, a password or a passkey
+      Given the app lets users sign in with single sign-on, a password or a passkey, and refuses the domain blocked.com
       And I am signed in
       When I ask to confirm my identity with the identity provider
       Then the app answers 200

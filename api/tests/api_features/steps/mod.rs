@@ -5,5 +5,7 @@ mod id_tokens;
 mod passkey;
 mod password;
 mod reauthentication;
+mod registration;
 mod session;
 mod throttle;
+mod verification;

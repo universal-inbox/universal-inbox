@@ -17,7 +17,10 @@ use crate::{
         TestedApp, local_auth_settings, setup_tested_app_with_local_auth, tested_app,
         tested_app_with_domain_blacklist,
     },
-    state::{Account, Authorizations, Browser, LinkedMethod, Passkeys, Probe, Sessions},
+    state::{
+        Account, Authorizations, Browser, EmailVerification, LinkedMethod, Passkeys, Probe,
+        Sessions,
+    },
 };
 
 #[derive(Default, World)]
@@ -32,6 +35,7 @@ pub struct ApiWorld {
     pub authorizations: Authorizations,
     pub passkeys: Passkeys,
     pub probe: Probe,
+    pub verification: EmailVerification,
     pub linked: LinkedMethod,
     pub http: HttpExchanges,
 }
@@ -141,6 +145,11 @@ pub struct Cookie {
     pub name: String,
     pub value: String,
     pub expires: Option<SystemTime>,
+    pub secure: bool,
+    pub http_only: bool,
+    pub same_site_lax: bool,
+    pub path: Option<String>,
+    pub domain: Option<String>,
 }
 
 #[derive(Debug)]
@@ -161,6 +170,11 @@ impl Response {
                 name: cookie.name().to_string(),
                 value: cookie.value().to_string(),
                 expires: cookie.expires(),
+                secure: cookie.secure(),
+                http_only: cookie.http_only(),
+                same_site_lax: cookie.same_site_lax(),
+                path: cookie.path().map(str::to_string),
+                domain: cookie.domain().map(str::to_string),
             })
             .collect();
         let body = response
