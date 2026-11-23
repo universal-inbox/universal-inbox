@@ -8,30 +8,28 @@ copy = "wt step copy-ignored"
 exclude = ["/target"]
 
 [[pre-start]]
-clean_data = "rm -rf .devbox/virtenv/redis/dump.rdb .devbox/virtenv/postgresql_17/data"
-
-[[pre-start]]
-fix_permissions = "chmod -R og-rwx .devbox/virtenv/postgresql_17"
-
-[[pre-start]]
 env = """
 cat > mise.local.toml << EOF
 [env]
-PGPORT = "{{ ('db-' ~ branch) | hash_port }}"
-REDIS_PORT = "{{ ('redis-' ~ branch) | hash_port }}"
 DX_SERVE_PORT = "{{ ('web-' ~ branch) | hash_port }}"
 API_PORT = "{{ ('api-' ~ branch) | hash_port }}"
-PROCESS_COMPOSE_PORT = "{{ ('pc-' ~ branch) | hash_port }}"
 
-DATABASE_URL = "postgres://postgres:password@127.0.0.1:{{ ('db-' ~ branch) | hash_port }}/universal-inbox"
 UNIVERSAL_INBOX__DATABASE__PORT = "{{ ('db-' ~ branch) | hash_port }}"
 UNIVERSAL_INBOX__REDIS__PORT = "{{ ('redis-' ~ branch) | hash_port }}"
 UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL = "http://localhost:{{ ('web-' ~ branch) | hash_port }}"
 UNIVERSAL_INBOX__APPLICATION__LISTEN_PORT = "{{ ('api-' ~ branch) | hash_port }}"
 UNIVERSAL_INBOX__APPLICATION__WORKER_LISTEN_PORT = "{{ ('worker-' ~ branch) | hash_port }}"
 
-# default PGHOST can became too long
-PGHOST = "/tmp"
+[daemons.postgresql]
+preset = "postgres"
+version = "17"
+port = {{ ('db-' ~ branch) | hash_port }}
+init = "bash dev/postgres-tune.sh"
+
+[daemons.redis]
+preset = "redis"
+version = "8"
+port = {{ ('redis-' ~ branch) | hash_port }}
 EOF
 """
 
@@ -42,7 +40,7 @@ setup = "mise trust"
 web_install = "cd web && npm install"
 
 [pre-remove]
-stop_services = "mise exec -- process-compose down -p ${PROCESS_COMPOSE_PORT:-9999} || true"
+stop_services = "mise daemons stop || true; mise daemons ls --json | jq -r '.[].data_dir // empty' | xargs -r rm -rf"
 
 [pre-commit]
 check = "just check-commit"
