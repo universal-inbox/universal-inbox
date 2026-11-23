@@ -1,15 +1,23 @@
+use apalis::prelude::Storage;
 use chrono::{DateTime, TimeDelta, TimeZone, Timelike, Utc};
 use cucumber::{gherkin::Step, given, then, when};
 use pretty_assertions::assert_eq;
 use serde_json::json;
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
+use wiremock::{
+    Mock, ResponseTemplate,
+    matchers::{method, path},
+};
 
 use universal_inbox::{
     PageToken,
     notification::{
         Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
-        NotificationStatus, NotificationWithTask, service::NotificationPatch,
+        NotificationStatus, NotificationWithTask,
+        service::{NotificationPatch, PatchNotificationsRequest},
     },
+    task::{TASK_TITLE_MAX_LENGTH, TaskCreation, TaskPriority},
     third_party::item::ThirdPartyItemKind,
 };
 use universal_inbox_api::repository::{
@@ -19,13 +27,17 @@ use universal_inbox_api::repository::{
 use crate::{
     helpers::{
         notification::{
+            create_task_from_notification_response,
             github::{create_notification_from_github_notification, github_notification},
             linear::{
                 create_notification_from_linear_notification, sync_linear_notifications_response,
             },
             list_notifications, list_notifications_page, list_only_snoozed_notifications,
         },
-        rest::{get_resource, get_resource_response, patch_resource, patch_resource_response},
+        rest::{
+            get_resource, get_resource_response, patch_resource, patch_resource_collection,
+            patch_resource_response,
+        },
         third_party::overwrite_third_party_item_data,
     },
     world::{ApiWorld, Response},
@@ -642,6 +654,160 @@ async fn i_patch_an_unknown_notification(world: &mut ApiWorld) {
             status: Some(NotificationStatus::Deleted),
             ..Default::default()
         },
+    )
+    .await;
+    world.http.record(Response::read(response).await);
+}
+
+#[given(expr = "GitHub accepts to delete the notification threads {int} and {int}")]
+async fn github_accepts_to_delete_threads(world: &mut ApiWorld, first: u32, second: u32) {
+    let app = world.app.get().await;
+    for thread in [first, second] {
+        Mock::given(method("DELETE"))
+            .and(path(format!("/notifications/threads/{thread}")))
+            .respond_with(ResponseTemplate::new(205))
+            .mount(&app.github_mock_server)
+            .await;
+    }
+}
+
+#[then(expr = "the notifications {string} and {string} are unread")]
+fn two_notifications_are_unread(world: &mut ApiWorld, first: String, second: String) {
+    for name in [first, second] {
+        assert_eq!(
+            world.notifications.named(&name).status,
+            NotificationStatus::Unread
+        );
+    }
+}
+
+#[then(expr = "the notifications {string} and {string} are not snoozed")]
+fn two_notifications_are_not_snoozed(world: &mut ApiWorld, first: String, second: String) {
+    for name in [first, second] {
+        assert_eq!(world.notifications.named(&name).snoozed_until, None);
+    }
+}
+
+async fn patch_all_github_notifications(
+    world: &mut ApiWorld,
+    status: Vec<NotificationStatus>,
+    patch: NotificationPatch,
+) {
+    let client = world.client();
+    let app = world.app.get().await;
+    world.notifications.bulk_changed = patch_resource_collection(
+        &client,
+        &app.api_address,
+        "notifications",
+        &PatchNotificationsRequest {
+            status,
+            sources: vec![NotificationSourceKind::Github],
+            patch,
+        },
+    )
+    .await;
+}
+
+#[when("I delete all my unread and read GitHub notifications")]
+async fn i_delete_all_my_github_notifications(world: &mut ApiWorld) {
+    patch_all_github_notifications(
+        world,
+        vec![NotificationStatus::Unread, NotificationStatus::Read],
+        NotificationPatch {
+            status: Some(NotificationStatus::Deleted),
+            snoozed_until: None,
+            task_id: None,
+        },
+    )
+    .await;
+}
+
+#[when(expr = "I snooze all my unread GitHub notifications until {string}")]
+async fn i_snooze_all_my_github_notifications(world: &mut ApiWorld, time: String) {
+    patch_all_github_notifications(
+        world,
+        vec![NotificationStatus::Unread],
+        NotificationPatch {
+            status: None,
+            snoozed_until: Some(parse_time(&time)),
+            task_id: None,
+        },
+    )
+    .await;
+}
+
+#[then(expr = "{int} notifications were changed")]
+fn notifications_were_changed(world: &mut ApiWorld, count: usize) {
+    assert_eq!(world.notifications.bulk_changed.len(), count);
+}
+
+#[then(expr = "all the changed notifications are snoozed until {string} and still unread")]
+fn the_changed_notifications_are_snoozed(world: &mut ApiWorld, time: String) {
+    let time = parse_time(&time);
+    assert!(
+        world
+            .notifications
+            .bulk_changed
+            .iter()
+            .all(|n| n.snoozed_until == Some(time) && n.status == NotificationStatus::Unread)
+    );
+}
+
+fn sorted_ids(world: &ApiWorld, step: &Step) -> Vec<NotificationId> {
+    let mut ids: Vec<NotificationId> = names_in_table(step)
+        .iter()
+        .map(|name| world.notifications.named(name).id)
+        .collect();
+    ids.sort_by_key(|id| id.0);
+    ids
+}
+
+#[then("I see exactly these notifications, in any order:")]
+fn i_see_exactly_these_notifications(world: &mut ApiWorld, step: &Step) {
+    let mut listed: Vec<NotificationId> = world.notifications.listed.iter().map(|n| n.id).collect();
+    listed.sort_by_key(|id| id.0);
+    assert_eq!(listed, sorted_ids(world, step));
+}
+
+#[then("the snoozed notifications I see are exactly these, in any order:")]
+fn the_snoozed_notifications_i_see(world: &mut ApiWorld, step: &Step) {
+    let mut listed: Vec<NotificationId> = world
+        .notifications
+        .snoozed_listed
+        .iter()
+        .map(|n| n.id)
+        .collect();
+    listed.sort_by_key(|id| id.0);
+    assert_eq!(listed, sorted_ids(world, step));
+}
+
+#[then("no job is left in the queue after a second")]
+async fn no_job_is_left_in_the_queue(world: &mut ApiWorld) {
+    sleep(Duration::from_millis(1000)).await;
+    let mut storage = world.app.get().await.redis_storage.clone();
+    let job_count = storage.len().await.expect("Failed to get job count");
+    assert_eq!(job_count, 0);
+}
+
+#[when(
+    "I create a task from a notification that does not exist, with a title one character too long"
+)]
+async fn i_create_a_task_with_a_title_too_long(world: &mut ApiWorld) {
+    let client = world.client();
+    let app = world.app.get().await;
+    let response = create_task_from_notification_response(
+        &client,
+        &app.api_address,
+        Uuid::new_v4().into(),
+        Some(TaskCreation {
+            title: "a".repeat(TASK_TITLE_MAX_LENGTH as usize + 1),
+            body: None,
+            project_name: None,
+            due_at: None,
+            priority: TaskPriority::P4,
+            task_provider_kind: None,
+            time_config: None,
+        }),
     )
     .await;
     world.http.record(Response::read(response).await);

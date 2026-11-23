@@ -14,6 +14,7 @@ pub struct Notifications {
     pub tied: Vec<NotificationId>,
     pub tied_updated_at: Option<DateTime<Utc>>,
     pub patched: Option<Notification>,
+    pub bulk_changed: Vec<Notification>,
     pub unknown_id: Option<Uuid>,
 }
 
