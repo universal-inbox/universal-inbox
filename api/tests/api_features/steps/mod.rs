@@ -1,8 +1,10 @@
+mod account_deletion;
 mod api_tokens;
 mod auth;
 mod auth_methods;
 mod http;
 mod id_tokens;
+mod integrations;
 mod passkey;
 mod passkey_ceremony;
 mod password;
