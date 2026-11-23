@@ -60,18 +60,6 @@ retry = 5
 run = "exec caddy run --config=$CADDY_CONFIG"
 retry = 5
 
-[[hooks.enter]]
-shell = "bash"
-script = 'if [ -n "$WORKTRUNK_ZELLIJ_SESSION" ] && [ -z "$ZELLIJ" ]; then zellij attach "$WORKTRUNK_ZELLIJ_SESSION"; fi'
-
-[[hooks.enter]]
-shell = "zsh"
-script = 'if [ -n "$WORKTRUNK_ZELLIJ_SESSION" ] && [ -z "$ZELLIJ" ]; then zellij attach "$WORKTRUNK_ZELLIJ_SESSION"; fi'
-
-[[hooks.enter]]
-shell = "fish"
-script = 'if test -n "$WORKTRUNK_ZELLIJ_SESSION"; and test -z "$ZELLIJ"; zellij attach "$WORKTRUNK_ZELLIJ_SESSION"; end'
-
 [tools]
 rust = { version = "1.98", components = "rust-analyzer,llvm-tools,clippy,rustfmt", targets = "wasm32-unknown-unknown", profile = "minimal" }
 node = "22"
@@ -82,7 +70,6 @@ fzf = "latest"
 jq = "latest"
 prek = "latest"
 sccache = "latest"
-zellij = "latest"
 hadolint = "latest"
 pinact = "latest"
 caddy = "latest"

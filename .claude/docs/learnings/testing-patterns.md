@@ -59,9 +59,9 @@ or call `helpers::set_audit_actor(&mut tx, &actor)` on a transaction they began.
 
 ## Stack size and SQLx
 
-`RUST_MIN_STACK=104857600` (100 MiB) is set by `.cargo/config.toml` `[env]`, so no `.envrc` is needed
+`RUST_MIN_STACK=104857600` (100 MiB) is set by `.cargo/config.toml` `[env]`, so no `mise.toml` env is needed
 for tests. Tests deserialize large nested structs; only a smaller *exported* value overflows.
-`SQLX_OFFLINE=true` comes from `.envrc`.
+`SQLX_OFFLINE=true` comes from `mise.toml`.
 
 ## Running tests
 
@@ -75,7 +75,7 @@ cd api && cargo nextest run --lib  # API unit tests (MCP tool-count / schema tes
 cd web && just test                # web (Dioxus/WASM)
 ```
 
-API tests need Postgres + Redis up (`direnv exec . just run-detached`; prefix `direnv exec .` if env is missing).
+API tests need Postgres + Redis up (`mise exec -- just run-detached`; prefix `mise exec --` if env is missing).
 `test_mcp_session_store` can time out on Redis under full-suite load: rerun it alone before suspecting code.
 
 ## Speed

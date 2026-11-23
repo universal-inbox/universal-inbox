@@ -15,8 +15,8 @@ cd api && just test        # API tests   |   cd web && just test   # web tests
 just check-all | just test-all   # whole workspace
 ```
 
-mbx builds workspace crates without Cargo incremental state: put `export MBX_INCREMENTAL=1`
-in `.local_envrc` (main checkout, copied into new worktrees) to rebuild the api test
+mbx builds workspace crates without Cargo incremental state: put `MBX_INCREMENTAL=1`
+in `.env` (main checkout, copied into new worktrees) to rebuild the api test
 binaries in ~15s instead of ~45s after an edit.
 
 macOS: random API test failures with `Can't assign requested address` (os error 49) mean the
@@ -37,28 +37,27 @@ just connect-to-db    # psql into the DB
 cd api && just check-db
 ```
 
-## Dev Servers (process-compose)
+## Dev Servers (mise daemons)
 
-`just run` / `just run-detached` merge three configs into one process-compose instance on
-`$PROCESS_COMPOSE_PORT` (default 9999): `.devbox/virtenv/redis/process-compose.yaml` (redis) +
-`process-compose-pg.yaml` (postgresql via `pg_ctl`) + `process-compose.yaml` (app services).
-`postgresql` + `redis` start automatically; app services `ui-api` `ui-workers` `ui-web`
-`build-tailwind` `bundle-js` `caddy` `stripe-listen` are `disabled: true` — start them
-explicitly. `stripe-listen` (`just api stripe-listen`) forwards Stripe webhooks to the local
+`just run` / `just run-detached` start the `[daemons]` declared in `mise.toml` (pitchfork
+supervisor). `postgresql` + `redis` (mise presets, data kept by mise outside the repo, see
+`mise daemons ls --json`) form the `default` group and start automatically; app services
+`ui-api` `ui-workers` `ui-web` `build-tailwind` `bundle-js` `caddy` `stripe-listen` are not in
+it — start them explicitly. `stripe-listen` (`just api stripe-listen`) forwards Stripe webhooks to the local
 API; it is only useful with `[application.billing]` configured.
 
 ```bash
-just run               # interactive TUI — HUMANS ONLY, errors in a no-TTY/agent shell
-just run-detached      # AGENTS: start pg+redis detached/headless (no TUI); idempotent
-just down              # stop the detached stack started by run-detached
+just run               # start pg+redis then open the dashboard TUI — HUMANS ONLY, errors in a no-TTY/agent shell
+just run-detached      # AGENTS: start pg+redis headless (no TUI); idempotent
+just down              # stop the stack started by run or run-detached
 just start ui-api      # start one service: ui-api | ui-workers | ui-web | postgresql | redis
 just stop <svc>        # stop one service
-just status            # service states (✅ running / ⏸️ disabled / ❌ down)
+just status            # service states (✅ running / ⏸️ available / ❌ down)
 just logs <svc>        # tail -f last 100 lines of a service
 just print-env-info    # URLs/ports for web, API, Postgres, Redis
 ```
 
-Always run service/test commands through `direnv exec .` (or inside a direnv-allowed shell) so
+Always run service/test commands through `mise exec --` (or inside a shell with mise activated) so
 the worktree's ports load — see **Worktree** below. `just run-detached` is the headless
 equivalent of `just run`; agents must never call bare `just run` (TUI needs a TTY).
 
@@ -86,8 +85,8 @@ rebuilds the frontend first) when `api/` `.rs` files are staged. Both include in
 so **Postgres and Redis must be running or the commit fails**.
 
 ```bash
-direnv exec . just run-detached            # pg + redis (idempotent)
-direnv exec . git commit -m "..."          # hook uses this worktree's ports
+mise exec -- just run-detached            # pg + redis (idempotent)
+mise exec -- git commit -m "..."          # hook uses this worktree's ports
 ```
 
 Don't skip the hook with `--no-verify`.
@@ -101,27 +100,28 @@ just api generate-user   # seeds test+{uuid}@test.com / test-password-123456 wit
 ## Worktree (worktrunk) — per-worktree ports
 
 ```bash
-wt switch --create my-feature --yes   # isolated ports, written into .local_envrc
-direnv exec . <command>               # REQUIRED: run with the worktree env loaded
+wt switch --create my-feature --yes   # isolated ports, written into mise.local.toml
+mise exec -- <command>               # REQUIRED: run with the worktree env loaded
 ```
 
 Each worktree gets **its own ports**, NOT 5432/6379. On create, worktrunk
-(`.config/wt.toml` pre-start hook) appends branch-hashed ports to `.local_envrc`:
-`PGPORT` `REDIS_PORT` `DX_SERVE_PORT` `API_PORT` `PROCESS_COMPOSE_PORT`, plus the matching
-`DATABASE_URL`, `UNIVERSAL_INBOX__{DATABASE__PORT,REDIS__PORT,APPLICATION__*}`, and `PGHOST=/tmp`.
-`.envrc` sources `.local_envrc` **last**, so these override the 5432/6379 defaults in `.envrc`.
+(`.config/wt.toml` pre-start hook) writes `mise.local.toml` with branch-hashed ports:
+`DX_SERVE_PORT` `API_PORT` and the `UNIVERSAL_INBOX__{DATABASE__PORT,REDIS__PORT,APPLICATION__*}`
+overrides in `[env]`, plus `[daemons.postgresql]` and `[daemons.redis]` redeclared with their
+hashed `port`. `mise.local.toml` overrides `mise.toml`, so these replace the 5432/6379/8000/8080
+defaults; mise then exports `PGPORT`, `REDIS_PORT` and `DATABASE_URL` from the daemon ports.
 
-- **`.local_envrc` is the source of truth for this worktree's ports** — read it (or
+- **`mise.local.toml` is the source of truth for this worktree's ports** — read it (or
   `just print-env-info`) to learn where pg/redis/API/web live.
-- **Always prefix with `direnv exec .`.** Bare `devbox run` does NOT source `.local_envrc`,
-  so it silently falls back to ports 5432/6379 — wrong DB, and it collides with any local
-  Docker postgres on 5432.
+- **Always prefix with `mise exec --`.** A bare command outside a mise-activated shell does NOT
+  load `mise.local.toml`, so it silently falls back to ports 5432/6379 — wrong DB, and it
+  collides with any local Docker postgres on 5432.
 - **Claude Code Bash calls load the worktree env automatically** (`SessionStart` hook
-  `.claude/hooks/direnv-session-start.sh`), even if the session started before `.envrc` was
-  allowed. `direnv exec .` stays required for git hooks, other agents and plain terminals.
+  `.claude/hooks/mise-session-start.sh`), even if the session started before `mise trust`.
+  `mise exec --` stays required for git hooks, other agents and plain terminals.
 - **Stop the branch's services before `wt remove` or `wt merge`.** Run from the worktree:
-  `direnv exec . just down` (stops pg, redis and app services on this worktree's
-  `PROCESS_COMPOSE_PORT`), then `direnv exec . just status` to confirm nothing runs. The
+  `mise exec -- just down` (stops pg, redis and app services of this worktree's daemons),
+  then `mise exec -- just status` to confirm nothing runs. The
   `.config/wt.toml` pre-remove hook is only a best-effort fallback (`|| true`); don't rely on
   it. Leftover processes keep ports and the removed worktree's data dir busy.
 
@@ -130,8 +130,8 @@ Each worktree gets **its own ports**, NOT 5432/6379. On create, worktrunk
 ```bash
 RUST_MIN_STACK=104857600   # tests (large nested structs); default set by .cargo/config.toml [env]
 SQLX_OFFLINE=true          # use cached query metadata
-# DATABASE_URL: 5432 default in .envrc, OVERRIDDEN per worktree by .local_envrc (PGPORT).
-# Don't hardcode 5432 — read $DATABASE_URL / $PGPORT from direnv.
+# DATABASE_URL: 5432 default in mise.toml, OVERRIDDEN per worktree by mise.local.toml (PGPORT).
+# Don't hardcode 5432 — read $DATABASE_URL / $PGPORT from mise.
 DATABASE_URL=postgres://postgres:password@127.0.0.1:${PGPORT:-5432}/universal-inbox
 ```
 

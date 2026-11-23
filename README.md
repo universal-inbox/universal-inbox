@@ -27,46 +27,34 @@ Universal Inbox is a solution that centralizes all your notifications and tasks 
 
 ### Pre-requisites
 
-The development environment is using [Devbox](https://www.jetpack.io/devbox/) which is based on Nix.
-Before setting up the Universal Inbox environment, you have to install Devbox following these [instructions](https://www.jetpack.io/devbox/docs/quickstart/#install-devbox).
+The development environment is using [mise](https://mise.jdx.dev/) to install the tools, set the environment variables and run the services.
+Before setting up the Universal Inbox environment, you have to [install mise](https://mise.jdx.dev/getting-started.html) and [activate it in your shell](https://mise.jdx.dev/getting-started.html#activate-mise).
+
+mise cannot provide the system libraries used to build the Rust dependencies:
+
+- Linux: a C toolchain, `pkg-config` and the OpenSSL headers (`build-essential pkg-config libssl-dev` on Debian and Ubuntu)
+- macOS: the Xcode command line tools (`xcode-select --install`), which provide `iconv` and the Foundation framework
 
 ### Environment setup
 
 ```bash
 git clone https://github.com/universal-inbox/universal-inbox.git
-```
-
-The simplest is to install [direnv](https://direnv.net/) to enter a complete development environment everytime you enter the `universal-inbox` directory:
-
-```bash
 cd universal-inbox
-direnv allow
+mise trust
+mise install
 ```
 
-From here, it should keep the environment installed using Devbox.
-
-#### Environment setup (bis)
-
-Without direnv, you can start by installing the development environment:
-
-```bash
-cd universal-inbox
-devbox install
-```
-
-and then enter the environment:
-
-```bash
-devbox shell
-```
+`mise install` installs the tools declared in `mise.toml` (Rust, Node.js, `just`, `sqlx-cli`, `dioxus-cli`, Playwright Chromium, ...). Once mise is activated in your shell, entering the directory loads the environment variables of the `[env]` section, the `.env` file and the git-ignored `mise.local.toml`.
 
 #### Setup PostgreSQL
 
-Start PostgreSQL (it will also start Redis):
+Start PostgreSQL and Redis (their data is kept outside of the repository by mise, see `mise daemons ls --json`):
 
 ```bash
-just run
+just run-detached
 ```
+
+`just run` does the same and opens the services dashboard. Other services (`ui-api`, `ui-workers`, `ui-web`, ...) are started with `just start <service>`, stopped with `just stop <service>`, and their output is shown with `just logs <service>`. `just status` shows the state of the services and `just down` stops them all.
 
 Prepare the database:
 

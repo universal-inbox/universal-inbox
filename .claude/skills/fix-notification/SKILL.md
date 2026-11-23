@@ -14,7 +14,7 @@ after that.
 The canonical reference for the underlying commands is
 `.claude/QUICK_START.md` (sections "Worktree (worktrunk)" and "Dev
 Servers"). This skill orchestrates them in the right order plus the few
-non-obvious bits (status flip, headless process-compose, password reset
+non-obvious bits (status flip, headless daemons, password reset
 via stdin).
 
 ## Inputs
@@ -47,76 +47,69 @@ WT_BIN="$(which -a wt | tail -1)"
 ```
 
 This triggers the project's pre-start hooks: copies gitignored state,
-wipes stale pg/redis data dirs, generates `.local_envrc` with
-branch-hashed ports (`PGPORT`, `REDIS_PORT`, `DX_SERVE_PORT`, `API_PORT`,
-`PROCESS_COMPOSE_PORT`), runs `direnv allow`, and `npm install`.
+generates `mise.local.toml` with branch-hashed ports (`DX_SERVE_PORT`,
+`API_PORT`, the `UNIVERSAL_INBOX__*` overrides and the `postgresql` and
+`redis` daemon ports), runs `mise trust`, and `npm install`.
 
 The worktree path is `~/Dev/universal-inbox/universal-inbox.<branch>`.
 
-## Step 2 — Bootstrap env (devbox + initdb)
+## Step 2 — Bootstrap env (mise)
 
-Every subsequent command must be wrapped in `direnv exec .` from the
+Every subsequent command must be wrapped in `mise exec --` from the
 worktree directory so the per-worktree ports are in scope.
 
 ```bash
 cd ~/Dev/universal-inbox/universal-inbox.debug-notif-<short-uuid>
-direnv exec . true
+mise exec -- true
 ```
 
-The first invocation runs devbox (installs cargo, playwright chromium,
-etc.) and `initdb`s the per-worktree PostgreSQL data directory. Expect
-this to take 30–60s the first time.
+The first invocation installs the tools (cargo, playwright chromium,
+etc.). Expect this to take a few minutes the first time.
 
 Capture the ports so later steps can use them:
 
 ```bash
-API_PORT=$(direnv exec . printenv API_PORT)
-DX_SERVE_PORT=$(direnv exec . printenv DX_SERVE_PORT)
-PGPORT=$(direnv exec . printenv PGPORT)
-PROCESS_COMPOSE_PORT=$(direnv exec . printenv PROCESS_COMPOSE_PORT)
+API_PORT=$(mise exec -- printenv API_PORT)
+DX_SERVE_PORT=$(mise exec -- printenv DX_SERVE_PORT)
+PGPORT=$(mise exec -- printenv PGPORT)
 ```
 
 ## Step 3 — Start PostgreSQL + Redis headless
 
-`just run` defaults to the TUI which fails in non-interactive sessions.
-Start `process-compose` directly with `-t=false`:
+`just run` opens the dashboard TUI which fails in non-interactive sessions.
+Use `just run-detached`: it initializes the per-worktree PostgreSQL data
+directory the first time and waits until pg and redis are ready.
 
 ```bash
-nohup direnv exec . process-compose \
-  -f .devbox/virtenv/redis/process-compose.yaml \
-  -f process-compose-pg.yaml \
-  -f process-compose.yaml \
-  -p "$PROCESS_COMPOSE_PORT" -t=false \
-  > /tmp/pc-debug-notif-<short-uuid>.log 2>&1 &
+mise exec -- just run-detached
 ```
 
-Poll until pg + redis are up (the `ui-*` services start disabled and
-must be opted into in Step 8):
+Check that pg + redis are up (the `ui-*` services are not started by
+default and must be opted into in Step 8):
 
 ```bash
-until direnv exec . just status 2>/dev/null \
-    | grep -E "postgresql|redis" | grep -qv "Disabled"; do sleep 1; done
+mise exec -- just status
 ```
 
 ## Step 4 — Restore the prod backup
 
 `restore-db-backup` accepts a `pg_dump` directory backup.
 
-First add the prod data encryption keys to the worktree's `.local_envrc`
-(git-ignored), then `direnv allow`:
+First add the prod data encryption keys to the worktree's `.env`
+(git-ignored, loaded by `mise.toml`):
 
 ```bash
-export UNIVERSAL_INBOX__DATA_ENCRYPTION__ACTIVE_KEY_ID=<prod active key id>
-export UNIVERSAL_INBOX__DATA_ENCRYPTION__KEYS__<id>=<prod key>   # one line per key
-export UNIVERSAL_INBOX__DATA_ENCRYPTION__BLIND_INDEX_KEY=<prod blind index key>  # email lookups
+UNIVERSAL_INBOX__DATA_ENCRYPTION__ACTIVE_KEY_ID=<prod active key id>
+UNIVERSAL_INBOX__DATA_ENCRYPTION__KEYS__<id>=<prod key>   # one line per key
+UNIVERSAL_INBOX__DATA_ENCRYPTION__BLIND_INDEX_KEY=<prod blind index key>  # email lookups
 ```
 
 ```bash
-direnv exec . just restore-db-backup <backup_path>
-direnv exec . just api ensure-db
+mise exec -- just restore-db-backup <backup_path>
+mise exec -- just api ensure-db
 # checks the keys read every value (a backup taken before data encryption cannot be
 # migrated: its plaintext columns are dropped by a migration refusing to lose values)
-direnv exec . cargo run -p universal-inbox-api -- data-encryption encrypt-plaintext
+mise exec -- cargo run -p universal-inbox-api -- data-encryption encrypt-plaintext
 ```
 
 If `encrypt-plaintext` reports values on a key that is not configured, a
@@ -130,7 +123,7 @@ landed since.
 ## Step 5 — Resolve the user owning the notification
 
 ```bash
-direnv exec . psql -h /tmp -U postgres -p "$PGPORT" -d universal-inbox -tA -c \
+mise exec -- psql -h 127.0.0.1 -U postgres -p "$PGPORT" -d universal-inbox -tA -c \
   "SELECT u.id, u.email
    FROM notification n
    JOIN \"user\" u ON u.id = n.user_id
@@ -147,11 +140,11 @@ A `Deleted` notification won't appear in the inbox UI, so the
 previously selected. Check the status and flip if needed:
 
 ```bash
-STATUS=$(direnv exec . psql -h /tmp -U postgres -p "$PGPORT" -d universal-inbox -tA -c \
+STATUS=$(mise exec -- psql -h 127.0.0.1 -U postgres -p "$PGPORT" -d universal-inbox -tA -c \
   "SELECT status FROM notification WHERE id = '<notification_id>';")
 
 if [ "$STATUS" = "Deleted" ]; then
-  direnv exec . psql -h /tmp -U postgres -p "$PGPORT" -d universal-inbox -c \
+  mise exec -- psql -h 127.0.0.1 -U postgres -p "$PGPORT" -d universal-inbox -c \
     "UPDATE notification SET status = 'Unread' WHERE id = '<notification_id>';"
   STATUS_FLIPPED=true
 fi
@@ -169,7 +162,7 @@ from stdin in non-TTY mode and either updates the existing Local auth
 row or creates one if the user only had OIDC/Passkey:
 
 ```bash
-echo "test-password-123456" | direnv exec . just api reset-password "<email>"
+echo "test-password-123456" | mise exec -- just api reset-password "<email>"
 ```
 
 Use `test-password-123456` as the password by convention — it matches the
@@ -181,16 +174,16 @@ isn't already validated (rare for prod backup users, but possible),
 their login attempt will be rejected. Validate it explicitly:
 
 ```bash
-direnv exec . psql -h /tmp -U postgres -p "$PGPORT" -d universal-inbox -c \
+mise exec -- psql -h 127.0.0.1 -U postgres -p "$PGPORT" -d universal-inbox -c \
   "UPDATE \"user\" SET email_validated_at = COALESCE(email_validated_at, now()) WHERE id = '<user-id>';"
 ```
 
 ## Step 8 — Start the app services and wait for readiness
 
 ```bash
-direnv exec . just start ui-api
-direnv exec . just start ui-workers
-direnv exec . just start ui-web
+mise exec -- just start ui-api
+mise exec -- just start ui-workers
+mise exec -- just start ui-web
 ```
 
 Cold compile of `ui-api` is ~90s. Wait for it before continuing:
@@ -217,7 +210,7 @@ Ready to debug notification <notification_id>
   Email:           <email>
   Password:        test-password-123456
   API:             http://localhost:<API_PORT>
-  Process-compose: http://localhost:<PROCESS_COMPOSE_PORT>
+  Daemons:         mise exec -- just status
 
   Status flip: <Yes — was Deleted, now Unread (revert before destructive testing)> | <No — was already <status>>
 ```
@@ -237,7 +230,7 @@ Full teardown of the whole worktree (including the DB):
 wt remove debug-notif-<short-uuid>
 ```
 
-The `pre-remove.stop_services` hook will shut process-compose down
+The `pre-remove.stop_services` hook will stop the mise daemons
 cleanly before deleting the directory.
 
 ## Troubleshooting

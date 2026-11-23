@@ -6,6 +6,9 @@ api/tests
 web/public
 web/node_modules
 mise.local.toml
+mise.local.lock
+.local_envrc
+.devbox
 node_modules
 .DS_Store
 tests/
@@ -15,7 +18,5 @@ docker/justfile
 docker/cache
 docker/*.env
 universal-inbox.env
-devbox.d
-.devbox
 lcov.info
 .DS_Store

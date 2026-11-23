@@ -13,15 +13,15 @@
 - **Fix:** With the DB up, run `cd api && cargo sqlx prepare`, then commit the updated `.sqlx/`. `SQLX_OFFLINE=true` reads that cache.
 
 ## 3. `just run` hangs/errors in a non-interactive shell
-- **Symptom:** `open /dev/tty: device not configured` — process-compose TUI can't attach.
+- **Symptom:** `open /dev/tty: device not configured` — daemons dashboard TUI can't attach.
 - **Check:** Are you an agent / no TTY? Then never use bare `just run`.
-- **Fix:** `direnv exec . just run-detached` (headless pg+redis), then `just start ui-api|ui-workers|ui-web` as needed; tear down with `just down`. See QUICK_START.md "Dev Servers".
+- **Fix:** `mise exec -- just run-detached` (headless pg+redis), then `just start ui-api|ui-workers|ui-web` as needed; tear down with `just down`. See QUICK_START.md "Dev Servers".
 
 ## 4. Commands in a worktree hit the wrong DB/ports
 - **Symptom:** Connection refused, or you mutate the main checkout's DB from a worktree.
-- **Check:** Did you prefix with `direnv exec .`? Per-branch ports live in `.local_envrc` (PGPORT/REDIS_PORT/…, NOT 5432/6379). Bare `devbox run` skips `.local_envrc` → wrong ports.
-- **Fix:** `cd /abs/path/to/worktree && direnv exec . just <cmd>`. Shell state doesn't persist across agent calls. See QUICK_START.md "Worktree".
-- **Before `wt remove` / `wt merge`:** stop that worktree's services first: `direnv exec . just down`, then `direnv exec . just status` to confirm. Orphaned pg/redis/API processes hold the branch ports.
+- **Check:** Did you prefix with `mise exec --`? Per-branch ports live in `mise.local.toml` (PGPORT/REDIS_PORT/…, NOT 5432/6379). A bare command outside mise skips `mise.local.toml` → wrong ports.
+- **Fix:** `cd /abs/path/to/worktree && mise exec -- just <cmd>`. Shell state doesn't persist across agent calls. See QUICK_START.md "Worktree".
+- **Before `wt remove` / `wt merge`:** stop that worktree's services first: `mise exec -- just down`, then `mise exec -- just status` to confirm. Orphaned pg/redis/API processes hold the branch ports.
 - **Builds link another worktree's code** (e.g. E0063 on a field your branch has): `readlink target` matches another worktree's? `target` is an mbx symlink and must be per-worktree. Fix: `rm target` (the symlink only), then rebuild. Never `mbx clean` here: it deletes the shared dir.
 
 ## 5. Frontend styling drift (hardcoded values / stray CSS)
@@ -31,8 +31,8 @@
 
 ## 6. `git commit` fails in the pre-commit hook (services not running)
 - **Symptom:** Commit aborts in the `Test Rust code` hook with DB/Redis connection errors (connection refused, pool timeout).
-- **Check:** The pre-commit hook (`.pre-commit-config.yaml`) runs `just test` — integration tests included — whenever a `.rs` file is staged, and the root `test-browser` hook (`just api test-browser`) when an `api/` `.rs` file is. Are Postgres and Redis up? `direnv exec . just status`.
-- **Fix:** `direnv exec . just run-detached` before committing, then commit through `direnv exec .` so the hook sees this worktree's ports. Never bypass with `--no-verify`.
+- **Check:** The pre-commit hook (`.pre-commit-config.yaml`) runs `just test` — integration tests included — whenever a `.rs` file is staged, and the root `test-browser` hook (`just api test-browser`) when an `api/` `.rs` file is. Are Postgres and Redis up? `mise exec -- just status`.
+- **Fix:** `mise exec -- just run-detached` before committing, then commit through `mise exec --` so the hook sees this worktree's ports. Never bypass with `--no-verify`.
 
 ## Before you finish
 - Run `just check` and `just test` from the project you touched (api/web/root).

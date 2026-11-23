@@ -97,7 +97,7 @@ cd api && just clear-cache   # flush Redis (cache + queue) if jobs get stuck
   handler (`api/src/jobs/`) — implementing the trait alone won't make sync happen.
 - `mock_slack_fetch_thread` indexes `messages[0]`, so it cannot serve a Slack error body; mock
   `/conversations.replies` directly for error cases.
-- `SQLX_OFFLINE=true` (from `.envrc`) uses cached query metadata; after changing SQL, regenerate it
+- `SQLX_OFFLINE=true` (from `mise.toml`) uses cached query metadata; after changing SQL, regenerate it
   or unset offline mode, or compilation fails on the new query.
 - Map domain types in `NotificationService` / `TaskService`, not in the integration client —
   keep the client returning raw third-party shapes.

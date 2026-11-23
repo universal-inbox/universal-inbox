@@ -60,7 +60,7 @@ rsx! { Button { variant: ButtonVariant::Primary, "Save" } }
 - Failing test: `just test "name" debug` for trace logs.
 - Stack overflow in tests → `unset RUST_MIN_STACK` (a smaller exported value overrides the `.cargo/config.toml` one).
 - SQLx compile error offline → `cd api && just check-db` (runs `cargo sqlx prepare`, refreshes `api/.sqlx/`).
-- Commit via `MBX_DISABLE=1 direnv exec . git commit ...`; the pre-commit hook may reformat files (check `git log -1`) and `web/Dioxus.toml` port rewrite must be reverted first.
+- Commit via `MBX_DISABLE=1 mise exec -- git commit ...`; the pre-commit hook may reformat files (check `git log -1`) and `web/Dioxus.toml` port rewrite must be reverted first.
 - Shell `rg` may be aliased to BSD grep: use `command rg`.
 - API up? `curl http://localhost:$API_PORT/ping` → `{"cache":"healthy","database":"healthy"}` (per-IP rate limited).
 - Service logs: `just logs ui-api` / `just status`.

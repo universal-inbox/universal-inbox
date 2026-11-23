@@ -84,13 +84,13 @@ load-bearing class names in the module doc-comment.
 ```bash
 cd web && just test            # frontend tests (builds assets first)
 cd web && just check           # clippy -D warnings (also rebuilds web/public assets)
-just start ui-web              # via process-compose (after `just run-detached`)
+just start ui-web              # via mise daemons (after `just run-detached`)
 just web run false             # dev server (dx serve, non-interactive); rewrites web/Dioxus.toml
                                # backend port from $API_PORT — revert before committing
 ```
 
 `ui-web` builds Tailwind once (no `--watch`) and the `dx serve` watcher is flaky in worktrees:
-after adding classes or if edits don't show, `process-compose process restart ui-web -p $PROCESS_COMPOSE_PORT`.
+after adding classes or if edits don't show, `just stop ui-web && just start ui-web`.
 After editing `web/js/index.js`: `cd web && just bundle-js`, touch a `web/src` file, restart `ui-web`.
 
 Verify health: `curl -s http://localhost:${API_PORT:-8000}/ping` then

@@ -12,7 +12,7 @@ For full navigation, see [docs/INDEX.md](docs/INDEX.md).
 | [api-design](docs/learnings/api-design.md) | Actix routes, `UniversalInboxError` → HTTP, service/`Arc`/`Weak` patterns | ~700 |
 | [frontend-dioxus](docs/learnings/frontend-dioxus.md) | Dioxus 0.6 WASM, components/ui, Tailwind v4 + FlyonUI, theme tokens | ~800 |
 | [integrations](docs/learnings/integrations.md) | Adding a source, `ThirdParty*SourceService`, OAuth2, third_party items | ~700 |
-| [common-pitfalls](docs/learnings/common-pitfalls.md) | Sharp edges: SQLX_OFFLINE, worktree ports, headless process-compose | ~500 |
+| [common-pitfalls](docs/learnings/common-pitfalls.md) | Sharp edges: SQLX_OFFLINE, worktree ports, headless daemons | ~500 |
 | [observability](docs/learnings/observability.md) | Span attribute naming convention, `attr::` constants, `error.type` | ~800 |
 
 ## Load this when…

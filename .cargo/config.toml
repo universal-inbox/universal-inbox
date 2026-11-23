@@ -1,4 +1,4 @@
-# Link macOS binaries with lld (shipped by devbox) instead of ld64.
+# Link macOS binaries with lld (provided by mise) instead of ld64.
 #
 # ld64 stores the offset of a function's DWARF unwind entry in a 24-bit field
 # of the compact unwind info. Once the debug API binary's __eh_frame grows past
@@ -13,7 +13,7 @@ rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 
 # Tests deserialize large nested structs with serde, which overflows the default
 # 2 MiB thread stack. Cargo and nextest inject `[env]` into every test process, so
-# tests get the bigger stack without depending on direnv having loaded `.envrc`.
+# tests get the bigger stack without depending on mise having loaded `mise.toml`.
 # An explicitly exported RUST_MIN_STACK still takes precedence.
 [env]
 RUST_MIN_STACK = "104857600"
