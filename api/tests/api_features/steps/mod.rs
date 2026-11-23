@@ -1,5 +1,6 @@
 mod account_deletion;
 mod api_tokens;
+mod audit_log;
 mod auth;
 mod auth_methods;
 mod data_encryption;

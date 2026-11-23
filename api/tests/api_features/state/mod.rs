@@ -1,4 +1,5 @@
 mod account;
+mod audit;
 mod caches;
 mod encryption;
 mod integrations;
@@ -12,6 +13,7 @@ pub use account::{
     Account, Authorizations, Browser, EmailVerification, LinkedMethod, PasswordReset, Sessions,
     cookie_client, ordinal,
 };
+pub use audit::Audit;
 pub use caches::{McpSessions, SlackEmojis};
 pub use encryption::{Encryption, RawTokenResponse, RecordedProgress, StoredItem};
 pub use integrations::Integrations;
