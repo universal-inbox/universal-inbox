@@ -51,7 +51,7 @@ fn id_token(which: &str) -> &'static str {
 
 #[given("the app lets users sign in with a password or a passkey")]
 fn the_app_lets_users_sign_in_with_a_password_or_a_passkey(world: &mut ApiWorld) {
-    world.app.configure().sign_in = SignInMode::PasswordAndPasskey;
+    world.app.configure().sign_in = SignInMode::Local { passkey: true };
 }
 
 #[given("the identity provider is available")]
@@ -93,22 +93,32 @@ async fn i_have_an_account_with_a_password(world: &mut ApiWorld) {
     world.account.set(email, PASSWORD, user);
 }
 
-#[given("I have signed up with a password")]
-async fn i_have_signed_up_with_a_password(world: &mut ApiWorld) {
-    let email = unique_email();
+pub(super) async fn sign_up(world: &mut ApiWorld, email: Pii<EmailAddress>) {
     let app = world.app.get().await;
     let (client, user) = register_user(app, email.clone(), PASSWORD).await;
     world.account.set(email, PASSWORD, user.clone());
     world.session = Some(Session { client, user });
 }
 
+#[given("I have signed up with a password")]
+async fn i_have_signed_up_with_a_password(world: &mut ApiWorld) {
+    sign_up(world, unique_email()).await;
+}
+
+#[given(regex = r#"^I have signed up with the email "([^"]+)" and a password$"#)]
+async fn i_have_signed_up_with_an_email_and_a_password(world: &mut ApiWorld, email: String) {
+    sign_up(world, email.parse().unwrap()).await;
+}
+
 async fn sign_in_with_my_password(world: &mut ApiWorld) {
     let app = world.app.get().await;
     let copied = login_and_copy_session(app, world.account.email(), world.account.password()).await;
-    world.session = Some(Session {
-        client: copied.client.clone(),
-        user: world.account.user().clone(),
-    });
+    if world.session.is_none() {
+        world.session = Some(Session {
+            client: copied.client.clone(),
+            user: world.account.user().clone(),
+        });
+    }
     world.sessions.open(copied);
 }
 
@@ -236,12 +246,7 @@ fn the_two_addresses_carry_a_different_parameter(world: &mut ApiWorld, parameter
 #[when("I sign out")]
 async fn i_sign_out(world: &mut ApiWorld) {
     let api_address = world.app.get().await.api_address.clone();
-    let client = world
-        .session
-        .as_ref()
-        .expect("The scenario is not signed in")
-        .client
-        .clone();
+    let client = world.client();
     let response = logout_user_response(&client, &api_address).await;
     world.http.record(Response::read(response).await);
 }
@@ -269,12 +274,7 @@ async fn the_session_cookie_is_cleared(world: &mut ApiWorld) {
 #[then("I am sent to the identity provider's logout page for my session")]
 async fn i_am_sent_to_the_identity_provider_logout_page(world: &mut ApiWorld) {
     let close_session_response: CloseSessionResponse = world.http.last().json();
-    let user_id = world
-        .session
-        .as_ref()
-        .expect("The scenario is not signed in")
-        .user
-        .id;
+    let user_id = world.user().id;
     let app = world.app.get().await;
     let oidc_issuer_mock_server_url = app.oidc_issuer_mock_server.as_ref().unwrap().uri();
     let user_auth = get_user_auth(app, user_id, UserAuthKind::OIDCAuthorizationCodePKCE).await;

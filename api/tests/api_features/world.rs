@@ -4,7 +4,9 @@ use cucumber::World;
 use futures::future::LocalBoxFuture;
 use reqwest::{Client, StatusCode, header::HeaderMap};
 
-use universal_inbox::user::User;
+use email_address::EmailAddress;
+
+use universal_inbox::{pii::Pii, user::User};
 
 use crate::{
     common::{
@@ -12,8 +14,8 @@ use crate::{
         scenarios::{AppConfig, AppUnderTest, ScenarioApp, ScenarioWorld, SignInMode},
     },
     helpers::{
-        TestedApp, tested_app, tested_app_with_domain_blacklist, tested_app_with_local_auth,
-        tested_app_with_local_auth_without_passkey,
+        TestedApp, local_auth_settings, setup_tested_app_with_local_auth, tested_app,
+        tested_app_with_domain_blacklist,
     },
     state::{Account, Authorizations, Browser, LinkedMethod, Passkeys, Sessions},
 };
@@ -53,18 +55,25 @@ impl ScenarioApp for TestedApp {
             "Billing is not available to API scenarios yet"
         );
         let AppConfig {
-            settings, sign_in, ..
+            settings,
+            sign_in,
+            local_auth,
+            ..
         } = config;
         Box::pin(async move {
             let db = db_connection(settings.clone());
             let redis = redis_storage(settings.clone());
             match sign_in {
                 SignInMode::SingleSignOn => tested_app(settings, (), db, redis).await,
-                SignInMode::PasswordAndPasskey => {
-                    tested_app_with_local_auth(settings, (), db, redis).await
-                }
-                SignInMode::PasswordOnly => {
-                    tested_app_with_local_auth_without_passkey(settings, (), db, redis).await
+                SignInMode::Local { passkey } => {
+                    setup_tested_app_with_local_auth(
+                        settings,
+                        local_auth.unwrap_or_else(local_auth_settings),
+                        passkey,
+                        db.await,
+                        redis.await,
+                    )
+                    .await
                 }
                 SignInMode::SingleSignOnPasswordAndPasskey => {
                     tested_app_with_domain_blacklist(settings, (), db, redis).await
@@ -94,6 +103,30 @@ impl ScenarioWorld for ApiWorld {
 pub struct Session {
     pub client: Client,
     pub user: User,
+}
+
+impl ApiWorld {
+    fn session(&self) -> &Session {
+        self.session
+            .as_ref()
+            .expect("The scenario is not signed in")
+    }
+
+    /// The HTTP client of the user the scenario is signed in as.
+    pub fn client(&self) -> Client {
+        self.session().client.clone()
+    }
+
+    pub fn user(&self) -> &User {
+        &self.session().user
+    }
+
+    pub fn my_email(&self) -> Pii<EmailAddress> {
+        self.user()
+            .email
+            .clone()
+            .expect("The signed-in user has no email address")
+    }
 }
 
 /// The HTTP requests a scenario sent to the app, and their responses.

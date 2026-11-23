@@ -192,14 +192,14 @@ Feature: Managing the ways to sign in
 
     @legacy:test_auth_methods::passkey_disabled::test_add_passkey_start_is_forbidden
     Scenario: A user cannot start adding a passkey
-      Given I have signed up with a password on this app
+      Given I have signed up with a password
       When I start adding a passkey named "john_passkey" to my account
       Then the app refuses because passkeys are disabled
       And the database holds 1 sign-in methods for my account
 
     @legacy:test_auth_methods::passkey_disabled::test_passkey_reauthentication_start_is_forbidden
     Scenario: A user cannot confirm their identity with a passkey
-      Given I have signed up with a password on this app
+      Given I have signed up with a password
       When I start confirming my identity with a passkey
       Then the app refuses because passkeys are disabled
 
@@ -210,7 +210,7 @@ Feature: Managing the ways to sign in
 
       Given another app lets users sign in with a password or a passkey
       And a visitor registered a passkey named "alice" on the other app
-      And I have signed up with a password on this app
+      And I have signed up with a password
       When that visitor replays the passkey registration on this app
       Then the app refuses because passkeys are disabled
       And that browser is not signed in

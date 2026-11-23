@@ -18,7 +18,7 @@ use cucumber::{
 use futures::future::LocalBoxFuture;
 use libtest_mimic::{Arguments, Failed, Trial};
 
-use universal_inbox_api::configuration::Settings;
+use universal_inbox_api::configuration::{LocalAuthenticationSettings, Settings};
 
 use crate::common::{init_tracing, settings};
 
@@ -40,6 +40,8 @@ pub struct AppConfig {
     pub settings: Settings,
     pub billing: bool,
     pub sign_in: SignInMode,
+    /// The password policy and the per-account limits, when a scenario changes the app's own.
+    pub local_auth: Option<LocalAuthenticationSettings>,
 }
 
 /// How the users of the app can sign in.
@@ -48,11 +50,10 @@ pub enum SignInMode {
     /// Single sign-on with an identity provider.
     #[default]
     SingleSignOn,
-    /// Email and password, or a passkey. There is no identity provider.
-    PasswordAndPasskey,
-    /// Email and password, with no passkey. There is no identity provider.
-    PasswordOnly,
-    /// Single sign-on, email and password, or a passkey.
+    /// Email and password, with or without passkeys. There is no identity provider.
+    Local { passkey: bool },
+    /// Single sign-on, email and password, and passkeys. Emails of the `blocked.com` domain
+    /// cannot register.
     SingleSignOnPasswordAndPasskey,
 }
 
@@ -62,6 +63,7 @@ impl Default for AppConfig {
             settings: settings(),
             billing: false,
             sign_in: SignInMode::default(),
+            local_auth: None,
         }
     }
 }

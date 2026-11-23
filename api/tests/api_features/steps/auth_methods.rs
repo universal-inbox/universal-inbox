@@ -8,7 +8,7 @@ use openidconnect::{
     core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
 };
 use pretty_assertions::assert_eq;
-use reqwest::{Client, StatusCode};
+use reqwest::StatusCode;
 use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
 use webauthn_rs::prelude::RequestChallengeResponse;
 
@@ -33,7 +33,7 @@ use crate::{
             add_local_auth_response, emails_sent_to, finish_add_passkey_registration_response,
             finish_body_with_nonce, finish_passkey_registration_response_unauthenticated,
             front_origin_header, link_oidc_pkce_session_response, list_auth_methods_response,
-            register_user, remove_auth_method_response, split_creation_challenge,
+            remove_auth_method_response, split_creation_challenge,
             start_add_passkey_registration_response, start_passkey_authentication_response,
             start_passkey_registration_response, with_discoverable_credential,
         },
@@ -69,26 +69,6 @@ fn plain_display_of(kind: UserAuthKind) -> Option<UserAuthMethodDisplayInfo> {
     }
 }
 
-fn session_client(world: &ApiWorld) -> Client {
-    world
-        .session
-        .as_ref()
-        .expect("The scenario is not signed in")
-        .client
-        .clone()
-}
-
-fn my_email(world: &ApiWorld) -> universal_inbox::pii::Pii<email_address::EmailAddress> {
-    world
-        .session
-        .as_ref()
-        .expect("The scenario is not signed in")
-        .user
-        .email
-        .clone()
-        .expect("The signed-in user has no email address")
-}
-
 #[given("the app lets users sign in with single sign-on, a password or a passkey")]
 fn the_app_lets_users_sign_in_with_every_method(world: &mut ApiWorld) {
     world.app.configure().sign_in = SignInMode::SingleSignOnPasswordAndPasskey;
@@ -96,17 +76,17 @@ fn the_app_lets_users_sign_in_with_every_method(world: &mut ApiWorld) {
 
 #[given("the app lets users sign in with a password but not with a passkey")]
 fn the_app_lets_users_sign_in_with_a_password_only(world: &mut ApiWorld) {
-    world.app.configure().sign_in = SignInMode::PasswordOnly;
+    world.app.configure().sign_in = SignInMode::Local { passkey: false };
 }
 
 #[given("another app lets users sign in with a password or a passkey")]
 fn another_app_lets_users_sign_in_with_a_password_or_a_passkey(world: &mut ApiWorld) {
-    world.other_app.configure().sign_in = SignInMode::PasswordAndPasskey;
+    world.other_app.configure().sign_in = SignInMode::Local { passkey: true };
 }
 
 #[when("I list my sign-in methods")]
 async fn i_list_my_sign_in_methods(world: &mut ApiWorld) {
-    let client = session_client(world);
+    let client = world.client();
     let app = world.app.get().await;
     let response = list_auth_methods_response(&client, app).await;
     world.http.record(Response::read(response).await);
@@ -167,12 +147,7 @@ fn the_added_sign_in_method_is_a_passkey(world: &mut ApiWorld, username: String)
 
 #[then(expr = "the database holds {int} sign-in methods for my account")]
 async fn the_database_holds_sign_in_methods(world: &mut ApiWorld, expected: usize) {
-    let user_id = world
-        .session
-        .as_ref()
-        .expect("The scenario is not signed in")
-        .user
-        .id;
+    let user_id = world.user().id;
     let app = world.app.get().await;
     assert_eq!(get_all_user_auths(app, user_id).await.len(), expected);
 }
@@ -183,7 +158,7 @@ async fn an_email_tells_me_a_sign_in_method_changed(
     method_label: String,
     change: String,
 ) {
-    let email = my_email(world);
+    let email = world.my_email();
     let app = world.app.get().await;
     let emails = emails_sent_to(app, &email).await;
     let found = emails
@@ -200,7 +175,7 @@ async fn an_email_tells_me_a_sign_in_method_changed(
 
 #[when(regex = r#"^I add the password "([^"]+)" to my account$"#)]
 async fn i_add_a_password_to_my_account(world: &mut ApiWorld, password: String) {
-    let client = session_client(world);
+    let client = world.client();
     let app = world.app.get().await;
     let response = add_local_auth_response(&client, app, &password).await;
     world.http.record(Response::read(response).await);
@@ -208,7 +183,7 @@ async fn i_add_a_password_to_my_account(world: &mut ApiWorld, password: String) 
 
 #[given("I have added a password to my account")]
 async fn i_have_added_a_password_to_my_account(world: &mut ApiWorld) {
-    let client = session_client(world);
+    let client = world.client();
     let app = world.app.get().await;
     let response = add_local_auth_response(&client, app, PASSWORD).await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -225,7 +200,7 @@ fn the_error_message_mentions(world: &mut ApiWorld, word: String) {
 
 #[when(regex = r#"^I add a passkey named "([^"]+)" to my account$"#)]
 async fn i_add_a_passkey_to_my_account(world: &mut ApiWorld, username: String) {
-    let client = session_client(world);
+    let client = world.client();
     let app = world.app.get().await;
     let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
     let (response, _credential_id) =
@@ -235,7 +210,7 @@ async fn i_add_a_passkey_to_my_account(world: &mut ApiWorld, username: String) {
 
 #[when(regex = r"^I remove my (password|passkey|single sign-on) sign-in method$")]
 async fn i_remove_a_sign_in_method(world: &mut ApiWorld, method: String) {
-    let client = session_client(world);
+    let client = world.client();
     let app = world.app.get().await;
     let response = remove_auth_method_response(&client, app, kind_of(&method)).await;
     world.http.record(Response::read(response).await);
@@ -260,7 +235,7 @@ async fn the_identity_provider_knows_the_account(
 
 #[when(regex = r#"^I link single sign-on to my account with an identity token for "([^"]+)"$"#)]
 async fn i_link_single_sign_on_to_my_account(world: &mut ApiWorld, email: String) {
-    let client = session_client(world);
+    let client = world.client();
     let app = world.app.get().await;
     let issuer = app.oidc_issuer_mock_server.as_ref().unwrap().uri();
     let id_token = CoreIdToken::new(
@@ -295,12 +270,7 @@ async fn link_google_account(
     world: &mut ApiWorld,
     google_user_id: &str,
 ) -> Result<UserAuthMethod, String> {
-    let user_id = world
-        .session
-        .as_ref()
-        .expect("The scenario is not signed in")
-        .user
-        .id;
+    let user_id = world.user().id;
     let email = world.account.email();
     let app = world.app.get().await;
     // The full redirect flow needs the identity provider to sign real RSA id tokens: the app's
@@ -389,7 +359,7 @@ async fn a_visitor_starts_signing_in_with_a_passkey(world: &mut ApiWorld, userna
 
 #[when(regex = r#"^I start adding a passkey named "([^"]+)" to my account$"#)]
 async fn i_start_adding_a_passkey(world: &mut ApiWorld, username: String) {
-    let client = session_client(world);
+    let client = world.client();
     let app = world.app.get().await;
     let response = start_add_passkey_registration_response(&client, app, &username).await;
     world.http.record(Response::read(response).await);
@@ -397,7 +367,7 @@ async fn i_start_adding_a_passkey(world: &mut ApiWorld, username: String) {
 
 #[when("I start confirming my identity with a passkey")]
 async fn i_start_confirming_my_identity_with_a_passkey(world: &mut ApiWorld) {
-    let client = session_client(world);
+    let client = world.client();
     let app = world.app.get().await;
     let response = client
         .post(format!(
@@ -409,18 +379,6 @@ async fn i_start_confirming_my_identity_with_a_passkey(world: &mut ApiWorld) {
         .await
         .unwrap();
     world.http.record(Response::read(response).await);
-}
-
-#[given("I have signed up with a password on this app")]
-async fn i_have_signed_up_with_a_password_on_this_app(world: &mut ApiWorld) {
-    let email: universal_inbox::pii::Pii<email_address::EmailAddress> =
-        format!("disabled-{}@example.com", uuid::Uuid::new_v4())
-            .parse()
-            .unwrap();
-    let app = world.app.get().await;
-    let (client, user) = register_user(app, email.clone(), PASSWORD).await;
-    world.account.set(email, PASSWORD, user.clone());
-    world.session = Some(crate::world::Session { client, user });
 }
 
 #[given(regex = r#"^a visitor registered a passkey named "([^"]+)" on the other app$"#)]
@@ -505,20 +463,11 @@ async fn the_visitor_replays_a_passkey_sign_in(world: &mut ApiWorld) {
 
 #[when("I replay that passkey registration to add it to my account on this app")]
 async fn i_replay_that_passkey_registration_on_my_account(world: &mut ApiWorld) {
-    let client = session_client(world);
+    let client = world.client();
     let foreign = world.passkeys.foreign.as_ref().expect("No visitor passkey");
     let app: &TestedApp = world.app.get().await;
     let response =
         finish_add_passkey_registration_response(&client, app, &foreign.credential, &foreign.nonce)
             .await;
     world.http.record(Response::read(response).await);
-}
-
-#[given(regex = r#"^I have signed up with the email "([^"]+)" and a password$"#)]
-async fn i_have_signed_up_with_an_email_and_a_password(world: &mut ApiWorld, email: String) {
-    let email: universal_inbox::pii::Pii<email_address::EmailAddress> = email.parse().unwrap();
-    let app = world.app.get().await;
-    let (client, user) = register_user(app, email.clone(), PASSWORD).await;
-    world.account.set(email, PASSWORD, user.clone());
-    world.session = Some(crate::world::Session { client, user });
 }

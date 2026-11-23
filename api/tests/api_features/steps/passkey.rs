@@ -61,12 +61,7 @@ async fn add_passkey(
 }
 
 async fn register_a_passkey_on_a_new_device(world: &mut ApiWorld) {
-    let client = world
-        .session
-        .as_ref()
-        .expect("The scenario is not signed in")
-        .client
-        .clone();
+    let client = world.client();
     let app = world.app.get().await;
     let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
     let (username, credential_id) = add_passkey(&client, app, &mut authenticator).await;
@@ -104,12 +99,7 @@ async fn i_start_a_passkey_sign_in(world: &mut ApiWorld) {
 
 #[when("I remove my passkey")]
 async fn i_remove_my_passkey(world: &mut ApiWorld) {
-    let client = world
-        .session
-        .as_ref()
-        .expect("The scenario is not signed in")
-        .client
-        .clone();
+    let client = world.client();
     let app = world.app.get().await;
     let response = remove_auth_method_response(&client, app, UserAuthKind::Passkey).await;
     world.http.record(Response::read(response).await);

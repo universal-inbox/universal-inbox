@@ -325,7 +325,7 @@ pub async fn tested_app_with_account_rate_limits(
     .await
 }
 
-async fn setup_tested_app_with_local_auth(
+pub async fn setup_tested_app_with_local_auth(
     mut settings: Settings,
     local_auth_settings: LocalAuthenticationSettings,
     passkey_enabled: bool,
