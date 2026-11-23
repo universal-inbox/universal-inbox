@@ -27,6 +27,7 @@ pub struct ApiWorld {
     /// A second instance of the app, for the scenarios that compare two instances.
     pub other_app: AppUnderTest<TestedApp>,
     pub session: Option<Session>,
+    pub other_session: Option<Session>,
     pub browser: Browser,
     pub account: Account,
     pub sessions: Sessions,
