@@ -20,6 +20,7 @@ mod reauthentication;
 mod registration;
 mod session;
 mod slack_emojis;
+mod tasks;
 mod third_party;
 mod throttle;
 mod user_rate_limits;

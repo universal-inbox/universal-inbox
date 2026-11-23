@@ -18,7 +18,7 @@ use crate::{
     state::{
         Account, Audit, Authorizations, Browser, EmailVerification, Encryption, Integrations, Jobs,
         LinkedMethod, McpSessions, Notifications, Passkeys, PasswordReset, Probe, Sessions,
-        SlackEmojis, ThirdPartyItems,
+        SlackEmojis, Tasks, ThirdPartyItems,
     },
 };
 
@@ -41,6 +41,7 @@ pub struct ApiWorld {
     pub integrations: Integrations,
     pub encryption: Encryption,
     pub jobs: Jobs,
+    pub tasks: Tasks,
     pub audit: Audit,
     pub notifications: Notifications,
     pub mcp_sessions: McpSessions,

@@ -6,6 +6,7 @@ mod integrations;
 mod jobs;
 mod notifications;
 mod passkey;
+mod tasks;
 mod third_party;
 mod throttle;
 
@@ -20,5 +21,6 @@ pub use integrations::Integrations;
 pub use jobs::Jobs;
 pub use notifications::Notifications;
 pub use passkey::{Device, Passkeys, PendingSignIn, Registration, VisitorPasskey};
+pub use tasks::Tasks;
 pub use third_party::ThirdPartyItems;
 pub use throttle::{Observed, Probe};
