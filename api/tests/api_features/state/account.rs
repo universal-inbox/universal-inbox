@@ -97,7 +97,6 @@ pub fn cookie_client() -> Client {
 #[derive(Default)]
 pub struct Sessions {
     opened: Vec<CopiedSession>,
-    /// The API token the user created.
     pub api_token: Option<AuthenticationToken>,
 }
 

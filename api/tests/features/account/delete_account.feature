@@ -3,12 +3,10 @@ Feature: Deleting the account
   deletion removes everything the account owns, including stored credentials,
   and ends the session.
 
-  Background:
-    Given I am signed in
-
   @legacy:test_users::delete_user::test_user_can_delete_their_account
   Scenario: A user deletes their account and everything it owns
-    Given I have an API token
+    Given I am signed in
+    And I have an API token
     And I am connected to GitHub
     And I have a GitHub notification
     And a Slack bridge action is waiting for that notification
@@ -21,6 +19,7 @@ Feature: Deleting the account
 
   @legacy:test_users::delete_user::test_account_deletion_requires_the_email_confirmation
   Scenario Outline: Deleting needs the user to confirm with their own email address
+    Given I am signed in
     When I delete my account, confirming with "<confirmation>"
     Then the app answers 400
     And my account is still there

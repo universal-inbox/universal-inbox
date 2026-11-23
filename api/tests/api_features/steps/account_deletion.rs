@@ -15,8 +15,6 @@ use crate::{
     world::{ApiWorld, Response},
 };
 
-/// Every `(table, column)` holding a foreign key to `"user"`, read from the live schema so a
-/// table added later is covered without touching this step.
 async fn user_foreign_keys(app: &TestedApp) -> Vec<(String, String)> {
     sqlx::query_as::<_, (String, String)>(
         r#"

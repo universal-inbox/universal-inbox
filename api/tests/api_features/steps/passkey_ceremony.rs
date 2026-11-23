@@ -102,6 +102,7 @@ async fn the_device_answers_the_registration_challenge(world: &mut ApiWorld) {
 
 async fn finish_registration(world: &mut ApiWorld, nonce: Option<&str>, origin: Option<&str>) {
     let app = world.app.get().await;
+    let origin = origin.map_or_else(|| front_origin_header(app), str::to_string);
     let registration = world
         .passkeys
         .registration
@@ -112,35 +113,23 @@ async fn finish_registration(world: &mut ApiWorld, nonce: Option<&str>, origin: 
         .as_ref()
         .expect("The device did not answer the registration challenge");
     let nonce = nonce.unwrap_or(&registration.nonce);
-    let response = match origin {
-        None => {
-            finish_passkey_registration_response_unauthenticated(
-                &registration.browser,
-                app,
-                credential,
-                nonce,
-            )
-            .await
-        }
-        Some(origin) => registration
-            .browser
-            .post(format!(
-                "{}users/passkeys/registration/finish",
-                app.api_address
-            ))
-            .header(ORIGIN, origin)
-            .json(&finish_body_with_nonce(credential, nonce))
-            .send()
-            .await
-            .unwrap(),
-    };
+    let response = registration
+        .browser
+        .post(format!(
+            "{}users/passkeys/registration/finish",
+            app.api_address
+        ))
+        .header(ORIGIN, origin)
+        .json(&finish_body_with_nonce(credential, nonce))
+        .send()
+        .await
+        .unwrap();
     world.http.record(Response::read(response).await);
 }
 
 #[when("the registration is finished through the endpoint for new accounts")]
 async fn the_registration_is_finished(world: &mut ApiWorld) {
-    let origin = front_origin_header(world.app.get().await);
-    finish_registration(world, None, Some(&origin)).await;
+    finish_registration(world, None, None).await;
 }
 
 #[when("the registration is finished with a nonce the app did not issue")]

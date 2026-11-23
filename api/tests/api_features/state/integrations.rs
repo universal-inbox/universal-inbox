@@ -1,5 +1,3 @@
-//! What the scenarios keep about the third-party services the account is connected to.
-
 use universal_inbox::{integration_connection::IntegrationConnection, notification::Notification};
 
 #[derive(Debug, Default)]
