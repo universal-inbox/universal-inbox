@@ -16,7 +16,7 @@ use crate::{
     },
     helpers::{TestedApp, build_tested_app, local_auth_settings},
     state::{
-        Account, Authorizations, Browser, EmailVerification, Encryption, Integrations,
+        Account, Authorizations, Browser, EmailVerification, Encryption, Integrations, Jobs,
         LinkedMethod, Passkeys, PasswordReset, Probe, Sessions,
     },
 };
@@ -39,6 +39,7 @@ pub struct ApiWorld {
     pub linked: LinkedMethod,
     pub integrations: Integrations,
     pub encryption: Encryption,
+    pub jobs: Jobs,
     pub http: HttpExchanges,
 }
 

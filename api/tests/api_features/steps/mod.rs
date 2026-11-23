@@ -7,6 +7,7 @@ mod export;
 mod http;
 mod id_tokens;
 mod integrations;
+mod jobs;
 mod passkey;
 mod passkey_ceremony;
 mod password;
