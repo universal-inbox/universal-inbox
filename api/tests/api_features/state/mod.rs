@@ -1,4 +1,5 @@
 mod account;
+mod caches;
 mod encryption;
 mod integrations;
 mod jobs;
@@ -10,6 +11,7 @@ pub use account::{
     Account, Authorizations, Browser, EmailVerification, LinkedMethod, PasswordReset, Sessions,
     cookie_client, ordinal,
 };
+pub use caches::{McpSessions, SlackEmojis};
 pub use encryption::{Encryption, RawTokenResponse, RecordedProgress, StoredItem};
 pub use integrations::Integrations;
 pub use jobs::Jobs;
