@@ -7,6 +7,7 @@ use reqwest::Client;
 use url::Url;
 
 use universal_inbox::{
+    auth::auth_token::AuthenticationToken,
     pii::Pii,
     user::{EmailValidationToken, PasswordResetToken, User, UserAuthMethod, UserId},
 };
@@ -96,8 +97,8 @@ pub fn cookie_client() -> Client {
 #[derive(Default)]
 pub struct Sessions {
     opened: Vec<CopiedSession>,
-    /// The API token the user created, to use as a bearer token.
-    pub api_token: Option<String>,
+    /// The API token the user created.
+    pub api_token: Option<AuthenticationToken>,
 }
 
 impl fmt::Debug for Sessions {

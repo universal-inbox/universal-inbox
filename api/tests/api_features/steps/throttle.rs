@@ -322,3 +322,61 @@ async fn i_ask_for_the_verification_email_from_a_new_address(world: &mut ApiWorl
     let response = resend_verification_email_from(&client, app, address).await;
     world.http.record(Response::read(response).await);
 }
+
+#[when(
+    expr = "{int} sign-in attempts with a wrong password for an email address that no account uses arrive at the same time from one network address"
+)]
+async fn a_burst_of_sign_in_attempts(world: &mut ApiWorld, count: usize) {
+    let email = unique_email();
+    let url = format!("{}users/me", world.app.get().await.api_address);
+    let client = Client::builder().cookie_store(true).build().unwrap();
+    let credentials = Credentials {
+        email,
+        password: SecretBox::new(Box::new(Password("wrong-password".to_string()))),
+    };
+    let requests = (0..count).map(|_| {
+        client
+            .post(&url)
+            .header("X-Forwarded-For", "203.0.113.42")
+            .json(&credentials)
+            .send()
+    });
+    world.probe.burst = futures::future::join_all(requests)
+        .await
+        .into_iter()
+        .map(|response| response.expect("Failed to send a sign-in attempt").status())
+        .collect();
+}
+
+#[then("some of those attempts were throttled")]
+fn some_attempts_were_throttled(world: &mut ApiWorld) {
+    assert!(
+        world.probe.burst.contains(&StatusCode::TOO_MANY_REQUESTS),
+        "No attempt was throttled; observed statuses were {:?}",
+        world.probe.burst
+    );
+}
+
+#[when(
+    "a sign-in attempt with a wrong password for another email address arrives from another network address"
+)]
+async fn a_sign_in_attempt_from_another_address(world: &mut ApiWorld) {
+    let email = unique_email();
+    let app = world.app.get().await;
+    let response = Client::new()
+        .post(format!("{}users/me", app.api_address))
+        .header("X-Forwarded-For", "198.51.100.7")
+        .json(&Credentials {
+            email,
+            password: SecretBox::new(Box::new(Password("wrong-password".to_string()))),
+        })
+        .send()
+        .await
+        .unwrap();
+    world.http.record(Response::read(response).await);
+}
+
+#[then("the app does not throttle it")]
+fn the_app_does_not_throttle_it(world: &mut ApiWorld) {
+    assert_ne!(world.http.last().status, StatusCode::TOO_MANY_REQUESTS);
+}

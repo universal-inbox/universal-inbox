@@ -19,6 +19,8 @@ pub struct Probe {
     pub next: u32,
     /// What each series of requests got, one series per email address.
     pub series: Vec<Vec<Observed>>,
+    /// The statuses of requests sent at the same time.
+    pub burst: Vec<reqwest::StatusCode>,
 }
 
 impl Probe {

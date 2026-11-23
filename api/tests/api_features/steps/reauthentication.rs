@@ -8,7 +8,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use universal_inbox::{
-    auth::{AuthorizeSessionResponse, auth_token::AuthenticationToken},
+    auth::AuthorizeSessionResponse,
     pii::Pii,
     user::{Password, REAUTHENTICATION_REQUIRED_CODE, UserAuthKind, UserPatch},
 };
@@ -34,7 +34,7 @@ fn unique_email() -> Pii<email_address::EmailAddress> {
         .unwrap()
 }
 
-async fn create_api_token(client: &Client, app: &TestedApp) -> reqwest::Response {
+pub(super) async fn create_api_token(client: &Client, app: &TestedApp) -> reqwest::Response {
     client
         .post(format!("{}users/me/authentication-tokens", app.api_address))
         .header(ORIGIN, front_origin_header(app))
@@ -191,14 +191,6 @@ fn the_sign_in_address_asks_me_to_select_an_account(world: &mut ApiWorld) {
     );
 }
 
-#[given("I have an API token")]
-async fn i_have_an_api_token(world: &mut ApiWorld) {
-    let client = world.client();
-    let app = world.app.get().await;
-    let token: AuthenticationToken = create_api_token(&client, app).await.json().await.unwrap();
-    world.sessions.api_token = Some(token.jwt_token.expose_secret().0.clone());
-}
-
 #[when(
     regex = r"^I use my API token to (create an API token|change my email address|remove my password)$"
 )]
@@ -206,8 +198,12 @@ async fn i_use_my_api_token_to(world: &mut ApiWorld, operation: String) {
     let jwt = world
         .sessions
         .api_token
-        .clone()
-        .expect("The scenario has no API token");
+        .as_ref()
+        .expect("The scenario has no API token")
+        .jwt_token
+        .expose_secret()
+        .0
+        .clone();
     let app = world.app.get().await;
     let bearer_client = Client::new();
     let response = match operation.as_str() {
