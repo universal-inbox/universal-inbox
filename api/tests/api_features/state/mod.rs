@@ -1,6 +1,7 @@
 mod account;
 mod audit;
 mod caches;
+mod connections;
 mod encryption;
 mod integrations;
 mod jobs;
@@ -16,6 +17,7 @@ pub use account::{
 };
 pub use audit::Audit;
 pub use caches::{McpSessions, SlackEmojis};
+pub use connections::Connections;
 pub use encryption::{Encryption, RawTokenResponse, RecordedProgress, StoredItem};
 pub use integrations::Integrations;
 pub use jobs::Jobs;
