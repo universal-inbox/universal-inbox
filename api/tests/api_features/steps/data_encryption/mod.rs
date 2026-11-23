@@ -43,9 +43,7 @@ use crate::{
         integration_connection::{
             create_integration_connection, google_account_id, todoist_oauth_credential,
         },
-        task::todoist::{
-            mock_todoist_sync_resources_service, sync_todoist_projects_response, todoist_item,
-        },
+        task::todoist::todoist_item,
         third_party::create_task_third_party_item,
     },
     state::{RawTokenResponse, RecordedProgress, StoredItem},

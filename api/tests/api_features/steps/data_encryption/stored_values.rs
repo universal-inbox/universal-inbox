@@ -2,18 +2,6 @@ use pretty_assertions::assert_eq;
 
 use super::*;
 
-#[given("Todoist can list my projects")]
-async fn todoist_can_list_my_projects(world: &mut ApiWorld) {
-    let app = world.app.get().await;
-    mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
-        "projects",
-        &sync_todoist_projects_response(),
-        None,
-    )
-    .await;
-}
-
 async fn store_todoist_item(world: &mut ApiWorld, item: TodoistItem) {
     let user_id = world.user().id;
     let data = ThirdPartyItemData::TodoistItem(Box::new(item));

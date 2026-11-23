@@ -15,6 +15,7 @@ mod profile;
 mod reauthentication;
 mod registration;
 mod session;
+mod third_party;
 mod throttle;
 mod user_rate_limits;
 mod verification;

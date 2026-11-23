@@ -31,7 +31,10 @@ use crate::{
             github::{create_notification_from_github_notification, github_notification},
             linear::sync_linear_tasks_response,
         },
-        task::linear::create_linear_task,
+        task::{
+            linear::create_linear_task,
+            todoist::{mock_todoist_sync_resources_service, sync_todoist_projects_response},
+        },
     },
     steps::reauthentication::create_api_token,
     world::{ApiWorld, Session},
@@ -222,4 +225,16 @@ async fn that_other_user_is_connected_to_github(world: &mut ApiWorld) {
     )
     .await;
     world.integrations.other_github_connection = Some(connection);
+}
+
+#[given("Todoist can list my projects")]
+async fn todoist_can_list_my_projects(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    mock_todoist_sync_resources_service(
+        &app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response(),
+        None,
+    )
+    .await;
 }
