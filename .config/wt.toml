@@ -40,7 +40,7 @@ setup = "mise trust"
 web_install = "cd web && npm install"
 
 [pre-remove]
-stop_services = "mise daemons stop || true; mise daemons ls --json | jq -r '.[].data_dir // empty' | xargs -r rm -rf"
+stop_services = "mise daemons stop || true; mise daemons ls --json | jq -r '.[] | select(.ownership == "project") | .data_dir // empty' | xargs -r rm -rf"
 
 [pre-commit]
 check = "just check-commit"

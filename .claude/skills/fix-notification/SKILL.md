@@ -230,8 +230,9 @@ Full teardown of the whole worktree (including the DB):
 wt remove debug-notif-<short-uuid>
 ```
 
-The `pre-remove.stop_services` hook will stop the mise daemons
-cleanly before deleting the directory.
+The `pre-remove.stop_services` hook stops the mise daemons and deletes
+their PostgreSQL/Redis data directories (mise keeps them outside the
+checkout) before the worktree is removed. A plain stop/restart keeps the data.
 
 ## Troubleshooting
 

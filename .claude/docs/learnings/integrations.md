@@ -75,7 +75,7 @@ Callbacks land in `routes/oauth.rs` and `routes/oauth2.rs`.
 
 Syncing runs as Apalis (Redis-backed) jobs, never inline on a request: `sync.rs`, `cron.rs`,
 `oauth.rs`, `slack/`, `notion/`. Handlers call the source service, then the notification/task
-service to upsert. Workers must be running (`just run` starts the full stack; or `just run-detached` then `just start ui-workers`).
+service to upsert. Workers must be running: `just run` and `just run-detached` start only PostgreSQL and Redis, so also run `just start ui-workers`.
 Webhook routes (Slack, Notion) verify the signature, then enqueue a job (e.g. `NotionWebhookEventJob`)
 that runs under `AuditActor::Webhook`. A Slack API error mapped to a normal outcome (`bot_not_found`,
 `user_not_found`) must not mark the span failed.
