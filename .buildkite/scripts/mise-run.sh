@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Runs a command inside the devbox environment on a Buildkite hosted Linux agent
-# (Ubuntu, root, Docker available, no Nix). Replaces the GitHub Actions
-# `jetify-com/devbox-install-action` + service containers setup.
+# Runs a command inside the mise environment on a Buildkite hosted Linux agent
+# (Ubuntu, root, Docker available).
 #
-# Usage: .buildkite/scripts/devbox-run.sh <command> [args...]
+# Usage: .buildkite/scripts/mise-run.sh <command> [args...]
 #
 # Environment:
 #   CI_SERVICES=1      start Postgres and Redis containers first (API/browser tests)
@@ -16,21 +15,22 @@ if [ -n "${CI_JUNIT:-}" ]; then
   trap 'cp "$CI_JUNIT" "junit-${BUILDKITE_STEP_KEY:-report}.xml" 2>/dev/null || true' EXIT
 fi
 
-echo "--- :nix: Setting up Nix and devbox"
-if [ ! -x /nix/var/nix/profiles/default/bin/nix ]; then
-  curl -fsSL https://install.determinate.systems/nix | sh -s -- install linux --init none --no-confirm
-fi
-export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+export MISE_YES=1
+export MISE_LOCKED=1
+export PATH="$HOME/.local/bin:$PATH"
 
-if ! command -v devbox >/dev/null; then
-  curl -fsSL https://get.jetify.com/devbox | bash -s -- -f
+echo "--- :package: Installing build prerequisites"
+apt-get update -qq
+apt-get install -y -qq --no-install-recommends build-essential pkg-config libssl-dev curl ca-certificates git
+
+echo "--- :toolbox: Setting up mise"
+if ! command -v mise >/dev/null; then
+  bash dev/install-mise.sh
 fi
-devbox version
+mise --version
 
 if [ "${CI_SERVICES:-}" = "1" ]; then
   echo "--- :docker: Starting Postgres and Redis"
-  # Same images as the former GitHub Actions service containers. The data is
-  # disposable, so trade crash durability for speed (as `just init-db` does locally).
   docker run -d --name postgres -p 5432:5432 -e POSTGRES_PASSWORD=password postgres:15.1 \
     -c fsync=off -c synchronous_commit=off -c full_page_writes=off \
     -c max_wal_size=4GB -c checkpoint_timeout=3600s
@@ -46,15 +46,13 @@ if [ "${CI_SERVICES:-}" = "1" ]; then
   docker exec redis redis-cli ping
 fi
 
-echo "--- :devbox: Installing devbox packages"
-devbox install
+echo "--- :toolbox: Installing mise tools"
+mise install
 
 if [ "${CI_BROWSER_DEPS:-}" = "1" ]; then
   echo "--- :chromium: Installing Chromium system libraries"
-  # GitHub runners ship these; the hosted agent image does not (libnspr4, libnss3, ...).
-  # Same Playwright version as `just api install-tools`.
-  devbox run -- npx --yes playwright@1.63.0 install-deps chromium
+  mise exec -- playwright install --with-deps chromium
 fi
 
 echo "+++ :rust: $*"
-devbox run -- "$@"
+mise exec -- "$@"

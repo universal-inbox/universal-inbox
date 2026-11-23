@@ -15,8 +15,8 @@ on:
       - Dockerfile
       - .dockerignore
       - docker/**
-      - devbox.json
-      - devbox.lock
+      - mise.toml
+      - mise.lock
       - .github/workflows/container-scan.yml
   push:
     branches:
@@ -25,8 +25,8 @@ on:
       - Dockerfile
       - .dockerignore
       - docker/**
-      - devbox.json
-      - devbox.lock
+      - mise.toml
+      - mise.lock
       - .github/workflows/container-scan.yml
 
 permissions:

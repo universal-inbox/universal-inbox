@@ -20,7 +20,7 @@ test:
 # Regenerate every documentation screenshot by driving a headless Chromium
 # against the locally running Universal Inbox. Requires the dev stack to be
 # up (`just start ui-api`, `just start ui-workers`, `just start ui-web`) and
-# Playwright Chromium installed (`just api::install-tools`).
+# Playwright Chromium installed (`mise install`).
 #
 # Devbox assigns random ports to every service so the recipe relies on the env
 # vars exposed by `.envrc` (API_PORT, DX_SERVE_PORT, UNIVERSAL_INBOX__*). If

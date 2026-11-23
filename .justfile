@@ -60,26 +60,6 @@ init-db:
   grep -q "postgresql.universal-inbox.conf" "$data_dir/postgresql.conf" \
     || echo "include = 'postgresql.universal-inbox.conf'" >> "$data_dir/postgresql.conf"
 
-install-rust-toolchain:
-  #!/usr/bin/env bash
-
-  rustup show active-toolchain | grep -q "^$RUST_TOOLCHAIN_VERSION-" || rustup default $RUST_TOOLCHAIN_VERSION
-  active=$(rustup show active-toolchain | awk '{ print $1 }')
-  for toolchain in $(rustup toolchain list | grep -v "$active"); do
-    rustup toolchain uninstall $toolchain
-  done
-  rustup target list --installed | grep -q '^wasm32-unknown-unknown$' || rustup target add wasm32-unknown-unknown
-  rustup component list --installed | grep -q '^rust-analyzer-' || rustup component add rust-analyzer
-  rustup component list --installed | grep -q '^llvm-tools-' || rustup component add llvm-tools-preview
-
-install-tools:
-  #!/usr/bin/env bash
-
-  if [ -z "$DOCKER_BUILD" ]; then
-    cargo binstall -y cargo-llvm-cov --version 0.6.16
-  fi
-  just api install-tools
-
 ## Build recipes
 build-release-all: build-release
     just web build-release

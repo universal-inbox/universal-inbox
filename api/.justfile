@@ -128,21 +128,3 @@ test-ci:
 
 test-ci-browser:
     cargo nextest run --profile ci-browser -E 'binary(browser)'
-
-install-tools:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    # Install Playwright browsers for browser tests (version must match playwright-rs crate)
-    PLAYWRIGHT_VERSION="1.64.0"
-    PLAYWRIGHT_CACHE_DIR="${PLAYWRIGHT_BROWSERS_PATH:-${HOME}/Library/Caches/ms-playwright}"
-    if [ "$(uname)" = "Linux" ]; then
-        PLAYWRIGHT_CACHE_DIR="${PLAYWRIGHT_BROWSERS_PATH:-${HOME}/.cache/ms-playwright}"
-    fi
-
-    if [ -d "${PLAYWRIGHT_CACHE_DIR}/chromium-1248" ]; then
-        echo "Playwright Chromium already installed, skipping."
-    else
-        echo "Installing Playwright Chromium ${PLAYWRIGHT_VERSION}..."
-        npx --yes playwright@${PLAYWRIGHT_VERSION} install chromium
-    fi

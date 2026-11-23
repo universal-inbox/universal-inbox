@@ -1,0 +1,51 @@
+min_version = "2026.11.0"
+
+[settings]
+experimental = true
+lockfile = true
+lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64"]
+
+[tools]
+rust = { version = "1.98", components = "rust-analyzer,llvm-tools,clippy,rustfmt", targets = "wasm32-unknown-unknown", profile = "minimal" }
+node = "22"
+just = "latest"
+watchexec = "latest"
+taplo = "latest"
+fzf = "latest"
+jq = "latest"
+prek = "latest"
+sccache = "latest"
+zellij = "latest"
+hadolint = "latest"
+pinact = "latest"
+caddy = "latest"
+docker-compose = "latest"
+"github:steveyegge/beads" = "latest"
+"conda:binaryen" = "latest"
+"conda:brotli-bin" = "latest"
+"aqua:cargo-bins/cargo-binstall" = "latest"
+cargo-deny = "latest"
+cargo-nextest = "latest"
+"aqua:bnjbvr/cargo-machete" = "latest"
+"cargo:cargo-audit" = "latest"
+"cargo:cargo-outdated" = "latest"
+"cargo:cargo-chef" = "0.1.78"
+"cargo:sqlx-cli" = "0.9.0"
+"cargo:trunk" = "latest"
+"cargo:wasm-bindgen-cli" = "0.2.126"
+"cargo:dioxus-cli" = "0.7.10"
+"cargo:mdbook-admonish" = "latest"
+"github:rust-lang/mdBook" = "0.4.52"
+"cargo:mdbook-linkcheck" = "latest"
+"aqua:taiki-e/cargo-llvm-cov" = "0.6.16"
+stripe = "latest"
+pitchfork = "latest"
+
+# Playwright version must match the playwright-rs crate (1.64.0 = Chromium 1248)
+[tools."npm:playwright"]
+version = "1.64.0"
+postinstall = "playwright install chromium"
+
+[tools."conda:lld"]
+version = "latest"
+os = ["macos"]

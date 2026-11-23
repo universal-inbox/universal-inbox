@@ -51,9 +51,7 @@
     },
     "shell": {
         "init_hook": [
-            "just init-db",
-            "just install-rust-toolchain",
-            "just install-tools"
+            "just init-db"
         ]
     },
     "env": {
