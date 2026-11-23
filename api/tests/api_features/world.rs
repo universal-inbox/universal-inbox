@@ -17,8 +17,8 @@ use crate::{
     helpers::{TestedApp, build_tested_app, local_auth_settings},
     state::{
         Account, Authorizations, Browser, EmailVerification, Encryption, Integrations, Jobs,
-        LinkedMethod, McpSessions, Passkeys, PasswordReset, Probe, Sessions, SlackEmojis,
-        ThirdPartyItems,
+        LinkedMethod, McpSessions, Notifications, Passkeys, PasswordReset, Probe, Sessions,
+        SlackEmojis, ThirdPartyItems,
     },
 };
 
@@ -41,6 +41,7 @@ pub struct ApiWorld {
     pub integrations: Integrations,
     pub encryption: Encryption,
     pub jobs: Jobs,
+    pub notifications: Notifications,
     pub mcp_sessions: McpSessions,
     pub slack_emojis: SlackEmojis,
     pub third_party: ThirdPartyItems,

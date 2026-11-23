@@ -238,3 +238,20 @@ async fn todoist_can_list_my_projects(world: &mut ApiWorld) {
     )
     .await;
 }
+
+#[given("I am connected to Linear")]
+async fn i_am_connected_to_linear_for_notifications(world: &mut ApiWorld) {
+    let user_id = world.user().id;
+    let app = world.app.get().await;
+    let connection = create_and_mock_integration_connection(
+        app,
+        user_id,
+        IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
+        &settings(),
+        linear_oauth_credential(),
+        None,
+        None,
+    )
+    .await;
+    world.integrations.linear_connection = Some(connection);
+}

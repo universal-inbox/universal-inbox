@@ -9,6 +9,7 @@ mod id_tokens;
 mod integrations;
 mod jobs;
 mod mcp_session_store;
+mod notifications;
 mod passkey;
 mod passkey_ceremony;
 mod password;
