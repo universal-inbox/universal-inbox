@@ -232,7 +232,10 @@ async fn accept_revocation(
 async fn the_provider_accepts_to_revoke(world: &mut ApiWorld, provider: String) {
     let app = world.app.get().await;
     let guard = accept_revocation(app, &settings(), provider_kind(&provider)).await;
-    world.connections.guards.push(("grant".to_string(), guard));
+    world
+        .connections
+        .guards
+        .push((format!("{provider} grant"), guard));
 }
 
 #[given("GitHub fails to revoke my grant")]
@@ -293,7 +296,10 @@ async fn slack_answers_token_revoked(world: &mut ApiWorld) {
         json!({ "ok": false, "error": "token_revoked" }),
     )
     .await;
-    world.connections.guards.push(("grant".to_string(), guard));
+    world
+        .connections
+        .guards
+        .push(("Slack grant".to_string(), guard));
 }
 
 #[given("Slack renews my token when asked")]
@@ -328,7 +334,10 @@ async fn slack_accepts_the_renewed_token(world: &mut ApiWorld) {
         json!({ "ok": true, "revoked": true }),
     )
     .await;
-    world.connections.guards.push(("grant".to_string(), guard));
+    world
+        .connections
+        .guards
+        .push(("Slack grant".to_string(), guard));
 }
 
 #[when("I disconnect it")]
@@ -344,6 +353,7 @@ async fn i_disconnect_it(world: &mut ApiWorld) {
     )
     .await;
     assert_eq!(disconnected.status, IntegrationConnectionStatus::Created);
+    world.connections.disconnected = Some(*disconnected);
 }
 
 #[when("I connect it again")]
@@ -409,7 +419,7 @@ async fn requests_received(world: &ApiWorld, name: &str) -> usize {
 )]
 async fn the_provider_was_asked_once(world: &mut ApiWorld, provider: String) {
     assert_eq!(
-        requests_received(world, "grant").await,
+        requests_received(world, &format!("{provider} grant")).await,
         1,
         "the {provider} grant should have been revoked"
     );
@@ -420,7 +430,7 @@ async fn the_provider_was_asked_once(world: &mut ApiWorld, provider: String) {
 )]
 async fn the_provider_was_not_asked(world: &mut ApiWorld, provider: String) {
     assert_eq!(
-        requests_received(world, "grant").await,
+        requests_received(world, &format!("{provider} grant")).await,
         0,
         "the {provider} grant must not be revoked"
     );

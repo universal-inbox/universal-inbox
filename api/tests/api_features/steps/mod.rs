@@ -18,6 +18,7 @@ mod notifications;
 mod passkey;
 mod passkey_ceremony;
 mod password;
+mod pausing;
 mod profile;
 mod provider;
 mod reauthentication;

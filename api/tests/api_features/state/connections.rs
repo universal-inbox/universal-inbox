@@ -1,7 +1,10 @@
+use chrono::{DateTime, Utc};
 use universal_inbox::integration_connection::{
     IntegrationConnection, config::IntegrationConnectionConfig,
 };
-use universal_inbox_api::universal_inbox::UniversalInboxError;
+use universal_inbox_api::universal_inbox::{
+    UniversalInboxError, integration_connection::service::PauseWithoutEmailReport,
+};
 use uuid::Uuid;
 use wiremock::MockGuard;
 
@@ -20,6 +23,11 @@ pub struct Connections {
     pub guards: Vec<(String, MockGuard)>,
     pub retried: Option<(usize, usize)>,
     pub stored_token_response: Option<serde_json::Value>,
+    pub linear: Option<Box<IntegrationConnection>>,
+    pub reported: Option<(usize, usize)>,
+    pub report: Option<PauseWithoutEmailReport>,
+    pub refused: Option<bool>,
+    pub recorded_activity: Option<DateTime<Utc>>,
 }
 
 impl Connections {
