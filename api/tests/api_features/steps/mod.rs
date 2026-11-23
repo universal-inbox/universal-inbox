@@ -2,6 +2,7 @@ mod account_deletion;
 mod api_tokens;
 mod auth;
 mod auth_methods;
+mod data_encryption;
 mod export;
 mod http;
 mod id_tokens;

@@ -8,7 +8,6 @@ mod test_audit_log;
 mod test_billing;
 mod test_cache;
 mod test_cron;
-mod test_data_encryption;
 mod test_dead_letter;
 mod test_github_notifications;
 mod test_google_calendar_notifications;
