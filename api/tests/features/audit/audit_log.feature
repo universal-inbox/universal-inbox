@@ -11,7 +11,7 @@ Feature: The audit log
     @legacy:test_audit_log::actors::test_web_user_change_is_recorded_with_its_from_and_to_values
     Scenario: A change made on the web records what it changed
       Given I am connected to GitHub
-      And I have a GitHub notification "mine"
+      And I have a GitHub notification called "mine"
       When I snooze "mine" until "2064-01-01T09:00:00Z"
       And I list the audit events of the notification "mine"
       Then the newest event is an update of the notification "mine" on GitHub by me through the web, snoozing it until "2064-01-01T09:00:00Z" from no snooze
@@ -20,7 +20,7 @@ Feature: The audit log
     @legacy:test_audit_log::actors::test_api_key_and_extension_changes_are_told_apart
     Scenario: A change with an API key and one with the extension are told apart
       Given I am connected to GitHub
-      And I have a GitHub notification "mine"
+      And I have a GitHub notification called "mine"
       And I have an API token
       When I snooze "mine" until "2064-01-01T09:00:00Z" with my API token
       And I snooze "mine" until "2065-01-01T09:00:00Z" with my API token, as the extension in version "1.4.2"
@@ -44,8 +44,8 @@ Feature: The audit log
     Scenario: The events of a bulk change share their transaction
       Given I am connected to GitHub
       And GitHub accepts to delete the notification threads 1 and 2
-      And I have a GitHub notification "first"
-      And I have a GitHub notification "second"
+      And I have a GitHub notification called "first"
+      And I have a GitHub notification called "second"
       When I delete all my unread GitHub notifications
       And I list my audit events with the query "change=Status&actor_kinds=User"
       Then 2 audit events are listed in total
@@ -54,7 +54,7 @@ Feature: The audit log
     @legacy:test_audit_log::changes::test_task_creation_records_its_parameters_but_not_its_body
     Scenario: A task creation records its parameters but never the task body
       Given I am connected to GitHub
-      And I have a GitHub notification "mine"
+      And I have a GitHub notification called "mine"
       And I am connected to Todoist
       And GitHub accepts to delete the notification thread 1
       And Todoist can list my projects
@@ -69,7 +69,7 @@ Feature: The audit log
     @legacy:test_audit_log::listing::test_events_of_another_user_are_never_listed
     Scenario: A user never sees the events of another user
       Given I am connected to GitHub
-      And I have a GitHub notification "mine"
+      And I have a GitHub notification called "mine"
       And another user is signed in
       When that other user lists their audit events with the query ""
       Then 0 audit events are listed in total
@@ -79,7 +79,7 @@ Feature: The audit log
     @legacy:test_audit_log::listing::test_events_are_paged_and_filtered_by_title
     Scenario: Events are paged and filtered by title
       Given I am connected to GitHub
-      And I have a GitHub notification "mine"
+      And I have a GitHub notification called "mine"
       When I snooze "mine" until "2064-01-01T09:00:00Z"
       And I snooze "mine" until "2064-01-02T09:00:00Z"
       And I snooze "mine" until "2064-01-03T09:00:00Z"
@@ -96,9 +96,9 @@ Feature: The audit log
     @legacy:test_audit_log::listing::test_groups_are_paged_without_splitting_a_bulk_action
     Scenario: Groups are paged without splitting a bulk action
       Given I am connected to GitHub
-      And I have a GitHub notification "first"
-      And I have a GitHub notification "second"
-      And I have a GitHub notification "third"
+      And I have a GitHub notification called "first"
+      And I have a GitHub notification called "second"
+      And I have a GitHub notification called "third"
       And GitHub accepts to delete the notification threads 1, 2 and 3
       When I snooze "first" until "2064-01-01T09:00:00Z"
       And I snooze "first" until "2064-01-02T09:00:00Z"
@@ -117,7 +117,7 @@ Feature: The audit log
     @legacy:test_audit_log::retention::test_purge_deletes_only_expired_events
     Scenario: Only the events past the retention are purged
       Given I am connected to GitHub
-      And I have a GitHub notification "mine"
+      And I have a GitHub notification called "mine"
       When I snooze "mine" until "2064-01-01T09:00:00Z"
       And the creation events grow 8 days old, which is past the 7 days of retention
       And the expired audit events are purged

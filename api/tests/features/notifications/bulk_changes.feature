@@ -11,8 +11,8 @@ Feature: Changing many notifications at once
   @legacy:test_notifications::patch_notifications_bulk::test_patch_notifications_bulk_delete_all
   Scenario: A user deletes all their GitHub notifications at once
     Given GitHub accepts to delete the notification threads 1 and 2
-    And I have a GitHub notification "first"
-    And I have a GitHub notification "second"
+    And I have a GitHub notification called "first"
+    And I have a GitHub notification called "second"
     Then the notifications "first" and "second" are unread
     When I delete all my unread and read GitHub notifications
     Then 2 notifications were changed
@@ -24,13 +24,13 @@ Feature: Changing many notifications at once
 
   @legacy:test_notifications::patch_notifications_bulk::test_patch_notifications_bulk_snooze_only
   Scenario: A user snoozes all their GitHub notifications at once without changing their status
-    Given I have a GitHub notification "first"
-    And I have a GitHub notification "second"
+    Given I have a GitHub notification called "first"
+    And I have a GitHub notification called "second"
     Then the notifications "first" and "second" are not snoozed
     When I snooze all my unread GitHub notifications until "2050-01-01T01:02:03Z"
     Then 2 notifications were changed
     And all the changed notifications are snoozed until "2050-01-01T01:02:03Z" and still unread
-    When I list only my snoozed unread notifications
+    When I list my snoozed unread notifications
     Then the snoozed notifications I see are exactly these, in any order:
       | first  |
       | second |

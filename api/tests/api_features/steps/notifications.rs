@@ -137,12 +137,12 @@ fn now_without_nanoseconds() -> DateTime<Utc> {
     Utc::now().with_nanosecond(0).unwrap()
 }
 
-#[given(expr = "I have a GitHub notification {string}")]
+#[given(expr = "I have a GitHub notification called {string}")]
 async fn i_have_a_github_notification(world: &mut ApiWorld, name: String) {
     create_github_notification(world, &name).await;
 }
 
-#[given(expr = "I have a GitHub notification {string}, which I marked as read")]
+#[given(expr = "I have a GitHub notification called {string}, which I marked as read")]
 async fn i_have_a_read_github_notification(world: &mut ApiWorld, name: String) {
     create_github_notification(world, &name).await;
     update(
@@ -156,7 +156,7 @@ async fn i_have_a_read_github_notification(world: &mut ApiWorld, name: String) {
     .await;
 }
 
-#[given(expr = "I have a GitHub notification {string}, which I deleted")]
+#[given(expr = "I have a GitHub notification called {string}, which I deleted")]
 async fn i_have_a_deleted_github_notification(world: &mut ApiWorld, name: String) {
     create_github_notification(world, &name).await;
     update(
@@ -170,7 +170,9 @@ async fn i_have_a_deleted_github_notification(world: &mut ApiWorld, name: String
     .await;
 }
 
-#[given(expr = "I have a GitHub notification {string}, snoozed until {int} minutes from now")]
+#[given(
+    expr = "I have a GitHub notification called {string}, snoozed until {int} minutes from now"
+)]
 async fn i_have_a_snoozed_github_notification(world: &mut ApiWorld, name: String, minutes: i64) {
     create_github_notification(world, &name).await;
     update(
@@ -186,7 +188,9 @@ async fn i_have_a_snoozed_github_notification(world: &mut ApiWorld, name: String
     .await;
 }
 
-#[given(expr = "I have a GitHub notification {string} whose stored item can no longer be decoded")]
+#[given(
+    expr = "I have a GitHub notification called {string} whose stored item can no longer be decoded"
+)]
 async fn i_have_a_github_notification_with_a_broken_item(world: &mut ApiWorld, name: String) {
     let notification = create_github_notification(world, &name).await;
     let app = world.app.get().await;
@@ -198,7 +202,7 @@ async fn i_have_a_github_notification_with_a_broken_item(world: &mut ApiWorld, n
     .await;
 }
 
-#[given(expr = "I have a Linear notification {string}")]
+#[given(expr = "I have a Linear notification called {string}")]
 async fn i_have_a_linear_notification(world: &mut ApiWorld, name: String) {
     let user_id = world.user().id;
     let connection_id = world
@@ -227,7 +231,7 @@ async fn i_have_a_linear_notification(world: &mut ApiWorld, name: String) {
     world.notifications.by_name.insert(name, notification);
 }
 
-#[given(expr = "I have {int} GitHub notifications that were all updated at the same second")]
+#[given(expr = "I have {int} GitHub notifications updated in the same second")]
 async fn i_have_tied_github_notifications(world: &mut ApiWorld, count: usize) {
     for index in 0..count {
         let notification = create_github_notification(world, &format!("tied {}", index + 1)).await;
@@ -291,7 +295,7 @@ async fn another_user_lists_their_notifications(world: &mut ApiWorld) {
 }
 
 #[when(
-    regex = r"^I list only my snoozed ((?:unread|read|deleted|unsubscribed)(?:(?:, | and )(?:unread|read|deleted|unsubscribed))*) notifications$"
+    regex = r"^I list my snoozed ((?:unread|read|deleted|unsubscribed)(?:(?:, | and )(?:unread|read|deleted|unsubscribed))*) notifications$"
 )]
 async fn i_list_only_my_snoozed_notifications(world: &mut ApiWorld, statuses: String) {
     let client = world.client();
@@ -341,22 +345,20 @@ fn i_see_no_snoozed_notifications(world: &mut ApiWorld) {
     assert!(world.notifications.snoozed_listed.is_empty());
 }
 
-#[when(expr = "I snooze {string} until {int} minute(s) ago")]
-async fn i_unsnooze(world: &mut ApiWorld, name: String, minutes: i64) {
+#[when(expr = "I unsnooze {string}")]
+async fn i_unsnooze(world: &mut ApiWorld, name: String) {
     update(
         world,
         &name,
         NotificationPatch {
-            snoozed_until: Some(
-                now_without_nanoseconds() - TimeDelta::try_minutes(minutes).unwrap(),
-            ),
+            snoozed_until: Some(now_without_nanoseconds() - TimeDelta::try_minutes(1).unwrap()),
             ..NotificationPatch::default()
         },
     )
     .await;
 }
 
-#[when(expr = "I mark {string} as unread again")]
+#[when(expr = "I undelete {string}")]
 async fn i_mark_as_unread_again(world: &mut ApiWorld, name: String) {
     update(
         world,
