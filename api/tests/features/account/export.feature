@@ -29,6 +29,7 @@ Feature: Exporting the account data
     And the export lists exactly my notification
     And the export lists exactly my task
 
+  # The budget 2 mirrors EXPORT_RATE_LIMIT_PER_MINUTE in api/src/utils/rate_limit.rs
   @legacy:test_export_user_data::test_export_has_a_per_user_budget
   Scenario: Exporting is limited per user
     Given I am signed in

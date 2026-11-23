@@ -9,8 +9,8 @@ use universal_inbox::notification::{
 
 use crate::{
     helpers::{
-        auth::authenticate_user, notification::sync_notifications_response,
-        rest::patch_resource_collection_response, task::sync_tasks_response,
+        notification::sync_notifications_response, rest::patch_resource_collection_response,
+        task::sync_tasks_response,
     },
     world::{ApiWorld, Response},
 };
@@ -51,10 +51,15 @@ fn the_response_asks_to_wait(world: &mut ApiWorld) {
     assert!(retry_after >= 1);
 }
 
-#[when("another user who is signed in asks for a notifications sync")]
-async fn another_user_asks_for_a_notifications_sync(world: &mut ApiWorld) {
+#[when("that other user asks for a notifications sync")]
+async fn that_other_user_asks_for_a_notifications_sync(world: &mut ApiWorld) {
+    let client = world
+        .other_session
+        .as_ref()
+        .expect("No other user is signed in")
+        .client
+        .clone();
     let app = world.app.get().await;
-    let (client, _) = authenticate_user(app, "5678", "Jane", "Doe", "jane@example.com").await;
     let response = sync_notifications_response(&client, &app.api_address, None, true).await;
     world.http.record(Response::read(response).await);
 }

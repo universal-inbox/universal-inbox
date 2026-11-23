@@ -16,7 +16,7 @@ use universal_inbox_api::universal_inbox::data_encryption::{
 #[derive(Default)]
 pub struct RecordedProgress {
     processed: Mutex<BTreeMap<String, u64>>,
-    pub done: Mutex<BTreeSet<String>>,
+    done: Mutex<BTreeSet<String>>,
 }
 
 impl DataEncryptionProgress for RecordedProgress {
@@ -35,7 +35,10 @@ impl DataEncryptionProgress for RecordedProgress {
 }
 
 impl RecordedProgress {
-    /// Values processed per column, columns without any processed value omitted
+    pub fn done(&self) -> BTreeSet<String> {
+        self.done.lock().unwrap().clone()
+    }
+
     pub fn processed(&self) -> BTreeMap<String, u64> {
         self.processed
             .lock()
@@ -60,6 +63,11 @@ pub struct Encryption {
     pub progress: RecordedProgress,
     pub plaintext_counts: Vec<(String, i64)>,
     pub stored_item: Option<StoredItem>,
-    pub expected_task_body: String,
-    pub raw_token_response: Option<(Value, Value)>,
+    pub expected_task_body: Option<String>,
+    pub raw_token_response: Option<RawTokenResponse>,
+}
+
+pub struct RawTokenResponse {
+    pub given: Value,
+    pub reported: Value,
 }
