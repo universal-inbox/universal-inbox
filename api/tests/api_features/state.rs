@@ -220,4 +220,6 @@ pub struct EmailVerification {
     pub link: Option<String>,
     /// The user a verification link named, when it is not the account's.
     pub link_user_id: Option<universal_inbox::user::UserId>,
+    /// The password reset token of the last reset email.
+    pub reset_token: Option<universal_inbox::user::PasswordResetToken>,
 }

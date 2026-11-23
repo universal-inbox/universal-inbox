@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 
 use chrono::Utc;
 use cucumber::{then, when};
@@ -6,15 +6,18 @@ use pretty_assertions::assert_eq;
 use reqwest::{Client, StatusCode, header::ORIGIN};
 use secrecy::SecretBox;
 
-use universal_inbox::user::{Password, PasswordChange};
-use universal_inbox_api::mailer::EmailTemplate;
+use uuid::Uuid;
+
+use universal_inbox::user::{Password, PasswordChange, PasswordResetToken, UserAuthKind, UserId};
+use universal_inbox_api::{mailer::EmailTemplate, universal_inbox::user::model::UserAuth};
 
 use crate::{
     helpers::{
         TestedApp,
+        auth::get_user_auth,
         user::{
-            front_origin_header, get_current_user_response, get_password_reset_token,
-            login_user_response, reset_password_response,
+            emails_sent_to, front_origin_header, get_current_user_response,
+            get_password_reset_token, login_user_response, reset_password_response,
         },
     },
     world::{ApiWorld, Response},
@@ -179,18 +182,180 @@ async fn i_ask_for_my_password_to_be_reset(world: &mut ApiWorld) {
     let email = world.account.email();
     let client = world.browser.client().clone();
     let url = format!("{}users/password-reset", world.app.get().await.api_address);
-    let response = client.post(url).json(&email).send().await.unwrap();
-    world.http.record(Response::read(response).await);
+    let response = Response::read(client.post(url).json(&email).send().await.unwrap()).await;
+    let sent = response.status == StatusCode::OK;
+    world.http.record(response);
+    if sent {
+        let user_id = world.account.user().id;
+        let app = world.app.get().await;
+        world.verification.reset_token = get_password_reset_token(app, user_id).await;
+    }
 }
 
 #[when(expr = "I reset my password to {string} with the link in the email")]
 async fn i_reset_my_password(world: &mut ApiWorld, new_password: String) {
     let user_id = world.account.user().id;
     let client = world.browser.client().clone();
+    let token = match world.verification.reset_token.take() {
+        Some(token) => token,
+        None => {
+            let app = world.app.get().await;
+            get_password_reset_token(app, user_id)
+                .await
+                .expect("No password reset email was sent")
+        }
+    };
     let app = world.app.get().await;
-    let token = get_password_reset_token(app, user_id)
-        .await
-        .expect("No password reset email was sent");
     let response = reset_password_response(&client, app, user_id, token, &new_password).await;
     world.http.record(Response::read(response).await);
+}
+
+#[then("the latest email sent is the password reset email with my link")]
+async fn the_latest_email_is_the_password_reset_email(world: &mut ApiWorld) {
+    let user_id = world.account.user().id;
+    let token = world
+        .verification
+        .reset_token
+        .clone()
+        .expect("No password reset email was asked for");
+    let app = world.app.get().await;
+    let emails_sent = (*app.mailer_stub.read().await.emails_sent.read().await).clone();
+    let (recipient, template) = emails_sent.last().expect("No email was sent");
+    assert_eq!(recipient.id, user_id);
+    assert_eq!(
+        *template,
+        EmailTemplate::PasswordReset {
+            first_name: None,
+            password_reset_url: format!(
+                "{}users/{}/password-reset/{token}",
+                app.front_base_url, user_id
+            )
+            .parse()
+            .unwrap()
+        }
+    );
+}
+
+/// The emailed web address carries the token to the reset page, which sends it to the API in the
+/// request body, never in the API address.
+#[when(expr = "I send the new password {string} to the API address that carries the reset token")]
+async fn i_send_the_new_password_to_an_address_with_the_token(
+    world: &mut ApiWorld,
+    new_password: String,
+) {
+    let user_id = world.account.user().id;
+    let token = world
+        .verification
+        .reset_token
+        .clone()
+        .expect("No password reset email was asked for");
+    let client = world.browser.client().clone();
+    let url = format!(
+        "{}users/{user_id}/password-reset/{token}",
+        world.app.get().await.api_address
+    );
+    let response = client
+        .post(url)
+        .json(&Password::from_str(&new_password).unwrap())
+        .send()
+        .await
+        .unwrap();
+    world.http.record(Response::read(response).await);
+}
+
+#[then("my password reset token is used up")]
+async fn my_password_reset_token_is_used_up(world: &mut ApiWorld) {
+    let user_id = world.account.user().id;
+    let app = world.app.get().await;
+    assert!(get_password_reset_token(app, user_id).await.is_none());
+}
+
+#[then("no password reset token exists for my account")]
+async fn no_password_reset_token_exists(world: &mut ApiWorld) {
+    my_password_reset_token_is_used_up(world).await;
+}
+
+#[then("my latest email is a password changed email")]
+async fn my_latest_email_is_a_password_changed_email(world: &mut ApiWorld) {
+    let email = world.account.email();
+    let app = world.app.get().await;
+    let emails = emails_sent_to(app, &email).await;
+    assert!(
+        matches!(emails.last(), Some(EmailTemplate::PasswordChanged { .. })),
+        "{emails:?}"
+    );
+}
+
+#[then("my account records when the password reset was sent and done")]
+async fn my_account_records_the_password_reset(world: &mut ApiWorld) {
+    let user_id = world.account.user().id;
+    let app = world.app.get().await;
+    let UserAuth::Local(local_user_auth) = get_user_auth(app, user_id, UserAuthKind::Local).await
+    else {
+        panic!("User should have local auth");
+    };
+    assert!(local_user_auth.password_reset_at.is_some());
+    assert!(local_user_auth.password_reset_sent_at.is_some());
+}
+
+#[when(
+    expr = "I reset my password to {string} with the link in the email but with the id of another user"
+)]
+async fn i_reset_my_password_with_another_users_id(world: &mut ApiWorld, new_password: String) {
+    let other_user_id = UserId(Uuid::new_v4());
+    world.verification.link_user_id = Some(other_user_id);
+    let token = world
+        .verification
+        .reset_token
+        .take()
+        .expect("No password reset email was asked for");
+    let client = world.browser.client().clone();
+    let app = world.app.get().await;
+    let response = reset_password_response(&client, app, other_user_id, token, &new_password).await;
+    world.http.record(Response::read(response).await);
+}
+
+#[when(expr = "I reset my password to {string} with a token I was never sent")]
+async fn i_reset_my_password_with_an_unknown_token(world: &mut ApiWorld, new_password: String) {
+    let user_id = world.user().id;
+    world.verification.link_user_id = Some(user_id);
+    let client = world.browser.client().clone();
+    let app = world.app.get().await;
+    let response = reset_password_response(
+        &client,
+        app,
+        user_id,
+        PasswordResetToken(Uuid::new_v4()),
+        &new_password,
+    )
+    .await;
+    world.http.record(Response::read(response).await);
+}
+
+#[then("the error message says the password reset token is invalid for the user in the link")]
+fn the_error_says_the_reset_token_is_invalid(world: &mut ApiWorld) {
+    let user_id = world
+        .verification
+        .link_user_id
+        .expect("No password reset was tried");
+    let body: std::collections::HashMap<String, String> = world.http.last().json();
+    assert_eq!(
+        body.get("message").unwrap(),
+        &format!("Invalid input data: Invalid password reset token for user {user_id}")
+    );
+}
+
+#[when("two hours pass after my password reset email was sent")]
+async fn my_password_reset_email_was_sent_two_hours_ago(world: &mut ApiWorld) {
+    let user_id = world.account.user().id;
+    let app = world.app.get().await;
+    let mut transaction = app.repository.begin().await.unwrap();
+    sqlx::query(
+        "UPDATE user_auth SET password_reset_sent_at = password_reset_sent_at - interval '2 hours' WHERE user_id = $1",
+    )
+    .bind(user_id.0)
+    .execute(&mut *transaction)
+    .await
+    .unwrap();
+    transaction.commit().await.unwrap();
 }

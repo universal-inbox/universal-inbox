@@ -4,6 +4,7 @@ mod http;
 mod id_tokens;
 mod passkey;
 mod password;
+mod profile;
 mod reauthentication;
 mod registration;
 mod session;

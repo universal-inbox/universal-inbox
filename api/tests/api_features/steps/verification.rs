@@ -19,16 +19,20 @@ async fn open_link(world: &mut ApiWorld, link: String) {
 }
 
 async fn my_verification_token(world: &mut ApiWorld) -> EmailValidationToken {
-    let user_id = world.user().id;
-    let app = world.app.get().await;
-    get_user_email_validation_token(app, user_id)
+    current_verification_token(world)
         .await
         .expect("The account has no verification token")
 }
 
+async fn current_verification_token(world: &mut ApiWorld) -> Option<EmailValidationToken> {
+    let user_id = world.user().id;
+    let app = world.app.get().await;
+    get_user_email_validation_token(app, user_id).await
+}
+
 #[when("I ask for the verification email to be sent again")]
 async fn i_ask_for_the_verification_email_again(world: &mut ApiWorld) {
-    world.verification.previous_token = Some(my_verification_token(world).await);
+    world.verification.previous_token = current_verification_token(world).await;
     let client = world.client();
     let app = world.app.get().await;
     let response = client
