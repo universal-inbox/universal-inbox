@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 
 use universal_inbox::user::UserId;
+use universal_inbox_api::configuration::VacuumJobsCronSettings;
 use universal_inbox_api::jobs::{
     JobStorage,
     dead_letter::{DeadJob, RequeueOutcome},
@@ -12,6 +13,9 @@ use universal_inbox_api::jobs::{
 #[derive(Default)]
 pub struct Jobs {
     pub storage: Option<JobStorage>,
+    pub other_storage: Option<JobStorage>,
+    pub vacuum_settings: Option<VacuumJobsCronSettings>,
+    pub lock_results: Vec<bool>,
     pub reference_time: Option<DateTime<Utc>>,
     pub user_id: Option<UserId>,
     pub enqueued_at: Option<DateTime<Utc>>,

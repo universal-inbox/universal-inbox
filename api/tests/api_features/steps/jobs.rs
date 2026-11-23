@@ -28,7 +28,7 @@ const REMOVED_JOB_PAYLOAD: &[u8] = br#"{"args":{"RemovedJob":{}},"parts":{"attem
 
 const NOT_JSON_PAYLOAD: &[u8] = b"\x00not json";
 
-async fn storage(world: &mut ApiWorld) -> &mut JobStorage {
+pub(super) async fn storage(world: &mut ApiWorld) -> &mut JobStorage {
     if world.jobs.storage.is_none() {
         world.jobs.storage = Some(redis_storage(settings()).await);
     }
