@@ -99,6 +99,8 @@ pub fn cookie_client() -> Client {
 #[derive(Default)]
 pub struct Sessions {
     opened: Vec<CopiedSession>,
+    /// The API token the user created, to use as a bearer token.
+    pub api_token: Option<String>,
 }
 
 impl fmt::Debug for Sessions {
@@ -153,6 +155,8 @@ pub struct Passkeys {
     pub signed_in_browser: Option<Client>,
     /// The passkey a visitor registered on another instance of the app.
     pub foreign: Option<ForeignPasskey>,
+    /// A passkey re-authentication that was started and waits for a device to answer it.
+    pub reauth: Option<(RequestChallengeResponse, String)>,
 }
 
 impl fmt::Debug for Passkeys {

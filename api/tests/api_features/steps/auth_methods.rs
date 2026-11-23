@@ -378,7 +378,17 @@ async fn i_start_confirming_my_identity_with_a_passkey(world: &mut ApiWorld) {
         .send()
         .await
         .unwrap();
-    world.http.record(Response::read(response).await);
+    let response = Response::read(response).await;
+    if response.status == StatusCode::OK {
+        let body = response.text();
+        let nonce = serde_json::from_str::<serde_json::Value>(&body).unwrap()["nonce"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let challenge: RequestChallengeResponse = serde_json::from_str(&body).unwrap();
+        world.passkeys.reauth = Some((challenge, nonce));
+    }
+    world.http.record(response);
 }
 
 #[given(regex = r#"^a visitor registered a passkey named "([^"]+)" on the other app$"#)]

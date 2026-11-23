@@ -4,5 +4,6 @@ mod http;
 mod id_tokens;
 mod passkey;
 mod password;
+mod reauthentication;
 mod session;
 mod throttle;
