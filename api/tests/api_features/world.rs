@@ -11,19 +11,25 @@ use crate::{
         db_connection, redis_storage,
         scenarios::{AppConfig, AppUnderTest, ScenarioApp, ScenarioWorld, SignInMode},
     },
-    helpers::{TestedApp, tested_app, tested_app_with_local_auth},
-    state::{Account, Authorizations, Browser, Passkeys, Sessions},
+    helpers::{
+        TestedApp, tested_app, tested_app_with_domain_blacklist, tested_app_with_local_auth,
+        tested_app_with_local_auth_without_passkey,
+    },
+    state::{Account, Authorizations, Browser, LinkedMethod, Passkeys, Sessions},
 };
 
 #[derive(Default, World)]
 pub struct ApiWorld {
     pub app: AppUnderTest<TestedApp>,
+    /// A second instance of the app, for the scenarios that compare two instances.
+    pub other_app: AppUnderTest<TestedApp>,
     pub session: Option<Session>,
     pub browser: Browser,
     pub account: Account,
     pub sessions: Sessions,
     pub authorizations: Authorizations,
     pub passkeys: Passkeys,
+    pub linked: LinkedMethod,
     pub http: HttpExchanges,
 }
 
@@ -57,6 +63,12 @@ impl ScenarioApp for TestedApp {
                 SignInMode::PasswordAndPasskey => {
                     tested_app_with_local_auth(settings, (), db, redis).await
                 }
+                SignInMode::PasswordOnly => {
+                    tested_app_with_local_auth_without_passkey(settings, (), db, redis).await
+                }
+                SignInMode::SingleSignOnPasswordAndPasskey => {
+                    tested_app_with_domain_blacklist(settings, (), db, redis).await
+                }
             }
         })
     }
@@ -70,7 +82,10 @@ impl ScenarioApp for TestedApp {
 
 impl ScenarioWorld for ApiWorld {
     fn tear_down(&mut self) -> LocalBoxFuture<'_, ()> {
-        Box::pin(self.app.stop())
+        Box::pin(async move {
+            self.app.stop().await;
+            self.other_app.stop().await;
+        })
     }
 }
 

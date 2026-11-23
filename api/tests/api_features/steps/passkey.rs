@@ -28,6 +28,25 @@ fn split_request_challenge(body: &str) -> (RequestChallengeResponse, String) {
     (serde_json::from_str(body).unwrap(), nonce)
 }
 
+/// Start adding a passkey named `username` to the signed-in `client`'s account, answer the
+/// challenge with `authenticator` and finish. Returns the answer to the finish request and the
+/// credential ID.
+pub(super) async fn start_and_finish_adding_a_passkey(
+    client: &Client,
+    app: &TestedApp,
+    authenticator: &mut WebauthnAuthenticator<SoftPasskey>,
+    username: &str,
+) -> (reqwest::Response, Value) {
+    let response = start_add_passkey_registration_response(client, app, username).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let (creation_challenge, nonce) = split_creation_challenge(&response.text().await.unwrap());
+    let credential = authenticator
+        .do_registration(app.front_base_url.clone(), creation_challenge)
+        .unwrap();
+    let response = finish_add_passkey_registration_response(client, app, &credential, &nonce).await;
+    (response, serde_json::to_value(&credential.raw_id).unwrap())
+}
+
 /// Register a passkey for the signed-in `client` and return its username and credential ID.
 async fn add_passkey(
     client: &Client,
@@ -35,15 +54,10 @@ async fn add_passkey(
     authenticator: &mut WebauthnAuthenticator<SoftPasskey>,
 ) -> (String, Value) {
     let username = format!("passkey_{}", Uuid::new_v4().simple());
-    let response = start_add_passkey_registration_response(client, app, &username).await;
+    let (response, credential_id) =
+        start_and_finish_adding_a_passkey(client, app, authenticator, &username).await;
     assert_eq!(response.status(), StatusCode::OK);
-    let (creation_challenge, nonce) = split_creation_challenge(&response.text().await.unwrap());
-    let credential = authenticator
-        .do_registration(app.front_base_url.clone(), creation_challenge)
-        .unwrap();
-    let response = finish_add_passkey_registration_response(client, app, &credential, &nonce).await;
-    assert_eq!(response.status(), StatusCode::OK);
-    (username, serde_json::to_value(&credential.raw_id).unwrap())
+    (username, credential_id)
 }
 
 async fn register_a_passkey_on_a_new_device(world: &mut ApiWorld) {

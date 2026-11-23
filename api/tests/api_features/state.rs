@@ -7,9 +7,12 @@ use reqwest::Client;
 use serde_json::Value;
 use url::Url;
 use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
-use webauthn_rs::prelude::RequestChallengeResponse;
+use webauthn_rs::prelude::{RegisterPublicKeyCredential, RequestChallengeResponse};
 
-use universal_inbox::{pii::Pii, user::User};
+use universal_inbox::{
+    pii::Pii,
+    user::{User, UserAuthMethod},
+};
 
 use crate::helpers::user::CopiedSession;
 
@@ -131,6 +134,8 @@ pub struct Passkeys {
     pub pending: Option<PendingSignIn>,
     /// The browser that finished a passkey sign-in.
     pub signed_in_browser: Option<Client>,
+    /// The passkey a visitor registered on another instance of the app.
+    pub foreign: Option<ForeignPasskey>,
 }
 
 impl fmt::Debug for Passkeys {
@@ -146,4 +151,18 @@ impl fmt::Debug for Passkeys {
             }
         )
     }
+}
+
+/// What linking an authentication method through the app's services answered.
+#[derive(Debug, Default)]
+pub struct LinkedMethod {
+    pub result: Option<Result<UserAuthMethod, String>>,
+}
+
+/// A passkey a visitor registered on another instance of the app, kept to be replayed.
+pub struct ForeignPasskey {
+    pub authenticator: WebauthnAuthenticator<SoftPasskey>,
+    pub credential: RegisterPublicKeyCredential,
+    pub nonce: String,
+    pub username: String,
 }

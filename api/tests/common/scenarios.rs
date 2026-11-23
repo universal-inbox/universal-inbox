@@ -50,6 +50,10 @@ pub enum SignInMode {
     SingleSignOn,
     /// Email and password, or a passkey. There is no identity provider.
     PasswordAndPasskey,
+    /// Email and password, with no passkey. There is no identity provider.
+    PasswordOnly,
+    /// Single sign-on, email and password, or a passkey.
+    SingleSignOnPasswordAndPasskey,
 }
 
 impl Default for AppConfig {
