@@ -50,6 +50,11 @@ Feature: Syncing Google Drive comments
       | mention       | newness | returned | status |
       | mentioning me | newer   | 1        | unread |
 
+
+    Examples:
+      | mention       | newness | returned | status       |
+      | mentioning me | older   | 0        | unsubscribed |
+
   @legacy:test_sync_google_drive_comments::test_sync_notifications_skips_files_returning_404_on_comments
   Scenario: A file without comments resource does not abort the sync
     Given Google Drive lists two files, on a single page
@@ -57,3 +62,11 @@ Feature: Syncing Google Drive comments
     And Google Drive answers that the second file has no comments resource
     When I sync my Google Drive notifications
     Then the sync returned one unread Google Drive notification
+
+  Scenario: A comment I already know, unchanged, is not synced again
+    Given I already have the Google Drive notification "mine" of the comment 123
+    And Google Drive lists a single file
+    And Google Drive reports the first fixture comment alone, unchanged
+    When I sync my Google Drive notifications
+    Then the sync returned 0 notification
+    And my Google Drive notification "mine" is unread

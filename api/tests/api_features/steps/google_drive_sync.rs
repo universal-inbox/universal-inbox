@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use chrono::{Datelike, Duration, Utc};
+use chrono::{Duration, Utc};
 use cucumber::{Parameter, given, then, when};
 use email_address::EmailAddress;
 use pretty_assertions::assert_eq;
@@ -45,7 +45,7 @@ use crate::{
     state::CommentsOfFile,
     steps::{
         integration_connections::stored_connection, kept_triage::read_notification,
-        notifications::update, notion_sync::Mention, status::UserStatus,
+        mention::Mention, notifications::update, status::UserStatus,
     },
     world::ApiWorld,
 };
@@ -244,13 +244,13 @@ fn google_drive_reports_a_reply(world: &mut ApiWorld, mention: Mention, newness:
     let comment = list.comments.as_ref().unwrap()[0].clone();
     let reply = comment.replies.as_ref().unwrap()[0].clone();
     let content = match mention {
-        Mention::Mentioning => "Hello @jane.doe@example.com".to_string(),
+        Mention::Mentioning => format!("Hello @{}", known_address(world)),
         Mention::NotMentioning => "Hello".to_string(),
     };
     let now = Utc::now();
     let modified_time = match newness {
-        Newness::Newer => now.with_year(now.year() + 1).unwrap(),
-        Newness::Older => now.with_year(now.year() - 1).unwrap(),
+        Newness::Newer => now + Duration::days(366),
+        Newness::Older => now - Duration::days(366),
     };
     world.google_drive_sync.comments.push((
         0,
@@ -401,14 +401,15 @@ fn reported_comment_456(world: &ApiWorld) -> GoogleDriveComment {
 #[then("my notifications are the comments Google Drive reported, for the user Jane Doe")]
 fn my_notifications_are_the_reported_comments(world: &mut ApiWorld) {
     let user_id = world.user().id;
+    let (name, email) = known_user(world);
     assert_eq!(world.google_drive_sync.synced.len(), 2);
     assert_sync_notifications(
         &world.google_drive_sync.synced,
         &google_drive_comment_123(),
         &reported_comment_456(world),
         user_id,
-        "jane.doe@example.com",
-        "Jane Doe",
+        &email,
+        &name,
     );
 }
 
@@ -418,6 +419,7 @@ fn my_notifications_are_the_reported_comments(world: &mut ApiWorld) {
 async fn the_known_notification_is_deleted(world: &mut ApiWorld, name: String) {
     let original = world.notifications.named(&name).clone();
     let comment_456 = reported_comment_456(world);
+    let (user_name, user_email) = known_user(world);
     let notification = read_notification(world, &name).await;
     assert_eq!(notification.id, original.id);
     assert_eq!(notification.kind, NotificationSourceKind::GoogleDrive);
@@ -430,8 +432,8 @@ async fn the_known_notification_is_deleted(world: &mut ApiWorld, name: String) {
     assert_eq!(
         notification.source_item.data,
         ThirdPartyItemData::GoogleDriveComment(Box::new(GoogleDriveComment {
-            user_email_address: Some(Pii::new("jane.doe@example.com".to_string())),
-            user_display_name: Some(Pii::new("Jane Doe".to_string())),
+            user_email_address: Some(Pii::new(user_email)),
+            user_display_name: Some(Pii::new(user_name)),
             ..comment_456
         }))
     );
@@ -506,4 +508,29 @@ async fn i_unsubscribe_from(world: &mut ApiWorld, name: String) {
         },
     )
     .await;
+}
+
+fn known_user(world: &ApiWorld) -> (String, String) {
+    world
+        .google_drive_sync
+        .about
+        .clone()
+        .expect("Google Drive does not know the user in this scenario")
+}
+
+fn known_address(world: &ApiWorld) -> String {
+    known_user(world).1
+}
+
+#[given("Google Drive reports the first fixture comment alone, unchanged")]
+fn google_drive_reports_the_first_comment_unchanged(world: &mut ApiWorld) {
+    let list = google_drive_comments_list();
+    let first = list.comments.unwrap().remove(0);
+    world.google_drive_sync.comments.push((
+        0,
+        CommentsOfFile::Listed(GoogleDriveCommentList {
+            comments: Some(vec![first]),
+            next_page_token: None,
+        }),
+    ));
 }

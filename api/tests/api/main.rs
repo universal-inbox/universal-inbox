@@ -30,7 +30,6 @@ mod test_slack_webhook_revocation;
 mod test_slack_webhook_star_reaction;
 mod test_sync_linear_notifications;
 mod test_sync_slack_threads;
-mod test_sync_ticktick_tasks;
 mod test_ticktick_tasks;
 mod test_todoist_notifications;
 mod test_todoist_tasks;

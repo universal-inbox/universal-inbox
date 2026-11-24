@@ -19,7 +19,7 @@ use crate::{
         Account, Audit, Authorizations, Browser, Connections, EmailVerification, Encryption,
         GithubSync, GoogleDriveSync, GoogleMailSync, Integrations, Jobs, LinearTasks, LinkedMethod,
         McpSessions, Notifications, NotionSync, Passkeys, PasswordReset, Probe, Sessions, SetAside,
-        SlackEmojis, Tasks, ThirdPartyItems, TodoistTasks,
+        SlackEmojis, Tasks, ThirdPartyItems, TickTickTasks, TodoistTasks,
     },
     steps::set_aside_support::Scene,
 };
@@ -52,6 +52,7 @@ pub struct ApiWorld {
     pub google_drive_sync: GoogleDriveSync,
     pub linear_tasks: LinearTasks,
     pub todoist_tasks: TodoistTasks,
+    pub ticktick_tasks: TickTickTasks,
     pub notion_sync: NotionSync,
     pub mcp_sessions: McpSessions,
     pub slack_emojis: SlackEmojis,

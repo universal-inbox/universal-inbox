@@ -42,7 +42,8 @@ use crate::{
     },
     state::WorkspacePage,
     steps::{
-        integration_connections::stored_connection, notifications::update, status::UserStatus,
+        integration_connections::stored_connection, mention::Mention, notifications::update,
+        status::UserStatus,
     },
     world::ApiWorld,
 };
@@ -111,30 +112,6 @@ impl Author {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mention {
-    Mentioning,
-    NotMentioning,
-}
-
-impl Parameter for Mention {
-    const REGEX: &'static str = "mentioning me|not mentioning me";
-    const NAME: &'static str = "mention";
-}
-
-impl FromStr for Mention {
-    type Err = String;
-
-    fn from_str(name: &str) -> Result<Self, Self::Err> {
-        match name {
-            "mentioning me" => Ok(Self::Mentioning),
-            "not mentioning me" => Ok(Self::NotMentioning),
-            other => Err(format!("Unknown mention {other:?}")),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
 pub struct Discussion(pub &'static str);
 
 impl Parameter for Discussion {
