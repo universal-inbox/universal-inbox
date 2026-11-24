@@ -1,11 +1,16 @@
 use std::str::FromStr;
 
-use chrono::{DateTime, TimeDelta, TimeZone, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use cucumber::{Parameter, given, then, when};
 use pretty_assertions::assert_eq;
+use tokio::time::{Duration, sleep};
+use wiremock::{Mock, ResponseTemplate};
 
 use universal_inbox::{
-    integration_connection::{IntegrationConnectionStatus, provider::IntegrationProviderKind},
+    integration_connection::{
+        IntegrationConnectionStatus, config::IntegrationConnectionConfig,
+        integrations::github::GithubConfig, provider::IntegrationProviderKind,
+    },
     notification::{
         NotificationSourceKind, NotificationStatus, NotificationSyncSourceKind,
         NotificationWithTask, service::NotificationPatch,
@@ -15,10 +20,18 @@ use universal_inbox::{
         item::ThirdPartyItemData,
     },
 };
-use universal_inbox_api::repository::integration_connection::IntegrationConnectionRepository;
+use universal_inbox_api::repository::integration_connection::{
+    IntegrationConnectionRepository, TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE,
+};
 
 use crate::{
+    common::settings,
     helpers::{
+        integration_connection::{
+            create_and_mock_integration_connection,
+            create_and_mock_integration_connection_with_backoff, create_integration_connection,
+            github_oauth_credential,
+        },
         notification::{
             github::{
                 assert_sync_notifications, create_notification_from_github_notification,
@@ -26,17 +39,19 @@ use crate::{
                 mock_github_notifications_service, mock_github_pull_request_query,
                 sync_github_notifications,
             },
-            set_notification_updated_at, sync_notifications,
+            list_notifications, set_notification_updated_at, sync_notifications,
+            sync_notifications_response,
         },
         rest::get_resource,
         third_party::overwrite_third_party_item_data,
     },
     state::{KeptTriage, PullRequest},
     steps::notifications::{parse_time, update},
-    world::ApiWorld,
+    world::{ApiWorld, Response},
 };
 
 const THREAD_456: &str = "456";
+const UPDATED_AT_BEFORE_THE_RESYNC: &str = "2026-10-21T12:57:31Z";
 
 #[derive(Clone, Copy, Debug)]
 pub struct UserStatus(pub NotificationStatus);
@@ -238,7 +253,7 @@ async fn i_change_the_status_in_universal_inbox_only(
         ..Default::default()
     };
     let notification = update(world, &name, patch).await;
-    let updated_at = Utc.with_ymd_and_hms(2026, 10, 21, 12, 57, 31).unwrap();
+    let updated_at = parse_time(UPDATED_AT_BEFORE_THE_RESYNC);
     let app = world.app.get().await;
     set_notification_updated_at(app, notification.id, updated_at).await;
     world.github_sync.kept = Some(KeptTriage {
@@ -403,4 +418,237 @@ async fn a_notification_is_healed(world: &mut ApiWorld, name: String, since: Str
     );
     assert_eq!(notification.status, NotificationStatus::Read);
     assert_eq!(notification.last_read_at, Some(parse_time(&since)));
+}
+
+#[derive(Clone, Copy)]
+enum SyncRequest {
+    Asked,
+    NotAsked,
+}
+
+async fn list_read_notifications(world: &mut ApiWorld, request: SyncRequest) -> usize {
+    let client = world.client();
+    let app = world.app.get().await;
+    list_notifications(
+        &client,
+        &app.api_address,
+        vec![NotificationStatus::Read],
+        false,
+        None,
+        None,
+        matches!(request, SyncRequest::Asked),
+    )
+    .await
+    .len()
+}
+
+#[given("GitHub would answer 200 to anything")]
+#[when("GitHub would answer 200 to anything")]
+async fn github_would_answer_200(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.github_mock_server)
+        .await;
+}
+
+#[given("GitHub answers 400 to anything")]
+async fn github_answers_400(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(400))
+        .mount(&app.github_mock_server)
+        .await;
+}
+
+#[given("I have a GitHub connection that was never validated")]
+async fn i_have_a_never_validated_connection(world: &mut ApiWorld) {
+    let user_id = world.user().id;
+    let app = world.app.get().await;
+    create_integration_connection(
+        app,
+        user_id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        IntegrationConnectionStatus::Created,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await;
+}
+
+#[given("I have a GitHub connection whose synchronisation is disabled")]
+async fn i_have_a_connection_with_the_sync_disabled(world: &mut ApiWorld) {
+    let user_id = world.user().id;
+    let app = world.app.get().await;
+    create_and_mock_integration_connection(
+        app,
+        user_id,
+        IntegrationConnectionConfig::Github(GithubConfig::disabled()),
+        &settings(),
+        github_oauth_credential(),
+        None,
+        None,
+    )
+    .await;
+}
+
+#[given("my GitHub connection already failed 5 times, the first failure being 2 hours old")]
+async fn my_connection_already_failed(world: &mut ApiWorld) {
+    let user_id = world.user().id;
+    let app = world.app.get().await;
+    create_and_mock_integration_connection_with_backoff(
+        app,
+        user_id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings(),
+        github_oauth_credential(),
+        Some(5),
+        Some(Utc::now() - TimeDelta::hours(2)),
+        None,
+    )
+    .await;
+}
+
+#[when("I list my read notifications, asking for a sync")]
+async fn i_list_my_read_notifications_asking_for_a_sync(world: &mut ApiWorld) {
+    let count = list_read_notifications(world, SyncRequest::Asked).await;
+    world.github_sync.read_count = Some(count);
+}
+
+#[when("I ask for an asynchronous sync of my GitHub notifications")]
+async fn i_ask_for_an_asynchronous_sync(world: &mut ApiWorld) {
+    let client = world.client();
+    let app = world.app.get().await;
+    let response = sync_notifications_response(
+        &client,
+        &app.api_address,
+        Some(NotificationSourceKind::Github),
+        true,
+    )
+    .await;
+    world.http.record(Response::read(response).await);
+}
+
+#[when("I ask for a synchronous sync of my GitHub notifications")]
+async fn i_ask_for_a_synchronous_sync(world: &mut ApiWorld) {
+    let client = world.client();
+    let app = world.app.get().await;
+    let response = sync_notifications_response(
+        &client,
+        &app.api_address,
+        Some(NotificationSourceKind::Github),
+        false,
+    )
+    .await;
+    world.http.record(Response::read(response).await);
+}
+
+#[when("one second passes")]
+async fn one_second_passes(_world: &mut ApiWorld) {
+    sleep(Duration::from_secs(1)).await;
+}
+
+async fn wait_for_a_read_notification(world: &mut ApiWorld, request: SyncRequest) {
+    for _ in 0..=20 {
+        if list_read_notifications(world, request).await == 1 {
+            return;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+    panic!("None of the notifications became read within two seconds");
+}
+
+#[then("none of my notifications is read yet")]
+fn none_of_my_notifications_is_read_yet(world: &mut ApiWorld) {
+    assert_eq!(world.github_sync.read_count, Some(0));
+}
+
+#[then(
+    "within two seconds, one of my notifications becomes read, listing them asking for a sync each time"
+)]
+async fn a_notification_becomes_read_asking_for_syncs(world: &mut ApiWorld) {
+    wait_for_a_read_notification(world, SyncRequest::Asked).await;
+}
+
+#[then(
+    "within two seconds, one of my notifications becomes read, listing them without asking for a sync"
+)]
+async fn a_notification_becomes_read_without_asking(world: &mut ApiWorld) {
+    wait_for_a_read_notification(world, SyncRequest::NotAsked).await;
+}
+
+#[then("I still have exactly one read notification")]
+async fn i_still_have_one_read_notification(world: &mut ApiWorld) {
+    assert_eq!(
+        list_read_notifications(world, SyncRequest::NotAsked).await,
+        1
+    );
+}
+
+#[then("I have no read notification")]
+async fn i_have_no_read_notification(world: &mut ApiWorld) {
+    assert_eq!(
+        list_read_notifications(world, SyncRequest::NotAsked).await,
+        0
+    );
+}
+
+#[then(
+    "my GitHub connection recorded a failed sync, the sixth, and is failing for too many sync failures"
+)]
+async fn my_connection_recorded_a_failed_sync(world: &mut ApiWorld) {
+    let user_id = world.user().id;
+    let app = world.app.get().await;
+    let mut transaction = app.repository.begin().await.unwrap();
+    let connection = app
+        .repository
+        .get_integration_connection_per_provider(
+            &mut transaction,
+            user_id,
+            IntegrationProviderKind::Github,
+            None,
+            None,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    transaction.commit().await.unwrap();
+    assert!(connection.last_notifications_sync_started_at.is_some());
+    assert!(connection.last_notifications_sync_completed_at.is_none());
+    assert!(connection.last_notifications_sync_failed_at.is_some());
+    assert_eq!(
+        connection
+            .last_notifications_sync_failure_message
+            .unwrap()
+            .as_str(),
+        "Failed to fetch notifications from Github"
+    );
+    assert_eq!(connection.notifications_sync_failures, 6);
+    assert!(connection.first_notifications_sync_failed_at.is_some());
+    assert_eq!(connection.status, IntegrationConnectionStatus::Failing);
+    assert_eq!(
+        connection.failure_message,
+        Some(TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE.to_string())
+    );
+}
+
+#[given(expr = "{string} is unread in Universal Inbox")]
+async fn a_notification_is_unread_in_universal_inbox(world: &mut ApiWorld, name: String) {
+    update(
+        world,
+        &name,
+        NotificationPatch {
+            status: Some(NotificationStatus::Unread),
+            ..Default::default()
+        },
+    )
+    .await;
+}
+
+#[given("GitHub serves what it reported")]
+async fn github_serves_what_it_reported(world: &mut ApiWorld) {
+    mount_github(world).await;
 }

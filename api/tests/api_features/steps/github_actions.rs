@@ -93,6 +93,7 @@ async fn github_refuses_to_delete_the_thread(world: &mut ApiWorld) {
 }
 
 #[given(expr = "I have a Todoist task in the project {string}, linked to {string}")]
+#[when(expr = "I have a Todoist task in the project {string}, linked to {string}")]
 async fn i_have_a_todoist_task_linked_to(world: &mut ApiWorld, project: String, name: String) {
     let project_id = match project.as_str() {
         "Project2" => "2222",

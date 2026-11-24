@@ -1,9 +1,8 @@
 #![allow(clippy::too_many_arguments)]
-use chrono::{TimeDelta, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use graphql_client::{Error, Response};
 use http::StatusCode;
 use rstest::*;
-use tokio::time::{Duration, sleep};
 
 use universal_inbox::{
     integration_connection::{
@@ -12,7 +11,6 @@ use universal_inbox::{
     },
     notification::{
         Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
-        service::NotificationPatch,
     },
     third_party::{
         integrations::github::{
@@ -28,7 +26,6 @@ use universal_inbox_api::{
         discussion_query, pull_request_comments_query, pull_request_query,
         pull_request_review_thread_comments_query, pull_request_review_threads_query,
     },
-    repository::integration_connection::TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE,
 };
 
 use crate::helpers::integration_connection::OAuthCredentialFixture;
@@ -36,9 +33,8 @@ use crate::helpers::{
     TestedApp,
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection,
-        create_and_mock_integration_connection_with_backoff, create_integration_connection,
-        get_integration_connection_per_provider, github_oauth_credential,
+        create_and_mock_integration_connection, get_integration_connection_per_provider,
+        github_oauth_credential,
     },
     notification::{
         github::{
@@ -55,13 +51,12 @@ use crate::helpers::{
             mock_github_pull_request_review_thread_comments_query,
             mock_github_pull_request_review_threads_query, sync_github_notifications,
         },
-        list_notifications, sync_notifications, sync_notifications_response, update_notification,
+        list_notifications, sync_notifications, sync_notifications_response,
     },
     rest::get_resource,
     settings, tested_app_with_local_auth,
     user::create_user_and_login,
 };
-use wiremock::{Mock, ResponseTemplate};
 
 #[rstest]
 #[tokio::test]
@@ -204,324 +199,6 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     assert_eq!(
         refreshed_other_user_existing_notification.status,
         NotificationStatus::Unread
-    );
-}
-
-#[rstest]
-#[case::trigger_sync_when_listing_notifications(true)]
-#[case::trigger_sync_with_sync_endpoint(false)]
-#[tokio::test]
-async fn test_sync_all_notifications_asynchronously(
-    settings: Settings,
-    #[future] authenticated_app: AuthenticatedApp,
-    // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
-    sync_github_notifications: Vec<GithubNotification>,
-    github_pull_request_123_response: Response<pull_request_query::ResponseData>,
-    github_oauth_credential: OAuthCredentialFixture,
-    #[case] trigger_sync_when_listing_notifications: bool,
-) {
-    let app = authenticated_app.await;
-    let github_integration_connection = create_and_mock_integration_connection(
-        &app.app,
-        app.user.id,
-        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
-        &settings,
-        github_oauth_credential,
-        None,
-        None,
-    )
-    .await;
-    let existing_notification = create_notification_from_github_notification(
-        &app.app,
-        &sync_github_notifications[1],
-        app.user.id,
-        github_integration_connection.id,
-    )
-    .await;
-    update_notification(
-        &app,
-        existing_notification.id,
-        &NotificationPatch {
-            status: Some(NotificationStatus::Unread),
-            ..NotificationPatch::default()
-        },
-        app.user.id,
-    )
-    .await;
-
-    let _github_notifications_mock = mock_github_notifications_service(
-        &app.app.github_mock_server,
-        "1",
-        &sync_github_notifications,
-    )
-    .await;
-    let empty_result = Vec::<GithubNotification>::new();
-    let _github_notifications_mock2 =
-        mock_github_notifications_service(&app.app.github_mock_server, "2", &empty_result).await;
-    let _github_pull_request_123_query_mock = mock_github_pull_request_query(
-        &app.app.github_mock_server,
-        "octokit".to_string(),
-        "octokit.rb".to_string(),
-        123,
-        &github_pull_request_123_response,
-    )
-    .await;
-
-    if trigger_sync_when_listing_notifications {
-        let result = list_notifications(
-            &app.client,
-            &app.app.api_address,
-            vec![NotificationStatus::Read],
-            false,
-            None,
-            None,
-            true,
-        )
-        .await;
-
-        // The existing notification's status should not have been updated to Read yet
-        assert_eq!(result.len(), 0);
-    } else {
-        let response = sync_notifications_response(
-            &app.client,
-            &app.app.api_address,
-            Some(NotificationSourceKind::Github),
-            true, // asynchronously
-        )
-        .await;
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-    }
-
-    let mut i = 0;
-    let synchronized = loop {
-        let result = list_notifications(
-            &app.client,
-            &app.app.api_address,
-            vec![NotificationStatus::Read],
-            false,
-            None,
-            None,
-            trigger_sync_when_listing_notifications,
-        )
-        .await;
-
-        if result.len() == 1 {
-            // The existing notification's status has been updated to Read
-            break true;
-        }
-
-        if i == 20 {
-            // Give up after 20 attempts
-            break false;
-        }
-
-        sleep(Duration::from_millis(100)).await;
-        i += 1;
-    };
-
-    assert!(synchronized);
-
-    // Triggering a new sync should not actually sync again
-    Mock::given(wiremock::matchers::any())
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&app.app.github_mock_server)
-        .await;
-    let response = sync_notifications_response(
-        &app.client,
-        &app.app.api_address,
-        Some(NotificationSourceKind::Github),
-        true, // asynchronously
-    )
-    .await;
-
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    sleep(Duration::from_millis(1000)).await;
-
-    let result = list_notifications(
-        &app.client,
-        &app.app.api_address,
-        vec![NotificationStatus::Read],
-        false,
-        None,
-        None,
-        false,
-    )
-    .await;
-
-    // Even after 1s, the existing notification's status should not have been updated
-    // because the sync happen too soon after the previous one
-    assert_eq!(result.len(), 1);
-}
-
-#[rstest]
-#[tokio::test]
-async fn test_sync_all_notifications_with_no_validated_integration_connections(
-    #[future] authenticated_app: AuthenticatedApp,
-) {
-    let app = authenticated_app.await;
-    create_integration_connection(
-        &app.app,
-        app.user.id,
-        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
-        IntegrationConnectionStatus::Created,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
-    .await;
-
-    Mock::given(wiremock::matchers::any())
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&app.app.github_mock_server)
-        .await;
-
-    let response = sync_notifications_response(
-        &app.client,
-        &app.app.api_address,
-        Some(NotificationSourceKind::Github),
-        false, // synchronously
-    )
-    .await;
-
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[rstest]
-#[tokio::test]
-async fn test_sync_all_notifications_with_synchronization_disabled(
-    settings: Settings,
-    #[future] authenticated_app: AuthenticatedApp,
-    github_oauth_credential: OAuthCredentialFixture,
-) {
-    let app = authenticated_app.await;
-    create_and_mock_integration_connection(
-        &app.app,
-        app.user.id,
-        IntegrationConnectionConfig::Github(GithubConfig::disabled()),
-        &settings,
-        github_oauth_credential,
-        None,
-        None,
-    )
-    .await;
-
-    Mock::given(wiremock::matchers::any())
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&app.app.github_mock_server)
-        .await;
-
-    let response = sync_notifications_response(
-        &app.client,
-        &app.app.api_address,
-        Some(NotificationSourceKind::Github),
-        false, // synchronously
-    )
-    .await;
-
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[rstest]
-#[tokio::test]
-async fn test_sync_all_notifications_asynchronously_in_error(
-    settings: Settings,
-    #[future] authenticated_app: AuthenticatedApp,
-    github_oauth_credential: OAuthCredentialFixture,
-) {
-    let app = authenticated_app.await;
-    // Set first_notifications_sync_failed_at beyond the failure window (dev config = 1h)
-    // so the next failure will trigger the Failing status
-    create_and_mock_integration_connection_with_backoff(
-        &app.app,
-        app.user.id,
-        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
-        &settings,
-        github_oauth_credential,
-        Some(5),
-        Some(Utc::now() - TimeDelta::hours(2)),
-        None,
-    )
-    .await;
-
-    Mock::given(wiremock::matchers::any())
-        .respond_with(ResponseTemplate::new(400))
-        .mount(&app.app.github_mock_server)
-        .await;
-    let response = sync_notifications_response(
-        &app.client,
-        &app.app.api_address,
-        Some(NotificationSourceKind::Github),
-        true, // asynchronously
-    )
-    .await;
-
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    sleep(Duration::from_millis(1000)).await;
-
-    let result = list_notifications(
-        &app.client,
-        &app.app.api_address,
-        vec![NotificationStatus::Read],
-        false,
-        None,
-        None,
-        false,
-    )
-    .await;
-
-    // Even after 1s, the existing notification's status should not have been updated
-    // because the sync was in error
-    assert_eq!(result.len(), 0);
-
-    let integration_connection = get_integration_connection_per_provider(
-        &app,
-        app.user.id,
-        IntegrationProviderKind::Github,
-        None,
-        None,
-    )
-    .await
-    .unwrap();
-    assert!(
-        integration_connection
-            .last_notifications_sync_started_at
-            .is_some()
-    );
-    assert!(
-        integration_connection
-            .last_notifications_sync_completed_at
-            .is_none()
-    );
-    assert!(
-        integration_connection
-            .last_notifications_sync_failed_at
-            .is_some()
-    );
-    assert_eq!(
-        integration_connection
-            .last_notifications_sync_failure_message
-            .unwrap()
-            .as_str(),
-        "Failed to fetch notifications from Github"
-    );
-    assert_eq!(integration_connection.notifications_sync_failures, 6);
-    assert!(
-        integration_connection
-            .first_notifications_sync_failed_at
-            .is_some()
-    );
-    assert_eq!(
-        integration_connection.status,
-        IntegrationConnectionStatus::Failing
-    );
-    assert_eq!(
-        integration_connection.failure_message,
-        Some(TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE.to_string())
     );
 }
 

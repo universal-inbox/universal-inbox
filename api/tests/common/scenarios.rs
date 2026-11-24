@@ -284,5 +284,12 @@ fn run_on_large_stack<W: ScenarioWorld>(scenario: Scenario) -> Result<(), Failed
         .spawn(move || run::<W>(&scenario))
         .map_err(|err| format!("Cannot start the scenario thread: {err}"))?
         .join()
-        .unwrap_or_else(|_| Err("The scenario panicked".into()))
+        .unwrap_or_else(|payload| {
+            let message = payload
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .or_else(|| payload.downcast_ref::<&str>().copied())
+                .unwrap_or("no message");
+            Err(format!("The scenario panicked: {message}").into())
+        })
 }

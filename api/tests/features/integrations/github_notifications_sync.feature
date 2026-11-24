@@ -97,14 +97,14 @@ Feature: Syncing GitHub notifications
 
     @legacy:test_sync_github_notifications::test_sync_notifications_should_keep_user_status_of_unchanged_notification::case_4_read_linked_to_task
     Scenario: A thread I marked read and linked to a task stays read and linked
-      Given GitHub reports the notifications 123 and 456
+      Given I am connected to Todoist
+      And Todoist can list my projects
+      And GitHub reports the notifications 123 and 456
       And GitHub reports every thread as unread
       And GitHub knows pull request 123
       When I sync my GitHub notifications
       And I take note of the synced notification of the GitHub thread 456 as "mine"
-      Given I am connected to Todoist
-      Given Todoist can list my projects
-      Given I have a Todoist task in the project "Project2", linked to "mine"
-      When I change "mine" to read in Universal Inbox only
+      And I have a Todoist task in the project "Project2", linked to "mine"
+      And I change "mine" to read in Universal Inbox only
       And I force a new sync of my GitHub notifications, which reports the same threads
       Then "mine" keeps the status I gave it, its update time and its task

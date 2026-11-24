@@ -13,6 +13,7 @@ pub struct GithubSync {
     pub synced: Vec<Notification>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub kept: Option<KeptTriage>,
+    pub read_count: Option<usize>,
 }
 
 pub struct KeptTriage {
