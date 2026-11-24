@@ -446,10 +446,21 @@ async fn list_read_notifications(world: &mut ApiWorld, request: SyncRequest) -> 
 #[when("GitHub would answer 200 to anything")]
 async fn github_would_answer_200(world: &mut ApiWorld) {
     let app = world.app.get().await;
-    Mock::given(wiremock::matchers::any())
+    let anything = Mock::given(wiremock::matchers::any())
         .respond_with(ResponseTemplate::new(200))
-        .mount(&app.github_mock_server)
+        .mount_as_scoped(&app.github_mock_server)
         .await;
+    world.github_sync.anything = Some(anything);
+}
+
+#[then("GitHub was not asked anything")]
+async fn github_was_not_asked_anything(world: &mut ApiWorld) {
+    let anything = world
+        .github_sync
+        .anything
+        .as_ref()
+        .expect("GitHub was not prepared to answer anything");
+    assert_eq!(anything.received_requests().await.len(), 0);
 }
 
 #[given("GitHub answers 400 to anything")]
@@ -499,7 +510,7 @@ async fn i_have_a_connection_with_the_sync_disabled(world: &mut ApiWorld) {
 async fn my_connection_already_failed(world: &mut ApiWorld) {
     let user_id = world.user().id;
     let app = world.app.get().await;
-    create_and_mock_integration_connection_with_backoff(
+    let connection = create_and_mock_integration_connection_with_backoff(
         app,
         user_id,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
@@ -510,6 +521,7 @@ async fn my_connection_already_failed(world: &mut ApiWorld) {
         None,
     )
     .await;
+    world.integrations.github_connection = Some(connection);
 }
 
 #[when("I list my read notifications, asking for a sync")]

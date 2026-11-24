@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use wiremock::MockGuard;
 
 use universal_inbox::{
     notification::{Notification, NotificationStatus},
@@ -14,6 +15,7 @@ pub struct GithubSync {
     pub deleted_at: Option<DateTime<Utc>>,
     pub kept: Option<KeptTriage>,
     pub read_count: Option<usize>,
+    pub anything: Option<MockGuard>,
 }
 
 pub struct KeptTriage {
