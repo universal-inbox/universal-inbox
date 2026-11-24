@@ -20,6 +20,7 @@ use crate::{
         Integrations, Jobs, LinkedMethod, McpSessions, Notifications, Passkeys, PasswordReset,
         Probe, Sessions, SetAside, SlackEmojis, Tasks, ThirdPartyItems,
     },
+    steps::set_aside_support::Scene,
 };
 
 #[derive(Default, World)]
@@ -134,6 +135,13 @@ pub struct Session {
 }
 
 impl ApiWorld {
+    pub async fn scene(&mut self) -> Scene<'_> {
+        let client = self.client();
+        let user = self.user().clone();
+        let app = self.app.get().await;
+        Scene { app, client, user }
+    }
+
     fn session(&self) -> &Session {
         self.session
             .as_ref()

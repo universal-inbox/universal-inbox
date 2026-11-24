@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use universal_inbox::notification::Notification;
 
-use crate::steps::set_aside_support::ProviderCase;
+use crate::steps::{provider::ProviderName, set_aside_support::ProviderCase};
 
 #[derive(Default)]
 pub struct SetAside {
@@ -11,10 +11,17 @@ pub struct SetAside {
 }
 
 impl SetAside {
-    pub fn case(&self) -> &ProviderCase {
-        self.case
+    pub fn case_of(&self, provider: ProviderName) -> &ProviderCase {
+        let case = self
+            .case
             .as_ref()
-            .expect("No notification was seeded in this scenario")
+            .expect("No notification was seeded in this scenario");
+        assert_eq!(
+            case.kind, provider.0,
+            "The scenario seeded a {:?} notification, not a {:?} one",
+            case.kind, provider.0
+        );
+        case
     }
 
     pub fn triaged(&self) -> &Notification {

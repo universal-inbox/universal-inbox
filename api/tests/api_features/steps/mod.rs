@@ -21,7 +21,7 @@ mod passkey_ceremony;
 mod password;
 mod pausing;
 mod profile;
-mod provider;
+pub mod provider;
 mod reauthentication;
 mod registration;
 mod session;

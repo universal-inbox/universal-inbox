@@ -120,7 +120,7 @@ Feature: Setting notifications aside
       Given I have a <provider> notification that I read, snoozed and turned into a task
       When I disconnect my <provider> connection
       Then my notification is set aside: out of my inbox and its count, but still readable by its id
-      When I reconnect it
+      When I reconnect my <provider> connection
       Then my notification is set aside: out of my inbox and its count, but still readable by its id
       When the sync that restores the <provider> notifications completes
       Then my notification is unchanged in my inbox
@@ -172,7 +172,7 @@ Feature: Setting notifications aside
       And Slack revokes my grant when asked
       When the pause job pauses the connections of users inactive for over 90 days
       Then my notification is set aside: out of my inbox and its count, but still readable by its id
-      When I reconnect it
+      When I reconnect my Slack connection
       And the sync that restores the Slack notifications completes
       Then my notification is unchanged in my inbox
 

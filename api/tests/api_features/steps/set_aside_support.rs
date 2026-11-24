@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_arguments)]
-
 use chrono::{DateTime, TimeZone, Timelike, Utc};
 use http::StatusCode;
 use pretty_assertions::assert_eq;
@@ -131,314 +129,53 @@ pub struct ProviderFixtures {
 }
 
 pub struct ProviderCase {
+    pub kind: IntegrationProviderKind,
     pub connection: Box<IntegrationConnection>,
     pub notification: Box<Notification>,
     pub harmless_config: IntegrationConnectionConfig,
     pub scope_narrowing_config: Option<IntegrationConnectionConfig>,
-    pub enabled_config: IntegrationConnectionConfig,
     pub notifications_off_config: Option<IntegrationConnectionConfig>,
 }
 
-pub async fn seed_provider(
-    app: &Scene<'_>,
-    provider_kind: IntegrationProviderKind,
-    fixtures: &ProviderFixtures,
-) -> ProviderCase {
-    match provider_kind {
-        IntegrationProviderKind::Github => {
-            let connection = create_provider_connection(
-                app,
-                IntegrationConnectionConfig::Github(GithubConfig::enabled()),
-                github_oauth_credential(),
-                &fixtures.settings,
-            )
-            .await;
-            let notification = create_notification_from_github_notification(
-                app.app,
-                &fixtures.github_notification,
-                app.user.id,
-                connection.id,
-            )
-            .await;
-
-            ProviderCase {
-                connection,
-                notification,
-                harmless_config: IntegrationConnectionConfig::Github(GithubConfig::enabled()),
-                scope_narrowing_config: None,
-                enabled_config: IntegrationConnectionConfig::Github(GithubConfig::enabled()),
-                notifications_off_config: Some(IntegrationConnectionConfig::Github(
-                    GithubConfig::disabled(),
-                )),
-            }
-        }
-        IntegrationProviderKind::Linear => {
-            let connection = create_provider_connection(
-                app,
-                IntegrationConnectionConfig::Linear(LinearConfig::default()),
-                linear_oauth_credential(),
-                &fixtures.settings,
-            )
-            .await;
-            let notification = create_notification_from_linear_notification(
-                app.app,
-                &fixtures.linear_notification,
-                app.user.id,
-                connection.id,
-            )
-            .await;
-
-            ProviderCase {
-                connection,
-                notification,
-                harmless_config: IntegrationConnectionConfig::Linear(LinearConfig {
-                    sync_task_config: LinearSyncTaskConfig {
-                        default_due_at: Some(PresetDueDate::Today),
-                        ..LinearSyncTaskConfig::default()
-                    },
-                    ..LinearConfig::default()
-                }),
-                scope_narrowing_config: None,
-                enabled_config: IntegrationConnectionConfig::Linear(LinearConfig::default()),
-                notifications_off_config: Some(IntegrationConnectionConfig::Linear(LinearConfig {
-                    sync_notifications_enabled: false,
-                    ..LinearConfig::default()
-                })),
-            }
-        }
-        IntegrationProviderKind::GoogleMail => {
-            let connection = create_provider_connection(
-                app,
-                IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
-                google_mail_oauth_credential(),
-                &fixtures.settings,
-            )
-            .await;
-            let notification = create_notification_from_google_mail_thread(
-                app.app,
-                &fixtures.google_mail_thread,
-                app.user.id,
-                connection.id,
-            )
-            .await;
-
-            ProviderCase {
-                connection,
-                notification,
-                harmless_config: IntegrationConnectionConfig::GoogleMail(
-                    GoogleMailConfig::enabled(),
-                ),
-                scope_narrowing_config: Some(IntegrationConnectionConfig::GoogleMail(
-                    GoogleMailConfig {
-                        sync_notifications_enabled: true,
-                        synced_label: GoogleMailLabel {
-                            id: "Label_2".to_string(),
-                            name: "Label 2".to_string(),
-                        },
-                    },
-                )),
-                enabled_config: IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
-                notifications_off_config: Some(IntegrationConnectionConfig::GoogleMail(
-                    GoogleMailConfig::disabled(),
-                )),
-            }
-        }
-        IntegrationProviderKind::GoogleDrive => {
-            let connection = create_provider_connection(
-                app,
-                IntegrationConnectionConfig::GoogleDrive(GoogleDriveConfig::enabled()),
-                google_drive_oauth_credential(),
-                &fixtures.settings,
-            )
-            .await;
-            let notification = create_notification_from_google_drive_comment(
-                app.app,
-                &fixtures.google_drive_comment,
-                app.user.id,
-                connection.id,
-            )
-            .await;
-
-            ProviderCase {
-                connection,
-                notification,
-                harmless_config: IntegrationConnectionConfig::GoogleDrive(
-                    GoogleDriveConfig::enabled(),
-                ),
-                scope_narrowing_config: None,
-                enabled_config: IntegrationConnectionConfig::GoogleDrive(
-                    GoogleDriveConfig::enabled(),
-                ),
-                notifications_off_config: Some(IntegrationConnectionConfig::GoogleDrive(
-                    GoogleDriveConfig::disabled(),
-                )),
-            }
-        }
-        IntegrationProviderKind::GoogleCalendar => {
-            let google_mail_connection = create_provider_connection(
-                app,
-                IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
-                google_mail_oauth_credential(),
-                &fixtures.settings,
-            )
-            .await;
-            let connection = create_provider_connection(
-                app,
-                IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
-                google_calendar_oauth_credential(),
-                &fixtures.settings,
-            )
-            .await;
-            let notification = create_notification_from_google_calendar_event(
-                app.app,
-                &fixtures.google_mail_thread,
-                &fixtures.google_calendar_event,
-                app.user.id,
-                google_mail_connection.id,
-                connection.id,
-            )
-            .await;
-
-            ProviderCase {
-                connection,
-                notification,
-                harmless_config: IntegrationConnectionConfig::GoogleCalendar(
-                    GoogleCalendarConfig::enabled(),
-                ),
-                scope_narrowing_config: Some(IntegrationConnectionConfig::GoogleCalendar(
-                    GoogleCalendarConfig::disabled(),
-                )),
-                enabled_config: IntegrationConnectionConfig::GoogleCalendar(
-                    GoogleCalendarConfig::enabled(),
-                ),
-                notifications_off_config: None,
-            }
-        }
-        IntegrationProviderKind::Slack => {
-            let connection = create_provider_connection(
-                app,
-                IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
-                slack_oauth_credential(),
-                &fixtures.settings,
-            )
-            .await;
-            let notification = create_notification_from_slack_thread(
-                app.app,
-                &fixtures.slack_thread,
-                app.user.id,
-                connection.id,
-            )
-            .await;
-
-            let mut harmless_config = SlackConfig::enabled_as_notifications();
-            harmless_config.reaction_config.completion_reaction_name =
-                Some(SlackReactionName("white_check_mark".to_string()));
-            let mut scope_narrowing_config = SlackConfig::enabled_as_notifications();
-            scope_narrowing_config.reaction_config.reaction_name =
-                SlackReactionName("bookmark".to_string());
-
-            ProviderCase {
-                connection,
-                notification,
-                harmless_config: IntegrationConnectionConfig::Slack(harmless_config),
-                scope_narrowing_config: Some(IntegrationConnectionConfig::Slack(
-                    scope_narrowing_config,
-                )),
-                enabled_config: IntegrationConnectionConfig::Slack(
-                    SlackConfig::enabled_as_notifications(),
-                ),
-                notifications_off_config: Some(IntegrationConnectionConfig::Slack(
-                    SlackConfig::disabled(),
-                )),
-            }
-        }
-        IntegrationProviderKind::Todoist => {
-            let connection = create_provider_connection(
-                app,
-                IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
-                todoist_oauth_credential(),
-                &fixtures.settings,
-            )
-            .await;
-            let notification = create_notification_from_todoist_item(
-                app.app,
-                &fixtures.todoist_item,
-                app.user.id,
-                connection.id,
-            )
-            .await;
-
-            ProviderCase {
-                connection,
-                notification,
-                harmless_config: IntegrationConnectionConfig::Todoist(TodoistConfig {
-                    default_priority: Some(TaskPriority::P2),
-                    ..TodoistConfig::enabled()
-                }),
-                scope_narrowing_config: Some(IntegrationConnectionConfig::Todoist(TodoistConfig {
-                    create_notification_from_inbox_task: false,
-                    ..TodoistConfig::enabled()
-                })),
-                enabled_config: IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
-                notifications_off_config: Some(IntegrationConnectionConfig::Todoist(
-                    TodoistConfig::disabled(),
-                )),
-            }
-        }
-        IntegrationProviderKind::TickTick => {
-            let connection = create_ticktick_integration_connection(
-                app.app,
-                app.user.id,
-                &fixtures.settings,
-                IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
-                None,
-            )
-            .await;
-            let notification = create_notification_from_ticktick_item(
-                app.app,
-                &fixtures.ticktick_item,
-                app.user.id,
-                connection.id,
-            )
-            .await;
-
-            ProviderCase {
-                connection,
-                notification,
-                harmless_config: IntegrationConnectionConfig::TickTick(TickTickConfig {
-                    default_priority: Some(TaskPriority::P2),
-                    ..TickTickConfig::enabled()
-                }),
-                scope_narrowing_config: Some(IntegrationConnectionConfig::TickTick(
-                    TickTickConfig {
-                        create_notification_from_inbox_task: false,
-                        ..TickTickConfig::enabled()
-                    },
-                )),
-                enabled_config: IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
-                notifications_off_config: Some(IntegrationConnectionConfig::TickTick(
-                    TickTickConfig::disabled(),
-                )),
-            }
-        }
-        IntegrationProviderKind::Notion | IntegrationProviderKind::API => {
-            unreachable!(
-                "{provider_kind} has no case: Notion does not create notifications yet, and \
-                 `API` has no configuration a user can save"
-            )
-        }
+impl ProviderCase {
+    pub fn enabled_config(&self) -> IntegrationConnectionConfig {
+        self.connection.provider.config()
     }
 }
 
+pub async fn seed_provider(
+    scene: &Scene<'_>,
+    kind: IntegrationProviderKind,
+    fixtures: &ProviderFixtures,
+) -> Result<ProviderCase, String> {
+    let case = match kind {
+        IntegrationProviderKind::Github => github_case(scene, fixtures).await,
+        IntegrationProviderKind::Linear => linear_case(scene, fixtures).await,
+        IntegrationProviderKind::GoogleMail => google_mail_case(scene, fixtures).await,
+        IntegrationProviderKind::GoogleDrive => google_drive_case(scene, fixtures).await,
+        IntegrationProviderKind::GoogleCalendar => google_calendar_case(scene, fixtures).await,
+        IntegrationProviderKind::Slack => slack_case(scene, fixtures).await,
+        IntegrationProviderKind::Todoist => todoist_case(scene, fixtures).await,
+        IntegrationProviderKind::TickTick => ticktick_case(scene, fixtures).await,
+        IntegrationProviderKind::Notion | IntegrationProviderKind::API => {
+            return Err(format!(
+                "{kind:?} has no scenario: Notion does not create notifications yet, and `API` \
+                 has no configuration a user can save"
+            ));
+        }
+    };
+    Ok(case)
+}
+
 pub async fn create_provider_connection(
-    app: &Scene<'_>,
+    scene: &Scene<'_>,
     config: IntegrationConnectionConfig,
     credential: OAuthCredentialFixture,
     settings: &Settings,
 ) -> Box<IntegrationConnection> {
     create_and_mock_integration_connection(
-        app.app,
-        app.user.id,
+        scene.app,
+        scene.user.id,
         config,
         settings,
         credential,
@@ -457,13 +194,13 @@ pub fn snoozed_until() -> DateTime<Utc> {
 }
 
 pub async fn triage_notification(
-    app: &Scene<'_>,
+    scene: &Scene<'_>,
     notification: &Notification,
     todoist_item: &TodoistItem,
 ) -> Notification {
-    let mut transaction = app.app.repository.begin().await.unwrap();
+    let mut transaction = scene.app.repository.begin().await.unwrap();
 
-    let read_notification = app
+    let read_notification = scene
         .app
         .repository
         .create_or_update_notification(
@@ -482,7 +219,7 @@ pub async fn triage_notification(
         .value();
 
     let task_source_id = format!("task-for-{}", notification.id);
-    let task_source_item = app
+    let task_source_item = scene
         .app
         .repository
         .create_or_update_third_party_item(
@@ -501,7 +238,7 @@ pub async fn triage_notification(
         .unwrap()
         .value();
 
-    let task = app
+    let task = scene
         .app
         .repository
         .create_or_update_task(
@@ -533,7 +270,7 @@ pub async fn triage_notification(
         .unwrap()
         .value();
 
-    let triaged_notification = app
+    let triaged_notification = scene
         .app
         .repository
         .update_notification(
@@ -561,12 +298,13 @@ pub async fn triage_notification(
 }
 
 pub async fn assert_config_updated(
-    app: &Scene<'_>,
+    scene: &Scene<'_>,
     integration_connection_id: IntegrationConnectionId,
     config: &IntegrationConnectionConfig,
 ) {
     let response =
-        update_integration_connection_config_response(app, integration_connection_id, config).await;
+        update_integration_connection_config_response(scene, integration_connection_id, config)
+            .await;
 
     assert_eq!(response.status(), StatusCode::OK);
     let updated_config: Box<IntegrationConnectionConfig> =
@@ -574,10 +312,10 @@ pub async fn assert_config_updated(
     assert_eq!(*updated_config, *config);
 }
 
-pub async fn assert_triage_state_preserved(app: &Scene<'_>, expected: &Notification) {
+pub async fn assert_triage_state_preserved(scene: &Scene<'_>, expected: &Notification) {
     let notifications = list_notifications(
-        &app.client,
-        &app.app.api_address,
+        &scene.client,
+        &scene.app.api_address,
         vec![],
         true,
         None,
@@ -601,10 +339,10 @@ pub async fn assert_triage_state_preserved(app: &Scene<'_>, expected: &Notificat
     assert_eq!(notification.task_id, expected.task_id);
 }
 
-pub async fn assert_notification_set_aside(app: &Scene<'_>, expected: &Notification) {
+pub async fn assert_notification_set_aside(scene: &Scene<'_>, expected: &Notification) {
     let notifications_page: Page<NotificationWithTask> = list_notifications_response(
-        &app.client,
-        &app.app.api_address,
+        &scene.client,
+        &scene.app.api_address,
         vec![],
         true,
         None,
@@ -628,11 +366,11 @@ pub async fn assert_notification_set_aside(app: &Scene<'_>, expected: &Notificat
         expected.kind
     );
 
-    let response = app
+    let response = scene
         .client
         .get(format!(
             "{}notifications/{}",
-            app.app.api_address, expected.id
+            scene.app.api_address, expected.id
         ))
         .send()
         .await
@@ -652,48 +390,56 @@ pub async fn assert_notification_set_aside(app: &Scene<'_>, expected: &Notificat
     assert_eq!(notification.snoozed_until, expected.snoozed_until);
 }
 
-pub async fn complete_notifications_sync(app: &Scene<'_>, provider_kind: IntegrationProviderKind) {
-    let service = app.app.integration_connection_service.read().await;
-    let mut transaction = app.app.repository.begin().await.unwrap();
+pub enum Sync {
+    Notifications,
+    Tasks,
+}
 
-    service
-        .complete_notifications_sync_status(&mut transaction, provider_kind, app.user.id)
-        .await
-        .unwrap();
+pub async fn complete_sync(scene: &Scene<'_>, sync: Sync, provider_kind: IntegrationProviderKind) {
+    let service = scene.app.integration_connection_service.read().await;
+    let mut transaction = scene.app.repository.begin().await.unwrap();
+
+    match sync {
+        Sync::Notifications => {
+            service
+                .complete_notifications_sync_status(&mut transaction, provider_kind, scene.user.id)
+                .await
+        }
+        Sync::Tasks => {
+            service
+                .complete_tasks_sync_status(&mut transaction, provider_kind, scene.user.id)
+                .await
+        }
+    }
+    .unwrap();
 
     transaction.commit().await.unwrap();
 }
 
-pub async fn complete_tasks_sync(app: &Scene<'_>, provider_kind: IntegrationProviderKind) {
-    let service = app.app.integration_connection_service.read().await;
-    let mut transaction = app.app.repository.begin().await.unwrap();
-
-    service
-        .complete_tasks_sync_status(&mut transaction, provider_kind, app.user.id)
-        .await
-        .unwrap();
-
-    transaction.commit().await.unwrap();
-}
-
-pub async fn complete_restoring_sync(app: &Scene<'_>, provider_kind: IntegrationProviderKind) {
+pub async fn complete_restoring_sync(scene: &Scene<'_>, provider_kind: IntegrationProviderKind) {
     match provider_kind {
         IntegrationProviderKind::Todoist | IntegrationProviderKind::TickTick => {
-            complete_tasks_sync(app, provider_kind).await
+            complete_sync(scene, Sync::Tasks, provider_kind).await
         }
         IntegrationProviderKind::GoogleCalendar => {
-            complete_notifications_sync(app, IntegrationProviderKind::GoogleMail).await
+            complete_sync(
+                scene,
+                Sync::Notifications,
+                IntegrationProviderKind::GoogleMail,
+            )
+            .await
         }
-        _ => complete_notifications_sync(app, provider_kind).await,
+        _ => complete_sync(scene, Sync::Notifications, provider_kind).await,
     }
 }
 
 pub async fn reconnect_connection(
-    app: &Scene<'_>,
+    scene: &Scene<'_>,
     integration_connection_id: IntegrationConnectionId,
 ) {
-    let mut transaction = app.app.repository.begin().await.unwrap();
-    app.app
+    let mut transaction = scene.app.repository.begin().await.unwrap();
+    scene
+        .app
         .repository
         .update_integration_connection_status(
             &mut transaction,
@@ -701,7 +447,7 @@ pub async fn reconnect_connection(
             IntegrationConnectionStatus::Validated,
             None,
             None,
-            app.user.id,
+            scene.user.id,
         )
         .await
         .unwrap();
@@ -709,30 +455,297 @@ pub async fn reconnect_connection(
 }
 
 pub async fn fetch_set_aside_at(
-    app: &Scene<'_>,
+    scene: &Scene<'_>,
     notification: &Notification,
 ) -> Option<DateTime<Utc>> {
     sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
         "SELECT set_aside_at FROM notification WHERE id = $1",
     )
     .bind(notification.id.0)
-    .fetch_one(&*app.app.repository.pool)
+    .fetch_one(&*scene.app.repository.pool)
     .await
     .expect("Failed to fetch the notification set aside timestamp")
 }
 
 pub async fn update_integration_connection_config_response(
-    app: &Scene<'_>,
+    scene: &Scene<'_>,
     integration_connection_id: IntegrationConnectionId,
     config: &IntegrationConnectionConfig,
 ) -> ReqwestResponse {
-    app.client
+    scene
+        .client
         .put(format!(
             "{}integration-connections/{}/config",
-            app.app.api_address, integration_connection_id
+            scene.app.api_address, integration_connection_id
         ))
         .json(config)
         .send()
         .await
         .expect("Failed to execute request")
+}
+
+async fn github_case(scene: &Scene<'_>, fixtures: &ProviderFixtures) -> ProviderCase {
+    let connection = create_provider_connection(
+        scene,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        github_oauth_credential(),
+        &fixtures.settings,
+    )
+    .await;
+    let notification = create_notification_from_github_notification(
+        scene.app,
+        &fixtures.github_notification,
+        scene.user.id,
+        connection.id,
+    )
+    .await;
+
+    ProviderCase {
+        kind: IntegrationProviderKind::Github,
+        connection,
+        notification,
+        harmless_config: IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        scope_narrowing_config: None,
+        notifications_off_config: Some(IntegrationConnectionConfig::Github(
+            GithubConfig::disabled(),
+        )),
+    }
+}
+
+async fn linear_case(scene: &Scene<'_>, fixtures: &ProviderFixtures) -> ProviderCase {
+    let connection = create_provider_connection(
+        scene,
+        IntegrationConnectionConfig::Linear(LinearConfig::default()),
+        linear_oauth_credential(),
+        &fixtures.settings,
+    )
+    .await;
+    let notification = create_notification_from_linear_notification(
+        scene.app,
+        &fixtures.linear_notification,
+        scene.user.id,
+        connection.id,
+    )
+    .await;
+
+    ProviderCase {
+        kind: IntegrationProviderKind::Linear,
+        connection,
+        notification,
+        harmless_config: IntegrationConnectionConfig::Linear(LinearConfig {
+            sync_task_config: LinearSyncTaskConfig {
+                default_due_at: Some(PresetDueDate::Today),
+                ..LinearSyncTaskConfig::default()
+            },
+            ..LinearConfig::default()
+        }),
+        scope_narrowing_config: None,
+        notifications_off_config: Some(IntegrationConnectionConfig::Linear(LinearConfig {
+            sync_notifications_enabled: false,
+            ..LinearConfig::default()
+        })),
+    }
+}
+
+async fn google_mail_case(scene: &Scene<'_>, fixtures: &ProviderFixtures) -> ProviderCase {
+    let connection = create_provider_connection(
+        scene,
+        IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
+        google_mail_oauth_credential(),
+        &fixtures.settings,
+    )
+    .await;
+    let notification = create_notification_from_google_mail_thread(
+        scene.app,
+        &fixtures.google_mail_thread,
+        scene.user.id,
+        connection.id,
+    )
+    .await;
+
+    ProviderCase {
+        kind: IntegrationProviderKind::GoogleMail,
+        connection,
+        notification,
+        harmless_config: IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
+        scope_narrowing_config: Some(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+            sync_notifications_enabled: true,
+            synced_label: GoogleMailLabel {
+                id: "Label_2".to_string(),
+                name: "Label 2".to_string(),
+            },
+        })),
+        notifications_off_config: Some(IntegrationConnectionConfig::GoogleMail(
+            GoogleMailConfig::disabled(),
+        )),
+    }
+}
+
+async fn google_drive_case(scene: &Scene<'_>, fixtures: &ProviderFixtures) -> ProviderCase {
+    let connection = create_provider_connection(
+        scene,
+        IntegrationConnectionConfig::GoogleDrive(GoogleDriveConfig::enabled()),
+        google_drive_oauth_credential(),
+        &fixtures.settings,
+    )
+    .await;
+    let notification = create_notification_from_google_drive_comment(
+        scene.app,
+        &fixtures.google_drive_comment,
+        scene.user.id,
+        connection.id,
+    )
+    .await;
+
+    ProviderCase {
+        kind: IntegrationProviderKind::GoogleDrive,
+        connection,
+        notification,
+        harmless_config: IntegrationConnectionConfig::GoogleDrive(GoogleDriveConfig::enabled()),
+        scope_narrowing_config: None,
+        notifications_off_config: Some(IntegrationConnectionConfig::GoogleDrive(
+            GoogleDriveConfig::disabled(),
+        )),
+    }
+}
+
+async fn google_calendar_case(scene: &Scene<'_>, fixtures: &ProviderFixtures) -> ProviderCase {
+    let google_mail_connection = create_provider_connection(
+        scene,
+        IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
+        google_mail_oauth_credential(),
+        &fixtures.settings,
+    )
+    .await;
+    let connection = create_provider_connection(
+        scene,
+        IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
+        google_calendar_oauth_credential(),
+        &fixtures.settings,
+    )
+    .await;
+    let notification = create_notification_from_google_calendar_event(
+        scene.app,
+        &fixtures.google_mail_thread,
+        &fixtures.google_calendar_event,
+        scene.user.id,
+        google_mail_connection.id,
+        connection.id,
+    )
+    .await;
+
+    ProviderCase {
+        kind: IntegrationProviderKind::GoogleCalendar,
+        connection,
+        notification,
+        harmless_config: IntegrationConnectionConfig::GoogleCalendar(
+            GoogleCalendarConfig::enabled(),
+        ),
+        scope_narrowing_config: Some(IntegrationConnectionConfig::GoogleCalendar(
+            GoogleCalendarConfig::disabled(),
+        )),
+        notifications_off_config: None,
+    }
+}
+
+async fn slack_case(scene: &Scene<'_>, fixtures: &ProviderFixtures) -> ProviderCase {
+    let connection = create_provider_connection(
+        scene,
+        IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+        slack_oauth_credential(),
+        &fixtures.settings,
+    )
+    .await;
+    let notification = create_notification_from_slack_thread(
+        scene.app,
+        &fixtures.slack_thread,
+        scene.user.id,
+        connection.id,
+    )
+    .await;
+
+    let mut harmless_config = SlackConfig::enabled_as_notifications();
+    harmless_config.reaction_config.completion_reaction_name =
+        Some(SlackReactionName("white_check_mark".to_string()));
+    let mut scope_narrowing_config = SlackConfig::enabled_as_notifications();
+    scope_narrowing_config.reaction_config.reaction_name =
+        SlackReactionName("bookmark".to_string());
+
+    ProviderCase {
+        kind: IntegrationProviderKind::Slack,
+        connection,
+        notification,
+        harmless_config: IntegrationConnectionConfig::Slack(harmless_config),
+        scope_narrowing_config: Some(IntegrationConnectionConfig::Slack(scope_narrowing_config)),
+        notifications_off_config: Some(IntegrationConnectionConfig::Slack(SlackConfig::disabled())),
+    }
+}
+
+async fn todoist_case(scene: &Scene<'_>, fixtures: &ProviderFixtures) -> ProviderCase {
+    let connection = create_provider_connection(
+        scene,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        todoist_oauth_credential(),
+        &fixtures.settings,
+    )
+    .await;
+    let notification = create_notification_from_todoist_item(
+        scene.app,
+        &fixtures.todoist_item,
+        scene.user.id,
+        connection.id,
+    )
+    .await;
+
+    ProviderCase {
+        kind: IntegrationProviderKind::Todoist,
+        connection,
+        notification,
+        harmless_config: IntegrationConnectionConfig::Todoist(TodoistConfig {
+            default_priority: Some(TaskPriority::P2),
+            ..TodoistConfig::enabled()
+        }),
+        scope_narrowing_config: Some(IntegrationConnectionConfig::Todoist(TodoistConfig {
+            create_notification_from_inbox_task: false,
+            ..TodoistConfig::enabled()
+        })),
+        notifications_off_config: Some(IntegrationConnectionConfig::Todoist(
+            TodoistConfig::disabled(),
+        )),
+    }
+}
+
+async fn ticktick_case(scene: &Scene<'_>, fixtures: &ProviderFixtures) -> ProviderCase {
+    let connection = create_ticktick_integration_connection(
+        scene.app,
+        scene.user.id,
+        &fixtures.settings,
+        IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+        None,
+    )
+    .await;
+    let notification = create_notification_from_ticktick_item(
+        scene.app,
+        &fixtures.ticktick_item,
+        scene.user.id,
+        connection.id,
+    )
+    .await;
+
+    ProviderCase {
+        kind: IntegrationProviderKind::TickTick,
+        connection,
+        notification,
+        harmless_config: IntegrationConnectionConfig::TickTick(TickTickConfig {
+            default_priority: Some(TaskPriority::P2),
+            ..TickTickConfig::enabled()
+        }),
+        scope_narrowing_config: Some(IntegrationConnectionConfig::TickTick(TickTickConfig {
+            create_notification_from_inbox_task: false,
+            ..TickTickConfig::enabled()
+        })),
+        notifications_off_config: Some(IntegrationConnectionConfig::TickTick(
+            TickTickConfig::disabled(),
+        )),
+    }
 }

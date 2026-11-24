@@ -25,17 +25,16 @@ use crate::{
 
 const THREAD_PATH: &str = "/notifications/threads/1";
 
-#[given(expr = "GitHub answers {int} when asked to mark the thread as read and to delete it")]
-async fn github_answers_to_mark_as_read_and_delete(world: &mut ApiWorld, status: u16) {
+async fn github_answers(world: &mut ApiWorld, mark_as_read_status: u16, delete_status: u16) {
     let app = world.app.get().await;
     let mark_as_read = Mock::given(method("PATCH"))
         .and(path(THREAD_PATH))
-        .respond_with(ResponseTemplate::new(status))
+        .respond_with(ResponseTemplate::new(mark_as_read_status))
         .mount_as_scoped(&app.github_mock_server)
         .await;
     let delete = Mock::given(method("DELETE"))
         .and(path(THREAD_PATH))
-        .respond_with(ResponseTemplate::new(status))
+        .respond_with(ResponseTemplate::new(delete_status))
         .mount_as_scoped(&app.github_mock_server)
         .await;
     let calls = &mut world.notifications.github_calls;
@@ -43,22 +42,14 @@ async fn github_answers_to_mark_as_read_and_delete(world: &mut ApiWorld, status:
     calls.insert(GithubCall::Delete, delete);
 }
 
+#[given(expr = "GitHub answers {int} when asked to mark the thread as read and to delete it")]
+async fn github_answers_to_mark_as_read_and_delete(world: &mut ApiWorld, status: u16) {
+    github_answers(world, status, status).await;
+}
+
 #[given("GitHub accepts to mark the thread as read and to delete it")]
-async fn github_accepts_to_mark_as_read_delete_and_unsubscribe(world: &mut ApiWorld) {
-    let app = world.app.get().await;
-    let mark_as_read = Mock::given(method("PATCH"))
-        .and(path(THREAD_PATH))
-        .respond_with(ResponseTemplate::new(205))
-        .mount_as_scoped(&app.github_mock_server)
-        .await;
-    let delete = Mock::given(method("DELETE"))
-        .and(path(THREAD_PATH))
-        .respond_with(ResponseTemplate::new(200))
-        .mount_as_scoped(&app.github_mock_server)
-        .await;
-    let calls = &mut world.notifications.github_calls;
-    calls.insert(GithubCall::MarkAsRead, mark_as_read);
-    calls.insert(GithubCall::Delete, delete);
+async fn github_accepts_to_mark_as_read_and_delete(world: &mut ApiWorld) {
+    github_answers(world, 205, 200).await;
 }
 
 #[given("GitHub would accept to unsubscribe from the thread")]
