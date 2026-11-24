@@ -17,8 +17,8 @@ use crate::{
     helpers::{TestedApp, build_tested_app, local_auth_settings},
     state::{
         Account, Audit, Authorizations, Browser, Connections, EmailVerification, Encryption,
-        Integrations, Jobs, LinkedMethod, McpSessions, Notifications, Passkeys, PasswordReset,
-        Probe, Sessions, SetAside, SlackEmojis, Tasks, ThirdPartyItems,
+        GithubSync, Integrations, Jobs, LinkedMethod, McpSessions, Notifications, Passkeys,
+        PasswordReset, Probe, Sessions, SetAside, SlackEmojis, Tasks, ThirdPartyItems,
     },
     steps::set_aside_support::Scene,
 };
@@ -46,6 +46,7 @@ pub struct ApiWorld {
     pub audit: Audit,
     pub notifications: Notifications,
     pub set_aside: SetAside,
+    pub github_sync: GithubSync,
     pub mcp_sessions: McpSessions,
     pub slack_emojis: SlackEmojis,
     pub third_party: ThirdPartyItems,

@@ -74,7 +74,7 @@ fn parse_order(order: &str) -> NotificationListOrder {
     }
 }
 
-fn parse_time(value: &str) -> DateTime<Utc> {
+pub fn parse_time(value: &str) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339(value)
         .unwrap()
         .with_timezone(&Utc)
@@ -545,6 +545,7 @@ fn assert_error_body(world: &ApiWorld, message: &str) {
     );
 }
 
+#[given(expr = "I snooze {string} until {string}")]
 #[when(expr = "I snooze {string} until {string}")]
 async fn i_snooze_a_notification_until(world: &mut ApiWorld, name: String, time: String) {
     let id = world.notifications.named(&name).id;

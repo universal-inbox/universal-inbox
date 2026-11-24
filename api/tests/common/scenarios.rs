@@ -223,7 +223,11 @@ pub fn main<W: ScenarioWorld>(include: fn(&Path) -> bool) {
     args.test_threads = Some(1);
     let trials = scenarios
         .into_iter()
-        .map(|scenario| Trial::test(scenario.name.clone(), move || run::<W>(&scenario)))
+        .map(|scenario| {
+            Trial::test(scenario.name.clone(), move || {
+                run_on_large_stack::<W>(scenario)
+            })
+        })
         .collect();
     libtest_mimic::run(&args, trials).exit();
 }
@@ -266,4 +270,19 @@ fn run<W: ScenarioWorld>(scenario: &Scenario) -> Result<(), Failed> {
         .into());
     }
     Ok(())
+}
+
+const DEFAULT_STACK_SIZE: usize = 100 * 1024 * 1024;
+
+fn run_on_large_stack<W: ScenarioWorld>(scenario: Scenario) -> Result<(), Failed> {
+    let stack_size = std::env::var("RUST_MIN_STACK")
+        .ok()
+        .and_then(|size| size.parse().ok())
+        .unwrap_or(DEFAULT_STACK_SIZE);
+    std::thread::Builder::new()
+        .stack_size(stack_size)
+        .spawn(move || run::<W>(&scenario))
+        .map_err(|err| format!("Cannot start the scenario thread: {err}"))?
+        .join()
+        .unwrap_or_else(|_| Err("The scenario panicked".into()))
 }

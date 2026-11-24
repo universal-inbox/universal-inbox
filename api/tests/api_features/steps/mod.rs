@@ -8,6 +8,7 @@ mod cron;
 mod data_encryption;
 mod export;
 mod github_actions;
+mod github_sync;
 mod grant_revocation;
 mod http;
 mod id_tokens;
