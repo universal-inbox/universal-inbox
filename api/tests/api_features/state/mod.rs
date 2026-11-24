@@ -22,7 +22,7 @@ pub use connections::Connections;
 pub use encryption::{Encryption, RawTokenResponse, RecordedProgress, StoredItem};
 pub use integrations::Integrations;
 pub use jobs::Jobs;
-pub use notifications::Notifications;
+pub use notifications::{GithubCall, Notifications};
 pub use passkey::{Device, Passkeys, PendingSignIn, Registration, VisitorPasskey};
 pub use set_aside::SetAside;
 pub use tasks::Tasks;

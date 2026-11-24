@@ -114,7 +114,7 @@ async fn create_github_notification(world: &mut ApiWorld, name: &str) -> Notific
     notification
 }
 
-async fn update(world: &mut ApiWorld, name: &str, patch: NotificationPatch) -> Notification {
+pub async fn update(world: &mut ApiWorld, name: &str, patch: NotificationPatch) -> Notification {
     let id = world.notifications.named(name).id;
     let user_id = world.user().id;
     let app = world.app.get().await;

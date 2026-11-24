@@ -7,7 +7,6 @@ mod test_api_notification;
 mod test_billing;
 mod test_cache;
 mod test_cron;
-mod test_github_notifications;
 mod test_google_calendar_notifications;
 mod test_google_drive_notifications;
 mod test_google_mail_notifications;

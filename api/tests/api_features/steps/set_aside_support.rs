@@ -89,7 +89,6 @@ use crate::{
     },
 };
 
-/// The app, and the session of the user a scenario is signed in as.
 pub struct Scene<'a> {
     pub app: &'a TestedApp,
     pub client: Client,
@@ -132,26 +131,11 @@ pub struct ProviderFixtures {
 }
 
 pub struct ProviderCase {
-    /// The connection whose configuration is saved.
     pub connection: Box<IntegrationConnection>,
-    /// A notification that must survive that save.
     pub notification: Box<Notification>,
-    /// A configuration change that does not touch what belongs in the inbox.
-    /// Some providers (Github, Google Drive) expose nothing but a notification
-    /// mute toggle, so their harmless payload is the stored one.
     pub harmless_config: IntegrationConnectionConfig,
-    /// A configuration change that narrows what belongs in the inbox, where the
-    /// provider has one. Muting is deliberately not exercised here: it is not a
-    /// scope change but a statement about what the user wants to see, and it has
-    /// its own coverage.
     pub scope_narrowing_config: Option<IntegrationConnectionConfig>,
-    /// The stored configuration, with whatever the provider offers switched on.
     pub enabled_config: IntegrationConnectionConfig,
-    /// The same configuration with the integration switched off, where the
-    /// provider has such a control. Only the five providers whose configuration
-    /// carries a notification sync flag actually mute their notifications; for
-    /// Todoist and TickTick this is the off switch of their *task* sync, which
-    /// must leave the already collected notifications alone.
     pub notifications_off_config: Option<IntegrationConnectionConfig>,
 }
 
@@ -207,8 +191,6 @@ pub async fn seed_provider(
             ProviderCase {
                 connection,
                 notification,
-                // A default for tasks created from Linear issues: nothing to do
-                // with which notifications are collected
                 harmless_config: IntegrationConnectionConfig::Linear(LinearConfig {
                     sync_task_config: LinearSyncTaskConfig {
                         default_due_at: Some(PresetDueDate::Today),
@@ -246,7 +228,6 @@ pub async fn seed_provider(
                 harmless_config: IntegrationConnectionConfig::GoogleMail(
                     GoogleMailConfig::enabled(),
                 ),
-                // Synchronizing another label narrows what belongs in the inbox
                 scope_narrowing_config: Some(IntegrationConnectionConfig::GoogleMail(
                     GoogleMailConfig {
                         sync_notifications_enabled: true,
@@ -294,8 +275,6 @@ pub async fn seed_provider(
             }
         }
         IntegrationProviderKind::GoogleCalendar => {
-            // Google Calendar notifications are derived during the Google Mail
-            // sync, so the notification hangs off both connections.
             let google_mail_connection = create_provider_connection(
                 app,
                 IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
@@ -332,9 +311,6 @@ pub async fn seed_provider(
                 enabled_config: IntegrationConnectionConfig::GoogleCalendar(
                     GoogleCalendarConfig::enabled(),
                 ),
-                // Google Calendar notifications are derived during the Google
-                // Mail sync: the connection carries no notification mute toggle
-                // of its own.
                 notifications_off_config: None,
             }
         }
@@ -355,11 +331,9 @@ pub async fn seed_provider(
             .await;
 
             let mut harmless_config = SlackConfig::enabled_as_notifications();
-            // The reaction added when a task is completed: it collects nothing
             harmless_config.reaction_config.completion_reaction_name =
                 Some(SlackReactionName("white_check_mark".to_string()));
             let mut scope_narrowing_config = SlackConfig::enabled_as_notifications();
-            // Watching another reaction narrows what belongs in the inbox
             scope_narrowing_config.reaction_config.reaction_name =
                 SlackReactionName("bookmark".to_string());
 
@@ -373,8 +347,6 @@ pub async fn seed_provider(
                 enabled_config: IntegrationConnectionConfig::Slack(
                     SlackConfig::enabled_as_notifications(),
                 ),
-                // Slack's mute lives in `message_config.sync_enabled` rather than
-                // in a `sync_notifications_enabled` field
                 notifications_off_config: Some(IntegrationConnectionConfig::Slack(
                     SlackConfig::disabled(),
                 )),
@@ -399,7 +371,6 @@ pub async fn seed_provider(
             ProviderCase {
                 connection,
                 notification,
-                // A default for newly created tasks: no bearing on notifications
                 harmless_config: IntegrationConnectionConfig::Todoist(TodoistConfig {
                     default_priority: Some(TaskPriority::P2),
                     ..TodoistConfig::enabled()
@@ -485,9 +456,6 @@ pub fn snoozed_until() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2027, 6, 7, 8, 9, 10).unwrap()
 }
 
-/// Invest triage work in the notification: read it, snooze it, and link it to a
-/// task. Returns the notification as it stands afterwards, which is exactly
-/// what a configuration save must give back.
 pub async fn triage_notification(
     app: &Scene<'_>,
     notification: &Notification,
@@ -606,8 +574,6 @@ pub async fn assert_config_updated(
     assert_eq!(*updated_config, *config);
 }
 
-/// The notification is still in the inbox, is still the same row, and still
-/// carries the triage state it had before the configuration was saved.
 pub async fn assert_triage_state_preserved(app: &Scene<'_>, expected: &Notification) {
     let notifications = list_notifications(
         &app.client,
@@ -635,10 +601,6 @@ pub async fn assert_triage_state_preserved(app: &Scene<'_>, expected: &Notificat
     assert_eq!(notification.task_id, expected.task_id);
 }
 
-/// The notification is out of the inbox and out of its count, but it is not
-/// gone: it is still the same row, still carries its triage state, and reading
-/// it by id — a bookmarked link, or the notification a task points at — still
-/// resolves rather than answering `404`.
 pub async fn assert_notification_set_aside(app: &Scene<'_>, expected: &Notification) {
     let notifications_page: Page<NotificationWithTask> = list_notifications_response(
         &app.client,
@@ -690,8 +652,6 @@ pub async fn assert_notification_set_aside(app: &Scene<'_>, expected: &Notificat
     assert_eq!(notification.snoozed_until, expected.snoozed_until);
 }
 
-/// The moment a successful notifications sync completed for that provider, which
-/// is what brings back whatever was set aside.
 pub async fn complete_notifications_sync(app: &Scene<'_>, provider_kind: IntegrationProviderKind) {
     let service = app.app.integration_connection_service.read().await;
     let mut transaction = app.app.repository.begin().await.unwrap();
@@ -704,7 +664,6 @@ pub async fn complete_notifications_sync(app: &Scene<'_>, provider_kind: Integra
     transaction.commit().await.unwrap();
 }
 
-/// The moment a successful tasks sync completed for that provider.
 pub async fn complete_tasks_sync(app: &Scene<'_>, provider_kind: IntegrationProviderKind) {
     let service = app.app.integration_connection_service.read().await;
     let mut transaction = app.app.repository.begin().await.unwrap();
@@ -717,11 +676,6 @@ pub async fn complete_tasks_sync(app: &Scene<'_>, provider_kind: IntegrationProv
     transaction.commit().await.unwrap();
 }
 
-/// The sync completion that reconciles a provider's notifications, and so the
-/// one that brings back whatever it set aside. Only five notification kinds have
-/// a notifications sync of their own: Todoist and TickTick notifications are a
-/// byproduct of their *task* sync, and Google Calendar notifications are derived
-/// during the Google Mail sync.
 pub async fn complete_restoring_sync(app: &Scene<'_>, provider_kind: IntegrationProviderKind) {
     match provider_kind {
         IntegrationProviderKind::Todoist | IntegrationProviderKind::TickTick => {
@@ -734,8 +688,6 @@ pub async fn complete_restoring_sync(app: &Scene<'_>, provider_kind: Integration
     }
 }
 
-/// What a successful OAuth round trip leaves behind: the connection is
-/// `Validated` again, and no sync has run yet.
 pub async fn reconnect_connection(
     app: &Scene<'_>,
     integration_connection_id: IntegrationConnectionId,
