@@ -11,11 +11,17 @@ use universal_inbox::{
         integrations::google_mail::{GoogleMailConfig, GoogleMailContext},
         provider::{IntegrationConnectionContext, IntegrationProvider},
     },
-    notification::{NotificationSourceKind, NotificationStatus, service::NotificationPatch},
+    notification::{
+        NotificationSourceKind, NotificationStatus, NotificationWithTask,
+        service::NotificationPatch,
+    },
     pii::Pii,
-    third_party::integrations::google_mail::{
-        GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_SENT_LABEL, GOOGLE_MAIL_UNREAD_LABEL,
-        GoogleMailMessageHeader, GoogleMailThread,
+    third_party::{
+        integrations::google_mail::{
+            GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_SENT_LABEL, GOOGLE_MAIL_UNREAD_LABEL,
+            GoogleMailMessageHeader, GoogleMailThread,
+        },
+        item::ThirdPartyItemData,
     },
 };
 use universal_inbox_api::integrations::google_mail::{
@@ -42,10 +48,12 @@ use crate::{
             },
             sync_notifications,
         },
+        rest::get_resource,
     },
+    state::Pages,
     steps::{
         integration_connections::stored_connection, kept_triage::read_notification,
-        notifications::update,
+        notifications::update, status::UserStatus,
     },
     world::ApiWorld,
 };
@@ -68,7 +76,7 @@ fn thread_456(world: &mut ApiWorld) -> &mut GoogleMailThread {
 pub async fn mount_google_mail(world: &mut ApiWorld) {
     let sync = &world.google_mail_sync;
     let threads = sync.threads.clone();
-    let paged = sync.paged;
+    let paged = sync.pages == Pages::Two;
     let attachment = sync.attachment.as_ref().map(|attachment| {
         (
             attachment.message_id,
@@ -166,28 +174,34 @@ pub async fn sync_google_mail(world: &mut ApiWorld) {
     world.google_mail_sync.synced = synced;
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct Addressing(pub bool);
-
-impl Parameter for Addressing {
-    const REGEX: &'static str = "addressed to me|addressed to somebody else";
-    const NAME: &'static str = "addressing";
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddressedTo {
+    Me,
+    Somebody,
 }
 
-impl FromStr for Addressing {
+impl Parameter for AddressedTo {
+    const REGEX: &'static str = "me|somebody else";
+    const NAME: &'static str = "addressee";
+}
+
+impl FromStr for AddressedTo {
     type Err = String;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
         match name {
-            "addressed to me" => Ok(Self(true)),
-            "addressed to somebody else" => Ok(Self(false)),
-            other => Err(format!("Unknown addressing {other:?}")),
+            "me" => Ok(Self::Me),
+            "somebody else" => Ok(Self::Somebody),
+            other => Err(format!("Unknown addressee {other:?}")),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct Reading(pub bool);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reading {
+    Unread,
+    Read,
+}
 
 impl Parameter for Reading {
     const REGEX: &'static str = "unread|read";
@@ -199,8 +213,8 @@ impl FromStr for Reading {
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
         match name {
-            "unread" => Ok(Self(true)),
-            "read" => Ok(Self(false)),
+            "unread" => Ok(Self::Unread),
+            "read" => Ok(Self::Read),
             other => Err(format!("Unknown reading {other:?}")),
         }
     }
@@ -214,8 +228,7 @@ pub enum Sender {
 }
 
 impl Parameter for Sender {
-    const REGEX: &'static str =
-        "sent by me|sent by a stranger|sent by a stranger who put my address in the display name";
+    const REGEX: &'static str = "me|a stranger|a stranger who put my address in the display name";
     const NAME: &'static str = "sender";
 }
 
@@ -224,23 +237,11 @@ impl FromStr for Sender {
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
         match name {
-            "sent by me" => Ok(Self::Me),
-            "sent by a stranger" => Ok(Self::Stranger),
-            "sent by a stranger who put my address in the display name" => {
-                Ok(Self::StrangerUsingMyAddress)
-            }
+            "me" => Ok(Self::Me),
+            "a stranger" => Ok(Self::Stranger),
+            "a stranger who put my address in the display name" => Ok(Self::StrangerUsingMyAddress),
             other => Err(format!("Unknown sender {other:?}")),
         }
-    }
-}
-
-fn status_named(name: &str) -> NotificationStatus {
-    match name {
-        "unread" => NotificationStatus::Unread,
-        "read" => NotificationStatus::Read,
-        "deleted" => NotificationStatus::Deleted,
-        "unsubscribed" => NotificationStatus::Unsubscribed,
-        other => panic!("Unknown status {other:?}"),
     }
 }
 
@@ -331,7 +332,7 @@ fn google_mail_reports_no_thread(world: &mut ApiWorld) {
 
 #[given("Google Mail lists its threads over two pages")]
 fn google_mail_lists_its_threads_over_two_pages(world: &mut ApiWorld) {
-    world.google_mail_sync.paged = true;
+    world.google_mail_sync.pages = Pages::Two;
 }
 
 #[given(expr = "I already have the notification {string} of the Google Mail thread 456")]
@@ -382,8 +383,8 @@ async fn i_unsubscribed_before_the_second_message(world: &mut ApiWorld, name: St
     .await;
 }
 
-#[given(expr = "that second message is {addressing} and {reading}")]
-fn the_second_message_is(world: &mut ApiWorld, addressing: Addressing, reading: Reading) {
+#[given(expr = "that second message is addressed to {addressee} and is {reading}")]
+fn the_second_message_is(world: &mut ApiWorld, addressee: AddressedTo, reading: Reading) {
     let synced_label = GoogleMailConfig::enabled().synced_label.id;
     let address = user_email_address();
     let message = &mut thread_456(world).messages[1];
@@ -392,13 +393,13 @@ fn the_second_message_is(world: &mut ApiWorld, addressing: Addressing, reading: 
         GOOGLE_MAIL_INBOX_LABEL.to_string(),
         synced_label,
     ];
-    if reading.0 {
+    if reading == Reading::Unread {
         labels.push(GOOGLE_MAIL_UNREAD_LABEL.to_string());
     }
     message.label_ids = Some(labels);
     message.payload.headers = vec![GoogleMailMessageHeader {
         name: "To".to_string(),
-        value: if addressing.0 {
+        value: if addressee == AddressedTo::Me {
             format!(
                 "other@example.com, You <{}>, test@example.com",
                 address.expose()
@@ -409,7 +410,7 @@ fn the_second_message_is(world: &mut ApiWorld, addressing: Addressing, reading: 
     }];
 }
 
-#[given(expr = "the last message of that thread is unread and {sender}")]
+#[given(expr = "the last message of that thread is unread and was sent by {sender}")]
 fn the_last_message_is_unread_and(world: &mut ApiWorld, sender: Sender) {
     let synced_label = GoogleMailConfig::enabled().synced_label.id;
     let address = user_email_address();
@@ -485,17 +486,17 @@ async fn my_connection_learned_the_address_and_labels(world: &mut ApiWorld) {
     );
 }
 
-#[then(expr = "{string} ends up {word}")]
-async fn a_notification_ends_up(world: &mut ApiWorld, name: String, status: String) {
+#[then(expr = "{string} ends up {status}")]
+async fn a_notification_ends_up(world: &mut ApiWorld, name: String, status: UserStatus) {
     let original = world.notifications.named(&name).clone();
     let notification = read_notification(world, &name).await;
     assert_eq!(notification.id, original.id);
     assert_eq!(notification.kind, NotificationSourceKind::GoogleMail);
-    assert_eq!(notification.status, status_named(&status));
+    assert_eq!(notification.status, status.0);
 }
 
-#[then(expr = "I get one notification of the Google Mail thread 456, that ends up {word}")]
-async fn i_get_one_notification_that_ends_up(world: &mut ApiWorld, status: String) {
+#[then(expr = "I get one notification of the Google Mail thread 456, that ends up {status}")]
+async fn i_get_one_notification_that_ends_up(world: &mut ApiWorld, status: UserStatus) {
     assert_eq!(world.google_mail_sync.synced.len(), 1);
     let id = world.google_mail_sync.synced[0].id;
     let connection_id = world
@@ -506,11 +507,10 @@ async fn i_get_one_notification_that_ends_up(world: &mut ApiWorld, status: Strin
         .id;
     let client = world.client();
     let app = world.app.get().await;
-    let notification: Box<universal_inbox::notification::NotificationWithTask> =
-        crate::helpers::rest::get_resource(&client, &app.api_address, "notifications", id.into())
-            .await;
+    let notification: Box<NotificationWithTask> =
+        get_resource(&client, &app.api_address, "notifications", id.into()).await;
     assert_eq!(notification.kind, NotificationSourceKind::GoogleMail);
-    assert_eq!(notification.status, status_named(&status));
+    assert_eq!(notification.status, status.0);
     assert_eq!(
         notification.source_item.integration_connection_id,
         connection_id
@@ -542,54 +542,37 @@ async fn the_second_message_keeps_the_labels(world: &mut ApiWorld, name: String,
 
 async fn stored_thread(world: &mut ApiWorld, name: &str) -> GoogleMailThread {
     let notification = read_notification(world, name).await;
-    let universal_inbox::third_party::item::ThirdPartyItemData::GoogleMailThread(thread) =
-        notification.source_item.data
-    else {
+    let ThirdPartyItemData::GoogleMailThread(thread) = notification.source_item.data else {
         panic!("Unexpected source item data");
     };
     *thread
 }
 
-async fn archive_requests(world: &mut ApiWorld) -> usize {
+async fn requests_to(world: &mut ApiWorld, is_wanted: impl Fn(&str) -> bool) -> usize {
     let app = world.app.get().await;
     app.google_mail_mock_server
         .received_requests()
         .await
         .unwrap()
         .iter()
-        .filter(|request| request.url.path().ends_with("/modify"))
+        .filter(|request| is_wanted(request.url.path()))
         .count()
 }
 
-#[then("Google Mail was asked to archive the thread")]
-async fn google_mail_was_asked_to_archive(world: &mut ApiWorld) {
-    assert_eq!(archive_requests(world).await, 1);
+#[then(expr = "the number of archive requests Google Mail received is {int}")]
+async fn google_mail_received_archive_requests(world: &mut ApiWorld, expected: usize) {
+    assert_eq!(
+        requests_to(world, |path| path.ends_with("/modify")).await,
+        expected
+    );
 }
 
-#[then("Google Mail was not asked to archive the thread")]
-async fn google_mail_was_not_asked_to_archive(world: &mut ApiWorld) {
-    assert_eq!(archive_requests(world).await, 0);
-}
-
-async fn profile_requests(world: &mut ApiWorld) -> usize {
-    let app = world.app.get().await;
-    app.google_mail_mock_server
-        .received_requests()
-        .await
-        .unwrap()
-        .iter()
-        .filter(|request| request.url.path() == "/users/me/profile")
-        .count()
-}
-
-#[then("Google Mail was asked for my profile once")]
-async fn google_mail_was_asked_for_my_profile(world: &mut ApiWorld) {
-    assert_eq!(profile_requests(world).await, 1);
-}
-
-#[then("Google Mail was never asked for my profile")]
-async fn google_mail_was_never_asked_for_my_profile(world: &mut ApiWorld) {
-    assert_eq!(profile_requests(world).await, 0);
+#[then(expr = "the number of profile requests Google Mail received is {int}")]
+async fn google_mail_received_profile_requests(world: &mut ApiWorld, expected: usize) {
+    assert_eq!(
+        requests_to(world, |path| path == "/users/me/profile").await,
+        expected
+    );
 }
 
 #[then(expr = "my Google Mail connection has the address {string}")]
@@ -614,4 +597,9 @@ async fn my_connection_has_the_address(world: &mut ApiWorld, address: String) {
         user_email_address,
         Pii::<EmailAddress>::from_str(&address).unwrap()
     );
+}
+
+#[then("my sync returned no notification")]
+fn my_sync_returned_no_notification(world: &mut ApiWorld) {
+    assert!(world.google_mail_sync.synced.is_empty());
 }

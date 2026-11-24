@@ -11,7 +11,7 @@ use universal_inbox::{
 #[derive(Default)]
 pub struct GoogleMailSync {
     pub threads: Vec<GoogleMailThread>,
-    pub paged: bool,
+    pub pages: Pages,
     pub attachment: Option<Attachment>,
     pub calendar: Option<CalendarPages>,
     pub answer: Option<GoogleCalendarEventAttendeeResponseStatus>,
@@ -27,4 +27,11 @@ pub struct Attachment {
 pub struct CalendarPages {
     pub ical_uid: &'static str,
     pub pages: Vec<(Option<&'static str>, Value)>,
+}
+
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+pub enum Pages {
+    #[default]
+    Single,
+    Two,
 }

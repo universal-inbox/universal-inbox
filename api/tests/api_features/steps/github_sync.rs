@@ -1,7 +1,5 @@
-use std::str::FromStr;
-
 use chrono::{DateTime, TimeDelta, Utc};
-use cucumber::{Parameter, given, then, when};
+use cucumber::{given, then, when};
 use pretty_assertions::assert_eq;
 use tokio::time::{Duration, sleep};
 use wiremock::{Mock, ResponseTemplate};
@@ -50,33 +48,13 @@ use crate::{
     steps::{
         kept_triage::read_notification,
         notifications::{parse_time, update},
+        status::UserStatus,
     },
     world::{ApiWorld, Response, Session},
 };
 
 const THREAD_456: &str = "456";
 const UPDATED_AT_BEFORE_THE_RESYNC: &str = "2026-10-21T12:57:31Z";
-
-#[derive(Clone, Copy, Debug)]
-pub struct UserStatus(pub NotificationStatus);
-
-impl Parameter for UserStatus {
-    const REGEX: &'static str = "read|deleted|unsubscribed";
-    const NAME: &'static str = "status";
-}
-
-impl FromStr for UserStatus {
-    type Err = String;
-
-    fn from_str(name: &str) -> Result<Self, Self::Err> {
-        Ok(Self(match name {
-            "read" => NotificationStatus::Read,
-            "deleted" => NotificationStatus::Deleted,
-            "unsubscribed" => NotificationStatus::Unsubscribed,
-            other => return Err(format!("Unknown status {other:?}")),
-        }))
-    }
-}
 
 fn thread_456(world: &mut ApiWorld) -> &mut GithubNotification {
     world

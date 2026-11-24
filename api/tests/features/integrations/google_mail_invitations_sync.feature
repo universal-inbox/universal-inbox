@@ -27,6 +27,8 @@ Feature: Syncing Google Mail invitations
     And I already have the notification "mine" of that event, from an earlier Google Mail thread
     When I sync my Google Mail notifications
     Then I get one Google Calendar notification, unread
+    And it is the event "eventid1", "Weekly meeting"
+    And it repeats every week
     And it is the notification "mine" of the same Google Calendar event, now fed by the new Google Mail thread
 
   @legacy:test_sync_google_mail_threads::test_sync_notifications_should_create_a_new_google_calendar_notification_from_a_google_mail_invitation_reply

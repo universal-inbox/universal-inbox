@@ -23,7 +23,7 @@ pub use caches::{McpSessions, SlackEmojis};
 pub use connections::Connections;
 pub use encryption::{Encryption, RawTokenResponse, RecordedProgress, StoredItem};
 pub use github_sync::{Discussion, GithubSync, KeptTriage, PullRequest};
-pub use google_mail_sync::{Attachment, CalendarPages, GoogleMailSync};
+pub use google_mail_sync::{Attachment, CalendarPages, GoogleMailSync, Pages};
 pub use integrations::Integrations;
 pub use jobs::Jobs;
 pub use notifications::{GithubCall, Notifications};

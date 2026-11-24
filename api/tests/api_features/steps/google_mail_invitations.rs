@@ -44,11 +44,14 @@ use crate::{
         rest::get_resource,
     },
     state::{Attachment, CalendarPages},
+    steps::status::UserStatus,
     world::ApiWorld,
 };
 
 const INVITATION_ICAL_UID: &str = "event_icaluid1";
 const REPLY_ICAL_UID: &str = "event_icaluid2";
+const EARLIER_THREAD_ID: &str = "anything";
+const KNOWN_INVITATION_THREAD_ID: &str = "invitation_thread";
 
 fn invitation_thread() -> GoogleMailThread {
     google_mail_thread_with_invitation(
@@ -254,7 +257,7 @@ async fn have_a_notification_of_the_event(
     expr = "I already have the notification {string} of that event, from an earlier Google Mail thread"
 )]
 async fn i_already_have_the_notification_of_the_event(world: &mut ApiWorld, name: String) {
-    have_a_notification_of_the_event(world, name, "anything", google_calendar_event()).await;
+    have_a_notification_of_the_event(world, name, EARLIER_THREAD_ID, google_calendar_event()).await;
 }
 
 #[given(
@@ -266,7 +269,7 @@ async fn i_have_not_answered_the_invitation(world: &mut ApiWorld, name: String) 
     have_a_notification_of_the_event(
         world,
         name,
-        "invitation_thread",
+        KNOWN_INVITATION_THREAD_ID,
         with_my_answer(&google_calendar_event(), answer),
     )
     .await;
@@ -279,7 +282,7 @@ async fn i_accepted_the_invitation(world: &mut ApiWorld, name: String) {
     have_a_notification_of_the_event(
         world,
         name,
-        "invitation_thread",
+        KNOWN_INVITATION_THREAD_ID,
         with_my_answer(&google_calendar_event(), answer),
     )
     .await;
@@ -323,17 +326,10 @@ async fn i_get_one_calendar_notification_of_the_event(world: &mut ApiWorld, sour
     assert_eq!(notification.source_item.source_id, source_id);
 }
 
-#[then(expr = "I get one Google Calendar notification, {word}")]
-async fn i_get_one_calendar_notification_with_the_status(world: &mut ApiWorld, status: String) {
+#[then(expr = "I get one Google Calendar notification, {status}")]
+async fn i_get_one_calendar_notification_with_the_status(world: &mut ApiWorld, status: UserStatus) {
     let notification = synced_calendar_notification(world).await;
-    assert_eq!(
-        notification.status,
-        match status.as_str() {
-            "unread" => NotificationStatus::Unread,
-            "deleted" => NotificationStatus::Deleted,
-            other => panic!("Unknown status {other:?}"),
-        }
-    );
+    assert_eq!(notification.status, status.0);
 }
 
 #[then(expr = "it is the event {string}, {string}")]

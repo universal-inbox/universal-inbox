@@ -26,55 +26,55 @@ Feature: Syncing Google Mail threads
 
   Rule: New messages of a thread I unsubscribed from are archived, unless one is addressed to me
 
-    Scenario Outline: A new message of an unsubscribed thread, <addressing> and <reading>
+    Scenario Outline: A new message addressed to <addressee>, <reading>
       Given Google Mail reports the thread 456
       And I unsubscribed from the Google Mail thread 456, "mine", before its second message arrived
-      And that second message is <addressing> and <reading>
+      And that second message is addressed to <addressee> and is <reading>
       When I sync my Google Mail notifications
       Then "mine" ends up <status>
       And the stored thread of "mine" has two messages, the first one without any label
       And the second message of "mine" keeps the labels "<labels>"
-      And Google Mail <archival> the thread
+      And the number of archive requests Google Mail received is <archive requests>
 
       @legacy:test_sync_google_mail_threads::test_sync_notifications_of_unsubscribed_notification_with_new_messages::case_1
       Examples:
-        | addressing                 | reading | status       | labels             | archival                          |
-        | addressed to somebody else | unread  | unsubscribed | TEST_LABEL, UNREAD | was asked to archive              |
+        | addressee     | reading | status       | labels             | archive requests |
+        | somebody else | unread  | unsubscribed | TEST_LABEL, UNREAD | 1                |
 
       @legacy:test_sync_google_mail_threads::test_sync_notifications_of_unsubscribed_notification_with_new_messages::case_2
       Examples:
-        | addressing                 | reading | status       | labels             | archival                          |
-        | addressed to somebody else | read    | unsubscribed | TEST_LABEL         | was asked to archive              |
+        | addressee     | reading | status       | labels     | archive requests |
+        | somebody else | read    | unsubscribed | TEST_LABEL | 1                |
 
       @legacy:test_sync_google_mail_threads::test_sync_notifications_of_unsubscribed_notification_with_new_messages::case_3
       Examples:
-        | addressing                 | reading | status       | labels                                       | archival                          |
-        | addressed to me            | unread  | unread       | TEST_LABEL, INBOX, the synced label, UNREAD  | was not asked to archive          |
+        | addressee | reading | status | labels                                      | archive requests |
+        | me        | unread  | unread | TEST_LABEL, INBOX, the synced label, UNREAD | 0                |
 
       @legacy:test_sync_google_mail_threads::test_sync_notifications_of_unsubscribed_notification_with_new_messages::case_4
       Examples:
-        | addressing                 | reading | status       | labels             | archival                          |
-        | addressed to me            | read    | unsubscribed | TEST_LABEL         | was asked to archive              |
+        | addressee | reading | status       | labels     | archive requests |
+        | me        | read    | unsubscribed | TEST_LABEL | 1                |
 
   Rule: A thread whose last message I sent is deleted
 
-    Scenario Outline: A thread whose last message is <sender>
+    Scenario Outline: A thread whose last message was sent by <sender>
       Given Google Mail reports the thread 456
-      And the last message of that thread is unread and <sender>
+      And the last message of that thread is unread and was sent by <sender>
       When I sync my Google Mail notifications
       Then I get one notification of the Google Mail thread 456, that ends up <status>
 
       @legacy:test_sync_google_mail_threads::test_sync_notifications_should_mark_notification_as_deleted_when_user_replied::case_1_sent_label
       Examples:
-        | sender  | status  |
-        | sent by me | deleted |
+        | sender | status  |
+        | me     | deleted |
 
       @legacy:test_sync_google_mail_threads::test_sync_notifications_should_mark_notification_as_deleted_when_user_replied::case_2_no_sent_label
       Examples:
-        | sender            | status |
-        | sent by a stranger | unread |
+        | sender     | status |
+        | a stranger | unread |
 
       @legacy:test_sync_google_mail_threads::test_sync_notifications_should_mark_notification_as_deleted_when_user_replied::case_3_spoofed_display_name_without_sent_label
       Examples:
-        | sender                                                           | status |
-        | sent by a stranger who put my address in the display name        | unread |
+        | sender                                            | status |
+        | a stranger who put my address in the display name | unread |
