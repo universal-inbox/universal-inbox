@@ -10,11 +10,14 @@ Feature: Syncing GitHub notifications of several users
     And another user, "jane@doe.net", signed up with a password and signed in
     And that other user is connected to GitHub
     And that other user has the unread GitHub notification "theirs" of the thread 789
+    And that other user has the unread GitHub notification "theirs too" of the thread 456
     And I have signed up with the email "john@doe.net" and a password
     And I am connected to GitHub
-    And I already have the notifications GitHub reports, and "extra" of the thread 789, which it no longer reports
+    And I already have the notifications GitHub reports
+    And I have the notification "extra" of the thread 789, which GitHub no longer reports
     When I sync my GitHub notifications
     Then my notifications are the threads GitHub reported
     And they carry what GitHub reported, with the details of pull request 123
     And "extra" is deleted
-    And the notification "theirs" of that other user is still unread
+    And the notification "theirs" of that other user is still unread and unchanged
+    And the notification "theirs too" of that other user is still unread and unchanged

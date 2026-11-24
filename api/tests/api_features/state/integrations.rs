@@ -14,4 +14,6 @@ pub struct Integrations {
     pub linear_task: Option<Task>,
     pub other_github_connection: Option<Box<IntegrationConnection>>,
     pub google_connection: Option<Box<IntegrationConnection>>,
+    pub google_mail_connection: Option<Box<IntegrationConnection>>,
+    pub google_calendar_connection: Option<Box<IntegrationConnection>>,
 }

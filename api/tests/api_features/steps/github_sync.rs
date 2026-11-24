@@ -47,7 +47,10 @@ use crate::{
         user::create_user_and_login,
     },
     state::{KeptTriage, PullRequest},
-    steps::notifications::{parse_time, update},
+    steps::{
+        kept_triage::read_notification,
+        notifications::{parse_time, update},
+    },
     world::{ApiWorld, Response, Session},
 };
 
@@ -330,42 +333,6 @@ fn they_carry_what_github_reported(world: &mut ApiWorld) {
         user_id,
         Some(GithubNotificationItem::GithubPullRequest(pull_request)),
     );
-}
-
-async fn read_notification(world: &mut ApiWorld, name: &str) -> NotificationWithTask {
-    let id = world.notifications.named(name).id;
-    let client = world.client();
-    let app = world.app.get().await;
-    let notification: Box<NotificationWithTask> =
-        get_resource(&client, &app.api_address, "notifications", id.into()).await;
-    *notification
-}
-
-#[then(expr = "{string} is read since {string}")]
-async fn a_notification_is_read_since(world: &mut ApiWorld, name: String, since: String) {
-    let original = world.notifications.named(&name).clone();
-    let notification = read_notification(world, &name).await;
-    assert_eq!(notification.id, original.id);
-    assert_eq!(notification.kind, NotificationSourceKind::Github);
-    assert_eq!(
-        notification.source_item.source_id,
-        original.source_item.source_id
-    );
-    assert_eq!(notification.status, NotificationStatus::Read);
-    assert_eq!(notification.last_read_at, Some(parse_time(&since)));
-}
-
-#[then(expr = "{string} is still snoozed until {string}")]
-async fn a_notification_is_still_snoozed(world: &mut ApiWorld, name: String, until: String) {
-    let notification = read_notification(world, &name).await;
-    assert_eq!(notification.snoozed_until, Some(parse_time(&until)));
-}
-
-#[then(expr = "{string} is still linked to my Todoist task")]
-async fn a_notification_is_still_linked(world: &mut ApiWorld, name: String) {
-    let linked = world.notifications.linked_task.clone().unwrap().id;
-    let notification = read_notification(world, &name).await;
-    assert_eq!(notification.task.map(|task| task.id), Some(linked));
 }
 
 #[then("my GitHub connection recorded a completed sync, without failure")]
@@ -665,7 +632,6 @@ async fn github_serves_what_it_reported(world: &mut ApiWorld) {
 }
 
 const OTHER_USERS_PASSWORD: &str = "Very-harD-pasSword-5";
-const THREAD_789: &str = "789";
 
 #[given(expr = "another user, {string}, signed up with a password and signed in")]
 async fn another_user_signed_up_and_signed_in(world: &mut ApiWorld, email: String) {
@@ -675,8 +641,8 @@ async fn another_user_signed_up_and_signed_in(world: &mut ApiWorld, email: Strin
     world.other_session = Some(Session { client, user });
 }
 
-#[given(expr = "that other user has the unread GitHub notification {string} of the thread 789")]
-async fn that_other_user_has_a_notification(world: &mut ApiWorld, name: String) {
+#[given(expr = "that other user has the unread GitHub notification {string} of the thread {int}")]
+async fn that_other_user_has_a_notification(world: &mut ApiWorld, name: String, thread: u32) {
     let other_user_id = world.other_session.as_ref().unwrap().user.id;
     let connection_id = world
         .integrations
@@ -685,19 +651,20 @@ async fn that_other_user_has_a_notification(world: &mut ApiWorld, name: String) 
         .expect("That other user is not connected to GitHub")
         .id;
     let mut reported = thread_456(world).clone();
-    reported.id = THREAD_789.to_string();
+    reported.id = thread.to_string();
     reported.unread = true;
+    let updated_at = parse_time(UPDATED_AT_BEFORE_THE_RESYNC);
     let app = world.app.get().await;
-    let notification =
+    let mut notification =
         create_notification_from_github_notification(app, &reported, other_user_id, connection_id)
             .await;
+    set_notification_updated_at(app, notification.id, updated_at).await;
+    notification.updated_at = updated_at;
     world.notifications.by_name.insert(name, *notification);
 }
 
-#[given(
-    expr = "I already have the notifications GitHub reports, and {string} of the thread 789, which it no longer reports"
-)]
-async fn i_already_have_the_notifications(world: &mut ApiWorld, extra: String) {
+#[given("I already have the notifications GitHub reports")]
+async fn i_already_have_the_notifications(world: &mut ApiWorld) {
     let user_id = world.user().id;
     let connection_id = world
         .integrations
@@ -706,13 +673,31 @@ async fn i_already_have_the_notifications(world: &mut ApiWorld, extra: String) {
         .expect("The account is not connected to GitHub")
         .id;
     let reported = world.github_sync.reported.clone();
-    let mut no_longer_reported = thread_456(world).clone();
-    no_longer_reported.id = THREAD_789.to_string();
     let app = world.app.get().await;
     for notification in &reported {
         create_notification_from_github_notification(app, notification, user_id, connection_id)
             .await;
     }
+}
+
+#[given(
+    expr = "I have the notification {string} of the thread {int}, which GitHub no longer reports"
+)]
+async fn i_have_a_notification_github_no_longer_reports(
+    world: &mut ApiWorld,
+    name: String,
+    thread: u32,
+) {
+    let user_id = world.user().id;
+    let connection_id = world
+        .integrations
+        .github_connection
+        .as_ref()
+        .expect("The account is not connected to GitHub")
+        .id;
+    let mut no_longer_reported = thread_456(world).clone();
+    no_longer_reported.id = thread.to_string();
+    let app = world.app.get().await;
     let notification = create_notification_from_github_notification(
         app,
         &no_longer_reported,
@@ -720,7 +705,7 @@ async fn i_already_have_the_notifications(world: &mut ApiWorld, extra: String) {
         connection_id,
     )
     .await;
-    world.notifications.by_name.insert(extra, *notification);
+    world.notifications.by_name.insert(name, *notification);
 }
 
 #[then(expr = "{string} is deleted")]
@@ -729,12 +714,13 @@ async fn a_notification_is_deleted(world: &mut ApiWorld, name: String) {
     assert_eq!(notification.status, NotificationStatus::Deleted);
 }
 
-#[then(expr = "the notification {string} of that other user is still unread")]
-async fn the_other_users_notification_is_unread(world: &mut ApiWorld, name: String) {
-    let id = world.notifications.named(&name).id;
+#[then(expr = "the notification {string} of that other user is still unread and unchanged")]
+async fn the_other_users_notification_is_untouched(world: &mut ApiWorld, name: String) {
+    let before = world.notifications.named(&name).clone();
     let client = world.other_session.as_ref().unwrap().client.clone();
     let app = world.app.get().await;
     let notification: Box<NotificationWithTask> =
-        get_resource(&client, &app.api_address, "notifications", id.into()).await;
+        get_resource(&client, &app.api_address, "notifications", before.id.into()).await;
     assert_eq!(notification.status, NotificationStatus::Unread);
+    assert_eq!(notification.updated_at, before.updated_at);
 }
