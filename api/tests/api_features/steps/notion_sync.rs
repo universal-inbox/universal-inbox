@@ -61,7 +61,7 @@ const ALL_STATUSES: [NotificationStatus; 4] = [
 pub struct Age(pub TimeDelta);
 
 impl Parameter for Age {
-    const REGEX: &'static str = r"\d+ (?:min|days)";
+    const REGEX: &'static str = r"\d+ (?:min|days?)";
     const NAME: &'static str = "age";
 }
 
@@ -73,7 +73,7 @@ impl FromStr for Age {
         let count: i64 = count.parse().map_err(|_| "Unknown age")?;
         match unit {
             "min" => Ok(Self(TimeDelta::minutes(count))),
-            "days" => Ok(Self(TimeDelta::days(count))),
+            "day" | "days" => Ok(Self(TimeDelta::days(count))),
             other => Err(format!("Unknown age unit {other:?}")),
         }
     }
@@ -193,7 +193,6 @@ fn mentioning_paragraph(block_id: &str, author: Author, time: DateTime<Utc>) -> 
 }
 
 fn page(world: &mut ApiWorld) -> &mut WorkspacePage {
-    world.notion_sync.mounted = false;
     world
         .notion_sync
         .page
@@ -220,9 +219,6 @@ async fn connect(world: &mut ApiWorld, config: NotionConfig) {
 }
 
 async fn mount_notion(world: &mut ApiWorld) {
-    if world.notion_sync.mounted {
-        return;
-    }
     let clock = now(world);
     let sync = &world.notion_sync;
     let page = sync
@@ -252,7 +248,6 @@ async fn mount_notion(world: &mut ApiWorld) {
     if !comments.is_empty() {
         mock_notion_discussion(server, MY_TOKEN, PAGE_ID, SOMEONE, BLOCK_ID, ME, comments).await;
     }
-    world.notion_sync.mounted = true;
 }
 
 async fn force_sync(world: &mut ApiWorld) {
@@ -317,10 +312,8 @@ async fn connected_for_comments(world: &mut ApiWorld) {
     .await;
 }
 
-#[given(expr = "Notion has the page {string}, edited {age} ago")]
-fn notion_has_a_page(world: &mut ApiWorld, title: String, age: Age) {
-    assert_eq!(title, "Roadmap");
-    world.notion_sync.mounted = false;
+#[given(expr = "Notion has the page \"Roadmap\", edited {age} ago")]
+fn notion_has_a_page(world: &mut ApiWorld, age: Age) {
     world.notion_sync.page = Some(WorkspacePage {
         edited: age.0,
         blocks: vec![],
@@ -363,7 +356,6 @@ fn the_page_holds_a_trashed_paragraph(world: &mut ApiWorld, age: Age) {
     expr = "Notion lists an older page, edited {age} ago, after that page, with more pages to come"
 )]
 fn notion_lists_an_older_page(world: &mut ApiWorld, age: Age) {
-    world.notion_sync.mounted = false;
     world.notion_sync.older_page = Some(age.0);
 }
 
@@ -451,15 +443,7 @@ fn push_comment(
 ) {
     let time = ago(world, age);
     let comments = &mut world.notion_sync.comments;
-    let base = if discussion.0 == DISCUSSION_ID { 0 } else { 2 };
-    let id = format!(
-        "comment-{}",
-        base + comments
-            .iter()
-            .filter(|comment| comment["discussion_id"] == discussion.0)
-            .count()
-            + 1
-    );
+    let id = format!("comment-{}", text.trim().replace(' ', "-"));
     let mut rich_text = vec![text_segment(text)];
     if mention == Mention::Mentioning {
         rich_text.push(user_mention_segment(ME, "Me"));
@@ -474,7 +458,6 @@ fn push_comment(
         "created_by": { "object": "user", "id": SOMEONE },
         "rich_text": rich_text
     }));
-    world.notion_sync.mounted = false;
 }
 
 #[given(expr = "I unsubscribe from my notification of the Notion discussion {discussion}")]
@@ -566,14 +549,6 @@ async fn the_webhook_reported_the_mention(world: &mut ApiWorld) {
     transaction.commit().await.unwrap();
 }
 
-#[given("I note how many times Notion's comments were read")]
-#[when("I note how many times Notion's comments were read")]
-async fn i_note_the_comment_reads(world: &mut ApiWorld) {
-    let reads = requests_to(world, "/v1/comments").await;
-    assert!(reads > 0, "Notion's comments were never read");
-    world.notion_sync.comment_reads = Some(reads);
-}
-
 #[given(expr = "I have {int} Notion notification(s)")]
 #[then(expr = "I have {int} Notion notification(s)")]
 async fn i_have_notifications(world: &mut ApiWorld, count: usize) {
@@ -605,9 +580,8 @@ async fn my_notification_is_titled(world: &mut ApiWorld, title: String) {
     assert_eq!(notion_notifications(world).await[0].title, title);
 }
 
-#[then(expr = "it is a mention of me in a block of the page {string}, saying {string}")]
-async fn it_is_a_mention_of_me(world: &mut ApiWorld, title: String, text: String) {
-    assert_eq!(title, "Roadmap");
+#[then(expr = "it is a mention of me in a block of the page \"Roadmap\", saying {string}")]
+async fn it_is_a_mention_of_me(world: &mut ApiWorld, text: String) {
     let notification = notion_notifications(world).await.remove(0);
     let ThirdPartyItemData::NotionBlock(block) = &notification.source_item.data else {
         panic!("Expected a NotionBlock item");
@@ -638,14 +612,9 @@ async fn notion_was_searched(world: &mut ApiWorld, times: usize) {
     assert_eq!(requests_to(world, "/v1/search").await, times);
 }
 
-#[then(expr = "Notion was asked for the content of {string} {int} time(s)")]
-async fn notion_was_asked_for_the_content(world: &mut ApiWorld, page: String, times: usize) {
-    let page_id = match page.as_str() {
-        "Roadmap" => PAGE_ID,
-        "the older page" => OLDER_PAGE_ID,
-        other => panic!("Unknown page {other:?}"),
-    };
-    let reads = requests_to(world, &format!("/v1/blocks/{page_id}")).await;
+#[then(expr = "Notion was asked for the content of {page} {int} time(s)")]
+async fn notion_was_asked_for_the_content(world: &mut ApiWorld, page: PageName, times: usize) {
+    let reads = requests_to(world, &format!("/v1/blocks/{}", page.0)).await;
     assert_eq!(reads, times);
 }
 
@@ -655,21 +624,33 @@ async fn notion_was_asked_for_the_page_and_users_once(world: &mut ApiWorld) {
     assert_eq!(requests_to(world, "/v1/users/").await, 1);
 }
 
+#[given("Notion's comments were read")]
 #[then("Notion's comments were read")]
 async fn the_comments_were_read(world: &mut ApiWorld) {
     assert!(requests_to(world, "/v1/comments").await > 0);
 }
 
-#[then("Notion's comments were never read")]
+#[then("Notion's comments were not read by the last sync")]
 async fn the_comments_were_never_read(world: &mut ApiWorld) {
     assert_eq!(requests_to(world, "/v1/comments").await, 0);
 }
 
-#[then("Notion's comments were not read again")]
-async fn the_comments_were_not_read_again(world: &mut ApiWorld) {
-    let noted = world
-        .notion_sync
-        .comment_reads
-        .expect("No comment read was noted");
-    assert_eq!(requests_to(world, "/v1/comments").await, noted);
+#[derive(Clone, Copy, Debug)]
+pub struct PageName(pub &'static str);
+
+impl Parameter for PageName {
+    const REGEX: &'static str = "Roadmap|the older page";
+    const NAME: &'static str = "page";
+}
+
+impl FromStr for PageName {
+    type Err = String;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        match name {
+            "Roadmap" => Ok(Self(PAGE_ID)),
+            "the older page" => Ok(Self(OLDER_PAGE_ID)),
+            other => Err(format!("Unknown page {other:?}")),
+        }
+    }
 }

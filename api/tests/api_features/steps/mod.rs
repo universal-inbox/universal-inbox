@@ -19,6 +19,7 @@ mod integration_connections;
 mod integrations;
 mod jobs;
 mod kept_triage;
+mod linear_tasks_sync;
 mod mcp_session_store;
 mod notifications;
 mod notion_sync;

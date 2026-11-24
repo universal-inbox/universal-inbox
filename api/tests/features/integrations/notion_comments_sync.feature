@@ -63,9 +63,9 @@ Feature: Syncing Notion comments
       Given I already track the Notion discussion first, whose first comment was written 120 min ago, and I have read it
       And Notion's discussion first holds the comment "Looks good", written by someone 120 min ago
       And I force a sync of my Notion notifications, ignoring the minimum interval between syncs
-      And I note how many times Notion's comments were read
+      And Notion's comments were read
       When I force a sync of my Notion notifications, ignoring the minimum interval between syncs
-      Then Notion's comments were not read again
+      Then Notion's comments were not read by the last sync
 
     @legacy:test_sync_notion_notifications::comments::test_discussions_inactive_for_two_weeks_are_not_re_read
     Scenario: A discussion inactive for two weeks is not read again
@@ -73,7 +73,7 @@ Feature: Syncing Notion comments
       And Notion's discussion first holds the comment "Looks good", written by someone 15 days ago
       And Notion's discussion first holds the comment "Any news?", written by someone 10 min ago
       When I force a sync of my Notion notifications, ignoring the minimum interval between syncs
-      Then Notion's comments were never read
+      Then Notion's comments were not read by the last sync
       And I have 1 Notion notification, all read
 
   Rule: Tracked discussions are not read again when the connection does not sync comments
@@ -84,4 +84,4 @@ Feature: Syncing Notion comments
       And I already track the Notion discussion first, whose first comment was written 120 min ago, and I have read it
       And Notion has the page "Roadmap", edited 1 min ago
       When I force a sync of my Notion notifications, ignoring the minimum interval between syncs
-      Then Notion's comments were never read
+      Then Notion's comments were not read by the last sync

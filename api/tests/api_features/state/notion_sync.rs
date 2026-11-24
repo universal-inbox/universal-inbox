@@ -10,8 +10,6 @@ pub struct NotionSync {
     pub page: Option<WorkspacePage>,
     pub older_page: Option<TimeDelta>,
     pub comments: Vec<Value>,
-    pub mounted: bool,
-    pub comment_reads: Option<usize>,
     pub clock: Option<chrono::DateTime<chrono::Utc>>,
 }
 

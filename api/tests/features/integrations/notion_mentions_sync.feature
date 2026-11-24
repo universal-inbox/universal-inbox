@@ -92,8 +92,8 @@ Feature: Syncing Notion mentions
       And Notion lists an older page, edited 60 min ago, after that page, with more pages to come
       When I force a sync of my Notion notifications, ignoring the minimum interval between syncs
       Then Notion was searched 1 time
-      And Notion was asked for the content of "the older page" 0 times
-      And Notion was asked for the content of "Roadmap" 1 time
+      And Notion was asked for the content of the older page 0 times
+      And Notion was asked for the content of Roadmap 1 time
 
   Rule: Mentions are not searched when the connection does not sync them
 
