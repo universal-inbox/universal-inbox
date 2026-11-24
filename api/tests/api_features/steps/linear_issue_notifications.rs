@@ -10,7 +10,7 @@ use universal_inbox::{
     notification::{
         Notification, NotificationSourceKind, NotificationStatus, NotificationWithTask,
     },
-    task::{PresetDueDate, ProjectSummary},
+    task::{PresetDueDate, ProjectSummary, TaskStatus},
     third_party::integrations::linear::LinearNotification,
 };
 
@@ -26,6 +26,7 @@ use crate::{
             sync_notifications,
         },
         rest::get_resource,
+        task::list_tasks,
     },
     steps::{audit_log::list_events, kept_triage::read_notification, status::UserStatus},
     world::ApiWorld,
@@ -179,4 +180,12 @@ async fn the_other_users_notification_is(world: &mut ApiWorld, name: String, sta
 async fn the_notification_arrives(world: &mut ApiWorld, name: String) {
     let notification = create_the_notification(world).await;
     world.notifications.by_name.insert(name, *notification);
+}
+
+#[then("that other user has no task")]
+async fn that_other_user_has_no_task(world: &mut ApiWorld) {
+    let client = world.other_session.as_ref().unwrap().client.clone();
+    let app = world.app.get().await;
+    let tasks = list_tasks(&client, &app.api_address, TaskStatus::Active, false).await;
+    assert!(tasks.is_empty());
 }

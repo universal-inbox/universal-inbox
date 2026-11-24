@@ -37,7 +37,8 @@ use crate::{
         task::{
             list_tasks, list_tasks_until, sync_tasks, sync_tasks_response,
             todoist::{
-                assert_sync_items, mock_todoist_sync_resources_service, sync_todoist_items_response,
+                assert_sync_items, mock_todoist_sync_resources_service,
+                sync_todoist_items_response, sync_todoist_projects_response,
             },
         },
         third_party::create_task_third_party_item,
@@ -47,6 +48,12 @@ use crate::{
 };
 
 const INBOX_PROJECT_ID: &str = "1111";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SyncMode {
+    Foreground,
+    Background,
+}
 
 async fn connect(world: &mut ApiWorld, config: TodoistConfig) {
     let user_id = world.user().id;
@@ -301,16 +308,15 @@ async fn i_sync_my_todoist_tasks(world: &mut ApiWorld) {
 
 #[when("I ask for a synchronous sync of my Todoist tasks")]
 async fn i_ask_for_a_sync(world: &mut ApiWorld) {
-    request_sync(world, false).await;
+    request_sync(world, SyncMode::Foreground).await;
 }
 
 #[when("I ask for a background sync of my Todoist tasks")]
-#[given("I ask for a background sync of my Todoist tasks")]
 async fn i_ask_for_a_background_sync(world: &mut ApiWorld) {
-    request_sync(world, true).await;
+    request_sync(world, SyncMode::Background).await;
 }
 
-async fn request_sync(world: &mut ApiWorld, asynchronously: bool) {
+async fn request_sync(world: &mut ApiWorld, mode: SyncMode) {
     mount_items(world).await;
     let client = world.client();
     let app = world.app.get().await;
@@ -318,7 +324,7 @@ async fn request_sync(world: &mut ApiWorld, asynchronously: bool) {
         &client,
         &app.api_address,
         Some(TaskSourceKind::Todoist),
-        asynchronously,
+        mode == SyncMode::Background,
     )
     .await;
     world.todoist_tasks.status = Some(response.status());
@@ -415,15 +421,18 @@ async fn the_known_task_was_updated(world: &mut ApiWorld) {
         .clone();
     let task = task_of_known(world, 0).await;
     assert_eq!(task.source_item.source_id, known_source_id);
-    assert_eq!(task.title, "Task 2");
-    assert_eq!(task.body, "");
-    assert_eq!(task.priority, TaskPriority::P4);
-    assert!(task.tags.is_empty());
-    assert_eq!(task.project, "Project2".to_string());
-    assert_eq!(
-        task.created_at,
-        Utc.with_ymd_and_hms(2019, 12, 11, 22, 37, 50).unwrap()
-    );
+    let project = sync_todoist_projects_response()
+        .projects
+        .unwrap()
+        .into_iter()
+        .find(|project| project.id == second.project_id)
+        .expect("The second item has no project");
+    assert_eq!(task.title, second.content);
+    assert_eq!(task.body, second.description);
+    assert_eq!(task.priority, second.priority.into());
+    assert_eq!(task.tags.len(), second.labels.len());
+    assert_eq!(task.project, project.name);
+    assert_eq!(task.created_at, second.added_at);
     assert_eq!(
         task.source_item.data,
         ThirdPartyItemData::TodoistItem(Box::new(second))
@@ -659,7 +668,9 @@ async fn todoist_requests(world: &mut ApiWorld) -> usize {
 #[given("I note how many requests Todoist received")]
 #[when("I note how many requests Todoist received")]
 async fn i_note_the_requests(world: &mut ApiWorld) {
-    world.todoist_tasks.requests_noted = Some(todoist_requests(world).await);
+    let requests = todoist_requests(world).await;
+    assert!(requests > 0, "Todoist received no request yet");
+    world.todoist_tasks.requests_noted = Some(requests);
 }
 
 #[then("Todoist received no other request")]
@@ -669,4 +680,9 @@ async fn todoist_received_no_other_request(world: &mut ApiWorld) {
         .requests_noted
         .expect("No request count was noted");
     assert_eq!(todoist_requests(world).await, noted);
+}
+
+#[then("Todoist received no request")]
+async fn todoist_received_no_request(world: &mut ApiWorld) {
+    assert_eq!(todoist_requests(world).await, 0);
 }

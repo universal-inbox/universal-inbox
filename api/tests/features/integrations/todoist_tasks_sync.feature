@@ -75,6 +75,7 @@ Feature: Syncing Todoist tasks
       And Todoist answers every request with a success and no data
       When I ask for a synchronous sync of my Todoist tasks
       Then the sync request is accepted
+      And Todoist received no request
 
     @legacy:test_sync_todoist_tasks::test_sync_tasks_with_synchronization_disabled
     Scenario: A connection with its synchronization disabled is not synced
@@ -82,6 +83,7 @@ Feature: Syncing Todoist tasks
       And Todoist answers every request with a success and no data
       When I ask for a synchronous sync of my Todoist tasks
       Then the sync request is accepted
+      And Todoist received no request
 
   Rule: Background syncs
 
@@ -122,12 +124,14 @@ Feature: Syncing Todoist tasks
   Rule: A failing background sync records its failure
 
     @legacy:test_sync_todoist_tasks::test_sync_all_tasks_asynchronously_in_error
-    Scenario: A background sync that fails syncs nothing and records the failure
+    Scenario: A background sync that fails leaves my task untouched and records the failure
       Given I am connected to Todoist
+      And Todoist can list my projects
+      And I already have the task "old task 1" of the second Todoist item, in my Inbox
       And Todoist answers every request with an error
       When I ask for a background sync of my Todoist tasks
       Then the sync is accepted to run in the background
       Given a second passes
       When I list the active tasks I have
-      Then I have 0 active tasks
+      Then I have 1 active task
       And my Todoist connection recorded the failure "Failed to fetch tasks from Todoist"

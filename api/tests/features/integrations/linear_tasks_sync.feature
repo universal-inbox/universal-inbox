@@ -133,6 +133,7 @@ Feature: Syncing Linear tasks
       When I sync my Linear tasks
       Then my Linear notification "mine" is deleted
       And the Linear notification "theirs" of that other user is still read
+      And that other user has no task
 
     @legacy:test_sync_linear_tasks::test_create_notification_should_auto_delete_when_task_already_exists
     Scenario: The notification of an issue that already has a task is created deleted
