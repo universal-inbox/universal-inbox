@@ -224,8 +224,6 @@ async fn my_account_as_now_shown_uses_the_verified_email(world: &mut ApiWorld, e
     assert!(user.email_validated_at.is_some());
 }
 
-/// A refused email change must not mutate any user state: the blocklist check happens before the
-/// update.
 #[then("my account is exactly as it was when I signed up")]
 async fn my_account_is_exactly_as_it_was(world: &mut ApiWorld) {
     let client = world.client();

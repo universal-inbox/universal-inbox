@@ -53,7 +53,6 @@ async fn my_verification_token_is_a_new_one(world: &mut ApiWorld) {
     assert_ne!(previous, my_verification_token(world).await);
 }
 
-/// The link of the verification email is a frontend address that calls this API endpoint.
 #[when("I open the link of the verification email")]
 async fn i_open_the_link_of_the_verification_email(world: &mut ApiWorld) {
     let token = my_verification_token(world).await;

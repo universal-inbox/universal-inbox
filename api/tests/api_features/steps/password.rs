@@ -236,8 +236,6 @@ async fn the_latest_email_is_the_password_reset_email(world: &mut ApiWorld) {
     );
 }
 
-/// The emailed web address carries the token to the reset page, which sends it to the API in the
-/// request body, never in the API address.
 #[when(expr = "I send the new password {string} to the API address that carries the reset token")]
 async fn i_send_the_new_password_to_an_address_with_the_token(
     world: &mut ApiWorld,

@@ -3,7 +3,6 @@ use std::str::FromStr;
 use chrono::TimeDelta;
 use cucumber::Parameter;
 
-/// "90 days", "1 day" or "90 days and 1 hour"
 #[derive(Clone, Copy, Debug)]
 pub struct Span(pub TimeDelta);
 

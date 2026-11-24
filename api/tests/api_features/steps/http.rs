@@ -6,7 +6,6 @@ use reqwest::{Client, Method, StatusCode};
 
 use crate::world::{ApiWorld, Response};
 
-/// A client that keeps the raw (compressed) body and headers: no transparent decompression.
 fn raw_client() -> Client {
     Client::builder()
         .no_gzip()
@@ -152,8 +151,6 @@ fn the_response_has_no_header(world: &mut ApiWorld, name: String) {
     assert_eq!(world.http.last().header(&name), None, "header {name}");
 }
 
-/// The expected value is a doc string, where `<identity provider URL>` stands for the address of
-/// the app's identity provider.
 #[then(regex = r#"^the response header "([^"]+)" is:$"#)]
 async fn the_response_header_is_the_doc_string(world: &mut ApiWorld, name: String, step: &Step) {
     let identity_provider = world

@@ -43,7 +43,6 @@ impl Connections {
     }
 }
 
-/// The calls a scenario expects a provider to receive, each kept to count its requests.
 #[derive(Default)]
 pub struct ProviderCalls {
     pub revocations: HashMap<IntegrationProviderKind, MockGuard>,

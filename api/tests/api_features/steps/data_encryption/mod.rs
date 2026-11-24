@@ -59,7 +59,6 @@ const ACCESS_TOKEN_COLUMN: &str = "oauth_credential.encrypted_access_token";
 const GOOGLE_EMAIL_COLUMN: &str =
     "integration_connection.provider_user_id (Google email blind index)";
 
-/// Data encryption key 1, as configured (the environment may override the test configuration)
 fn key_1(settings: &Settings) -> &str {
     settings
         .data_encryption
@@ -83,7 +82,6 @@ fn data_encryption_service(app: &TestedApp, keyring: Arc<DataKeyring>) -> DataEn
     DataEncryptionService::new(app.repository.clone(), keyring)
 }
 
-/// OAuth token in the format used before the encryption envelope: nonce || ciphertext || tag
 fn legacy_encrypt_token(plaintext: &str, aad: &[u8], hex_key: &str) -> Vec<u8> {
     let key =
         LessSafeKey::new(UnboundKey::new(&AES_256_GCM, &hex::decode(hex_key).unwrap()).unwrap());

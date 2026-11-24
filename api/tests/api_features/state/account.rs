@@ -1,5 +1,3 @@
-//! What the scenarios of the account, session and email features keep between their steps.
-
 use std::fmt;
 
 use email_address::EmailAddress;
@@ -23,7 +21,6 @@ pub fn ordinal(word: &str) -> usize {
     }
 }
 
-/// The account the scenario signs in with.
 #[derive(Debug, Default)]
 pub struct Account {
     email: Option<Pii<EmailAddress>>,
@@ -39,7 +36,6 @@ impl Account {
         self.user = Some(user);
     }
 
-    /// An email address and password nobody registered.
     pub fn set_without_account(&mut self, email: Pii<EmailAddress>, password: &str) {
         self.email = Some(email);
         self.password = Some(password.to_string());
@@ -74,7 +70,6 @@ impl Account {
     }
 }
 
-/// A browser: an HTTP client that keeps its cookies, started on first use.
 #[derive(Debug, Default)]
 pub struct Browser {
     client: Option<Client>,
@@ -93,7 +88,6 @@ pub fn cookie_client() -> Client {
         .expect("Failed to build the HTTP client")
 }
 
-/// The sessions the account opened by signing in with its password, in order.
 #[derive(Default)]
 pub struct Sessions {
     opened: Vec<CopiedSession>,
@@ -124,34 +118,25 @@ impl Sessions {
     }
 }
 
-/// The addresses the identity provider was asked to sign in at.
 #[derive(Debug, Default)]
 pub struct Authorizations {
     pub urls: Vec<Url>,
 }
 
-/// What linking an authentication method through the app's services answered.
 #[derive(Debug, Default)]
 pub struct LinkedMethod {
     pub result: Option<Result<UserAuthMethod, String>>,
 }
 
-/// What the scenario knows about the verification of the account's email address.
 #[derive(Debug, Default)]
 pub struct EmailVerification {
-    /// The verification token the account had before a new email was asked for.
     pub previous_token: Option<EmailValidationToken>,
-    /// The verification link that was last opened.
     pub link: Option<String>,
-    /// The user a verification link named, when it is not the account's.
     pub link_user_id: Option<UserId>,
 }
 
-/// What the scenario knows about the password reset of the account.
 #[derive(Debug, Default)]
 pub struct PasswordReset {
-    /// The token of the last reset email.
     pub token: Option<PasswordResetToken>,
-    /// The user a reset link named, when it is not the account's.
     pub link_user_id: Option<UserId>,
 }

@@ -51,7 +51,6 @@ fn kind_of(word: &str) -> UserAuthKind {
     }
 }
 
-/// How the app shows a sign-in method that carries no name.
 fn plain_display_of(kind: UserAuthKind) -> Option<UserAuthMethodDisplayInfo> {
     match kind {
         UserAuthKind::Local => Some(UserAuthMethodDisplayInfo::Local),

@@ -25,7 +25,6 @@ use crate::{
 #[derive(Default, World)]
 pub struct ApiWorld {
     pub app: AppUnderTest<TestedApp>,
-    /// A second instance of the app, for the scenarios that compare two instances.
     pub other_app: AppUnderTest<TestedApp>,
     pub session: Option<Session>,
     pub other_session: Option<Session>,
@@ -128,7 +127,6 @@ impl ScenarioWorld for ApiWorld {
     }
 }
 
-/// The HTTP client that holds the session of the user the scenario is signed in as.
 #[derive(Debug)]
 pub struct Session {
     pub client: Client,
@@ -142,7 +140,6 @@ impl ApiWorld {
             .expect("The scenario is not signed in")
     }
 
-    /// The HTTP client of the user the scenario is signed in as.
     pub fn client(&self) -> Client {
         self.session().client.clone()
     }
@@ -159,7 +156,6 @@ impl ApiWorld {
     }
 }
 
-/// The HTTP requests a scenario sent to the app, and their responses.
 #[derive(Debug, Default)]
 pub struct HttpExchanges {
     responses: Vec<Response>,

@@ -1,9 +1,3 @@
-//! Runs the Gherkin scenarios of `tests/features` as individual tests.
-//!
-//! Every expanded scenario (one per Scenario, one per Examples row of a Scenario Outline) is a
-//! libtest trial, so nextest lists them and runs each one alone in its own process: scenarios
-//! never share the process-wide state of the app under test (cache namespace, tracing, rustls).
-
 use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Debug},
@@ -24,30 +18,19 @@ use crate::common::{init_tracing, settings};
 
 pub const FEATURES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/features");
 
-/// Prints `<legacy tag>\t<scenario>` lines instead of running anything, for the legacy mapping
-/// check (`just api check-legacy-mapping`).
 const LEGACY_REPORT_ENV: &str = "UI_SCENARIOS_LEGACY_REPORT";
 const LEGACY_TAG_PREFIX: &str = "legacy:";
 
 pub trait ScenarioWorld: World + Debug + WorldInventory {
-    /// Stops what the scenario started, once its steps ran.
     fn tear_down(&mut self) -> LocalBoxFuture<'_, ()>;
 }
 
-/// How the app under test is started. Given steps that configure the app change it before the
-/// app starts. Each setting is independent of the others, so they compose whatever their order;
-/// an app refuses to start on a combination it cannot honour.
 pub struct AppConfig {
     pub settings: Settings,
     pub billing: bool,
-    /// Whether users can sign in with single sign-on, with a test identity provider.
     pub identity_provider: bool,
-    /// Whether users can sign in with an email address and a password, and with a passkey.
     pub local_auth: Option<LocalAuth>,
-    /// The password policy and the per-account limits, when a scenario changes the app's own.
-    /// Needs `local_auth`.
     pub local_auth_policy: Option<LocalAuthenticationSettings>,
-    /// Email domains that cannot register.
     pub blocked_domains: Vec<String>,
 }
 
@@ -56,16 +39,13 @@ pub struct LocalAuth {
     pub passkey: bool,
 }
 
-/// An app a scenario can start from an [`AppConfig`] and stop.
 pub trait ScenarioApp: Sized {
-    /// The configuration of the app when no step changes it.
     fn default_config() -> AppConfig;
 
     fn start(config: AppConfig) -> LocalBoxFuture<'static, Self>;
     fn stop(self) -> LocalBoxFuture<'static, ()>;
 }
 
-/// The app under test of a scenario, started on first use.
 pub struct AppUnderTest<A> {
     config: Option<AppConfig>,
     app: Option<A>,
@@ -92,7 +72,6 @@ impl<A> Debug for AppUnderTest<A> {
 }
 
 impl<A: ScenarioApp> AppUnderTest<A> {
-    /// The configuration of the app, for a step that configures it.
     pub fn configure(&mut self) -> &mut AppConfig {
         self.config.as_mut().expect(
             "This step configures the app: it must come before the first step that uses the app",
@@ -119,13 +98,10 @@ pub struct Scenario {
     pub name: String,
     pub path: PathBuf,
     pub line: usize,
-    /// Name of the expanded scenario, as cucumber knows it.
     pub scenario_name: String,
     pub legacy_tags: Vec<String>,
 }
 
-/// Lists every expanded scenario of the feature files under [`FEATURES_DIR`] whose path,
-/// relative to it, matches `include`.
 pub fn collect(include: fn(&Path) -> bool) -> Vec<Scenario> {
     let root = Path::new(FEATURES_DIR);
     let mut paths = feature_files(root);
@@ -230,7 +206,6 @@ fn feature_scenarios(root: &Path, path: &Path) -> Vec<Scenario> {
     scenarios
 }
 
-/// Entry point of a scenarios test binary.
 pub fn main<W: ScenarioWorld>(include: fn(&Path) -> bool) {
     let scenarios = collect(include);
 

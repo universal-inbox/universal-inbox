@@ -108,7 +108,6 @@ fn the_app_asks_me_to_sign_in_again(world: &mut ApiWorld) {
 
 #[when(expr = "I change my first name to {string} and keep my email address")]
 async fn i_change_my_first_name(world: &mut ApiWorld, first_name: String) {
-    // The profile form sends the unchanged email along with the name
     let patch = UserPatch {
         first_name: Some(Pii::new(first_name)),
         email: Some(world.my_email()),

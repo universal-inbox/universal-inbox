@@ -218,7 +218,6 @@ async fn i_have_a_linear_notification(world: &mut ApiWorld, name: String) {
         .unwrap()
         .try_into()
         .unwrap();
-    // An issue notification
     let linear_notification = linear_notifications[2].clone();
     let app = world.app.get().await;
     let notification = *create_notification_from_linear_notification(

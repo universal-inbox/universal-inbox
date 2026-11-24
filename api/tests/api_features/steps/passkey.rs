@@ -28,9 +28,6 @@ pub(super) fn split_request_challenge(body: &str) -> (RequestChallengeResponse, 
     (serde_json::from_str(body).unwrap(), nonce)
 }
 
-/// Start adding a passkey named `username` to the signed-in `client`'s account, answer the
-/// challenge with `authenticator` and finish. Returns the answer to the finish request and the
-/// credential ID.
 pub(super) async fn start_and_finish_adding_a_passkey(
     client: &Client,
     app: &TestedApp,
@@ -47,7 +44,6 @@ pub(super) async fn start_and_finish_adding_a_passkey(
     (response, serde_json::to_value(&credential.raw_id).unwrap())
 }
 
-/// Register a passkey for the signed-in `client` and return its username and credential ID.
 async fn add_passkey(
     client: &Client,
     app: &TestedApp,

@@ -55,8 +55,6 @@ fn sync_tasks_job(user_id: UserId) -> UniversalInboxJob {
     })
 }
 
-/// Pushes `job` and makes it dead the way apalis does: its id moves from the active list to the
-/// dead set, its error is written to the result hash and its attempts are those it ran.
 async fn push_dead_job(
     storage: &mut JobStorage,
     job: UniversalInboxJob,
@@ -105,7 +103,6 @@ async fn push_dead_job(
     id
 }
 
-/// Makes a dead job whose payload is `payload`, as left by a job type that no longer exists
 async fn put_dead_payload(storage: &JobStorage, payload: &[u8], died_at: DateTime<Utc>) -> String {
     let id = Uuid::new_v4().to_string();
     let config = storage.get_config();

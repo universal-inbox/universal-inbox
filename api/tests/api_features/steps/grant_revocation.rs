@@ -38,7 +38,6 @@ use crate::{
 
 const ROTATING_REFRESH_TOKEN: &str = "xoxe-1-old-refresh-token";
 
-/// What a provider needs to be connected.
 struct ProviderFixture {
     config: IntegrationConnectionConfig,
     credential: OAuthCredentialFixture,
