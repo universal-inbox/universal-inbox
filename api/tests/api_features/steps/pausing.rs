@@ -8,6 +8,7 @@ use universal_inbox::{
         IntegrationConnection, IntegrationConnectionPausedReason, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::{linear::LinearConfig, slack::SlackConfig},
+        provider::IntegrationProviderKind,
     },
     user::UserId,
 };
@@ -245,8 +246,9 @@ async fn slack_is_rate_limited(world: &mut ApiWorld) {
         .await;
     world
         .connections
-        .guards
-        .push(("Slack grant".to_string(), guard));
+        .calls
+        .revocations
+        .insert(IntegrationProviderKind::Slack, guard);
 }
 
 #[given("Slack rejects my refresh token")]
@@ -259,10 +261,7 @@ async fn slack_rejects_the_refresh_token(world: &mut ApiWorld) {
         })))
         .mount_as_scoped(&app.slack_mock_server)
         .await;
-    world
-        .connections
-        .guards
-        .push(("refresh".to_string(), guard));
+    world.connections.calls.renewal = Some(guard);
 }
 
 #[given("Slack accepts any revocation")]
@@ -275,8 +274,9 @@ async fn slack_accepts_any_revocation(world: &mut ApiWorld) {
         .await;
     world
         .connections
-        .guards
-        .push(("Slack grant".to_string(), guard));
+        .calls
+        .revocations
+        .insert(IntegrationProviderKind::Slack, guard);
 }
 
 async fn run_pause_job(world: &mut ApiWorld, warning_days: i64) {

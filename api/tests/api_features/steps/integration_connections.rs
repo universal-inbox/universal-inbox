@@ -31,25 +31,21 @@ use crate::{
         notification::list_notifications,
         rest::{create_resource, delete_resource, get_resource},
     },
-    steps::provider::Provider,
+    steps::provider::ProviderName,
     world::ApiWorld,
 };
 
-#[given(
-    regex = r"^I have created an? (GitHub|Linear|Slack|Todoist|Google Mail|Google Calendar|Google Drive|Notion|TickTick) integration connection$"
-)]
-async fn i_have_created_a_connection(world: &mut ApiWorld, provider: String) {
-    create(world, provider.parse().unwrap()).await;
+#[given(expr = "I have created a(n) {provider} integration connection")]
+async fn i_have_created_a_connection(world: &mut ApiWorld, provider: ProviderName) {
+    create(world, provider).await;
 }
 
-#[when(
-    regex = r"^I create an? (GitHub|Linear|Slack|Todoist|Google Mail|Google Calendar|Google Drive|Notion|TickTick) integration connection$"
-)]
-async fn i_create_a_connection(world: &mut ApiWorld, provider: String) {
-    create(world, provider.parse().unwrap()).await;
+#[when(expr = "I create a(n) {provider} integration connection")]
+async fn i_create_a_connection(world: &mut ApiWorld, provider: ProviderName) {
+    create(world, provider).await;
 }
 
-async fn create(world: &mut ApiWorld, provider: Provider) {
+async fn create(world: &mut ApiWorld, provider: ProviderName) {
     let client = world.client();
     let app = world.app.get().await;
     let connection: Box<IntegrationConnection> = create_resource(
@@ -64,11 +60,8 @@ async fn create(world: &mut ApiWorld, provider: Provider) {
     world.connections.created.push(*connection);
 }
 
-#[then(
-    regex = r"^the new connection is an? (GitHub|Linear|Slack|Todoist|Google Mail|Google Calendar|Google Drive|Notion|TickTick) connection of mine that was just created$"
-)]
-fn the_new_connection_is_mine(world: &mut ApiWorld, provider: String) {
-    let provider: Provider = provider.parse().unwrap();
+#[then(expr = "the new connection is a(n) {provider} connection of mine that was just created")]
+fn the_new_connection_is_mine(world: &mut ApiWorld, provider: ProviderName) {
     let connection = world.connections.created.last().unwrap();
     assert_eq!(connection.provider.kind(), provider.0);
     assert_eq!(connection.user_id, world.user().id);
@@ -101,10 +94,8 @@ fn i_see_the_connections_i_created(world: &mut ApiWorld) {
     assert_eq!(world.connections.listed, expected);
 }
 
-#[given(
-    regex = r"^I have a validated (GitHub) integration connection without a stored credential$"
-)]
-async fn i_have_a_validated_connection(world: &mut ApiWorld, _provider: String) {
+#[given("I have a validated GitHub integration connection without a stored credential")]
+async fn i_have_a_validated_connection(world: &mut ApiWorld) {
     let user_id = world.user().id;
     let app = world.app.get().await;
     let connection = create_integration_connection(

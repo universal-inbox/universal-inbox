@@ -262,7 +262,7 @@ async fn the_connection_is_unchanged(world: &mut ApiWorld, label_name: String) {
                 },
                 context: None,
             },
-            ..stored.clone()
+            ..*before
         }
     );
 }

@@ -55,7 +55,7 @@ Feature: Revoking provider grants
       And the stored revocations are
         | status  | attempts | tokens | connection |
         | Pending | 1        | kept   | mine       |
-      When GitHub is back
+      When the provider is back
       And GitHub revokes my grant when asked
       And the waiting revocations come due
       When the revocation retry job runs, allowing 20 attempts
@@ -90,7 +90,7 @@ Feature: Revoking provider grants
       Given I have a validated GitHub connection with a stored credential
       And GitHub fails to revoke my grant
       When I disconnect it
-      And GitHub is back
+      And the provider is back
       And I connect it again
       And GitHub revokes my grant when asked
       And the waiting revocations come due
@@ -122,7 +122,7 @@ Feature: Revoking provider grants
       Then the stored revocations are
         | status  | attempts | tokens | connection |
         | Pending | 1        | kept   | mine       |
-      When Slack is back
+      When the provider is back
       And Slack answers that my token expired
       And Slack renews my token when asked
       And Slack accepts to revoke my renewed token
@@ -166,7 +166,7 @@ Feature: Revoking provider grants
       And the stored revocations are
         | status  | attempts | tokens | connection |
         | Pending | 1        | kept   | none       |
-      When GitHub is back
+      When the provider is back
       And GitHub revokes my grant when asked
       And the waiting revocations come due
       When the revocation retry job runs, allowing 20 attempts

@@ -207,17 +207,21 @@ async fn an_active_job(world: &mut ApiWorld, job_id: String) {
         .await;
 }
 
-async fn vacuum(world: &mut ApiWorld, on_other_queue: bool) {
+enum Queue {
+    Own,
+    Other,
+}
+
+async fn vacuum(world: &mut ApiWorld, queue: Queue) {
     let cron_settings = world
         .jobs
         .vacuum_settings
         .clone()
         .expect("The vacuum cron settings were not given");
     let cache = cache().await;
-    let target = if on_other_queue {
-        other_storage(world).await.clone()
-    } else {
-        storage(world).await.clone()
+    let target = match queue {
+        Queue::Own => storage(world).await.clone(),
+        Queue::Other => other_storage(world).await.clone(),
     };
     handle_vacuum_jobs_cron_tick(
         Default::default(),
@@ -232,17 +236,17 @@ async fn vacuum(world: &mut ApiWorld, on_other_queue: bool) {
 
 #[when("the vacuum cron tick is handled")]
 async fn the_vacuum_cron_tick_is_handled(world: &mut ApiWorld) {
-    vacuum(world, false).await;
+    vacuum(world, Queue::Own).await;
 }
 
 #[when("the same vacuum cron tick is handled again by a second worker process")]
 async fn the_vacuum_cron_tick_is_handled_again(world: &mut ApiWorld) {
-    vacuum(world, false).await;
+    vacuum(world, Queue::Own).await;
 }
 
 #[when("the same vacuum cron tick is handled on the other queue")]
 async fn the_vacuum_cron_tick_is_handled_on_the_other_queue(world: &mut ApiWorld) {
-    vacuum(world, true).await;
+    vacuum(world, Queue::Other).await;
 }
 
 #[then(expr = "the job {string} is purged from the done set, the data and the result")]

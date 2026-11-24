@@ -3,7 +3,7 @@ use pretty_assertions::assert_eq;
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::{
-    Mock, MockGuard, MockServer, ResponseTemplate,
+    Mock, MockGuard, ResponseTemplate,
     matchers::{basic_auth, body_json, body_string_contains, header, method, path},
 };
 
@@ -32,26 +32,20 @@ use crate::{
             notion_oauth_credential, slack_oauth_credential, ticktick_oauth_credential,
         },
     },
-    steps::provider::Provider,
+    steps::provider::ProviderName,
     world::ApiWorld,
 };
 
-fn mock_server(app: &TestedApp, kind: IntegrationProviderKind) -> &MockServer {
-    match kind {
-        IntegrationProviderKind::Github => &app.github_mock_server,
-        IntegrationProviderKind::GoogleMail => &app.google_mail_mock_server,
-        IntegrationProviderKind::Slack => &app.slack_mock_server,
-        IntegrationProviderKind::Linear => &app.linear_mock_server,
-        IntegrationProviderKind::TickTick => &app.ticktick_mock_server,
-        IntegrationProviderKind::Notion => &app.notion_mock_server,
-        other => panic!("{other:?} grants are not revoked"),
-    }
+const ROTATING_REFRESH_TOKEN: &str = "xoxe-1-old-refresh-token";
+
+/// What a provider needs to be connected.
+struct ProviderFixture {
+    config: IntegrationConnectionConfig,
+    credential: OAuthCredentialFixture,
 }
 
-fn connection_kit(
-    kind: IntegrationProviderKind,
-) -> (IntegrationConnectionConfig, OAuthCredentialFixture) {
-    match kind {
+fn provider_fixture(provider: ProviderName) -> ProviderFixture {
+    let (config, credential) = match provider.0 {
         IntegrationProviderKind::Github => (
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             github_oauth_credential(),
@@ -77,14 +71,18 @@ fn connection_kit(
             notion_oauth_credential(),
         ),
         other => panic!("{other:?} grants are not revoked"),
-    }
+    };
+    ProviderFixture { config, credential }
 }
 
-async fn connect(world: &mut ApiWorld, kind: IntegrationProviderKind, rotating: bool) {
+async fn connect(world: &mut ApiWorld, provider: ProviderName, refresh_token: Option<&str>) {
     let user_id = world.user().id;
-    let (config, mut credential) = connection_kit(kind);
-    if rotating {
-        credential.refresh_token = Some(RefreshToken("xoxe-1-old-refresh-token".to_string()));
+    let ProviderFixture {
+        config,
+        mut credential,
+    } = provider_fixture(provider);
+    if let Some(refresh_token) = refresh_token {
+        credential.refresh_token = Some(RefreshToken(refresh_token.to_string()));
     }
     let app = world.app.get().await;
     let connection = create_and_mock_integration_connection(
@@ -100,20 +98,19 @@ async fn connect(world: &mut ApiWorld, kind: IntegrationProviderKind, rotating: 
     world.connections.granted = Some(connection);
 }
 
-#[given(
-    regex = r"^I have a validated (GitHub|Google Mail|Slack|Linear|TickTick|Notion) connection with a stored credential$"
-)]
-async fn i_have_a_connection_with_a_credential(world: &mut ApiWorld, provider: String) {
-    connect(world, provider_kind(&provider), false).await;
-}
-
-fn provider_kind(name: &str) -> IntegrationProviderKind {
-    name.parse::<Provider>().unwrap().0
+#[given(expr = "I have a validated {provider} connection with a stored credential")]
+async fn i_have_a_connection_with_a_credential(world: &mut ApiWorld, provider: ProviderName) {
+    connect(world, provider, None).await;
 }
 
 #[given("I have a validated Slack connection whose credential rotates")]
 async fn i_have_a_rotating_slack_connection(world: &mut ApiWorld) {
-    connect(world, IntegrationProviderKind::Slack, true).await;
+    connect(
+        world,
+        ProviderName(IntegrationProviderKind::Slack),
+        Some(ROTATING_REFRESH_TOKEN),
+    )
+    .await;
 }
 
 #[given("its access token expired an hour ago")]
@@ -131,11 +128,10 @@ async fn its_access_token_expired(world: &mut ApiWorld) {
 }
 
 async fn slack_revocation(
-    world: &mut ApiWorld,
+    app: &TestedApp,
     access_token: &str,
     response: serde_json::Value,
 ) -> MockGuard {
-    let app = world.app.get().await;
     Mock::given(method("POST"))
         .and(path("/auth.revoke"))
         .and(header(
@@ -150,10 +146,10 @@ async fn slack_revocation(
 async fn accept_revocation(
     app: &TestedApp,
     settings: &Settings,
-    kind: IntegrationProviderKind,
+    provider: ProviderName,
 ) -> MockGuard {
-    let server = mock_server(app, kind);
-    match kind {
+    let server = provider.mock_server(app);
+    match provider.0 {
         IntegrationProviderKind::Github => {
             let client_id = &settings.integrations["github"].oauth_client_id;
             Mock::given(method("DELETE"))
@@ -176,18 +172,12 @@ async fn accept_revocation(
                 .await
         }
         IntegrationProviderKind::Slack => {
-            Mock::given(method("POST"))
-                .and(path("/auth.revoke"))
-                .and(header(
-                    "authorization",
-                    "Bearer slack_test_user_access_token",
-                ))
-                .respond_with(
-                    ResponseTemplate::new(200)
-                        .set_body_json(json!({ "ok": true, "revoked": true })),
-                )
-                .mount_as_scoped(server)
-                .await
+            slack_revocation(
+                app,
+                "slack_test_user_access_token",
+                json!({ "ok": true, "revoked": true }),
+            )
+            .await
         }
         IntegrationProviderKind::Linear => {
             Mock::given(method("POST"))
@@ -227,15 +217,16 @@ async fn accept_revocation(
     }
 }
 
-#[given(regex = r"^(GitHub|Google Mail|Slack|Linear|TickTick|Notion) revokes my grant when asked$")]
-#[when(regex = r"^(GitHub|Google Mail|Slack|Linear|TickTick|Notion) revokes my grant when asked$")]
-async fn the_provider_accepts_to_revoke(world: &mut ApiWorld, provider: String) {
+#[given(expr = "{provider} revokes my grant when asked")]
+#[when(expr = "{provider} revokes my grant when asked")]
+async fn the_provider_revokes_the_grant(world: &mut ApiWorld, provider: ProviderName) {
     let app = world.app.get().await;
-    let guard = accept_revocation(app, &settings(), provider_kind(&provider)).await;
+    let guard = accept_revocation(app, &settings(), provider).await;
     world
         .connections
-        .guards
-        .push((format!("{provider} grant"), guard));
+        .calls
+        .revocations
+        .insert(provider.0, guard);
 }
 
 #[given("GitHub fails to revoke my grant")]
@@ -248,10 +239,7 @@ async fn github_fails_to_revoke(world: &mut ApiWorld) {
         .respond_with(ResponseTemplate::new(500))
         .mount_as_scoped(&app.github_mock_server)
         .await;
-    world
-        .connections
-        .guards
-        .push(("failure".to_string(), guard));
+    world.connections.calls.failure = Some(guard);
 }
 
 #[given("Slack is unavailable when asked to revoke a token")]
@@ -262,45 +250,42 @@ async fn slack_is_unavailable(world: &mut ApiWorld) {
         .respond_with(ResponseTemplate::new(503))
         .mount_as_scoped(&app.slack_mock_server)
         .await;
-    world
-        .connections
-        .guards
-        .push(("failure".to_string(), guard));
+    world.connections.calls.failure = Some(guard);
 }
 
-#[given(regex = r"^(GitHub|Slack) is back$")]
-#[when(regex = r"^(GitHub|Slack) is back$")]
-fn the_provider_is_back(world: &mut ApiWorld, _provider: String) {
-    world.connections.release("failure");
+#[given("the provider is back")]
+#[when("the provider is back")]
+fn the_provider_is_back(world: &mut ApiWorld) {
+    world.connections.calls.failure = None;
 }
 
 #[given("Slack answers that my token expired")]
 #[when("Slack answers that my token expired")]
 async fn slack_answers_token_expired(world: &mut ApiWorld) {
+    let app = world.app.get().await;
     let guard = slack_revocation(
-        world,
+        app,
         "slack_test_user_access_token",
         json!({ "ok": false, "error": "token_expired" }),
     )
     .await;
-    world
-        .connections
-        .guards
-        .push(("expired".to_string(), guard));
+    world.connections.calls.expired = Some(guard);
 }
 
 #[given("Slack answers that my token was already revoked")]
 async fn slack_answers_token_revoked(world: &mut ApiWorld) {
+    let app = world.app.get().await;
     let guard = slack_revocation(
-        world,
+        app,
         "slack_test_user_access_token",
         json!({ "ok": false, "error": "token_revoked" }),
     )
     .await;
     world
         .connections
-        .guards
-        .push(("Slack grant".to_string(), guard));
+        .calls
+        .revocations
+        .insert(IntegrationProviderKind::Slack, guard);
 }
 
 #[given("Slack renews my token when asked")]
@@ -310,9 +295,9 @@ async fn slack_renews_my_token(world: &mut ApiWorld) {
     let guard = Mock::given(method("POST"))
         .and(path("/oauth.v2.access"))
         .and(body_string_contains("grant_type=refresh_token"))
-        .and(body_string_contains(
-            "refresh_token=xoxe-1-old-refresh-token",
-        ))
+        .and(body_string_contains(format!(
+            "refresh_token={ROTATING_REFRESH_TOKEN}"
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "ok": true,
             "access_token": "xoxe.xoxp-new-access-token",
@@ -322,25 +307,24 @@ async fn slack_renews_my_token(world: &mut ApiWorld) {
         })))
         .mount_as_scoped(&app.slack_mock_server)
         .await;
-    world
-        .connections
-        .guards
-        .push(("refresh".to_string(), guard));
+    world.connections.calls.renewal = Some(guard);
 }
 
 #[given("Slack accepts to revoke my renewed token")]
 #[when("Slack accepts to revoke my renewed token")]
 async fn slack_accepts_the_renewed_token(world: &mut ApiWorld) {
+    let app = world.app.get().await;
     let guard = slack_revocation(
-        world,
+        app,
         "xoxe.xoxp-new-access-token",
         json!({ "ok": true, "revoked": true }),
     )
     .await;
     world
         .connections
-        .guards
-        .push(("Slack grant".to_string(), guard));
+        .calls
+        .revocations
+        .insert(IntegrationProviderKind::Slack, guard);
 }
 
 #[when("I disconnect it")]
@@ -408,54 +392,58 @@ async fn the_retry_job_runs(world: &mut ApiWorld, max_attempts: u32) {
     world.connections.retried = Some(result);
 }
 
-async fn requests_received(world: &ApiWorld, name: &str) -> usize {
-    world
-        .connections
-        .guard(name)
+async fn requests_received(guard: Option<&MockGuard>, what: &str) -> usize {
+    guard
+        .unwrap_or_else(|| panic!("{what} was not prepared in this scenario"))
         .received_requests()
         .await
         .len()
 }
 
-#[then(
-    regex = r"^(GitHub|Google Mail|Slack|Linear|TickTick|Notion) was asked once to revoke my grant$"
-)]
-async fn the_provider_was_asked_once(world: &mut ApiWorld, provider: String) {
-    assert_eq!(
-        requests_received(world, &format!("{provider} grant")).await,
-        1,
-        "the {provider} grant should have been revoked"
-    );
+async fn revocation_requests(world: &ApiWorld, provider: ProviderName) -> usize {
+    requests_received(
+        world.connections.calls.revocations.get(&provider.0),
+        "The revocation",
+    )
+    .await
 }
 
-#[then(
-    regex = r"^(GitHub|Google Mail|Slack|Linear|TickTick|Notion) was not asked to revoke my grant$"
-)]
-async fn the_provider_was_not_asked(world: &mut ApiWorld, provider: String) {
-    assert_eq!(
-        requests_received(world, &format!("{provider} grant")).await,
-        0,
-        "the {provider} grant must not be revoked"
-    );
+#[then(expr = "{provider} was asked once to revoke my grant")]
+async fn the_provider_was_asked_once(world: &mut ApiWorld, provider: ProviderName) {
+    assert_eq!(revocation_requests(world, provider).await, 1);
 }
 
-#[then(regex = r"^(GitHub|Slack) was asked once to revoke my grant, and failed$")]
-async fn the_provider_failed_once(world: &mut ApiWorld, provider: String) {
+#[then(expr = "{provider} was not asked to revoke my grant")]
+async fn the_provider_was_not_asked(world: &mut ApiWorld, provider: ProviderName) {
+    assert_eq!(revocation_requests(world, provider).await, 0);
+}
+
+#[then(expr = "{provider} was asked once to revoke my grant, and failed")]
+async fn the_provider_failed_once(world: &mut ApiWorld, provider: ProviderName) {
     assert_eq!(
-        requests_received(world, "failure").await,
-        1,
-        "{provider} should have been asked once"
+        requests_received(
+            world.connections.calls.failure.as_ref(),
+            &format!("The {provider:?} failure")
+        )
+        .await,
+        1
     );
 }
 
 #[then("Slack was asked once to renew my token")]
 async fn slack_was_asked_to_renew(world: &mut ApiWorld) {
-    assert_eq!(requests_received(world, "refresh").await, 1);
+    assert_eq!(
+        requests_received(world.connections.calls.renewal.as_ref(), "The renewal").await,
+        1
+    );
 }
 
 #[then("Slack was asked once about my expired token")]
 async fn slack_was_asked_about_the_expired_token(world: &mut ApiWorld) {
-    assert_eq!(requests_received(world, "expired").await, 1);
+    assert_eq!(
+        requests_received(world.connections.calls.expired.as_ref(), "The expiry").await,
+        1
+    );
 }
 
 #[then(expr = "the revocation retry job completed {int} and failed {int}")]

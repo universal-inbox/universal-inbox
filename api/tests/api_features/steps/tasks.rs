@@ -7,7 +7,6 @@ use uuid::Uuid;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::ticktick::TickTickConfig,
-        provider::IntegrationProviderKind,
     },
     task::{
         ProjectSummary, TASK_BODY_MAX_LENGTH, TASK_PROJECT_NAME_MAX_LENGTH, TASK_TITLE_MAX_LENGTH,
@@ -36,6 +35,7 @@ use crate::{
         },
         third_party::create_task_third_party_item,
     },
+    steps::provider::ProviderName,
     world::{ApiWorld, Response},
 };
 
@@ -251,11 +251,15 @@ fn i_see_only_the_task(world: &mut ApiWorld, name: String) {
     assert_eq!(world.tasks.listed, vec![world.tasks.named(&name).clone()]);
 }
 
-async fn patch(world: &mut ApiWorld, id: Uuid, patch: &impl serde::Serialize, other: bool) {
-    let client = if other {
-        world.other_session.as_ref().unwrap().client.clone()
-    } else {
-        world.client()
+enum Sender {
+    Me,
+    OtherUser,
+}
+
+async fn patch(world: &mut ApiWorld, id: Uuid, patch: &impl serde::Serialize, sender: Sender) {
+    let client = match sender {
+        Sender::Me => world.client(),
+        Sender::OtherUser => world.other_session.as_ref().unwrap().client.clone(),
     };
     let app = world.app.get().await;
     let response = patch_resource_response(&client, &app.api_address, "tasks", id, patch).await;
@@ -272,7 +276,7 @@ async fn i_send_the_status_it_already_has(world: &mut ApiWorld, name: String) {
             status: Some(task.status),
             ..Default::default()
         },
-        false,
+        Sender::Me,
     )
     .await;
 }
@@ -287,7 +291,7 @@ async fn that_other_user_marks_a_task_as_done(world: &mut ApiWorld, name: String
             status: Some(TaskStatus::Done),
             ..Default::default()
         },
-        true,
+        Sender::OtherUser,
     )
     .await;
 }
@@ -303,7 +307,7 @@ async fn i_point_a_task_at_a_stored_item(world: &mut ApiWorld, name: String, tar
             sink_item_id: Some(sink_item_id),
             ..Default::default()
         },
-        false,
+        Sender::Me,
     )
     .await;
 }
@@ -316,7 +320,7 @@ fn the_app_does_not_answer_403(world: &mut ApiWorld) {
 #[when(expr = "I send the task {string} a patch with nothing to change")]
 async fn i_send_an_empty_patch(world: &mut ApiWorld, name: String) {
     let id = world.tasks.named(&name).id;
-    patch(world, id.into(), &TaskPatch::default(), false).await;
+    patch(world, id.into(), &TaskPatch::default(), Sender::Me).await;
 }
 
 #[when("I mark a task that does not exist as active")]
@@ -330,7 +334,7 @@ async fn i_patch_an_unknown_task(world: &mut ApiWorld) {
             status: Some(TaskStatus::Active),
             ..Default::default()
         },
-        false,
+        Sender::Me,
     )
     .await;
 }
@@ -356,7 +360,7 @@ async fn i_send_an_invalid_patch(world: &mut ApiWorld, field: String, problem: S
         },
         other => panic!("Unknown invalid patch {other:?}"),
     };
-    patch(world, Uuid::new_v4(), &invalid, false).await;
+    patch(world, Uuid::new_v4(), &invalid, Sender::Me).await;
 }
 
 #[when(expr = "I send a patch with the unknown field {string} to a task that does not exist")]
@@ -365,7 +369,7 @@ async fn i_send_a_patch_with_an_unknown_field(world: &mut ApiWorld, field: Strin
         world,
         Uuid::new_v4(),
         &json!({ "status": "Done", field: Uuid::new_v4() }),
-        false,
+        Sender::Me,
     )
     .await;
 }
@@ -377,16 +381,15 @@ async fn i_search_my_tasks(world: &mut ApiWorld, query: String) {
     world.tasks.found = search_tasks(&client, &app.api_address, &query, None).await;
 }
 
-#[when(expr = "I search my {word} tasks for {string}")]
-async fn i_search_my_tasks_of_a_provider(world: &mut ApiWorld, provider: String, query: String) {
-    let kind = match provider.as_str() {
-        "Todoist" => IntegrationProviderKind::Todoist,
-        "TickTick" => IntegrationProviderKind::TickTick,
-        other => panic!("Unknown task provider {other:?}"),
-    };
+#[when(expr = "I search my {provider} tasks for {string}")]
+async fn i_search_my_tasks_of_a_provider(
+    world: &mut ApiWorld,
+    provider: ProviderName,
+    query: String,
+) {
     let client = world.client();
     let app = world.app.get().await;
-    world.tasks.found = search_tasks(&client, &app.api_address, &query, Some(kind)).await;
+    world.tasks.found = search_tasks(&client, &app.api_address, &query, Some(provider.0)).await;
 }
 
 #[when(expr = "that other user searches their tasks for {string}")]

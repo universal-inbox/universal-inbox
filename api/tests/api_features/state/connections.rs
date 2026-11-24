@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use universal_inbox::integration_connection::{
-    IntegrationConnection, config::IntegrationConnectionConfig,
+    IntegrationConnection, config::IntegrationConnectionConfig, provider::IntegrationProviderKind,
 };
 use universal_inbox_api::universal_inbox::{
     UniversalInboxError, integration_connection::service::PauseWithoutEmailReport,
@@ -20,7 +22,7 @@ pub struct Connections {
     pub granted: Option<Box<IntegrationConnection>>,
     pub saved_config: Option<Box<IntegrationConnectionConfig>>,
     pub unknown_id: Option<Uuid>,
-    pub guards: Vec<(String, MockGuard)>,
+    pub calls: ProviderCalls,
     pub retried: Option<(usize, usize)>,
     pub stored_token_response: Option<serde_json::Value>,
     pub linear: Option<Box<IntegrationConnection>>,
@@ -30,16 +32,11 @@ pub struct Connections {
     pub recorded_activity: Option<DateTime<Utc>>,
 }
 
-impl Connections {
-    pub fn guard(&self, name: &str) -> &MockGuard {
-        self.guards
-            .iter()
-            .find(|(guard_name, _)| guard_name == name)
-            .map(|(_, guard)| guard)
-            .unwrap_or_else(|| panic!("No provider call was prepared as {name:?}"))
-    }
-
-    pub fn release(&mut self, name: &str) {
-        self.guards.retain(|(guard_name, _)| guard_name != name);
-    }
+/// The calls a scenario expects a provider to receive, each kept to count its requests.
+#[derive(Default)]
+pub struct ProviderCalls {
+    pub revocations: HashMap<IntegrationProviderKind, MockGuard>,
+    pub failure: Option<MockGuard>,
+    pub expired: Option<MockGuard>,
+    pub renewal: Option<MockGuard>,
 }
