@@ -43,7 +43,7 @@ async fn github_answers_to_mark_as_read_and_delete(world: &mut ApiWorld, status:
     calls.insert(GithubCall::Delete, delete);
 }
 
-#[given("GitHub accepts to mark the thread as read, delete it and unsubscribe from it")]
+#[given("GitHub accepts to mark the thread as read and to delete it")]
 async fn github_accepts_to_mark_as_read_delete_and_unsubscribe(world: &mut ApiWorld) {
     let app = world.app.get().await;
     let mark_as_read = Mock::given(method("PATCH"))
@@ -56,14 +56,35 @@ async fn github_accepts_to_mark_as_read_delete_and_unsubscribe(world: &mut ApiWo
         .respond_with(ResponseTemplate::new(200))
         .mount_as_scoped(&app.github_mock_server)
         .await;
-    Mock::given(method("PUT"))
-        .and(path(format!("{THREAD_PATH}/subscription")))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&app.github_mock_server)
-        .await;
     let calls = &mut world.notifications.github_calls;
     calls.insert(GithubCall::MarkAsRead, mark_as_read);
     calls.insert(GithubCall::Delete, delete);
+}
+
+#[given("GitHub would accept to unsubscribe from the thread")]
+async fn github_would_accept_to_unsubscribe(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    let subscription = Mock::given(method("PUT"))
+        .and(path(format!("{THREAD_PATH}/subscription")))
+        .respond_with(ResponseTemplate::new(200))
+        .mount_as_scoped(&app.github_mock_server)
+        .await;
+    world
+        .notifications
+        .github_calls
+        .insert(GithubCall::Subscription, subscription);
+}
+
+#[then("GitHub was asked once to unsubscribe from the thread")]
+async fn github_was_asked_once_to_unsubscribe(world: &mut ApiWorld) {
+    let guard = &world.notifications.github_calls[&GithubCall::Subscription];
+    assert_eq!(guard.received_requests().await.len(), 1);
+}
+
+#[then("GitHub was not asked to unsubscribe from the thread")]
+async fn github_was_not_asked_to_unsubscribe(world: &mut ApiWorld) {
+    let guard = &world.notifications.github_calls[&GithubCall::Subscription];
+    assert_eq!(guard.received_requests().await.len(), 0);
 }
 
 #[given("GitHub refuses to delete the thread")]

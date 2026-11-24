@@ -13,6 +13,7 @@ use wiremock::MockGuard;
 pub enum GithubCall {
     MarkAsRead,
     Delete,
+    Subscription,
 }
 
 #[derive(Default)]

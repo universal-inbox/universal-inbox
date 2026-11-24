@@ -16,9 +16,11 @@ Feature: Acting on a GitHub notification
       And I have a GitHub notification called "mine"
       And I have a Todoist task in the project "Project2", linked to "mine"
       And GitHub answers <status> when asked to mark the thread as read and to delete it
+      And GitHub would accept to unsubscribe from the thread
       When I mark "mine" as deleted
       Then the patched notification is "mine", deleted, with its read marker moved forward
       And GitHub was asked once to mark the thread as read, and once to delete it
+      And GitHub was not asked to unsubscribe from the thread
       And the Todoist task keeps its status
 
       @legacy:test_github_notifications::patch_resource::test_patch_github_notification_status_as_deleted::github_status_code_1_205
@@ -52,10 +54,12 @@ Feature: Acting on a GitHub notification
     @legacy:test_github_notifications::patch_resource::test_patch_github_notification_status_as_unsubscribed::_github_status_code_3_404
     Scenario: An unsubscribed notification is marked as read, deleted and unsubscribed at GitHub
       Given I have a GitHub notification called "mine"
-      And GitHub accepts to mark the thread as read, delete it and unsubscribe from it
+      And GitHub accepts to mark the thread as read and to delete it
+      And GitHub would accept to unsubscribe from the thread
       When I mark "mine" as unsubscribed
       Then the patched notification is "mine", unsubscribed, with its read marker moved forward
       And GitHub was asked once to mark the thread as read, and once to delete it
+      And GitHub was asked once to unsubscribe from the thread
 
   Rule: Changing a GitHub notification without acting on GitHub
 
