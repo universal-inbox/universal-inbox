@@ -15,6 +15,7 @@ mod set_aside;
 mod tasks;
 mod third_party;
 mod throttle;
+mod todoist_tasks;
 
 pub use account::{
     Account, Authorizations, Browser, EmailVerification, LinkedMethod, PasswordReset, Sessions,
@@ -36,3 +37,4 @@ pub use set_aside::SetAside;
 pub use tasks::Tasks;
 pub use third_party::ThirdPartyItems;
 pub use throttle::{Observed, Probe};
+pub use todoist_tasks::TodoistTasks;
