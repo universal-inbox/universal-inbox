@@ -69,8 +69,8 @@ Tests run with **cargo nextest** (one process per test). Root `just test` runs *
 
 ```bash
 just test [pattern] [debug]        # root domain crate
-cd api && just test [pattern]      # API tests: nextest -E 'not binary(browser)'
-cd api && just test-browser        # Playwright browser tests (binary(browser))
+cd api && just test [pattern]      # API tests: nextest -E 'not binary(browser_features)'
+cd api && just test-browser        # Playwright browser scenarios (binary(browser_features))
 cd api && cargo nextest run --lib  # API unit tests (MCP tool-count / schema tests); pre-commit runs these too
 cd web && just test                # web (Dioxus/WASM)
 ```
@@ -89,9 +89,23 @@ API tests need Postgres + Redis up (`mise exec -- just run-detached`; prefix `mi
 - Browser tests are reserved for the most important flows; prefer API tests. Never navigate a browser
   page to `/api/*` (the middleware forces `Content-Disposition: attachment`).
 
+## Scenarios (cucumber)
+
+API integration tests and all browser tests are being migrated from rstest to Gherkin scenarios run
+by cucumber-rs. A scenario is a nextest test (one process per scenario), named
+`<feature file>::<Rule>::<Scenario>`; a Scenario Outline gives one test per Examples row.
+
+- Features: `api/tests/features/<domain>/*.feature`. Steps: `api/tests/api_features/steps/`, state kept
+  between steps in `api_features/state/`, one `ApiWorld` per scenario. Browser: `api/tests/browser_features/`.
+- Steps speak the user's language and are shared: parameterise (`{provider}`, `{duration}`), never one step per test.
+- Every migrated test keeps a `@legacy:<module>::<test>[::case]` tag until the migration ends;
+  `just api check-legacy-mapping` (also run by `just api test`) checks that no legacy test was lost.
+- Check a new scenario by mutating the code it covers and seeing it fail.
+
 ## Where tests live
 
-- **API integration tests:** `api/tests/api/` (`test_*.rs`, one file per feature/integration); **browser:** `api/tests/browser/`.
+- **Scenarios:** `api/tests/features/` (API and browser), steps under `api/tests/api_features/` and `api/tests/browser_features/`.
+- **Remaining rstest API tests (until migrated):** `api/tests/api/` (`test_*.rs`, one file per feature/integration).
 - **Unit tests:** inline `#[cfg(test)]` modules next to the code under test.
 
 See also: [integrations](integrations.md), [database patterns](database-patterns.md), [common pitfalls](common-pitfalls.md).
