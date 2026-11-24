@@ -21,6 +21,7 @@ mod jobs;
 mod kept_triage;
 mod mcp_session_store;
 mod notifications;
+mod notion_sync;
 mod passkey;
 mod passkey_ceremony;
 mod password;
