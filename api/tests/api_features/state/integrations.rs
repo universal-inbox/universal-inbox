@@ -20,4 +20,5 @@ pub struct Integrations {
     pub google_drive_connection: Option<Box<IntegrationConnection>>,
     pub ticktick_connection: Option<Box<IntegrationConnection>>,
     pub slack_connection: Option<Box<IntegrationConnection>>,
+    pub oauth_connection: Option<Box<IntegrationConnection>>,
 }

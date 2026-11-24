@@ -26,6 +26,7 @@ mod mcp_session_store;
 mod mention;
 mod notifications;
 mod notion_sync;
+mod oauth_callback;
 mod passkey;
 mod passkey_ceremony;
 mod password;

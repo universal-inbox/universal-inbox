@@ -17,7 +17,6 @@ mod test_multi_task_manager;
 mod test_notion_webhook;
 mod test_oauth2_cimd;
 mod test_oauth2_revocation;
-mod test_oauth_callback;
 mod test_realtime_events;
 mod test_realtime_stream;
 mod test_slack_backfill_team_id;

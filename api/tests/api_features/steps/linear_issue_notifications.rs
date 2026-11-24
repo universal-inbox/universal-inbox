@@ -232,7 +232,6 @@ fn linear_reports_a_second_notification(world: &mut ApiWorld) {
     world.linear_tasks.second_notification = Some(uuid::Uuid::new_v4());
 }
 
-#[given(expr = "I take note of the unread notification Linear reported as {string}")]
 #[when(expr = "I take note of the unread notification Linear reported as {string}")]
 fn i_take_note_of_the_unread_notification(world: &mut ApiWorld, name: String) {
     let notification = world
@@ -245,7 +244,6 @@ fn i_take_note_of_the_unread_notification(world: &mut ApiWorld, name: String) {
     world.notifications.by_name.insert(name, notification);
 }
 
-#[given(expr = "I read {string} in Universal Inbox only, which was last updated at {string}")]
 #[when(expr = "I read {string} in Universal Inbox only, which was last updated at {string}")]
 async fn i_read_it_in_universal_inbox_only(world: &mut ApiWorld, name: String, updated_at: String) {
     let updated_at = parse_time(&updated_at);
@@ -263,7 +261,6 @@ async fn i_read_it_in_universal_inbox_only(world: &mut ApiWorld, name: String, u
     set_notification_updated_at(app, id, updated_at).await;
 }
 
-#[given("I force a new sync of my Linear notifications, which reports the same notifications")]
 #[when("I force a new sync of my Linear notifications, which reports the same notifications")]
 async fn i_force_a_new_sync(world: &mut ApiWorld) {
     let user_id = world.user().id;
@@ -376,6 +373,21 @@ async fn the_newer_notification_is_read(world: &mut ApiWorld) {
         .find(|notification| notification.source_item.source_id == second_id)
         .expect("The newer notification was not synced");
     assert_eq!(newer.status, NotificationStatus::Read);
+    let issue_id = match &reported_notifications()[2] {
+        LinearNotification::IssueNotification { issue, .. } => issue.id,
+        _ => unreachable!("Expected Linear issue notification"),
+    };
+    let of_that_issue = notifications
+        .iter()
+        .filter(|notification| {
+            matches!(
+                &notification.source_item.data,
+                ThirdPartyItemData::LinearNotification(linear)
+                    if matches!(&**linear, LinearNotification::IssueNotification { issue, .. } if issue.id == issue_id)
+            )
+        })
+        .count();
+    assert_eq!(of_that_issue, 2);
 }
 
 #[then("my Linear connection recorded a completed notifications sync, without failure")]
@@ -412,4 +424,14 @@ async fn the_snooze_is_stored_directly(world: &mut ApiWorld, name: String, until
         .await
         .unwrap();
     transaction.commit().await.unwrap();
+    let notification = read_notification(world, &name).await;
+    assert_eq!(notification.snoozed_until, Some(parse_time(&until)));
+}
+
+fn reported_notifications() -> Vec<LinearNotification> {
+    sync_linear_notifications_response()
+        .data
+        .unwrap()
+        .try_into()
+        .unwrap()
 }
