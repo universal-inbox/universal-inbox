@@ -24,7 +24,7 @@ use crate::{
 
 const NO_SUCH_NOTIFICATION: &str = "00000000-0000-4000-8000-000000000000";
 
-fn my_token(world: &ApiWorld) -> String {
+pub(super) fn my_token(world: &ApiWorld) -> String {
     world
         .sessions
         .api_token
@@ -65,7 +65,7 @@ async fn record(world: &mut ApiWorld, response: reqwest::Response) {
     };
 }
 
-fn body(world: &ApiWorld) -> &Value {
+pub(super) fn body(world: &ApiWorld) -> &Value {
     world
         .mcp
         .body
@@ -311,7 +311,7 @@ async fn i_list_an_unknown_session(world: &mut ApiWorld) {
     world.mcp.status = Some(response.status());
 }
 
-async fn call_tool_in_a_new_session(world: &mut ApiWorld, name: &str, arguments: Value) {
+pub(super) async fn call_tool_in_a_new_session(world: &mut ApiWorld, name: &str, arguments: Value) {
     let token = my_token(world);
     let app = world.app.get().await;
     let answer = mcp_client::tool_call(app, &token, name, arguments).await;

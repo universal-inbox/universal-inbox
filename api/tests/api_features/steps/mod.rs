@@ -25,6 +25,7 @@ mod linear_tasks_sync;
 mod mcp_client;
 mod mcp_protocol;
 mod mcp_session_store;
+mod mcp_triage;
 mod mention;
 mod notifications;
 mod notion_sync;
