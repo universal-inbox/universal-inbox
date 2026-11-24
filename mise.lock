@@ -807,6 +807,9 @@ aube = { path = ".mise/locks/npm-playwright/1.64.0", digest = "sha256:f59d688014
 backend = "npm:playwright"
 specifiers = ["1.64.0"]
 
+[tools."npm:playwright".provenance]
+repository = "github.com/microsoft/playwright"
+
 [[tools.pinact]]
 version = "5.0.2"
 backend = "aqua:suzuki-shunsuke/pinact"
