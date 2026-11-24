@@ -17,7 +17,6 @@ use crate::{
 async fn i_list_notifications_concurrently(world: &mut ApiWorld, width: usize, rounds: usize) {
     let client = world.client();
     let app = world.app.get().await;
-    let mut answers = Vec::new();
     for _ in 0..rounds {
         let requests = (0..width).map(|_| {
             list_notifications_response(
@@ -31,11 +30,8 @@ async fn i_list_notifications_concurrently(world: &mut ApiWorld, width: usize, r
             )
         });
         for response in futures::future::join_all(requests).await {
-            answers.push(Response::read(response).await);
+            world.http.record(Response::read(response).await);
         }
-    }
-    for answer in answers {
-        world.http.record(answer);
     }
 }
 
@@ -61,7 +57,7 @@ async fn a_visitor_asks_for_syncs(world: &mut ApiWorld) {
     }
 }
 
-#[then(expr = "the app answered {int} {int} times")]
+#[then(expr = "the app answered {int}, {int} times")]
 fn the_app_answered_n_times(world: &mut ApiWorld, status: u16, count: usize) {
     let answers = world.http.all();
     assert_eq!(answers.len(), count);
