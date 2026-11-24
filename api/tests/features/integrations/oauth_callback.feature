@@ -15,22 +15,28 @@ Feature: The OAuth callback
       And another user is signed in
       When the provider calls back with that state and a code, for another signed in user
       Then I am redirected to my settings with "oauth_error=invalid-state"
+      And TickTick was not called by that callback
+      And that redirect does not contain "Failed to retrieve"
+      And that redirect does not contain "redis"
+      And that redirect does not contain "invalid or expired"
       And my connection is still not validated, and not pinned to any account
+      And no credential is stored for my connection
 
     @legacy:test_oauth_callback::test_oauth_callback_requires_a_session
     Scenario: A callback without session is refused and consumes nothing
       Given I started the OAuth flow of a new TickTick connection
       When the provider calls back with that state and a code, without any session
       Then I am redirected to my settings with "oauth_error=invalid-state"
+      And TickTick was not called by that callback
       And the state of that flow is still stored, as a call without session consumes nothing
 
     @legacy:test_oauth_callback::test_oauth_callback_redacts_internal_error_chain
     Scenario: A state nobody issued is reported with a public code only
-      When the provider calls back with a state nobody issued
-      Then I am redirected to my settings with "oauth_error=invalid-state"
-      And that redirect does not contain "Failed to retrieve"
+      When the provider calls back with a state nobody issued, for me
+      Then that redirect does not contain "Failed to retrieve"
       And that redirect does not contain "redis"
       And that redirect does not contain "invalid or expired"
+      And I am redirected to my settings with "oauth_error=invalid-state"
 
     @legacy:test_oauth_callback::test_oauth_callback_redacts_provider_error_parameter
     Scenario: The error of the provider is not echoed back
@@ -53,6 +59,7 @@ Feature: The OAuth callback
       When the provider calls back with that state and a code, for the owner of the connection
       Then I am redirected to my settings with "oauth_success=true"
       And my connection is validated, and pinned to the Google account of "jane.doe@example.com"
+      And the credential of my connection is stored
 
       @legacy:test_oauth_callback::google_provider_user_id::test_oauth_callback_pins_google_account::case_1_google_mail
       Examples:
@@ -82,6 +89,7 @@ Feature: The OAuth callback
       When the provider calls back with that state and a code, for the owner of the connection
       Then I am redirected to my settings with "oauth_success=true"
       And my connection is validated, and pinned to the Google account of "jane.doe@example.com"
+      And the credential of my connection is stored
 
     @legacy:test_oauth_callback::google_provider_user_id::test_oauth_callback_repins_reconnect_with_another_google_account
     Scenario: A connection reconnected with another Google account is pinned to it, and its cached address follows
@@ -91,6 +99,7 @@ Feature: The OAuth callback
       When the provider calls back with that state and a code, for the owner of the connection
       Then I am redirected to my settings with "oauth_success=true"
       And my connection is validated, and pinned to the Google account of "john.roe@example.com"
+      And the credential of my connection is stored
       When I sync my Google Mail notifications, which has no thread
       Then my Google Mail connection caches the address "John.Roe@example.com"
 
@@ -102,6 +111,11 @@ Feature: The OAuth callback
       When the provider calls back with that state and a code, for the owner of the connection
       Then I am redirected to my settings with "oauth_error=internal-error"
       And my connection is still not validated, and not pinned to any account
+      And no credential is stored for my connection
+      And that redirect does not contain "Failed to retrieve"
+      And that redirect does not contain "redis"
+      And that redirect does not contain "invalid or expired"
+      And no credential is stored for my connection
 
   Rule: The callback pins the Notion user of the connection
 
@@ -117,13 +131,34 @@ Feature: The OAuth callback
       When the provider calls back with that state and a code, for the owner of the connection
       Then I am redirected to my settings with "oauth_success=true"
       And my Notion connection is validated, pinned to the Notion user, and keeps the workspace and bot
+      And the credential of my connection is stored
 
     @legacy:test_oauth_callback::notion_provider::test_notion_events_are_queued_once_the_workspace_is_connected
     Scenario: The events of a workspace are queued once the workspace is connected
-      Given Notion sends an event of a workspace nobody connected yet
-      And 0 Notion events are queued
-      And I started the OAuth flow of a new Notion connection
+      When Notion sends an event of that workspace
+      Then 0 Notion events are queued
+      Given I started the OAuth flow of a new Notion connection
       And Notion exchanges the code for a token of the user "notion-user-id" in the workspace "notion-workspace-id"
       When the provider calls back with that state and a code, for the owner of the connection
       And Notion sends an event of that workspace
       Then 1 Notion event is queued
+
+  Rule: An authorization cannot be started or completed for a connection of somebody else
+
+    Scenario: Another user cannot start the OAuth flow of my connection
+      Given I have a new TickTick connection, not authorized yet
+      And another user is signed in
+      When the other user asks for the authorization URL of my connection
+      Then that request is refused as forbidden
+      And no OAuth state is stored for my connection
+
+    Scenario: A state of mine naming a connection of another user is refused before the code is exchanged
+      Given another user is signed in
+      And the other user has a new Google Mail connection, not authorized yet
+      And a state of mine naming that connection of the other user is stored
+      And Google Mail would accept any code and say that the account is "Jane.Doe@example.com", if it were asked
+      When the provider calls back with that state and a code, for the owner of the connection
+      Then I am redirected to my settings with an OAuth error
+      And the connection of the other user is still not validated, and not pinned
+      And no credential is stored for the connection of the other user
+      And Google Mail was not called by that callback

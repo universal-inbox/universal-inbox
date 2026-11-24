@@ -9,4 +9,5 @@ pub struct OauthCallback {
     pub authorization_url: Option<url::Url>,
     pub status: Option<StatusCode>,
     pub location: Option<String>,
+    pub other_connection_id: Option<IntegrationConnectionId>,
 }
