@@ -17,9 +17,9 @@ use crate::{
     helpers::{TestedApp, build_tested_app, local_auth_settings},
     state::{
         Account, Audit, Authorizations, Browser, Connections, EmailVerification, Encryption,
-        GithubSync, GoogleMailSync, Integrations, Jobs, LinearTasks, LinkedMethod, McpSessions,
-        Notifications, NotionSync, Passkeys, PasswordReset, Probe, Sessions, SetAside, SlackEmojis,
-        Tasks, ThirdPartyItems, TodoistTasks,
+        GithubSync, GoogleDriveSync, GoogleMailSync, Integrations, Jobs, LinearTasks, LinkedMethod,
+        McpSessions, Notifications, NotionSync, Passkeys, PasswordReset, Probe, Sessions, SetAside,
+        SlackEmojis, Tasks, ThirdPartyItems, TodoistTasks,
     },
     steps::set_aside_support::Scene,
 };
@@ -49,6 +49,7 @@ pub struct ApiWorld {
     pub set_aside: SetAside,
     pub github_sync: GithubSync,
     pub google_mail_sync: GoogleMailSync,
+    pub google_drive_sync: GoogleDriveSync,
     pub linear_tasks: LinearTasks,
     pub todoist_tasks: TodoistTasks,
     pub notion_sync: NotionSync,

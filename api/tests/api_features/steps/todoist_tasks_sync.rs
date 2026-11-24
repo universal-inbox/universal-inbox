@@ -29,8 +29,7 @@ use crate::{
     common::settings,
     helpers::{
         integration_connection::{
-            create_and_mock_integration_connection, create_integration_connection,
-            todoist_oauth_credential,
+            create_and_mock_integration_connection, todoist_oauth_credential,
         },
         notification::list_notifications_with_tasks,
         rest::get_resource,
@@ -90,21 +89,23 @@ async fn connected_with_the_sync_disabled(world: &mut ApiWorld) {
 
 #[given("I have a Todoist connection that is not validated yet")]
 async fn a_connection_not_validated(world: &mut ApiWorld) {
-    let user_id = world.user().id;
+    connect(world, TodoistConfig::enabled()).await;
+    let connection = world.integrations.todoist_connection.as_ref().unwrap();
+    let (id, user_id) = (connection.id, connection.user_id);
     let app = world.app.get().await;
-    let connection = create_integration_connection(
-        app,
-        user_id,
-        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
-        IntegrationConnectionStatus::Created,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
-    .await;
-    world.integrations.todoist_connection = Some(connection);
+    let mut transaction = app.repository.begin().await.unwrap();
+    app.repository
+        .update_integration_connection_status(
+            &mut transaction,
+            id,
+            IntegrationConnectionStatus::Created,
+            None,
+            None,
+            user_id,
+        )
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
 }
 
 #[given("Todoist reports its items")]
@@ -430,7 +431,14 @@ async fn the_known_task_was_updated(world: &mut ApiWorld) {
     assert_eq!(task.title, second.content);
     assert_eq!(task.body, second.description);
     assert_eq!(task.priority, second.priority.into());
-    assert_eq!(task.tags.len(), second.labels.len());
+    assert_eq!(
+        task.tags,
+        second
+            .labels
+            .iter()
+            .map(|label| label.name.clone())
+            .collect::<Vec<_>>()
+    );
     assert_eq!(task.project, project.name);
     assert_eq!(task.created_at, second.added_at);
     assert_eq!(
