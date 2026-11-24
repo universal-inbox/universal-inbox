@@ -14,7 +14,7 @@ use wiremock::{
 use universal_inbox::{
     auth::auth_token::AuthenticationToken,
     integration_connection::{
-        IntegrationConnectionId, IntegrationConnectionStatus,
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::{
             google_calendar::GoogleCalendarConfig,
@@ -27,8 +27,13 @@ use universal_inbox::{
     },
     notification::NotificationSourceKind,
     pii::Pii,
+    user::UserId,
 };
-use universal_inbox_api::integrations::google_mail::GoogleMailThreadList;
+use universal_inbox_api::{
+    integrations::google_mail::GoogleMailThreadList,
+    repository::oauth_credential::OAuthCredentialRepository,
+    universal_inbox::integration_connection::service::OAUTH_STATE_PREFIX,
+};
 
 use crate::{
     common::settings,
@@ -102,15 +107,14 @@ async fn authorization_url(world: &mut ApiWorld) -> url::Url {
     .expect("Invalid authorization URL")
 }
 
-async fn start_flow(
-    world: &mut ApiWorld,
+async fn new_connection(
+    app: &TestedApp,
+    user_id: UserId,
     kind: IntegrationProviderKind,
-    provider_user_id: Option<String>,
     context: Option<IntegrationConnectionContext>,
-) {
-    let user_id = world.user().id;
-    let app = world.app.get().await;
-    let connection = create_integration_connection(
+    provider_user_id: Option<String>,
+) -> Box<IntegrationConnection> {
+    create_integration_connection(
         app,
         user_id,
         config_of(kind),
@@ -121,7 +125,18 @@ async fn start_flow(
         None,
         None,
     )
-    .await;
+    .await
+}
+
+async fn start_flow(
+    world: &mut ApiWorld,
+    kind: IntegrationProviderKind,
+    provider_user_id: Option<String>,
+    context: Option<IntegrationConnectionContext>,
+) {
+    let user_id = world.user().id;
+    let app = world.app.get().await;
+    let connection = new_connection(app, user_id, kind, context, provider_user_id).await;
     world.integrations.oauth_connection = Some(connection.clone());
     world.oauth_callback.connection_id = Some(connection.id);
     let url = authorization_url(world).await;
@@ -408,7 +423,7 @@ async fn i_am_redirected_to_my_settings(world: &mut ApiWorld, query: String) {
 fn the_redirect_does_not_contain(world: &mut ApiWorld, text: String) {
     let location = urlencoding::decode(world.oauth_callback.location.as_ref().unwrap())
         .unwrap()
-        .into_owned();
+        .replace('+', " ");
     assert!(
         !location
             .to_ascii_lowercase()
@@ -431,7 +446,7 @@ async fn the_state_is_still_stored(world: &mut ApiWorld) {
     let app = world.app.get().await;
     let mut conn = app.cache.connection_manager.clone();
     let stored: Option<String> =
-        redis::AsyncCommands::get(&mut conn, format!("universal-inbox::oauth-state::{state}"))
+        redis::AsyncCommands::get(&mut conn, format!("{OAUTH_STATE_PREFIX}{state}"))
             .await
             .expect("Failed to read OAuth state");
     assert!(
@@ -597,25 +612,11 @@ async fn notion_events_are_queued(world: &mut ApiWorld, count: usize) {
     assert_eq!(pushed_jobs_count(app).await, count);
 }
 
-// The same key prefix as the service, whose constant is private.
-const OAUTH_STATE_PREFIX: &str = "universal-inbox::oauth-state::";
-
 #[given(expr = "I have a new {provider} connection, not authorized yet")]
 async fn i_have_a_new_connection(world: &mut ApiWorld, provider: ProviderName) {
     let user_id = world.user().id;
     let app = world.app.get().await;
-    let connection = create_integration_connection(
-        app,
-        user_id,
-        config_of(provider.0),
-        IntegrationConnectionStatus::Created,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
-    .await;
+    let connection = new_connection(app, user_id, provider.0, None, None).await;
     world.oauth_callback.connection_id = Some(connection.id);
 }
 
@@ -641,14 +642,10 @@ fn that_request_is_forbidden(world: &mut ApiWorld) {
 async fn the_other_user_has_a_connection(world: &mut ApiWorld) {
     let user_id = world.other_session.as_ref().unwrap().user.id;
     let app = world.app.get().await;
-    let connection = create_integration_connection(
+    let connection = new_connection(
         app,
         user_id,
-        config_of(IntegrationProviderKind::GoogleMail),
-        IntegrationConnectionStatus::Created,
-        None,
-        None,
-        None,
+        IntegrationProviderKind::GoogleMail,
         None,
         None,
     )
@@ -660,19 +657,35 @@ async fn the_other_user_has_a_connection(world: &mut ApiWorld) {
 async fn a_state_naming_the_other_connection_is_stored(world: &mut ApiWorld) {
     let user_id = world.user().id;
     let other_id = world.oauth_callback.other_connection_id.unwrap();
-    let state = "crafted-state".to_string();
+    let app = world.app.get().await;
+    let own = new_connection(
+        app,
+        user_id,
+        IntegrationProviderKind::GoogleMail,
+        None,
+        None,
+    )
+    .await;
+    world.oauth_callback.connection_id = Some(own.id);
+    let issued_state = authorization_url(world)
+        .await
+        .query_pairs()
+        .find(|(key, _)| key == "state")
+        .map(|(_, value)| value.to_string())
+        .unwrap();
     let app = world.app.get().await;
     let mut conn = app.cache.connection_manager.clone();
+    let stored: String =
+        redis::AsyncCommands::get(&mut conn, format!("{OAUTH_STATE_PREFIX}{issued_state}"))
+            .await
+            .expect("Failed to read the issued OAuth state");
+    let mut data: serde_json::Value = serde_json::from_str(&stored).unwrap();
+    data["integration_connection_id"] = json!(other_id);
+    let state = uuid::Uuid::new_v4().to_string();
     redis::AsyncCommands::set_ex::<_, _, ()>(
         &mut conn,
         format!("{OAUTH_STATE_PREFIX}{state}"),
-        json!({
-            "integration_connection_id": other_id,
-            "pkce_verifier": null,
-            "provider_kind": IntegrationProviderKind::GoogleMail,
-            "user_id": user_id,
-        })
-        .to_string(),
+        data.to_string(),
         600,
     )
     .await
@@ -711,13 +724,16 @@ async fn the_provider_received_no_request(world: &mut ApiWorld, provider: Provid
     assert_eq!(requests, 0);
 }
 
-async fn credentials_of(world: &mut ApiWorld, connection_id: IntegrationConnectionId) -> i64 {
+async fn credentials_of(world: &mut ApiWorld, connection_id: IntegrationConnectionId) -> usize {
     let app = world.app.get().await;
-    sqlx::query_scalar("SELECT count(*) FROM oauth_credential WHERE integration_connection_id = $1")
-        .bind(connection_id.0)
-        .fetch_one(&*app.repository.pool)
+    let mut transaction = app.repository.begin().await.unwrap();
+    let credential = app
+        .repository
+        .get_oauth_credential(&mut transaction, connection_id)
         .await
-        .unwrap()
+        .unwrap();
+    transaction.commit().await.unwrap();
+    usize::from(credential.is_some())
 }
 
 #[then("the credential of my connection is stored")]

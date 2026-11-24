@@ -115,7 +115,6 @@ Feature: The OAuth callback
       And that redirect does not contain "Failed to retrieve"
       And that redirect does not contain "redis"
       And that redirect does not contain "invalid or expired"
-      And no credential is stored for my connection
 
   Rule: The callback pins the Notion user of the connection
 
@@ -158,7 +157,16 @@ Feature: The OAuth callback
       And a state of mine naming that connection of the other user is stored
       And Google Mail would accept any code and say that the account is "Jane.Doe@example.com", if it were asked
       When the provider calls back with that state and a code, for the owner of the connection
-      Then I am redirected to my settings with an OAuth error
+      Then I am redirected to my settings with "oauth_error=invalid-state"
       And the connection of the other user is still not validated, and not pinned
       And no credential is stored for the connection of the other user
       And Google Mail was not called by that callback
+
+    Scenario: A second callback with the same state is refused, and the credential is left untouched
+      Given I started the OAuth flow of a new Google Mail connection
+      And the provider exchanges the code for an access token of Google Mail
+      And Google Mail tells that the account of the access token is "Jane.Doe@example.com"
+      When the provider calls back with that state and a code, for the owner of the connection
+      And the provider calls back with that state and a code, for the owner of the connection
+      Then I am redirected to my settings with "oauth_error=invalid-state"
+      And the credential of my connection is stored

@@ -145,7 +145,7 @@ impl RefreshFailure {
     }
 }
 
-const OAUTH_STATE_PREFIX: &str = "universal-inbox::oauth-state::";
+pub const OAUTH_STATE_PREFIX: &str = "universal-inbox::oauth-state::";
 const OAUTH_STATE_TTL_SECONDS: u64 = 600;
 
 #[derive(Debug, Serialize, Deserialize)]
