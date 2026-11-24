@@ -390,22 +390,26 @@ pub async fn assert_notification_set_aside(scene: &Scene<'_>, expected: &Notific
     assert_eq!(notification.snoozed_until, expected.snoozed_until);
 }
 
-pub enum Sync {
+pub enum SyncKind {
     Notifications,
     Tasks,
 }
 
-pub async fn complete_sync(scene: &Scene<'_>, sync: Sync, provider_kind: IntegrationProviderKind) {
+pub async fn complete_sync(
+    scene: &Scene<'_>,
+    sync: SyncKind,
+    provider_kind: IntegrationProviderKind,
+) {
     let service = scene.app.integration_connection_service.read().await;
     let mut transaction = scene.app.repository.begin().await.unwrap();
 
     match sync {
-        Sync::Notifications => {
+        SyncKind::Notifications => {
             service
                 .complete_notifications_sync_status(&mut transaction, provider_kind, scene.user.id)
                 .await
         }
-        Sync::Tasks => {
+        SyncKind::Tasks => {
             service
                 .complete_tasks_sync_status(&mut transaction, provider_kind, scene.user.id)
                 .await
@@ -419,17 +423,17 @@ pub async fn complete_sync(scene: &Scene<'_>, sync: Sync, provider_kind: Integra
 pub async fn complete_restoring_sync(scene: &Scene<'_>, provider_kind: IntegrationProviderKind) {
     match provider_kind {
         IntegrationProviderKind::Todoist | IntegrationProviderKind::TickTick => {
-            complete_sync(scene, Sync::Tasks, provider_kind).await
+            complete_sync(scene, SyncKind::Tasks, provider_kind).await
         }
         IntegrationProviderKind::GoogleCalendar => {
             complete_sync(
                 scene,
-                Sync::Notifications,
+                SyncKind::Notifications,
                 IntegrationProviderKind::GoogleMail,
             )
             .await
         }
-        _ => complete_sync(scene, Sync::Notifications, provider_kind).await,
+        _ => complete_sync(scene, SyncKind::Notifications, provider_kind).await,
     }
 }
 

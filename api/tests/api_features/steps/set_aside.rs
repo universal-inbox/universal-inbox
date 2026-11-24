@@ -24,7 +24,7 @@ use crate::{
     steps::{
         provider::ProviderName,
         set_aside_support::{
-            Sync, assert_config_updated, assert_notification_set_aside,
+            SyncKind, assert_config_updated, assert_notification_set_aside,
             assert_triage_state_preserved, complete_restoring_sync, complete_sync,
             fetch_set_aside_at, provider_fixtures, reconnect_connection, seed_provider,
             triage_notification,
@@ -230,14 +230,14 @@ async fn i_reconnect_the_connection(world: &mut ApiWorld, provider: ProviderName
 
 #[when(expr = "the notifications sync of {provider} completes")]
 async fn the_notifications_sync_completes(world: &mut ApiWorld, provider: ProviderName) {
-    world.set_aside.case_of(provider);
+    world.set_aside.assert_seeded(provider);
     let scene = world.scene().await;
-    complete_sync(&scene, Sync::Notifications, provider.0).await;
+    complete_sync(&scene, SyncKind::Notifications, provider.0).await;
 }
 
 #[when(expr = "the sync that restores the {provider} notifications completes")]
 async fn the_restoring_sync_completes(world: &mut ApiWorld, provider: ProviderName) {
-    world.set_aside.case_of(provider);
+    world.set_aside.assert_seeded(provider);
     let scene = world.scene().await;
     complete_restoring_sync(&scene, provider.0).await;
 }

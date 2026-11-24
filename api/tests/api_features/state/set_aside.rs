@@ -24,6 +24,10 @@ impl SetAside {
         case
     }
 
+    pub fn assert_seeded(&self, provider: ProviderName) {
+        self.case_of(provider);
+    }
+
     pub fn triaged(&self) -> &Notification {
         self.triaged
             .as_ref()
