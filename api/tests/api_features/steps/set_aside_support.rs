@@ -1,24 +1,14 @@
 #![allow(clippy::too_many_arguments)]
 
-//! Saving an integration configuration saves the configuration and nothing
-//! else: no notification is removed and none of the triage state a user
-//! invested in it (`status`, `last_read_at`, `snoozed_until`, `task_id`) is
-//! disturbed.
-//!
-//! The invariant is written once and the providers are cases, so a provider
-//! added later shows up as a missing `#[case]` line rather than a missing file.
-
 use chrono::{DateTime, TimeZone, Timelike, Utc};
-use graphql_client::Response;
 use http::StatusCode;
-use reqwest::Response as ReqwestResponse;
-use rstest::*;
+use pretty_assertions::assert_eq;
+use reqwest::{Client, Response as ReqwestResponse};
 use slack_morphism::SlackReactionName;
 use uuid::Uuid;
 
 use universal_inbox::{
     Page,
-    audit::AuditActor,
     integration_connection::{
         IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
@@ -40,7 +30,6 @@ use universal_inbox::{
     task::{CreateOrUpdateTaskRequest, PresetDueDate, TaskPriority, TaskSourceKind, TaskStatus},
     third_party::{
         integrations::{
-            api::{APISource, WebPage},
             github::GithubNotification,
             google_calendar::GoogleCalendarEvent,
             google_drive::GoogleDriveComment,
@@ -50,475 +39,124 @@ use universal_inbox::{
             ticktick::TickTickItem,
             todoist::TodoistItem,
         },
-        item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
+        item::{ThirdPartyItem, ThirdPartyItemData},
     },
+    user::User,
     utils::default_value::DefaultValue,
 };
 
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::linear::graphql::notifications_query,
     repository::{
         integration_connection::IntegrationConnectionRepository,
         notification::NotificationRepository, task::TaskRepository,
         third_party::ThirdPartyItemRepository,
     },
-    universal_inbox::audit::actor_context::with_actor,
 };
 
-use crate::helpers::{
-    auth::{AuthenticatedApp, authenticated_app},
-    integration_connection::{
-        OAuthCredentialFixture, create_and_mock_integration_connection,
-        create_ticktick_integration_connection, get_integration_connection_per_provider,
-        github_oauth_credential, google_calendar_oauth_credential, google_drive_oauth_credential,
-        google_mail_oauth_credential, linear_oauth_credential, slack_oauth_credential,
-        todoist_oauth_credential,
-    },
-    notification::{
-        github::{create_notification_from_github_notification, github_notification},
-        google_calendar::{create_notification_from_google_calendar_event, google_calendar_event},
-        google_drive::{create_notification_from_google_drive_comment, google_drive_comment_123},
-        google_mail::{create_notification_from_google_mail_thread, google_mail_thread_get_123},
-        linear::{
-            create_notification_from_linear_notification, sync_linear_notifications_response,
+use crate::{
+    common::settings,
+    helpers::{
+        TestedApp,
+        integration_connection::{
+            OAuthCredentialFixture, create_and_mock_integration_connection,
+            create_ticktick_integration_connection, github_oauth_credential,
+            google_calendar_oauth_credential, google_drive_oauth_credential,
+            google_mail_oauth_credential, linear_oauth_credential, slack_oauth_credential,
+            todoist_oauth_credential,
         },
-        list_notifications, list_notifications_response,
-        slack::{create_notification_from_slack_thread, slack_thread},
-        ticktick::create_notification_from_ticktick_item,
-        todoist::create_notification_from_todoist_item,
+        notification::{
+            github::{create_notification_from_github_notification, github_notification},
+            google_calendar::{
+                create_notification_from_google_calendar_event, google_calendar_event,
+            },
+            google_drive::{
+                create_notification_from_google_drive_comment, google_drive_comment_123,
+            },
+            google_mail::{
+                create_notification_from_google_mail_thread, google_mail_thread_get_123,
+                google_mail_user_profile, raw_google_mail_thread_get_123,
+            },
+            linear::{
+                create_notification_from_linear_notification, sync_linear_notifications_response,
+            },
+            list_notifications, list_notifications_response,
+            slack::{create_notification_from_slack_thread, slack_thread},
+            ticktick::create_notification_from_ticktick_item,
+            todoist::create_notification_from_todoist_item,
+        },
+        task::{ticktick::ticktick_item, todoist::todoist_item},
     },
-    rest::{create_resource, delete_resource},
-    settings,
-    task::{ticktick::ticktick_item, todoist::todoist_item},
 };
 
-/// One notification per provider, triaged, then a configuration `PUT`. Nothing
-/// may be removed and nothing may be disturbed — for any provider, any setting.
-///
-/// `Notion` and `API` have no case: Notion does not create notifications yet,
-/// and `API` is not a connection a user can configure.
-#[rstest]
-#[case(IntegrationProviderKind::Github)]
-#[case(IntegrationProviderKind::Linear)]
-#[case(IntegrationProviderKind::GoogleMail)]
-#[case(IntegrationProviderKind::GoogleDrive)]
-#[case(IntegrationProviderKind::GoogleCalendar)]
-#[case(IntegrationProviderKind::Slack)]
-#[case(IntegrationProviderKind::Todoist)]
-#[case(IntegrationProviderKind::TickTick)]
-#[tokio::test]
-async fn test_config_update_preserves_triage_state(
-    #[case] provider_kind: IntegrationProviderKind,
-    #[future] authenticated_app: AuthenticatedApp,
-    provider_fixtures: ProviderFixtures,
-) {
-    let app = authenticated_app.await;
-
-    let case = seed_provider(&app, provider_kind, &provider_fixtures).await;
-    let triaged_notification =
-        triage_notification(&app, &case.notification, &provider_fixtures.todoist_item).await;
-
-    // A change with no bearing on which notifications belong in the inbox
-    assert_config_updated(&app, case.connection.id, &case.harmless_config).await;
-    assert_triage_state_preserved(&app, &triaged_notification).await;
-
-    // A change that narrows what belongs in the inbox is just as harmless at
-    // save time: reconciling the inbox is the following sync's job.
-    if let Some(scope_narrowing_config) = case.scope_narrowing_config {
-        assert_config_updated(&app, case.connection.id, &scope_narrowing_config).await;
-        assert_triage_state_preserved(&app, &triaged_notification).await;
-    }
+/// The app, and the session of the user a scenario is signed in as.
+pub struct Scene<'a> {
+    pub app: &'a TestedApp,
+    pub client: Client,
+    pub user: User,
 }
 
-/// Switching an integration's notifications off takes them out of the inbox
-/// immediately, so the screen matches what the user just asked for — but they
-/// are set aside rather than removed, and reading one by id still resolves.
-/// Switching it back on brings them back exactly as they were, once the sync
-/// that reconciles the inbox has completed.
-#[rstest]
-#[case(IntegrationProviderKind::Github)]
-#[case(IntegrationProviderKind::Linear)]
-#[case(IntegrationProviderKind::GoogleMail)]
-#[case(IntegrationProviderKind::GoogleDrive)]
-#[case(IntegrationProviderKind::Slack)]
-#[tokio::test]
-async fn test_mute_sets_aside_and_unmute_restores(
-    #[case] provider_kind: IntegrationProviderKind,
-    #[future] authenticated_app: AuthenticatedApp,
-    provider_fixtures: ProviderFixtures,
-) {
-    let app = authenticated_app.await;
-
-    let case = seed_provider(&app, provider_kind, &provider_fixtures).await;
-    let triaged_notification =
-        triage_notification(&app, &case.notification, &provider_fixtures.todoist_item).await;
-    let muted_config = case
-        .notifications_off_config
-        .unwrap_or_else(|| panic!("{provider_kind} is expected to own a notification mute toggle"));
-
-    assert_config_updated(&app, case.connection.id, &muted_config).await;
-    assert_notification_set_aside(&app, &triaged_notification).await;
-
-    // Nothing comes back on the save itself: what is restored has to be a
-    // reconciled inbox rather than an archive, so it waits for a successful sync.
-    assert_config_updated(&app, case.connection.id, &case.enabled_config).await;
-    assert_notification_set_aside(&app, &triaged_notification).await;
-
-    complete_notifications_sync(&app, provider_kind).await;
-
-    assert_triage_state_preserved(&app, &triaged_notification).await;
-}
-
-/// Todoist and TickTick notifications are a byproduct of their task sync, and
-/// neither has a notifications sync of its own to restore them. Switching their
-/// synchronization off must therefore leave the already collected notifications
-/// in the inbox rather than setting them aside for good.
-#[rstest]
-#[case(IntegrationProviderKind::Todoist)]
-#[case(IntegrationProviderKind::TickTick)]
-#[tokio::test]
-async fn test_mute_does_not_set_aside_task_derived_notifications(
-    #[case] provider_kind: IntegrationProviderKind,
-    #[future] authenticated_app: AuthenticatedApp,
-    provider_fixtures: ProviderFixtures,
-) {
-    let app = authenticated_app.await;
-
-    let case = seed_provider(&app, provider_kind, &provider_fixtures).await;
-    let triaged_notification =
-        triage_notification(&app, &case.notification, &provider_fixtures.todoist_item).await;
-    let disabled_config = case
-        .notifications_off_config
-        .unwrap_or_else(|| panic!("{provider_kind} is expected to have an off switch"));
-
-    assert_config_updated(&app, case.connection.id, &disabled_config).await;
-
-    assert_triage_state_preserved(&app, &triaged_notification).await;
-}
-
-/// Disconnecting is the same user situation as muting, one notch stronger, so
-/// it must not be the more destructive one: its notifications leave the inbox
-/// and are set aside, and reconnecting brings them back exactly as they were
-/// once the sync that reconciles them has completed.
-///
-/// `Notion` does not create notifications yet, and `API` notifications are pushed
-/// in by an external client rather than collected by a sync, so nothing could
-/// ever restore them — neither is set aside, and neither has a case here.
-#[rstest]
-#[case(IntegrationProviderKind::Github)]
-#[case(IntegrationProviderKind::Linear)]
-#[case(IntegrationProviderKind::GoogleMail)]
-#[case(IntegrationProviderKind::GoogleDrive)]
-#[case(IntegrationProviderKind::GoogleCalendar)]
-#[case(IntegrationProviderKind::Slack)]
-#[case(IntegrationProviderKind::Todoist)]
-#[case(IntegrationProviderKind::TickTick)]
-#[tokio::test]
-async fn test_disconnect_sets_aside_and_reconnect_restores(
-    #[case] provider_kind: IntegrationProviderKind,
-    #[future] authenticated_app: AuthenticatedApp,
-    provider_fixtures: ProviderFixtures,
-) {
-    let app = authenticated_app.await;
-
-    let case = seed_provider(&app, provider_kind, &provider_fixtures).await;
-    let triaged_notification =
-        triage_notification(&app, &case.notification, &provider_fixtures.todoist_item).await;
-
-    let disconnected_connection: Box<IntegrationConnection> = delete_resource(
-        &app.client,
-        &app.app.api_address,
-        "integration-connections",
-        case.connection.id.into(),
-    )
-    .await;
-    assert_eq!(
-        disconnected_connection.status,
-        IntegrationConnectionStatus::Created
-    );
-
-    assert_notification_set_aside(&app, &triaged_notification).await;
-
-    // Reconnecting is an OAuth round trip that enqueues no sync of its own, so
-    // nothing comes back until the interval-throttled sync the next inbox load
-    // enqueues has reconciled the inbox.
-    reconnect_connection(&app, case.connection.id).await;
-    assert_notification_set_aside(&app, &triaged_notification).await;
-
-    complete_restoring_sync(&app, provider_kind).await;
-
-    assert_triage_state_preserved(&app, &triaged_notification).await;
-}
-
-/// Pausing a connection after a long inactivity is a disconnect Universal Inbox
-/// makes on the user's behalf: its notifications are set aside the same way,
-/// and reconnecting brings them back.
-#[rstest]
-#[tokio::test]
-async fn test_inactivity_pause_sets_aside_and_reconnect_restores(
-    #[future] authenticated_app: AuthenticatedApp,
-    provider_fixtures: ProviderFixtures,
-) {
-    let app = authenticated_app.await;
-
-    let case = seed_provider(&app, IntegrationProviderKind::Slack, &provider_fixtures).await;
-    let triaged_notification =
-        triage_notification(&app, &case.notification, &provider_fixtures.todoist_item).await;
-
-    sqlx::query(r#"UPDATE "user" SET last_active_at = $2 WHERE id = $1"#)
-        .bind(app.user.id.0)
-        .bind((Utc::now() - chrono::TimeDelta::days(100)).naive_utc())
-        .execute(&*app.app.repository.pool)
-        .await
-        .unwrap();
-    let _revocation = wiremock::Mock::given(wiremock::matchers::path("/auth.revoke"))
-        .respond_with(
-            wiremock::ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({ "ok": true, "revoked": true })),
-        )
-        .mount_as_scoped(&app.app.slack_mock_server)
-        .await;
-    // Runs, in production, as the PauseIntegrationConnections job
-    let (paused, failed) = with_actor(
-        AuditActor::System {
-            job: "PauseIntegrationConnections".to_string(),
-            source: None,
-            triggered_by: None,
-        },
-        async {
-            app.app
-                .integration_connection_service
-                .read()
-                .await
-                .pause_integration_connections_of_inactive_users(
-                    Utc::now() - chrono::TimeDelta::days(90),
-                    None,
-                )
-                .await
-        },
-    )
-    .await
-    .unwrap();
-    assert_eq!((paused, failed), (1, 0));
-
-    assert_notification_set_aside(&app, &triaged_notification).await;
-
-    reconnect_connection(&app, case.connection.id).await;
-    complete_restoring_sync(&app, IntegrationProviderKind::Slack).await;
-
-    assert_triage_state_preserved(&app, &triaged_notification).await;
-}
-
-/// `API` notifications are pushed in by an external client rather than collected
-/// by a synchronization, so no sync completion could ever bring them back.
-/// Disconnecting an `API` connection therefore leaves them in the inbox, rather
-/// than setting them aside for good.
-#[rstest]
-#[tokio::test]
-async fn test_disconnect_does_not_set_aside_api_notifications(
-    #[future] authenticated_app: AuthenticatedApp,
-    provider_fixtures: ProviderFixtures,
-) {
-    let app = authenticated_app.await;
-
-    // Pushing a web page through the API creates the `API` connection along with
-    // the notification.
-    let creation: Box<ThirdPartyItemCreationResult> = create_resource(
-        &app.client,
-        &app.app.api_address,
-        "third_party/notification/items",
-        Box::new(ThirdPartyItemData::WebPage(Box::new(WebPage {
-            url: "https://www.universal-inbox.com".parse().unwrap(),
-            title: "Universal Inbox".to_string(),
-            timestamp: Utc::now(),
-            source: APISource::UniversalInboxExtension,
-            favicon: None,
-        }))),
-    )
-    .await;
-    let notification = creation
-        .notification
-        .expect("Expected an API notification to be created");
-    let triaged_notification =
-        triage_notification(&app, &notification, &provider_fixtures.todoist_item).await;
-
-    let api_connection = get_integration_connection_per_provider(
-        &app,
-        app.user.id,
-        IntegrationProviderKind::API,
-        None,
-        None,
-    )
-    .await
-    .expect("Expected an API integration connection to have been created");
-
-    let disconnected_connection: Box<IntegrationConnection> = delete_resource(
-        &app.client,
-        &app.app.api_address,
-        "integration-connections",
-        api_connection.id.into(),
-    )
-    .await;
-    assert_eq!(
-        disconnected_connection.status,
-        IntegrationConnectionStatus::Created
-    );
-
-    assert_triage_state_preserved(&app, &triaged_notification).await;
-}
-
-/// The API moves connections to `Failing` on its own when a refresh token
-/// expires, so only a user's own action may set notifications aside: a failing
-/// connection keeps its notifications, which are still work the user can read,
-/// snooze or dismiss.
-#[rstest]
-#[tokio::test]
-async fn test_failing_connection_keeps_notifications_visible(
-    #[future] authenticated_app: AuthenticatedApp,
-    provider_fixtures: ProviderFixtures,
-) {
-    let app = authenticated_app.await;
-
-    let case = seed_provider(&app, IntegrationProviderKind::Github, &provider_fixtures).await;
-    let triaged_notification =
-        triage_notification(&app, &case.notification, &provider_fixtures.todoist_item).await;
-
-    let mut transaction = app.app.repository.begin().await.unwrap();
-    app.app
-        .repository
-        .update_integration_connection_status(
-            &mut transaction,
-            case.connection.id,
-            IntegrationConnectionStatus::Failing,
-            Some("Failed to refresh the access token".to_string()),
-            None,
-            app.user.id,
-        )
-        .await
-        .unwrap();
-    transaction.commit().await.unwrap();
-
-    assert_config_updated(&app, case.connection.id, &case.enabled_config).await;
-
-    assert_triage_state_preserved(&app, &triaged_notification).await;
-}
-
-/// Reconciling is idempotent: a second save while the integration is still muted
-/// matches no visible notification, so an existing `set_aside_at` is never
-/// overwritten with a fresher timestamp.
-#[rstest]
-#[tokio::test]
-async fn test_repeated_mute_does_not_refresh_set_aside_at(
-    #[future] authenticated_app: AuthenticatedApp,
-    provider_fixtures: ProviderFixtures,
-) {
-    let app = authenticated_app.await;
-
-    let case = seed_provider(&app, IntegrationProviderKind::Slack, &provider_fixtures).await;
-    let triaged_notification =
-        triage_notification(&app, &case.notification, &provider_fixtures.todoist_item).await;
-
-    assert_config_updated(
-        &app,
-        case.connection.id,
-        &IntegrationConnectionConfig::Slack(SlackConfig::disabled()),
-    )
-    .await;
-    let set_aside_at = fetch_set_aside_at(&app, &triaged_notification).await;
-    assert!(
-        set_aside_at.is_some(),
-        "Expected the Slack notification to have been set aside"
-    );
-
-    // Another save that leaves the integration muted
-    let mut still_muted_config = SlackConfig::disabled();
-    still_muted_config.reaction_config.completion_reaction_name =
-        Some(SlackReactionName("white_check_mark".to_string()));
-    assert_config_updated(
-        &app,
-        case.connection.id,
-        &IntegrationConnectionConfig::Slack(still_muted_config),
-    )
-    .await;
-
-    assert_eq!(
-        fetch_set_aside_at(&app, &triaged_notification).await,
-        set_aside_at,
-        "Expected the notification to keep the moment it was set aside"
-    );
-}
-
-struct ProviderFixtures {
-    settings: Settings,
-    github_notification: Box<GithubNotification>,
-    linear_notification: LinearNotification,
-    google_mail_thread: GoogleMailThread,
-    google_drive_comment: GoogleDriveComment,
-    google_calendar_event: GoogleCalendarEvent,
-    slack_thread: Box<SlackThread>,
-    todoist_item: Box<TodoistItem>,
-    ticktick_item: Box<TickTickItem>,
-}
-
-#[fixture]
-fn provider_fixtures(
-    settings: Settings,
-    github_notification: Box<GithubNotification>,
-    sync_linear_notifications_response: Response<notifications_query::ResponseData>,
-    google_mail_thread_get_123: GoogleMailThread,
-    google_drive_comment_123: GoogleDriveComment,
-    google_calendar_event: GoogleCalendarEvent,
-    slack_thread: Box<SlackThread>,
-    todoist_item: Box<TodoistItem>,
-    ticktick_item: Box<TickTickItem>,
-) -> ProviderFixtures {
-    let linear_notifications: Vec<LinearNotification> = sync_linear_notifications_response
+pub fn provider_fixtures() -> ProviderFixtures {
+    let linear_notifications: Vec<LinearNotification> = sync_linear_notifications_response()
         .data
         .unwrap()
         .try_into()
         .unwrap();
 
     ProviderFixtures {
-        settings,
-        github_notification,
-        // An `IssueNotification`, as the other Linear notification tests use
+        settings: settings(),
+        github_notification: github_notification(),
         linear_notification: linear_notifications[2].clone(),
-        google_mail_thread: google_mail_thread_get_123,
-        google_drive_comment: google_drive_comment_123,
-        google_calendar_event,
-        slack_thread,
-        todoist_item,
-        ticktick_item,
+        google_mail_thread: google_mail_thread_get_123(
+            raw_google_mail_thread_get_123(),
+            google_mail_user_profile(),
+        ),
+        google_drive_comment: google_drive_comment_123(),
+        google_calendar_event: google_calendar_event(),
+        slack_thread: slack_thread(),
+        todoist_item: todoist_item(),
+        ticktick_item: ticktick_item(),
     }
 }
 
-struct ProviderCase {
+pub struct ProviderFixtures {
+    pub settings: Settings,
+    pub github_notification: Box<GithubNotification>,
+    pub linear_notification: LinearNotification,
+    pub google_mail_thread: GoogleMailThread,
+    pub google_drive_comment: GoogleDriveComment,
+    pub google_calendar_event: GoogleCalendarEvent,
+    pub slack_thread: Box<SlackThread>,
+    pub todoist_item: Box<TodoistItem>,
+    pub ticktick_item: Box<TickTickItem>,
+}
+
+pub struct ProviderCase {
     /// The connection whose configuration is saved.
-    connection: Box<IntegrationConnection>,
+    pub connection: Box<IntegrationConnection>,
     /// A notification that must survive that save.
-    notification: Box<Notification>,
+    pub notification: Box<Notification>,
     /// A configuration change that does not touch what belongs in the inbox.
     /// Some providers (Github, Google Drive) expose nothing but a notification
     /// mute toggle, so their harmless payload is the stored one.
-    harmless_config: IntegrationConnectionConfig,
+    pub harmless_config: IntegrationConnectionConfig,
     /// A configuration change that narrows what belongs in the inbox, where the
     /// provider has one. Muting is deliberately not exercised here: it is not a
     /// scope change but a statement about what the user wants to see, and it has
     /// its own coverage.
-    scope_narrowing_config: Option<IntegrationConnectionConfig>,
+    pub scope_narrowing_config: Option<IntegrationConnectionConfig>,
     /// The stored configuration, with whatever the provider offers switched on.
-    enabled_config: IntegrationConnectionConfig,
+    pub enabled_config: IntegrationConnectionConfig,
     /// The same configuration with the integration switched off, where the
     /// provider has such a control. Only the five providers whose configuration
     /// carries a notification sync flag actually mute their notifications; for
     /// Todoist and TickTick this is the off switch of their *task* sync, which
     /// must leave the already collected notifications alone.
-    notifications_off_config: Option<IntegrationConnectionConfig>,
+    pub notifications_off_config: Option<IntegrationConnectionConfig>,
 }
 
-async fn seed_provider(
-    app: &AuthenticatedApp,
+pub async fn seed_provider(
+    app: &Scene<'_>,
     provider_kind: IntegrationProviderKind,
     fixtures: &ProviderFixtures,
 ) -> ProviderCase {
@@ -532,7 +170,7 @@ async fn seed_provider(
             )
             .await;
             let notification = create_notification_from_github_notification(
-                &app.app,
+                app.app,
                 &fixtures.github_notification,
                 app.user.id,
                 connection.id,
@@ -559,7 +197,7 @@ async fn seed_provider(
             )
             .await;
             let notification = create_notification_from_linear_notification(
-                &app.app,
+                app.app,
                 &fixtures.linear_notification,
                 app.user.id,
                 connection.id,
@@ -595,7 +233,7 @@ async fn seed_provider(
             )
             .await;
             let notification = create_notification_from_google_mail_thread(
-                &app.app,
+                app.app,
                 &fixtures.google_mail_thread,
                 app.user.id,
                 connection.id,
@@ -633,7 +271,7 @@ async fn seed_provider(
             )
             .await;
             let notification = create_notification_from_google_drive_comment(
-                &app.app,
+                app.app,
                 &fixtures.google_drive_comment,
                 app.user.id,
                 connection.id,
@@ -673,7 +311,7 @@ async fn seed_provider(
             )
             .await;
             let notification = create_notification_from_google_calendar_event(
-                &app.app,
+                app.app,
                 &fixtures.google_mail_thread,
                 &fixtures.google_calendar_event,
                 app.user.id,
@@ -709,7 +347,7 @@ async fn seed_provider(
             )
             .await;
             let notification = create_notification_from_slack_thread(
-                &app.app,
+                app.app,
                 &fixtures.slack_thread,
                 app.user.id,
                 connection.id,
@@ -751,7 +389,7 @@ async fn seed_provider(
             )
             .await;
             let notification = create_notification_from_todoist_item(
-                &app.app,
+                app.app,
                 &fixtures.todoist_item,
                 app.user.id,
                 connection.id,
@@ -778,7 +416,7 @@ async fn seed_provider(
         }
         IntegrationProviderKind::TickTick => {
             let connection = create_ticktick_integration_connection(
-                &app.app,
+                app.app,
                 app.user.id,
                 &fixtures.settings,
                 IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
@@ -786,7 +424,7 @@ async fn seed_provider(
             )
             .await;
             let notification = create_notification_from_ticktick_item(
-                &app.app,
+                app.app,
                 &fixtures.ticktick_item,
                 app.user.id,
                 connection.id,
@@ -821,14 +459,14 @@ async fn seed_provider(
     }
 }
 
-async fn create_provider_connection(
-    app: &AuthenticatedApp,
+pub async fn create_provider_connection(
+    app: &Scene<'_>,
     config: IntegrationConnectionConfig,
     credential: OAuthCredentialFixture,
     settings: &Settings,
 ) -> Box<IntegrationConnection> {
     create_and_mock_integration_connection(
-        &app.app,
+        app.app,
         app.user.id,
         config,
         settings,
@@ -839,19 +477,19 @@ async fn create_provider_connection(
     .await
 }
 
-fn last_read_at() -> DateTime<Utc> {
+pub fn last_read_at() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap()
 }
 
-fn snoozed_until() -> DateTime<Utc> {
+pub fn snoozed_until() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2027, 6, 7, 8, 9, 10).unwrap()
 }
 
 /// Invest triage work in the notification: read it, snooze it, and link it to a
 /// task. Returns the notification as it stands afterwards, which is exactly
 /// what a configuration save must give back.
-async fn triage_notification(
-    app: &AuthenticatedApp,
+pub async fn triage_notification(
+    app: &Scene<'_>,
     notification: &Notification,
     todoist_item: &TodoistItem,
 ) -> Notification {
@@ -954,8 +592,8 @@ async fn triage_notification(
     *triaged_notification
 }
 
-async fn assert_config_updated(
-    app: &AuthenticatedApp,
+pub async fn assert_config_updated(
+    app: &Scene<'_>,
     integration_connection_id: IntegrationConnectionId,
     config: &IntegrationConnectionConfig,
 ) {
@@ -970,7 +608,7 @@ async fn assert_config_updated(
 
 /// The notification is still in the inbox, is still the same row, and still
 /// carries the triage state it had before the configuration was saved.
-async fn assert_triage_state_preserved(app: &AuthenticatedApp, expected: &Notification) {
+pub async fn assert_triage_state_preserved(app: &Scene<'_>, expected: &Notification) {
     let notifications = list_notifications(
         &app.client,
         &app.app.api_address,
@@ -1001,7 +639,7 @@ async fn assert_triage_state_preserved(app: &AuthenticatedApp, expected: &Notifi
 /// gone: it is still the same row, still carries its triage state, and reading
 /// it by id — a bookmarked link, or the notification a task points at — still
 /// resolves rather than answering `404`.
-async fn assert_notification_set_aside(app: &AuthenticatedApp, expected: &Notification) {
+pub async fn assert_notification_set_aside(app: &Scene<'_>, expected: &Notification) {
     let notifications_page: Page<NotificationWithTask> = list_notifications_response(
         &app.client,
         &app.app.api_address,
@@ -1054,10 +692,7 @@ async fn assert_notification_set_aside(app: &AuthenticatedApp, expected: &Notifi
 
 /// The moment a successful notifications sync completed for that provider, which
 /// is what brings back whatever was set aside.
-async fn complete_notifications_sync(
-    app: &AuthenticatedApp,
-    provider_kind: IntegrationProviderKind,
-) {
+pub async fn complete_notifications_sync(app: &Scene<'_>, provider_kind: IntegrationProviderKind) {
     let service = app.app.integration_connection_service.read().await;
     let mut transaction = app.app.repository.begin().await.unwrap();
 
@@ -1070,7 +705,7 @@ async fn complete_notifications_sync(
 }
 
 /// The moment a successful tasks sync completed for that provider.
-async fn complete_tasks_sync(app: &AuthenticatedApp, provider_kind: IntegrationProviderKind) {
+pub async fn complete_tasks_sync(app: &Scene<'_>, provider_kind: IntegrationProviderKind) {
     let service = app.app.integration_connection_service.read().await;
     let mut transaction = app.app.repository.begin().await.unwrap();
 
@@ -1087,7 +722,7 @@ async fn complete_tasks_sync(app: &AuthenticatedApp, provider_kind: IntegrationP
 /// a notifications sync of their own: Todoist and TickTick notifications are a
 /// byproduct of their *task* sync, and Google Calendar notifications are derived
 /// during the Google Mail sync.
-async fn complete_restoring_sync(app: &AuthenticatedApp, provider_kind: IntegrationProviderKind) {
+pub async fn complete_restoring_sync(app: &Scene<'_>, provider_kind: IntegrationProviderKind) {
     match provider_kind {
         IntegrationProviderKind::Todoist | IntegrationProviderKind::TickTick => {
             complete_tasks_sync(app, provider_kind).await
@@ -1101,8 +736,8 @@ async fn complete_restoring_sync(app: &AuthenticatedApp, provider_kind: Integrat
 
 /// What a successful OAuth round trip leaves behind: the connection is
 /// `Validated` again, and no sync has run yet.
-async fn reconnect_connection(
-    app: &AuthenticatedApp,
+pub async fn reconnect_connection(
+    app: &Scene<'_>,
     integration_connection_id: IntegrationConnectionId,
 ) {
     let mut transaction = app.app.repository.begin().await.unwrap();
@@ -1121,8 +756,8 @@ async fn reconnect_connection(
     transaction.commit().await.unwrap();
 }
 
-async fn fetch_set_aside_at(
-    app: &AuthenticatedApp,
+pub async fn fetch_set_aside_at(
+    app: &Scene<'_>,
     notification: &Notification,
 ) -> Option<DateTime<Utc>> {
     sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
@@ -1134,8 +769,8 @@ async fn fetch_set_aside_at(
     .expect("Failed to fetch the notification set aside timestamp")
 }
 
-async fn update_integration_connection_config_response(
-    app: &AuthenticatedApp,
+pub async fn update_integration_connection_config_response(
+    app: &Scene<'_>,
     integration_connection_id: IntegrationConnectionId,
     config: &IntegrationConnectionConfig,
 ) -> ReqwestResponse {

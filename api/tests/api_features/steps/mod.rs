@@ -24,6 +24,8 @@ mod provider;
 mod reauthentication;
 mod registration;
 mod session;
+mod set_aside;
+pub mod set_aside_support;
 mod slack_emojis;
 mod span;
 mod tasks;
