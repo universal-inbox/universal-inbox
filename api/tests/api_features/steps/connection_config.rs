@@ -15,7 +15,7 @@ use universal_inbox::{
             google_mail::{GoogleMailConfig, GoogleMailContext},
             slack::{SlackConfig, SlackReactionConfig},
         },
-        provider::{IntegrationConnectionContext, IntegrationProvider},
+        provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
     },
     notification::Notification,
     pii::Pii,
@@ -137,7 +137,9 @@ async fn i_have_a_slack_connection_paused_by_my_plan(world: &mut ApiWorld) {
         .await
         .unwrap();
     transaction.commit().await.unwrap();
-    world.connections.slack = Some(connection);
+    world
+        .connections
+        .keep(IntegrationProviderKind::Slack, connection);
 }
 
 async fn put_config(
@@ -184,7 +186,7 @@ async fn that_other_user_saves_a_configuration(world: &mut ApiWorld) {
 
 #[when("I turn on the reaction sync of my Slack connection, leaving the message sync off")]
 async fn i_turn_on_the_reaction_sync(world: &mut ApiWorld) {
-    let id = world.connections.slack.as_ref().unwrap().id;
+    let id = world.connections.owned(IntegrationProviderKind::Slack).id;
     let client = world.client();
     let config = IntegrationConnectionConfig::Slack(SlackConfig {
         reaction_config: SlackReactionConfig {
@@ -199,7 +201,7 @@ async fn i_turn_on_the_reaction_sync(world: &mut ApiWorld) {
 
 #[when("I change the reaction of my Slack connection to \"bookmark\", leaving every sync off")]
 async fn i_change_the_reaction(world: &mut ApiWorld) {
-    let id = world.connections.slack.as_ref().unwrap().id;
+    let id = world.connections.owned(IntegrationProviderKind::Slack).id;
     let client = world.client();
     let config = IntegrationConnectionConfig::Slack(SlackConfig {
         reaction_config: SlackReactionConfig {
@@ -308,7 +310,7 @@ fn both_answers_are_the_same_not_found(world: &mut ApiWorld) {
 
 #[then("my Slack connection still holds its paused configuration, and stays paused by my plan")]
 async fn my_slack_connection_stays_paused(world: &mut ApiWorld) {
-    let id = world.connections.slack.as_ref().unwrap().id;
+    let id = world.connections.owned(IntegrationProviderKind::Slack).id;
     let stored = stored_connection(world, id).await;
     assert_eq!(
         stored.provider.config(),
@@ -333,12 +335,14 @@ async fn i_have_a_slack_connection(world: &mut ApiWorld) {
         None,
     )
     .await;
-    world.connections.slack = Some(connection);
+    world
+        .connections
+        .keep(IntegrationProviderKind::Slack, connection);
 }
 
 #[when("a Slack token response holding cleartext tokens is stored for that connection")]
 async fn a_token_response_is_stored(world: &mut ApiWorld) {
-    let id = world.connections.slack.as_ref().unwrap().id;
+    let id = world.connections.owned(IntegrationProviderKind::Slack).id;
     let app = world.app.get().await;
     let mut transaction = app.repository.begin().await.unwrap();
     let stored = app

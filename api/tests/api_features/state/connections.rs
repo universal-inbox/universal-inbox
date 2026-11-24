@@ -18,18 +18,29 @@ pub struct Connections {
     pub google_calendar: Option<IntegrationConnection>,
     pub token_lookup: Option<Result<String, UniversalInboxError>>,
     pub mail: Option<Box<IntegrationConnection>>,
-    pub slack: Option<Box<IntegrationConnection>>,
+    pub owned: HashMap<IntegrationProviderKind, Box<IntegrationConnection>>,
     pub granted: Option<Box<IntegrationConnection>>,
     pub saved_config: Option<Box<IntegrationConnectionConfig>>,
     pub unknown_id: Option<Uuid>,
     pub calls: ProviderCalls,
     pub retried: Option<(usize, usize)>,
     pub stored_token_response: Option<serde_json::Value>,
-    pub linear: Option<Box<IntegrationConnection>>,
     pub reported: Option<(usize, usize)>,
     pub report: Option<PauseWithoutEmailReport>,
     pub refused: Option<bool>,
     pub recorded_activity: Option<DateTime<Utc>>,
+}
+
+impl Connections {
+    pub fn keep(&mut self, kind: IntegrationProviderKind, connection: Box<IntegrationConnection>) {
+        self.owned.insert(kind, connection);
+    }
+
+    pub fn owned(&self, kind: IntegrationProviderKind) -> &IntegrationConnection {
+        self.owned
+            .get(&kind)
+            .unwrap_or_else(|| panic!("No {kind:?} connection in this scenario"))
+    }
 }
 
 /// The calls a scenario expects a provider to receive, each kept to count its requests.

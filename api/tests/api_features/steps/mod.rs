@@ -25,6 +25,7 @@ mod reauthentication;
 mod registration;
 mod session;
 mod slack_emojis;
+mod span;
 mod tasks;
 mod third_party;
 mod throttle;

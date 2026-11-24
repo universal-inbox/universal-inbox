@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionPausedReason, IntegrationConnectionStatus,
+        IntegrationConnectionPausedReason, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::{linear::LinearConfig, slack::SlackConfig},
         provider::IntegrationProviderKind,
@@ -37,27 +37,27 @@ use crate::{
         },
         user::get_current_user,
     },
-    steps::integration_connections::stored_connection,
+    steps::{integration_connections::stored_connection, provider::ProviderName, span::Span},
     world::ApiWorld,
 };
 
 const INACTIVITY_THRESHOLD_DAYS: i64 = 90;
 const FAILING_THRESHOLD_DAYS: i64 = 30;
 
-/// "90 days", "90 days and 1 hour", "1 day"
-fn duration(text: &str) -> TimeDelta {
-    let mut parts = text.split(" and ");
-    let days: i64 = parts
-        .next()
-        .and_then(|days| days.split(' ').next())
-        .unwrap()
-        .parse()
-        .unwrap();
-    let hours: i64 = parts
-        .next()
-        .map(|hours| hours.split(' ').next().unwrap().parse().unwrap())
-        .unwrap_or(0);
-    TimeDelta::days(days) + TimeDelta::hours(hours)
+enum FailureSource {
+    Syncs,
+    TokenRefresh,
+}
+
+enum PauseMode {
+    Apply,
+    DryRun,
+}
+
+impl PauseMode {
+    fn is_dry_run(&self) -> bool {
+        matches!(self, Self::DryRun)
+    }
 }
 
 fn paused_reason(text: &str) -> IntegrationConnectionPausedReason {
@@ -88,7 +88,9 @@ async fn connect_slack(world: &mut ApiWorld, refresh_token: Option<&str>) {
     )
     .await;
     world.connections.granted = Some(connection.clone());
-    world.connections.slack = Some(connection);
+    world
+        .connections
+        .keep(IntegrationProviderKind::Slack, connection.clone());
 }
 
 #[given("I have a Slack connection syncing my notifications")]
@@ -120,7 +122,9 @@ async fn i_have_a_linear_connection(world: &mut ApiWorld) {
         None,
     )
     .await;
-    world.connections.linear = Some(connection);
+    world
+        .connections
+        .keep(IntegrationProviderKind::Linear, connection);
 }
 
 async fn set_last_active_at(app: &TestedApp, user_id: UserId, last_active_at: DateTime<Utc>) {
@@ -132,33 +136,25 @@ async fn set_last_active_at(app: &TestedApp, user_id: UserId, last_active_at: Da
         .expect("Failed to set the user last activity");
 }
 
-#[given(regex = r"^I was last active (\d+ days?(?: and \d+ hours?)?) ago$")]
-#[when(regex = r"^I was last active (\d+ days?(?: and \d+ hours?)?) ago$")]
-async fn i_was_last_active(world: &mut ApiWorld, ago: String) {
+#[given(expr = "I was last active {duration} ago")]
+#[when(expr = "I was last active {duration} ago")]
+async fn i_was_last_active(world: &mut ApiWorld, ago: Span) {
     let user_id = world.user().id;
-    let last_active_at = Utc::now() - duration(&ago);
+    let last_active_at = Utc::now() - ago.0;
     world.connections.recorded_activity = Some(last_active_at);
     let app = world.app.get().await;
     set_last_active_at(app, user_id, last_active_at).await;
 }
 
-fn connection_of<'a>(world: &'a ApiWorld, provider: &str) -> &'a IntegrationConnection {
-    match provider {
-        "Slack" => world.connections.slack.as_deref(),
-        "Linear" => world.connections.linear.as_deref(),
-        other => panic!("No {other} connection in this scenario"),
-    }
-    .unwrap_or_else(|| panic!("No {provider} connection in this scenario"))
-}
-
 async fn set_failing_since(
     world: &mut ApiWorld,
-    provider: &str,
-    failing_for: TimeDelta,
-    by_syncs: bool,
+    provider: ProviderName,
+    failing_for: Span,
+    source: FailureSource,
 ) {
-    let id = connection_of(world, provider).id;
-    let failing_since = Utc::now() - failing_for;
+    let id = world.connections.owned(provider.0).id;
+    let failing_since = Utc::now() - failing_for.0;
+    let by_syncs = matches!(source, FailureSource::Syncs);
     let app = world.app.get().await;
     sqlx::query(
         r#"
@@ -177,28 +173,30 @@ async fn set_failing_since(
     .expect("Failed to mark the connection as failing");
 }
 
-#[given(
-    regex = r"^my (Slack|Linear) connection has been failing for (\d+ days?(?: and \d+ hours?)?), through its syncs$"
-)]
+#[given(expr = "my {provider} connection has been failing for {duration}, through its syncs")]
 async fn my_connection_has_been_failing(
     world: &mut ApiWorld,
-    provider: String,
-    failing_for: String,
+    provider: ProviderName,
+    failing_for: Span,
 ) {
-    set_failing_since(world, &provider, duration(&failing_for), true).await;
+    set_failing_since(world, provider, failing_for, FailureSource::Syncs).await;
 }
 
 #[given(
-    regex = r"^my Slack connection has been failing for (\d+ days?(?: and \d+ hours?)?), since a token refresh failed$"
+    expr = "my {provider} connection has been failing for {duration}, since a token refresh failed"
 )]
-async fn my_connection_has_been_failing_since_a_refresh(world: &mut ApiWorld, failing_for: String) {
-    set_failing_since(world, "Slack", duration(&failing_for), false).await;
+async fn my_connection_has_been_failing_since_a_refresh(
+    world: &mut ApiWorld,
+    provider: ProviderName,
+    failing_for: Span,
+) {
+    set_failing_since(world, provider, failing_for, FailureSource::TokenRefresh).await;
 }
 
-#[given(regex = r"^my Slack connection was last updated (\d+ days?(?: and \d+ hours?)?) ago$")]
-async fn my_connection_was_last_updated(world: &mut ApiWorld, ago: String) {
-    let id = connection_of(world, "Slack").id;
-    let updated_at = Utc::now() - duration(&ago);
+#[given(expr = "my {provider} connection was last updated {duration} ago")]
+async fn my_connection_was_last_updated(world: &mut ApiWorld, provider: ProviderName, ago: Span) {
+    let id = world.connections.owned(provider.0).id;
+    let updated_at = Utc::now() - ago.0;
     let app = world.app.get().await;
     sqlx::query("UPDATE integration_connection SET updated_at = $2 WHERE id = $1")
         .bind(id.0)
@@ -208,18 +206,20 @@ async fn my_connection_was_last_updated(world: &mut ApiWorld, ago: String) {
         .unwrap();
 }
 
-#[given(regex = r"^the warning I received is (\d+ days?(?: and \d+ hours?)?) old$")]
-#[when(regex = r"^the warning I received is (\d+ days?(?: and \d+ hours?)?) old$")]
-async fn the_warning_was_sent(world: &mut ApiWorld, ago: String) {
-    let id = connection_of(world, "Slack").id;
-    let sent_at = Utc::now() - duration(&ago);
+#[given(expr = "the warning I received is {duration} old")]
+#[when(expr = "the warning I received is {duration} old")]
+async fn the_warning_was_sent(world: &mut ApiWorld, ago: Span) {
+    let user_id = world.user().id;
+    let sent_at = Utc::now() - ago.0;
     let app = world.app.get().await;
-    sqlx::query("UPDATE integration_connection SET inactivity_warning_sent_at = $2 WHERE id = $1")
-        .bind(id.0)
-        .bind(sent_at.naive_utc())
-        .execute(&*app.repository.pool)
-        .await
-        .expect("Failed to set the inactivity warning time");
+    sqlx::query(
+        "UPDATE integration_connection SET inactivity_warning_sent_at = $2 WHERE user_id = $1",
+    )
+    .bind(user_id.0)
+    .bind(sent_at.naive_utc())
+    .execute(&*app.repository.pool)
+    .await
+    .expect("Failed to set the inactivity warning time");
 }
 
 #[given("my account is a testing account")]
@@ -346,7 +346,7 @@ async fn the_expiring_tokens_are_refreshed(world: &mut ApiWorld) {
 
 #[when(regex = r#"^my Slack connection turns failing with the message "([^"]+)"$"#)]
 async fn my_connection_turns_failing(world: &mut ApiWorld, message: String) {
-    let id = connection_of(world, "Slack").id;
+    let id = world.connections.owned(IntegrationProviderKind::Slack).id;
     let user_id = world.user().id;
     let app = world.app.get().await;
     let mut transaction = app.repository.begin().await.unwrap();
@@ -366,14 +366,14 @@ async fn my_connection_turns_failing(world: &mut ApiWorld, message: String) {
 
 async fn pause_without_email_of_users_inactive_since_yesterday(
     world: &mut ApiWorld,
-    dry_run: bool,
+    mode: PauseMode,
 ) {
     let app = world.app.get().await;
     let report = pause_without_email(
         app.integration_connection_service.clone(),
         Utc::now() - TimeDelta::days(1),
         FAILING_THRESHOLD_DAYS,
-        dry_run,
+        mode.is_dry_run(),
     )
     .await
     .unwrap();
@@ -382,14 +382,14 @@ async fn pause_without_email_of_users_inactive_since_yesterday(
 
 #[when("the connections of users inactive since yesterday are paused without email")]
 async fn paused_without_email(world: &mut ApiWorld) {
-    pause_without_email_of_users_inactive_since_yesterday(world, false).await;
+    pause_without_email_of_users_inactive_since_yesterday(world, PauseMode::Apply).await;
 }
 
 #[when(
     "the connections of users inactive since yesterday are checked for a pause without email, as a dry run"
 )]
 async fn paused_without_email_dry_run(world: &mut ApiWorld) {
-    pause_without_email_of_users_inactive_since_yesterday(world, true).await;
+    pause_without_email_of_users_inactive_since_yesterday(world, PauseMode::DryRun).await;
 }
 
 #[when("the connections of users inactive since tomorrow are paused without email")]
@@ -434,55 +434,78 @@ fn the_request_is_refused(world: &mut ApiWorld) {
     assert_eq!(world.connections.refused, Some(true));
 }
 
-#[then(regex = r"^my (Slack|Linear) connection is paused for (inactivity|a long failure)$")]
-async fn my_connection_is_paused(world: &mut ApiWorld, provider: String, reason: String) {
-    let id = connection_of(world, &provider).id;
+async fn assert_paused_for(
+    world: &mut ApiWorld,
+    provider: ProviderName,
+    reason: IntegrationConnectionPausedReason,
+) {
+    let id = world.connections.owned(provider.0).id;
     let connection = stored_connection(world, id).await;
     assert_eq!(connection.status, IntegrationConnectionStatus::Paused);
-    assert_eq!(connection.paused_reason, Some(paused_reason(&reason)));
+    assert_eq!(connection.paused_reason, Some(reason));
     assert!(connection.paused_at.is_some());
     assert_eq!(connection.failure_message, None);
     assert!(!connection.is_connected());
 }
 
-#[then(regex = r"^my (Slack|Linear) connection is still validated, and was never paused$")]
-async fn my_connection_is_still_validated(world: &mut ApiWorld, provider: String) {
-    let id = connection_of(world, &provider).id;
+#[then(expr = "my {provider} connection is paused for inactivity")]
+async fn my_connection_is_paused_for_inactivity(world: &mut ApiWorld, provider: ProviderName) {
+    assert_paused_for(
+        world,
+        provider,
+        IntegrationConnectionPausedReason::Inactivity,
+    )
+    .await;
+}
+
+#[then(expr = "my {provider} connection is paused for a long failure")]
+async fn my_connection_is_paused_for_a_long_failure(world: &mut ApiWorld, provider: ProviderName) {
+    assert_paused_for(
+        world,
+        provider,
+        IntegrationConnectionPausedReason::LongFailing,
+    )
+    .await;
+}
+
+#[then(expr = "my {provider} connection is still validated, and was never paused")]
+async fn my_connection_is_still_validated(world: &mut ApiWorld, provider: ProviderName) {
+    let id = world.connections.owned(provider.0).id;
     let connection = stored_connection(world, id).await;
     assert_eq!(connection.status, IntegrationConnectionStatus::Validated);
     assert_eq!(connection.paused_at, None);
 }
 
-#[then(regex = r"^my (Slack|Linear) connection is still failing$")]
-async fn my_connection_is_still_failing(world: &mut ApiWorld, provider: String) {
-    let id = connection_of(world, &provider).id;
+#[then(expr = "my {provider} connection is still failing")]
+async fn my_connection_is_still_failing(world: &mut ApiWorld, provider: ProviderName) {
+    let id = world.connections.owned(provider.0).id;
     let connection = stored_connection(world, id).await;
     assert_eq!(connection.status, IntegrationConnectionStatus::Failing);
 }
 
-#[then("my Slack connection is paused")]
-async fn my_slack_connection_is_paused(world: &mut ApiWorld) {
-    let id = connection_of(world, "Slack").id;
+#[then(expr = "my {provider} connection is paused")]
+async fn my_connection_is_paused(world: &mut ApiWorld, provider: ProviderName) {
+    let id = world.connections.owned(provider.0).id;
     let connection = stored_connection(world, id).await;
     assert_eq!(connection.status, IntegrationConnectionStatus::Paused);
 }
 
-#[then("my Slack connection keeps its notifications in my inbox")]
-async fn my_connection_keeps_its_notifications(world: &mut ApiWorld) {
-    let id = connection_of(world, "Slack").id;
+#[then(expr = "my {provider} connection keeps its notifications in my inbox")]
+async fn my_connection_keeps_its_notifications(world: &mut ApiWorld, provider: ProviderName) {
+    let id = world.connections.owned(provider.0).id;
     let connection = stored_connection(world, id).await;
     assert!(!connection.should_set_aside_notifications());
 }
 
-#[then("my Slack connection has its notifications set aside")]
-async fn my_connection_sets_its_notifications_aside(world: &mut ApiWorld) {
-    let id = connection_of(world, "Slack").id;
+#[then(expr = "my {provider} connection has its notifications set aside")]
+async fn my_connection_sets_its_notifications_aside(world: &mut ApiWorld, provider: ProviderName) {
+    let id = world.connections.owned(provider.0).id;
     let connection = stored_connection(world, id).await;
     assert!(connection.should_set_aside_notifications());
 }
 
-async fn holds_a_credential(world: &mut ApiWorld, provider: &str) -> bool {
-    let id = connection_of(world, provider).id;
+async fn holds_a_credential(world: &mut ApiWorld, provider: ProviderName) -> bool {
+    let id = world.connections.owned(provider.0).id;
     let app = world.app.get().await;
     let mut transaction = app.repository.begin().await.unwrap();
     let credential = app
@@ -494,19 +517,19 @@ async fn holds_a_credential(world: &mut ApiWorld, provider: &str) -> bool {
     credential.is_some()
 }
 
-#[then(regex = r"^my (Slack|Linear) connection still holds its credential$")]
-async fn my_connection_holds_its_credential(world: &mut ApiWorld, provider: String) {
-    assert!(holds_a_credential(world, &provider).await);
+#[then(expr = "my {provider} connection still holds its credential")]
+async fn my_connection_holds_its_credential(world: &mut ApiWorld, provider: ProviderName) {
+    assert!(holds_a_credential(world, provider).await);
 }
 
-#[then(regex = r"^my (Slack|Linear) connection no longer holds a credential$")]
-async fn my_connection_holds_no_credential(world: &mut ApiWorld, provider: String) {
-    assert!(!holds_a_credential(world, &provider).await);
+#[then(expr = "my {provider} connection no longer holds a credential")]
+async fn my_connection_holds_no_credential(world: &mut ApiWorld, provider: ProviderName) {
+    assert!(!holds_a_credential(world, provider).await);
 }
 
-#[then("one revocation of my Slack grant is waiting to be retried")]
-async fn a_revocation_is_waiting(world: &mut ApiWorld) {
-    let id = connection_of(world, "Slack").id;
+#[then(expr = "one revocation of my {provider} grant is waiting to be retried")]
+async fn a_revocation_is_waiting(world: &mut ApiWorld, provider: ProviderName) {
+    let id = world.connections.owned(provider.0).id;
     let app = world.app.get().await;
     let pending: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM oauth_grant_revocation WHERE integration_connection_id = $1 AND status = 'Pending'",
