@@ -21,7 +21,7 @@ pub use audit::Audit;
 pub use caches::{McpSessions, SlackEmojis};
 pub use connections::Connections;
 pub use encryption::{Encryption, RawTokenResponse, RecordedProgress, StoredItem};
-pub use github_sync::{GithubSync, KeptTriage, PullRequest};
+pub use github_sync::{Discussion, GithubSync, KeptTriage, PullRequest};
 pub use integrations::Integrations;
 pub use jobs::Jobs;
 pub use notifications::{GithubCall, Notifications};

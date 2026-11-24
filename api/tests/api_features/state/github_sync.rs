@@ -11,6 +11,7 @@ use universal_inbox::{
 pub struct GithubSync {
     pub reported: Vec<GithubNotification>,
     pub pull_request: Option<PullRequest>,
+    pub discussion: Option<Discussion>,
     pub synced: Vec<Notification>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub kept: Option<KeptTriage>,
@@ -28,4 +29,12 @@ pub struct KeptTriage {
 pub enum PullRequest {
     WithCommits,
     WithoutCommits,
+    WithCommentsAndReviewThreads,
+}
+
+#[derive(Clone, Copy)]
+pub enum Discussion {
+    Paged,
+    LoopingBackToTheSamePage,
+    Failing,
 }

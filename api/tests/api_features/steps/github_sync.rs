@@ -36,8 +36,8 @@ use crate::{
             github::{
                 assert_sync_notifications, create_notification_from_github_notification,
                 github_pull_request_123_no_commits_response, github_pull_request_123_response,
-                mock_github_notifications_service, mock_github_pull_request_query,
-                sync_github_notifications,
+                github_pull_request_123_with_comments_response, mock_github_notifications_service,
+                mock_github_pull_request_query, sync_github_notifications,
             },
             list_notifications, set_notification_updated_at, sync_notifications,
             sync_notifications_response,
@@ -190,12 +190,17 @@ fn pull_request_response(
     match pull_request {
         PullRequest::WithCommits => github_pull_request_123_response(),
         PullRequest::WithoutCommits => github_pull_request_123_no_commits_response(),
+        PullRequest::WithCommentsAndReviewThreads => {
+            github_pull_request_123_with_comments_response()
+        }
     }
 }
 
-async fn mount_github(world: &mut ApiWorld) {
+pub async fn mount_github(world: &mut ApiWorld) {
     let reported = world.github_sync.reported.clone();
-    let pull_request = world.github_sync.pull_request.map(pull_request_response);
+    let pull_request_kind = world.github_sync.pull_request;
+    let discussion = world.github_sync.discussion;
+    let pull_request = pull_request_kind.map(pull_request_response);
     let app = world.app.get().await;
     mock_github_notifications_service(&app.github_mock_server, "1", &reported).await;
     mock_github_notifications_service(&app.github_mock_server, "2", &Vec::new()).await;
@@ -209,6 +214,29 @@ async fn mount_github(world: &mut ApiWorld) {
         )
         .await;
     }
+    super::github_details::mount_details(app, pull_request_kind, discussion).await;
+}
+
+pub async fn github_connection_of(
+    world: &mut ApiWorld,
+) -> universal_inbox::integration_connection::IntegrationConnection {
+    let user_id = world.user().id;
+    let app = world.app.get().await;
+    let mut transaction = app.repository.begin().await.unwrap();
+    let connection = app
+        .repository
+        .get_integration_connection_per_provider(
+            &mut transaction,
+            user_id,
+            IntegrationProviderKind::Github,
+            None,
+            None,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    transaction.commit().await.unwrap();
+    connection
 }
 
 #[when("I sync my GitHub notifications")]
