@@ -43,13 +43,13 @@ Feature: Dead jobs
     Scenario: A requeued job is active again and its workers are woken up
       Given a dead "sync tasks" job "sync" that died just now
       When I requeue the dead job "sync"
-      Then the requeue outcome is "requeued"
+      Then the job is requeued
       And "sync" is no longer dead and is the only active job
-      And the consumers were woken up once
+      And the workers were woken up once
       And a worker reads "sync" as a "SyncTasks" job that has not run yet
       And the queue has 1 pending and 0 dead jobs
       When I requeue the dead job "sync"
-      Then the requeue outcome is "not dead"
+      Then the app says the job is not dead
       And "sync" is still the only active job
 
     @legacy:test_dead_letter::test_requeue_undecodable_dead_job

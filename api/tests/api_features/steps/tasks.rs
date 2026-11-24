@@ -91,12 +91,12 @@ enum Owner {
     TheOtherUser,
 }
 
-#[given(expr = "I have a Todoist task {string}")]
+#[given(expr = "a Todoist task called {string}")]
 async fn i_have_a_todoist_task(world: &mut ApiWorld, name: String) {
     create_todoist_task(world, &name, Owner::Me, |_| {}).await;
 }
 
-#[given(expr = "I have a Todoist task {string} titled {string}, with the description {string}")]
+#[given(expr = "a Todoist task called {string} titled {string}, with the description {string}")]
 async fn i_have_a_titled_todoist_task(
     world: &mut ApiWorld,
     name: String,

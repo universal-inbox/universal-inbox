@@ -159,7 +159,7 @@ Feature: Managing the ways to sign in
       When I list my sign-in methods
       Then I have these sign-in methods:
         | single sign-on |
-      And the database holds 1 sign-in methods for my account
+      And the database holds 1 sign-in method for my account
       And an email tells me that "A password" was removed as a sign-in method
 
     @legacy:test_auth_methods::remove_auth_method::test_cannot_remove_last_auth_method
@@ -195,7 +195,7 @@ Feature: Managing the ways to sign in
       Given I have signed up with a password
       When I start adding a passkey named "john_passkey" to my account
       Then the app refuses because passkeys are disabled
-      And the database holds 1 sign-in methods for my account
+      And the database holds 1 sign-in method for my account
 
     @legacy:test_auth_methods::passkey_disabled::test_passkey_reauthentication_start_is_forbidden
     Scenario: A user cannot confirm their identity with a passkey
@@ -218,4 +218,4 @@ Feature: Managing the ways to sign in
       Then the app refuses because passkeys are disabled
       When I replay that passkey registration to add it to my account on this app
       Then the app refuses because passkeys are disabled
-      And the database holds 1 sign-in methods for my account
+      And the database holds 1 sign-in method for my account

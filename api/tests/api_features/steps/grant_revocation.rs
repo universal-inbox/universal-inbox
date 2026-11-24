@@ -227,8 +227,8 @@ async fn accept_revocation(
     }
 }
 
-#[given(regex = r"^(GitHub|Google Mail|Slack|Linear|TickTick|Notion) accepts to revoke my grant$")]
-#[when(regex = r"^(GitHub|Google Mail|Slack|Linear|TickTick|Notion) accepts to revoke my grant$")]
+#[given(regex = r"^(GitHub|Google Mail|Slack|Linear|TickTick|Notion) revokes my grant when asked$")]
+#[when(regex = r"^(GitHub|Google Mail|Slack|Linear|TickTick|Notion) revokes my grant when asked$")]
 async fn the_provider_accepts_to_revoke(world: &mut ApiWorld, provider: String) {
     let app = world.app.get().await;
     let guard = accept_revocation(app, &settings(), provider_kind(&provider)).await;
@@ -275,6 +275,7 @@ fn the_provider_is_back(world: &mut ApiWorld, _provider: String) {
 }
 
 #[given("Slack answers that my token expired")]
+#[when("Slack answers that my token expired")]
 async fn slack_answers_token_expired(world: &mut ApiWorld) {
     let guard = slack_revocation(
         world,
@@ -303,6 +304,7 @@ async fn slack_answers_token_revoked(world: &mut ApiWorld) {
 }
 
 #[given("Slack renews my token when asked")]
+#[when("Slack renews my token when asked")]
 async fn slack_renews_my_token(world: &mut ApiWorld) {
     let app = world.app.get().await;
     let guard = Mock::given(method("POST"))
@@ -327,6 +329,7 @@ async fn slack_renews_my_token(world: &mut ApiWorld) {
 }
 
 #[given("Slack accepts to revoke my renewed token")]
+#[when("Slack accepts to revoke my renewed token")]
 async fn slack_accepts_the_renewed_token(world: &mut ApiWorld) {
     let guard = slack_revocation(
         world,

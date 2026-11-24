@@ -18,7 +18,7 @@ Feature: The tasks
     Scenario: A user cannot read the task of another user
       Given I am connected to Todoist
       And Todoist can list my projects
-      And I have a Todoist task "mine"
+      And a Todoist task called "mine"
       And another user is signed in
       When that other user gets the task "mine"
       Then the app answers 403
@@ -35,7 +35,7 @@ Feature: The tasks
     Scenario: Tasks are listed by status and never to another user
       Given I am connected to Todoist
       And Todoist can list my projects
-      And I have a Todoist task "active one"
+      And a Todoist task called "active one"
       And I have a done Todoist task "done one"
       And another user is signed in
       When I list my active tasks
@@ -51,7 +51,7 @@ Feature: The tasks
     Scenario: A change that changes nothing is not modified
       Given I am connected to Todoist
       And Todoist can list my projects
-      And I have a Todoist task "mine"
+      And a Todoist task called "mine"
       When I send "mine" the status it already has
       Then the app answers 304
 
@@ -59,7 +59,7 @@ Feature: The tasks
     Scenario: A user cannot change the task of another user
       Given I am connected to Todoist
       And Todoist can list my projects
-      And I have a Todoist task "mine"
+      And a Todoist task called "mine"
       And another user is signed in
       When that other user marks "mine" as done
       Then the app answers 403
@@ -68,7 +68,7 @@ Feature: The tasks
     Scenario: A task cannot point at the stored item of another user
       Given Todoist can list my projects
       And I am connected to Todoist
-      And I have a Todoist task "mine"
+      And a Todoist task called "mine"
       And another user is signed in
       And that other user is connected to Todoist
       And that other user has a Todoist task "victim"
@@ -81,7 +81,7 @@ Feature: The tasks
     Scenario: A change without any value is refused
       Given I am connected to Todoist
       And Todoist can list my projects
-      And I have a Todoist task "mine"
+      And a Todoist task called "mine"
       When I send the task "mine" a patch with nothing to change
       Then the app answers 400
       And the error message is "Invalid input data: Missing `status` field value to update task <id>", with <id> being the id of the task "mine"
@@ -122,8 +122,8 @@ Feature: The tasks
     Scenario: Tasks are found by title and tags, not by description, and never for another user
       Given I am connected to Todoist
       And Todoist can list my projects
-      And I have a Todoist task "release"
-      And I have a Todoist task "other" titled "Other todo", with the description "fill the form"
+      And a Todoist task called "release"
+      And a Todoist task called "other" titled "Other todo", with the description "fill the form"
       And another user is signed in
       Then the title of "release" is "Release new version of Universal Inbox"
       When I search my tasks for "Release new version"
@@ -144,7 +144,7 @@ Feature: The tasks
       Given I am connected to Todoist
       And Todoist can list my projects
       And I am connected to TickTick
-      And I have a Todoist task "todoist"
+      And a Todoist task called "todoist"
       And I have a TickTick task "ticktick" titled "Universal ticktick task"
       When I search my tasks for "Universal"
       Then I find 2 tasks

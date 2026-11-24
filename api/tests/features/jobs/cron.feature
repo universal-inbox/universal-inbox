@@ -13,7 +13,7 @@ Feature: Scheduled jobs
     @legacy:test_cron::test_refresh_oauth_tokens_cron_tick_enqueues_job_once
     Scenario: The OAuth token refresh is enqueued once per tick
       Given an empty job queue
-      When the refresh OAuth tokens cron tick is handled by 2 worker processes, refreshing 42 minutes before expiry
+      When the token refresh cron runs on 2 workers, refreshing tokens that expire within 42 minutes
       Then exactly 1 job was enqueued, although 2 processes handled the same tick
 
     @legacy:test_cron::test_pause_integration_connections_cron_tick_enqueues_job_once

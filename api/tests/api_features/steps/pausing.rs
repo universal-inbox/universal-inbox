@@ -207,8 +207,8 @@ async fn my_connection_was_last_updated(world: &mut ApiWorld, ago: String) {
         .unwrap();
 }
 
-#[given(regex = r"^the warning was sent to me (\d+ days?(?: and \d+ hours?)?) ago$")]
-#[when(regex = r"^the warning was sent to me (\d+ days?(?: and \d+ hours?)?) ago$")]
+#[given(regex = r"^the warning I received is (\d+ days?(?: and \d+ hours?)?) old$")]
+#[when(regex = r"^the warning I received is (\d+ days?(?: and \d+ hours?)?) old$")]
 async fn the_warning_was_sent(world: &mut ApiWorld, ago: String) {
     let id = connection_of(world, "Slack").id;
     let sent_at = Utc::now() - duration(&ago);
@@ -412,7 +412,7 @@ async fn i_open_my_account_page(world: &mut ApiWorld) {
     get_current_user(&client, app).await;
 }
 
-#[then(regex = r"^the pause reported (\d+) paused and (\d+) failed$")]
+#[then(regex = r"^the pause job reports (\d+) connections paused and (\d+) failures$")]
 fn the_pause_reported(world: &mut ApiWorld, paused: usize, failed: usize) {
     assert_eq!(world.connections.reported, Some((paused, failed)));
 }

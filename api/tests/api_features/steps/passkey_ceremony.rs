@@ -127,7 +127,7 @@ async fn finish_registration(world: &mut ApiWorld, nonce: Option<&str>, origin: 
     world.http.record(Response::read(response).await);
 }
 
-#[when("the registration is finished through the endpoint for new accounts")]
+#[when("the passkey registration is finished as a new account")]
 async fn the_registration_is_finished(world: &mut ApiWorld) {
     finish_registration(world, None, None).await;
 }
@@ -142,7 +142,7 @@ async fn the_registration_is_finished_from_a_website(world: &mut ApiWorld, origi
     finish_registration(world, None, Some(&origin)).await;
 }
 
-#[when("the registration is finished through the endpoint for adding a passkey")]
+#[when("the passkey registration is finished as an added passkey")]
 async fn the_registration_is_finished_for_adding_a_passkey(world: &mut ApiWorld) {
     let app = world.app.get().await;
     let registration = world.passkeys.registration.as_ref().unwrap();

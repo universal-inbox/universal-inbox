@@ -10,7 +10,7 @@ Feature: Revoking provider grants
 
     Scenario Outline: Disconnecting <provider> revokes the grant
       Given I have a validated <provider> connection with a stored credential
-      And <provider> accepts to revoke my grant
+      And <provider> revokes my grant when asked
       When I disconnect it
       Then <provider> was asked once to revoke my grant
 
@@ -55,8 +55,8 @@ Feature: Revoking provider grants
       And the stored revocations are
         | status  | attempts | tokens | connection |
         | Pending | 1        | kept   | mine       |
-      Given GitHub is back
-      And GitHub accepts to revoke my grant
+      When GitHub is back
+      And GitHub revokes my grant when asked
       And the waiting revocations come due
       When the revocation retry job runs, allowing 20 attempts
       Then the revocation retry job completed 1 and failed 0
@@ -92,7 +92,7 @@ Feature: Revoking provider grants
       When I disconnect it
       And GitHub is back
       And I connect it again
-      And GitHub accepts to revoke my grant
+      And GitHub revokes my grant when asked
       And the waiting revocations come due
       And the revocation retry job runs, allowing 20 attempts
       Then the revocation retry job completed 1 and failed 0
@@ -122,7 +122,7 @@ Feature: Revoking provider grants
       Then the stored revocations are
         | status  | attempts | tokens | connection |
         | Pending | 1        | kept   | mine       |
-      Given Slack is back
+      When Slack is back
       And Slack answers that my token expired
       And Slack renews my token when asked
       And Slack accepts to revoke my renewed token
@@ -150,8 +150,8 @@ Feature: Revoking provider grants
     Scenario: Deleting the account revokes the grants of every connection
       Given I have a validated GitHub connection with a stored credential
       And I have a validated Google Mail connection with a stored credential
-      And GitHub accepts to revoke my grant
-      And Google Mail accepts to revoke my grant
+      And GitHub revokes my grant when asked
+      And Google Mail revokes my grant when asked
       When I delete my account, confirming with my email address
       Then the app answers 200
       And GitHub was asked once to revoke my grant
@@ -166,8 +166,8 @@ Feature: Revoking provider grants
       And the stored revocations are
         | status  | attempts | tokens | connection |
         | Pending | 1        | kept   | none       |
-      Given GitHub is back
-      And GitHub accepts to revoke my grant
+      When GitHub is back
+      And GitHub revokes my grant when asked
       And the waiting revocations come due
       When the revocation retry job runs, allowing 20 attempts
       Then the revocation retry job completed 1 and failed 0

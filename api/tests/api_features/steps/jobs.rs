@@ -378,11 +378,19 @@ async fn i_requeue_the_dead_job(world: &mut ApiWorld, name: String) {
     world.jobs.requeue_outcome = Some(outcome);
 }
 
+#[then("the job is requeued")]
+fn the_job_is_requeued(world: &mut ApiWorld) {
+    assert_eq!(world.jobs.requeue_outcome, Some(RequeueOutcome::Requeued));
+}
+
+#[then("the app says the job is not dead")]
+fn the_app_says_the_job_is_not_dead(world: &mut ApiWorld) {
+    assert_eq!(world.jobs.requeue_outcome, Some(RequeueOutcome::NotDead));
+}
+
 #[then(expr = "the requeue outcome is {string}")]
 fn the_requeue_outcome_is(world: &mut ApiWorld, outcome: String) {
     let expected = match outcome.as_str() {
-        "requeued" => RequeueOutcome::Requeued,
-        "not dead" => RequeueOutcome::NotDead,
         "undecodable" => RequeueOutcome::Undecodable,
         other => panic!("Unknown requeue outcome {other:?}"),
     };
@@ -403,7 +411,7 @@ async fn the_job_is_still_the_only_active_job(world: &mut ApiWorld, name: String
     assert_eq!(active_ids(storage(world).await).await, vec![id]);
 }
 
-#[then("the consumers were woken up once")]
+#[then("the workers were woken up once")]
 async fn the_consumers_were_woken_up(world: &mut ApiWorld) {
     let storage = storage(world).await;
     let mut conn = storage.get_connection().clone();

@@ -156,7 +156,7 @@ fn the_added_sign_in_method_is_a_passkey(world: &mut ApiWorld, username: String)
     );
 }
 
-#[then(expr = "the database holds {int} sign-in methods for my account")]
+#[then(expr = "the database holds {int} sign-in method(s) for my account")]
 async fn the_database_holds_sign_in_methods(world: &mut ApiWorld, expected: usize) {
     let user_id = world.user().id;
     let app = world.app.get().await;

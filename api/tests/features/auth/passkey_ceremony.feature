@@ -50,7 +50,7 @@ Feature: Registering and signing in with a passkey, step by step
       When a visitor starts registering a passkey for the username "alice_taken_username"
       Then the app answers 200
       When the device answers the registration challenge
-      And the registration is finished through the endpoint for new accounts
+      And the passkey registration is finished as a new account
       Then the app answers 409
       And the error message is "This username is already taken. Please choose a different one."
       And the response mentions neither the database, the username nor any identifier
@@ -64,7 +64,7 @@ Feature: Registering and signing in with a passkey, step by step
       Then the app answers 401
       When a visitor starts registering a passkey for the username "nonce_match_alice_v2"
       And the device answers the registration challenge
-      And the registration is finished through the endpoint for new accounts
+      And the passkey registration is finished as a new account
       Then the app answers 200
 
     @legacy:test_users::passkey_ceremony_csrf_hardening::test_finish_passkey_registration_rejects_foreign_origin
@@ -73,7 +73,7 @@ Feature: Registering and signing in with a passkey, step by step
       And the device answers the registration challenge
       And the registration is finished from the website "https://evil.example"
       Then the app answers 400
-      When the registration is finished through the endpoint for new accounts
+      When the passkey registration is finished as a new account
       Then the app answers 200
 
     @legacy:test_users::passkey_ceremony_csrf_hardening::test_add_passkey_state_cannot_complete_initial_passkey_finish
@@ -81,7 +81,7 @@ Feature: Registering and signing in with a passkey, step by step
       Given I have signed up with the email "carol@doe.name" and a password
       When I start adding a passkey named "carol_passkey"
       And the device answers the registration challenge
-      And the registration is finished through the endpoint for new accounts
+      And the passkey registration is finished as a new account
       Then the app does not answer with a success
-      When the registration is finished through the endpoint for adding a passkey
+      When the passkey registration is finished as an added passkey
       Then the app answers 200

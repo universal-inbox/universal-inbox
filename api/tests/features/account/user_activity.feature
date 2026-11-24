@@ -11,6 +11,6 @@ Feature: User activity
     And I was last active 30 days ago
     When I open my account page
     Then my last activity is recorded as just now
-    Given I was last active 30 days ago
+    When I was last active 30 days ago
     When I open my account page
     Then my last activity is still the one recorded before

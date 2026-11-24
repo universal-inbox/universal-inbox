@@ -302,7 +302,7 @@ async fn queued_jobs(storage: &JobStorage) -> usize {
 }
 
 #[when(
-    expr = "the refresh OAuth tokens cron tick is handled by 2 worker processes, refreshing {int} minutes before expiry"
+    expr = "the token refresh cron runs on 2 workers, refreshing tokens that expire within {int} minutes"
 )]
 async fn the_refresh_tick_is_handled_twice(world: &mut ApiWorld, minutes: i64) {
     let cache = cache().await;

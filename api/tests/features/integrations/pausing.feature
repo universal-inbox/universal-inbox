@@ -16,7 +16,7 @@ Feature: Pausing connections
     Scenario: A user inactive for just over 90 days has their connection paused
       Given I have a Slack connection syncing my notifications
       And I was last active 90 days and 1 hour ago
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When the pause job runs
       Then my Slack connection is paused for inactivity
       And Slack was asked once to revoke my grant
@@ -28,7 +28,7 @@ Feature: Pausing connections
     Scenario: A user inactive for just under 90 days keeps their connection
       Given I have a Slack connection syncing my notifications
       And I was last active 89 days and 23 hours ago
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When the pause job runs
       Then my Slack connection is still validated, and was never paused
       And Slack was not asked to revoke my grant
@@ -38,11 +38,11 @@ Feature: Pausing connections
     @legacy:test_pause_integration_connections::test_healthy_connection_of_active_user_is_not_paused
     Scenario: A healthy connection of an active user is never paused
       Given I have a Slack connection syncing my notifications
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When only the connections of inactive users are paused
-      Then the pause reported 0 paused and 0 failed
+      Then the pause job reports 0 connections paused and 0 failures
       When only the long-failing connections are paused
-      Then the pause reported 0 paused and 0 failed
+      Then the pause job reports 0 connections paused and 0 failures
       And Slack was not asked to revoke my grant
       And my Slack connection is still validated, and was never paused
 
@@ -56,7 +56,7 @@ Feature: Pausing connections
       And Slack renews my token when asked
       And Slack accepts to revoke my renewed token
       When only the connections of inactive users are paused
-      Then the pause reported 1 paused and 0 failed
+      Then the pause job reports 1 connections paused and 0 failures
       And Slack was asked once to renew my token
       And Slack was asked once to revoke my grant
       And my Slack connection is paused for inactivity
@@ -68,7 +68,7 @@ Feature: Pausing connections
       And I was last active 91 days ago
       And Slack answers that revoking is rate limited
       When only the connections of inactive users are paused
-      Then the pause reported 1 paused and 0 failed
+      Then the pause job reports 1 connections paused and 0 failures
       And Slack was asked once to revoke my grant
       And my Slack connection is paused for inactivity
       And my Slack connection no longer holds a credential
@@ -82,7 +82,7 @@ Feature: Pausing connections
       And Slack rejects my refresh token
       And Slack accepts any revocation
       When only the long-failing connections are paused
-      Then the pause reported 1 paused and 0 failed
+      Then the pause job reports 1 connections paused and 0 failures
       And Slack was not asked to revoke my grant
       And my Slack connection is paused
 
@@ -92,22 +92,22 @@ Feature: Pausing connections
     Scenario: Later runs and the token refresh leave a paused connection alone
       Given I have a Slack connection syncing my notifications, with the refresh token "xoxe-1-refresh-token"
       And I was last active 91 days ago
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When only the connections of inactive users are paused
-      Then the pause reported 1 paused and 0 failed
+      Then the pause job reports 1 connections paused and 0 failures
       When only the connections of inactive users are paused
-      Then the pause reported 0 paused and 0 failed
+      Then the pause job reports 0 connections paused and 0 failures
       And Slack was asked once to revoke my grant
       When the tokens expiring within a year are refreshed
-      Then the pause reported 0 paused and 0 failed
+      Then the pause job reports 0 connections paused and 0 failures
 
     @legacy:test_pause_integration_connections::test_disconnecting_a_paused_connection_clears_the_pause
     Scenario: Disconnecting a paused connection clears the pause
       Given I have a Slack connection syncing my notifications
       And I was last active 91 days ago
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When only the connections of inactive users are paused
-      Then the pause reported 1 paused and 0 failed
+      Then the pause job reports 1 connections paused and 0 failures
       When I disconnect it
       Then it is no longer paused
 
@@ -117,7 +117,7 @@ Feature: Pausing connections
     Scenario: A connection whose syncs failed for just over 30 days is paused
       Given I have a Slack connection syncing my notifications
       And my Slack connection has been failing for 30 days and 1 hour, through its syncs
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When the pause job runs
       Then my Slack connection is paused for a long failure
       And Slack was asked once to revoke my grant
@@ -130,7 +130,7 @@ Feature: Pausing connections
     Scenario: A connection whose syncs failed for just under 30 days is left failing
       Given I have a Slack connection syncing my notifications
       And my Slack connection has been failing for 29 days and 23 hours, through its syncs
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When the pause job runs
       Then my Slack connection is still failing
       And Slack was not asked to revoke my grant
@@ -140,7 +140,7 @@ Feature: Pausing connections
     Scenario: A connection whose token refresh failed over 30 days ago is paused
       Given I have a Slack connection syncing my notifications
       And my Slack connection has been failing for 30 days and 1 hour, since a token refresh failed
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When the pause job runs
       Then my Slack connection is paused for a long failure
       And Slack was asked once to revoke my grant
@@ -153,7 +153,7 @@ Feature: Pausing connections
     Scenario: An old connection that has only just started failing is not paused
       Given I have a Slack connection syncing my notifications
       And my Slack connection was last updated 60 days ago
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When my Slack connection turns failing with the message "Refresh token rejected"
       And the pause job runs
       Then my Slack connection is still failing
@@ -163,7 +163,7 @@ Feature: Pausing connections
     Scenario: A Linear connection failing for over 30 days is paused too
       Given I have a Linear connection syncing my tasks
       And my Linear connection has been failing for 30 days and 1 hour, through its syncs
-      And Linear accepts to revoke my grant
+      And Linear revokes my grant when asked
       When the pause job runs
       Then my Linear connection is paused for a long failure
       And Linear was asked once to revoke my grant
@@ -175,7 +175,7 @@ Feature: Pausing connections
     Scenario: A Linear connection failing for under 30 days is left failing
       Given I have a Linear connection syncing my tasks
       And my Linear connection has been failing for 29 days and 23 hours, through its syncs
-      And Linear accepts to revoke my grant
+      And Linear revokes my grant when asked
       When the pause job runs
       Then my Linear connection is still failing
       And Linear was not asked to revoke my grant
@@ -187,10 +187,10 @@ Feature: Pausing connections
       And I have a Linear connection syncing my tasks
       And my Slack connection has been failing for 31 days, through its syncs
       And my Linear connection has been failing for 31 days, through its syncs
-      And Slack accepts to revoke my grant
-      And Linear accepts to revoke my grant
+      And Slack revokes my grant when asked
+      And Linear revokes my grant when asked
       When only the long-failing connections are paused
-      Then the pause reported 2 paused and 0 failed
+      Then the pause job reports 2 connections paused and 0 failures
       And I got 1 pause email
       And my last pause email says that my Linear and Slack connections were paused for a long failure
 
@@ -200,7 +200,7 @@ Feature: Pausing connections
     Scenario: A user inactive for just over 83 days is warned once
       Given I have a Slack connection syncing my notifications
       And I was last active 83 days and 1 hour ago
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When the pause job runs, warning inactive users 7 days ahead
       And the pause job runs, warning inactive users 7 days ahead
       Then I was warned once that my Slack connection would be paused, after 83 days of inactivity
@@ -211,7 +211,7 @@ Feature: Pausing connections
     Scenario: A user inactive for just under 83 days is not warned
       Given I have a Slack connection syncing my notifications
       And I was last active 82 days and 23 hours ago
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When the pause job runs, warning inactive users 7 days ahead
       And the pause job runs, warning inactive users 7 days ahead
       Then I got no pause email
@@ -222,16 +222,16 @@ Feature: Pausing connections
     Scenario: A user already inactive for too long is warned first, then paused after the warning period
       Given I have a Slack connection syncing my notifications
       And I was last active 100 days ago
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When the pause job runs, warning inactive users 7 days ahead
       Then my Slack connection is still validated, and was never paused
       And I got 1 pause email
       And my first pause email is a warning
-      Given the warning was sent to me 6 days and 23 hours ago
+      When the warning I received is 6 days and 23 hours old
       When the pause job runs, warning inactive users 7 days ahead
       Then my Slack connection is still validated, and was never paused
       And I got 1 pause email
-      Given the warning was sent to me 7 days and 1 hour ago
+      When the warning I received is 7 days and 1 hour old
       When the pause job runs, warning inactive users 7 days ahead
       Then my Slack connection is paused for inactivity
       And Slack was asked once to revoke my grant
@@ -241,9 +241,9 @@ Feature: Pausing connections
     @legacy:test_pause_integration_connections::test_warning_sent_before_the_last_activity_does_not_count
     Scenario: A warning sent before the last activity does not count for a new period of inactivity
       Given I have a Slack connection syncing my notifications
-      And the warning was sent to me 200 days ago
+      And the warning I received is 200 days old
       And I was last active 100 days ago
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When the pause job runs, warning inactive users 7 days ahead
       Then my Slack connection is still validated, and was never paused
       And Slack was not asked to revoke my grant
@@ -254,14 +254,14 @@ Feature: Pausing connections
     Scenario: An inactive user gets one warning and one pause email for all their connections
       Given I have a Slack connection syncing my notifications
       And I have a Linear connection syncing my tasks
-      And Slack accepts to revoke my grant
-      And Linear accepts to revoke my grant
+      And Slack revokes my grant when asked
+      And Linear revokes my grant when asked
       And I was last active 83 days and 1 hour ago
       When the pause job runs, warning inactive users 7 days ahead
       Then I was warned once that my Linear and Slack connections would be paused, after 83 days of inactivity
       And my Slack connection is still validated, and was never paused
       And my Linear connection is still validated, and was never paused
-      Given I was last active 90 days and 1 hour ago
+      When I was last active 90 days and 1 hour ago
       When the pause job runs
       Then my Slack connection is paused for inactivity
       And my Linear connection is paused for inactivity
@@ -277,10 +277,10 @@ Feature: Pausing connections
       Given I have a Slack connection syncing my notifications
       And my account is a testing account
       And I was last active 100 days ago
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When the pause job runs, warning inactive users 7 days ahead
       Then my Slack connection is still validated, and was never paused
-      Given the warning was sent to me 8 days ago
+      When the warning I received is 8 days old
       When the pause job runs, warning inactive users 7 days ahead
       Then my Slack connection is paused
       And I got no pause email
@@ -293,8 +293,8 @@ Feature: Pausing connections
       And I have a Linear connection syncing my tasks
       And my Linear connection has been failing for 1 day, through its syncs
       And I was last active 30 days ago
-      And Slack accepts to revoke my grant
-      And Linear accepts to revoke my grant
+      And Slack revokes my grant when asked
+      And Linear revokes my grant when asked
       When the connections of users inactive since yesterday are paused without email
       Then the report counts 1 inactive and 1 failing connections paused
       And my Slack connection is paused for inactivity
@@ -305,7 +305,7 @@ Feature: Pausing connections
       And my Slack connection no longer holds a credential
       And my Linear connection no longer holds a credential
       And I got no pause email
-      Given I was last active 365 days ago
+      When I was last active 365 days ago
       When the pause job runs, warning inactive users 7 days ahead
       Then I got no pause email
 
@@ -314,8 +314,8 @@ Feature: Pausing connections
       Given I have a Slack connection syncing my notifications
       And I have a Linear connection syncing my tasks
       And my Linear connection has been failing for 31 days, through its syncs
-      And Slack accepts to revoke my grant
-      And Linear accepts to revoke my grant
+      And Slack revokes my grant when asked
+      And Linear revokes my grant when asked
       When the connections of users inactive since yesterday are paused without email
       Then the report counts 0 inactive and 1 failing connections paused
       And my Slack connection is still validated, and was never paused
@@ -329,8 +329,8 @@ Feature: Pausing connections
       Given I have a Slack connection syncing my notifications
       And I have a Linear connection syncing my tasks
       And my Linear connection has been failing for 29 days, through its syncs
-      And Slack accepts to revoke my grant
-      And Linear accepts to revoke my grant
+      And Slack revokes my grant when asked
+      And Linear revokes my grant when asked
       When the connections of users inactive since yesterday are paused without email
       Then the report counts 0 inactive and 0 failing connections paused
       And my Slack connection is still validated, and was never paused
@@ -343,7 +343,7 @@ Feature: Pausing connections
     Scenario: A dry run reports what would be paused and changes nothing
       Given I have a Slack connection syncing my notifications
       And I was last active 30 days ago
-      And Slack accepts to revoke my grant
+      And Slack revokes my grant when asked
       When the connections of users inactive since yesterday are checked for a pause without email, as a dry run
       Then the report counts 1 inactive and 0 failing connections paused
       And my Slack connection is still validated, and was never paused
