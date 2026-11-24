@@ -40,7 +40,15 @@ setup = "mise trust"
 web_install = "cd web && npm install"
 
 [pre-remove]
-stop_services = "mise daemons stop || true; mise daemons ls --json | jq -r '.[] | select(.ownership == \"project\") | .data_dir // empty' | xargs -r rm -rf"
+stop_services = '''
+# `stop` fails when the daemons were never started, so judge by the daemon states instead.
+out=$(mise daemons stop 2>&1)
+if mise daemons ls --json | jq -e 'any(.[]; (.status | IN("stopped", "available", "errored") | not))' > /dev/null; then
+  echo "pre-remove: project daemons are still running, keeping their data: $out" >&2
+  exit 1
+fi
+mise daemons ls --json | jq -j '.[] | select(.ownership == "project") | .data_dir // empty | ., "\u0000"' | xargs -0 rm -rf
+'''
 
 [pre-commit]
 check = "just check-commit"
