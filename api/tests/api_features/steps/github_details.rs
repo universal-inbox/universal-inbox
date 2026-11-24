@@ -1,4 +1,3 @@
-use chrono::{TimeZone, Utc};
 use cucumber::{gherkin::Step, given, then, when};
 use graphql_client::{Error, Response};
 use pretty_assertions::assert_eq;
@@ -34,6 +33,7 @@ use crate::{
         },
     },
     state::{Discussion, PullRequest},
+    steps::notifications::parse_time,
     world::{ApiWorld, Response as HttpResponse},
 };
 
@@ -72,47 +72,48 @@ pub async fn mount_details(
         )
         .await;
     }
-    let Some(discussion) = discussion else {
-        return;
-    };
     match discussion {
-        Discussion::Failing => {
-            let error_response = Response {
-                data: None,
-                errors: Some(vec![Error {
-                    message: "Something went wrong".to_string(),
-                    locations: None,
-                    path: None,
-                    extensions: None,
-                }]),
-                extensions: None,
-            };
-            mock_github_discussion_query(
-                &app.github_mock_server,
-                OWNER.to_string(),
-                REPOSITORY.to_string(),
-                123,
-                &error_response,
-            )
-            .await;
-            return;
-        }
-        Discussion::Paged | Discussion::LoopingBackToTheSamePage => {
-            mock_github_discussion_query(
-                &app.github_mock_server,
-                OWNER.to_string(),
-                REPOSITORY.to_string(),
-                123,
-                &github_discussion_123_response(),
-            )
-            .await;
-        }
+        Some(Discussion::Failing) => mount_failing_discussion(app).await,
+        Some(Discussion::Paged) => mount_discussion(app, 2).await,
+        Some(Discussion::LoopingBackToTheSamePage) => mount_discussion(app, 1).await,
+        None => {}
     }
-    let comment_pages = match discussion {
-        Discussion::Paged => [(None, 1), (Some("comments-cursor-1".to_string()), 2)],
-        _ => [(None, 1), (Some("comments-cursor-1".to_string()), 1)],
+}
+
+async fn mount_failing_discussion(app: &TestedApp) {
+    let error_response = Response {
+        data: None,
+        errors: Some(vec![Error {
+            message: "Something went wrong".to_string(),
+            locations: None,
+            path: None,
+            extensions: None,
+        }]),
+        extensions: None,
     };
-    for (after, page) in comment_pages {
+    mock_github_discussion_query(
+        &app.github_mock_server,
+        OWNER.to_string(),
+        REPOSITORY.to_string(),
+        123,
+        &error_response,
+    )
+    .await;
+}
+
+async fn mount_discussion(app: &TestedApp, second_comments_page: usize) {
+    mock_github_discussion_query(
+        &app.github_mock_server,
+        OWNER.to_string(),
+        REPOSITORY.to_string(),
+        123,
+        &github_discussion_123_response(),
+    )
+    .await;
+    for (after, page) in [
+        (None, 1),
+        (Some("comments-cursor-1".to_string()), second_comments_page),
+    ] {
         mock_github_discussion_comments_query(
             &app.github_mock_server,
             OWNER.to_string(),
@@ -132,7 +133,8 @@ pub async fn mount_details(
     .await;
 }
 
-fn reports_on(world: &mut ApiWorld, url: &str, kind: &str, title: Option<&str>) {
+fn reports_on(world: &mut ApiWorld, path: &str, kind: &str, title: Option<&str>) {
+    let url = format!("https://api.github.com/repos/{OWNER}/{REPOSITORY}/{path}");
     let mut notification = crate::helpers::notification::github::github_notification();
     let title = title
         .map(str::to_string)
@@ -148,22 +150,12 @@ fn reports_on(world: &mut ApiWorld, url: &str, kind: &str, title: Option<&str>) 
 
 #[given("GitHub reports one notification, on pull request 123")]
 fn github_reports_one_pull_request_notification(world: &mut ApiWorld) {
-    reports_on(
-        world,
-        "https://api.github.com/repos/octokit/octokit.rb/pulls/123",
-        "PullRequest",
-        None,
-    );
+    reports_on(world, "pulls/123", "PullRequest", None);
 }
 
 #[given(expr = "GitHub reports one notification, on the discussion 123 titled {string}")]
 fn github_reports_one_discussion_notification(world: &mut ApiWorld, title: String) {
-    reports_on(
-        world,
-        "https://api.github.com/repos/octokit/octokit.rb/discussions/123",
-        "Discussion",
-        Some(&title),
-    );
+    reports_on(world, "discussions/123", "Discussion", Some(&title));
 }
 
 #[given(
@@ -242,15 +234,10 @@ async fn the_pull_request(world: &mut ApiWorld) -> GithubPullRequest {
     }
 }
 
-fn table_rows(step: &Step) -> Vec<Vec<String>> {
-    step.table
-        .as_ref()
-        .expect("A table is expected")
-        .rows
-        .iter()
-        .skip(1)
-        .cloned()
-        .collect()
+fn table_rows(step: &Step, header: &[&str]) -> Vec<Vec<String>> {
+    let rows = &step.table.as_ref().expect("A table is expected").rows;
+    assert_eq!(rows[0], header, "The table has unexpected columns");
+    rows[1..].to_vec()
 }
 
 #[then(
@@ -263,20 +250,25 @@ async fn the_pull_request_holds_these_comments(world: &mut ApiWorld, step: &Step
         .iter()
         .map(|comment| vec![comment.id.clone().unwrap_or_default(), comment.body.clone()])
         .collect();
-    assert_eq!(comments, table_rows(step));
+    assert_eq!(comments, table_rows(step, &["id", "body"]));
 }
 
 #[then(
-    "that pull request holds one review, PRR_1, saying \"<p>Looks good overall</p>\" and submitted at 2014-11-07T22:03:00Z"
+    expr = "that pull request holds one review, {string}, saying {string} and submitted at {string}"
 )]
-async fn the_pull_request_holds_one_review(world: &mut ApiWorld) {
+async fn the_pull_request_holds_one_review(
+    world: &mut ApiWorld,
+    id: String,
+    body: String,
+    submitted_at: String,
+) {
     let pull_request = the_pull_request(world).await;
     assert_eq!(pull_request.reviews.len(), 1);
-    assert_eq!(pull_request.reviews[0].id.as_deref(), Some("PRR_1"));
-    assert_eq!(pull_request.reviews[0].body, "<p>Looks good overall</p>");
+    assert_eq!(pull_request.reviews[0].id.as_deref(), Some(id.as_str()));
+    assert_eq!(pull_request.reviews[0].body, body);
     assert_eq!(
         pull_request.reviews[0].submitted_at,
-        Some(Utc.with_ymd_and_hms(2014, 11, 7, 22, 3, 0).unwrap())
+        Some(parse_time(&submitted_at))
     );
 }
 
@@ -298,27 +290,39 @@ async fn the_pull_request_holds_these_threads(world: &mut ApiWorld, step: &Step)
             ]
         })
         .collect();
-    assert_eq!(threads, table_rows(step));
+    assert_eq!(threads, table_rows(step, &["thread", "comments"]));
 }
 
 #[then(
-    "its first review thread is on lib/octokit/authenticator.rb, lines 13 to 15, starts with the hunk \"@@ -10,6 +10,8 @@\" and is not resolved"
+    expr = "its review thread {int} is on {string}, lines {int} to {int}, starts with the hunk {string} and is not resolved"
 )]
-async fn the_first_review_thread(world: &mut ApiWorld) {
+async fn an_open_review_thread(
+    world: &mut ApiWorld,
+    position: usize,
+    path: String,
+    start_line: i64,
+    line: i64,
+    hunk: String,
+) {
     let pull_request = the_pull_request(world).await;
-    let thread = &pull_request.review_threads[0];
-    assert_eq!(thread.path, "lib/octokit/authenticator.rb");
-    assert_eq!((thread.start_line, thread.line), (Some(13), Some(15)));
-    assert!(thread.diff_hunk.starts_with("@@ -10,6 +10,8 @@"));
+    let thread = &pull_request.review_threads[position - 1];
+    assert_eq!(thread.path, path);
+    assert_eq!(
+        (thread.start_line, thread.line),
+        (Some(start_line), Some(line))
+    );
+    assert!(thread.diff_hunk.starts_with(&hunk));
     assert!(!thread.is_resolved);
 }
 
-#[then("its second review thread is resolved and outdated, and falls back to its original line 20")]
-async fn the_second_review_thread(world: &mut ApiWorld) {
+#[then(
+    expr = "its review thread {int} is resolved and outdated, and falls back to its original line {int}"
+)]
+async fn a_resolved_outdated_review_thread(world: &mut ApiWorld, position: usize, line: i64) {
     let pull_request = the_pull_request(world).await;
-    let thread = &pull_request.review_threads[1];
+    let thread = &pull_request.review_threads[position - 1];
     assert!(thread.is_resolved && thread.is_outdated);
-    assert_eq!(thread.line, Some(20));
+    assert_eq!(thread.line, Some(line));
 }
 
 #[then(
@@ -370,11 +374,11 @@ async fn the_first_discussion_comment(
     assert_eq!(held.join(", "), replies);
 }
 
-#[then("its second comment is the answer and holds no reply")]
-async fn the_second_discussion_comment(world: &mut ApiWorld) {
+#[then(expr = "its comment {int} is the answer and holds no reply")]
+async fn a_discussion_comment_is_the_answer(world: &mut ApiWorld, position: usize) {
     let discussion = the_discussion(world).await;
-    assert!(discussion.comments[1].is_answer);
-    assert!(discussion.comments[1].replies.is_empty());
+    assert!(discussion.comments[position - 1].is_answer);
+    assert!(discussion.comments[position - 1].replies.is_empty());
 }
 
 #[then("I have no unread notification")]
@@ -409,4 +413,25 @@ async fn my_connection_recorded_its_first_failed_sync(world: &mut ApiWorld) {
     );
     assert_eq!(connection.notifications_sync_failures, 1);
     assert_eq!(connection.status, IntegrationConnectionStatus::Validated);
+}
+
+#[then(expr = "my only unread notification is {string}")]
+async fn my_only_unread_notification_is(world: &mut ApiWorld, name: String) {
+    let expected = world.notifications.named(&name).id;
+    let client = world.client();
+    let app = world.app.get().await;
+    let notifications = list_notifications(
+        &client,
+        &app.api_address,
+        vec![NotificationStatus::Unread],
+        false,
+        None,
+        None,
+        false,
+    )
+    .await;
+    assert_eq!(
+        notifications.iter().map(|n| n.id).collect::<Vec<_>>(),
+        vec![expected]
+    );
 }

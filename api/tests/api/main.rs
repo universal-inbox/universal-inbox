@@ -28,7 +28,6 @@ mod test_slack_webhook;
 mod test_slack_webhook_message;
 mod test_slack_webhook_revocation;
 mod test_slack_webhook_star_reaction;
-mod test_sync_github_notifications;
 mod test_sync_google_drive_comments;
 mod test_sync_google_mail_threads;
 mod test_sync_linear_notifications;

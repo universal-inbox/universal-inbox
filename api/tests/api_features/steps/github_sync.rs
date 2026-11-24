@@ -44,10 +44,11 @@ use crate::{
         },
         rest::get_resource,
         third_party::overwrite_third_party_item_data,
+        user::create_user_and_login,
     },
     state::{KeptTriage, PullRequest},
     steps::notifications::{parse_time, update},
-    world::{ApiWorld, Response},
+    world::{ApiWorld, Response, Session},
 };
 
 const THREAD_456: &str = "456";
@@ -369,22 +370,7 @@ async fn a_notification_is_still_linked(world: &mut ApiWorld, name: String) {
 
 #[then("my GitHub connection recorded a completed sync, without failure")]
 async fn my_connection_recorded_a_completed_sync(world: &mut ApiWorld) {
-    let user_id = world.user().id;
-    let app = world.app.get().await;
-    let mut transaction = app.repository.begin().await.unwrap();
-    let connection = app
-        .repository
-        .get_integration_connection_per_provider(
-            &mut transaction,
-            user_id,
-            IntegrationProviderKind::Github,
-            None,
-            None,
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    transaction.commit().await.unwrap();
+    let connection = github_connection_of(world).await;
     assert!(connection.last_notifications_sync_started_at.is_some());
     assert!(connection.last_notifications_sync_completed_at.is_some());
     assert!(connection.last_notifications_sync_failed_at.is_none());
@@ -640,22 +626,7 @@ async fn i_have_no_read_notification(world: &mut ApiWorld) {
     "my GitHub connection recorded a failed sync, the sixth, and is failing for too many sync failures"
 )]
 async fn my_connection_recorded_a_failed_sync(world: &mut ApiWorld) {
-    let user_id = world.user().id;
-    let app = world.app.get().await;
-    let mut transaction = app.repository.begin().await.unwrap();
-    let connection = app
-        .repository
-        .get_integration_connection_per_provider(
-            &mut transaction,
-            user_id,
-            IntegrationProviderKind::Github,
-            None,
-            None,
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    transaction.commit().await.unwrap();
+    let connection = github_connection_of(world).await;
     assert!(connection.last_notifications_sync_started_at.is_some());
     assert!(connection.last_notifications_sync_completed_at.is_none());
     assert!(connection.last_notifications_sync_failed_at.is_some());
@@ -691,4 +662,79 @@ async fn a_notification_is_unread_in_universal_inbox(world: &mut ApiWorld, name:
 #[given("GitHub serves what it reported")]
 async fn github_serves_what_it_reported(world: &mut ApiWorld) {
     mount_github(world).await;
+}
+
+const OTHER_USERS_PASSWORD: &str = "Very-harD-pasSword-5";
+const THREAD_789: &str = "789";
+
+#[given(expr = "another user, {string}, signed up with a password and signed in")]
+async fn another_user_signed_up_and_signed_in(world: &mut ApiWorld, email: String) {
+    let app = world.app.get().await;
+    let (client, user) =
+        create_user_and_login(app, email.parse().unwrap(), OTHER_USERS_PASSWORD).await;
+    world.other_session = Some(Session { client, user });
+}
+
+#[given(expr = "that other user has the unread GitHub notification {string} of the thread 789")]
+async fn that_other_user_has_a_notification(world: &mut ApiWorld, name: String) {
+    let other_user_id = world.other_session.as_ref().unwrap().user.id;
+    let connection_id = world
+        .integrations
+        .other_github_connection
+        .as_ref()
+        .expect("That other user is not connected to GitHub")
+        .id;
+    let mut reported = thread_456(world).clone();
+    reported.id = THREAD_789.to_string();
+    reported.unread = true;
+    let app = world.app.get().await;
+    let notification =
+        create_notification_from_github_notification(app, &reported, other_user_id, connection_id)
+            .await;
+    world.notifications.by_name.insert(name, *notification);
+}
+
+#[given(
+    expr = "I already have the notifications GitHub reports, and {string} of the thread 789, which it no longer reports"
+)]
+async fn i_already_have_the_notifications(world: &mut ApiWorld, extra: String) {
+    let user_id = world.user().id;
+    let connection_id = world
+        .integrations
+        .github_connection
+        .as_ref()
+        .expect("The account is not connected to GitHub")
+        .id;
+    let reported = world.github_sync.reported.clone();
+    let mut no_longer_reported = thread_456(world).clone();
+    no_longer_reported.id = THREAD_789.to_string();
+    let app = world.app.get().await;
+    for notification in &reported {
+        create_notification_from_github_notification(app, notification, user_id, connection_id)
+            .await;
+    }
+    let notification = create_notification_from_github_notification(
+        app,
+        &no_longer_reported,
+        user_id,
+        connection_id,
+    )
+    .await;
+    world.notifications.by_name.insert(extra, *notification);
+}
+
+#[then(expr = "{string} is deleted")]
+async fn a_notification_is_deleted(world: &mut ApiWorld, name: String) {
+    let notification = read_notification(world, &name).await;
+    assert_eq!(notification.status, NotificationStatus::Deleted);
+}
+
+#[then(expr = "the notification {string} of that other user is still unread")]
+async fn the_other_users_notification_is_unread(world: &mut ApiWorld, name: String) {
+    let id = world.notifications.named(&name).id;
+    let client = world.other_session.as_ref().unwrap().client.clone();
+    let app = world.app.get().await;
+    let notification: Box<NotificationWithTask> =
+        get_resource(&client, &app.api_address, "notifications", id.into()).await;
+    assert_eq!(notification.status, NotificationStatus::Unread);
 }
