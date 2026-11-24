@@ -22,6 +22,8 @@ mod jobs;
 mod kept_triage;
 mod linear_issue_notifications;
 mod linear_tasks_sync;
+mod mcp_client;
+mod mcp_protocol;
 mod mcp_session_store;
 mod mention;
 mod notifications;
