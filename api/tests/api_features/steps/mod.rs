@@ -29,6 +29,7 @@ mod set_aside;
 pub mod set_aside_support;
 mod slack_emojis;
 mod span;
+mod sync_scheduling;
 mod tasks;
 mod third_party;
 mod throttle;

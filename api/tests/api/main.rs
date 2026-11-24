@@ -34,7 +34,6 @@ mod test_sync_google_mail_threads;
 mod test_sync_linear_notifications;
 mod test_sync_linear_tasks;
 mod test_sync_notion_notifications;
-mod test_sync_scheduling_concurrency;
 mod test_sync_slack_threads;
 mod test_sync_ticktick_tasks;
 mod test_sync_todoist_tasks;
