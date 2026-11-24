@@ -50,7 +50,7 @@ Feature: Syncing Linear tasks
     @legacy:test_sync_linear_tasks::test_sync_tasks_should_not_overwrite_the_title_of_an_unmirrored_task
     Scenario: Retitling the issue does not change the title of an unmirrored task either
       Given I am connected to Linear, syncing its tasks into the project Project2, due today
-      And I already have the task of that issue in the project Project2, not mirrored by any task manager
+      And I already have the task of that issue in the project Project2, due today, not mirrored by any task manager
       And Todoist accepts no call from the sync
       And a second passes
       And Linear reports that issue retitled "Renamed upstream in Linear"
@@ -100,7 +100,7 @@ Feature: Syncing Linear tasks
     @legacy:test_sync_linear_tasks::test_sync_tasks_should_create_sink_item_if_missing_when_updating_task
     Scenario: Updating an unmirrored task creates its Todoist item
       Given I am connected to Linear, syncing its tasks into the project Project2, due no date
-      And I already have the task of that issue in the project Project2, not mirrored by any task manager
+      And I already have the task of that issue in the project Project2, due today, not mirrored by any task manager
       And a second passes
       And Linear reports that issue with the description "This issue was edited upstream"
       And Todoist creates the item "new_todoist_id" for that task, with its title and the description Linear reports
@@ -123,11 +123,23 @@ Feature: Syncing Linear tasks
       When I sync my Linear tasks
       Then my Linear notification "mine" is deleted
 
+    Scenario: Syncing the task deletes the notification of the syncing user only
+      Given another user is signed in
+      And that other user is connected to Linear, syncing its tasks into the project Project2, due today
+      And that other user has the Linear notification of that issue, "theirs", which they have read
+      And I already have the Linear notification of that issue, "mine", which I have read
+      And Linear reports my assigned issue
+      And Todoist creates the item "new_item" for the new task, titled with a link to the issue
+      When I sync my Linear tasks
+      Then my Linear notification "mine" is deleted
+      And the Linear notification "theirs" of that other user is still read
+
     @legacy:test_sync_linear_tasks::test_create_notification_should_auto_delete_when_task_already_exists
     Scenario: The notification of an issue that already has a task is created deleted
       Given I already have the task of that issue in the project Project2, mirrored by Todoist
-      And I received the Linear notification of that issue, "mine", which was created already deleted
-      Then the status of "mine" never changed
+      When the Linear notification of that issue arrives as "mine"
+      Then my Linear notification "mine" is deleted
+      And the status of "mine" never changed
 
     @legacy:test_sync_linear_tasks::resync_of_notification_for_issue_synced_as_task::test_resync_should_keep_notification_deleted_without_status_change
     Scenario: Syncing the notification again keeps it deleted, without flipping its status

@@ -1,28 +1,27 @@
 use std::str::FromStr;
 
-use chrono::Utc;
 use cucumber::{Parameter, given, then, when};
 use pretty_assertions::{assert_eq, assert_ne};
 use tokio::time::{Duration, sleep};
 use wiremock::{Mock, ResponseTemplate, matchers::method, matchers::path};
 
 use universal_inbox::{
-    HasHtmlUrl, Page,
-    audit::AuditEvent,
+    HasHtmlUrl,
     integration_connection::{
+        IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::linear::{LinearConfig, LinearSyncTaskConfig},
         provider::IntegrationProviderKind,
     },
-    notification::{NotificationSourceKind, NotificationStatus},
     task::{
-        DueDate, PresetDueDate, ProjectSummary, TaskCreationConfig, TaskPriority, TaskSourceKind,
-        TaskStatus, service::TaskPatch,
+        DueDate, PresetDueDate, ProjectSummary, Task, TaskCreationConfig, TaskPriority,
+        TaskSourceKind, TaskStatus, service::TaskPatch,
     },
     third_party::{
         integrations::{
-            linear::{LinearIssue, LinearNotification},
-            todoist::TodoistItemPriority,
+            linear::LinearIssue,
+            ticktick::{TickTickItem, TickTickItemPriority},
+            todoist::{TodoistItem, TodoistItemPriority},
         },
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemKind},
     },
@@ -41,14 +40,7 @@ use crate::{
     common::settings,
     helpers::{
         integration_connection::{create_and_mock_integration_connection, linear_oauth_credential},
-        notification::{
-            linear::{
-                create_notification_from_linear_notification, mock_linear_assigned_issues_query,
-                mock_linear_notifications_query, sync_linear_notifications_response,
-                sync_linear_tasks_response,
-            },
-            sync_notifications,
-        },
+        notification::linear::{mock_linear_assigned_issues_query, sync_linear_tasks_response},
         task::{
             get_task,
             linear::create_linear_task,
@@ -63,7 +55,7 @@ use crate::{
         },
     },
     state::Reported,
-    steps::{kept_triage::read_notification, status::UserStatus},
+    steps::integration_connections::stored_connection,
     world::ApiWorld,
 };
 
@@ -92,7 +84,10 @@ impl FromStr for Due {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Project(pub &'static str, pub &'static str);
+pub struct Project {
+    pub name: &'static str,
+    pub source_id: &'static str,
+}
 
 impl Parameter for Project {
     const REGEX: &'static str = "Project1|Project2|TickTick Project2";
@@ -104,9 +99,18 @@ impl FromStr for Project {
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
         match name {
-            "Project1" => Ok(Self("Project1", "1111")),
-            "Project2" => Ok(Self("Project2", "2222")),
-            "TickTick Project2" => Ok(Self("Project2", "tt_proj_2222")),
+            "Project1" => Ok(Self {
+                name: "Project1",
+                source_id: "1111",
+            }),
+            "Project2" => Ok(Self {
+                name: "Project2",
+                source_id: "2222",
+            }),
+            "TickTick Project2" => Ok(Self {
+                name: "Project2",
+                source_id: "tt_proj_2222",
+            }),
             other => Err(format!("Unknown project {other:?}")),
         }
     }
@@ -115,8 +119,8 @@ impl FromStr for Project {
 impl Project {
     fn summary(self) -> ProjectSummary {
         ProjectSummary {
-            name: self.0.to_string(),
-            source_id: self.1.into(),
+            name: self.name.to_string(),
+            source_id: self.source_id.into(),
         }
     }
 }
@@ -150,7 +154,7 @@ async fn connect_linear(
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
                 target_project: Some(project.summary()),
-                default_due_at: due.0,
+                default_due_at: due.0.clone(),
                 task_manager_provider_kind: task_manager,
                 ..Default::default()
             },
@@ -163,6 +167,7 @@ async fn connect_linear(
     .await;
     world.integrations.linear_connection = Some(connection);
     world.integrations.linear_project = Some(project.summary());
+    world.linear_tasks.due = due.0.clone();
 }
 
 #[given(expr = "I am connected to Linear, syncing its tasks into the project {project}, due {due}")]
@@ -235,7 +240,7 @@ async fn i_have_a_mirrored_task(world: &mut ApiWorld, project: Project) {
 }
 
 #[given(
-    expr = "I already have the task of that issue in the project {project}, not mirrored by any task manager"
+    expr = "I already have the task of that issue in the project {project}, due today, not mirrored by any task manager"
 )]
 async fn i_have_an_unmirrored_task(world: &mut ApiWorld, project: Project) {
     let user_id = world.user().id;
@@ -267,7 +272,7 @@ async fn i_have_an_unmirrored_task(world: &mut ApiWorld, project: Project) {
             &issue,
             &source_item,
             Some(TaskCreationConfig {
-                project_name: Some(project.0.to_string()),
+                project_name: Some(project.name.to_string()),
                 due_at: Some(PresetDueDate::Today.into()),
                 priority: TaskPriority::default(),
                 task_manager_provider_kind: None,
@@ -326,25 +331,30 @@ async fn todoist_accepts_no_call(world: &mut ApiWorld) {
 )]
 async fn todoist_creates_the_item_for_the_new_task(world: &mut ApiWorld, item_id: String) {
     let issue = the_issue();
+    let project_id = linked_project_id(world);
+    let due: DueDate = world
+        .linear_tasks
+        .due
+        .clone()
+        .expect("Linear syncs no due date")
+        .into();
     let app = world.app.get().await;
     mock_todoist_item_add_service(
         &app.todoist_mock_server,
         &item_id,
         title_with_link(&issue),
         issue.description.clone(),
-        Some("2222".to_string()),
-        Some((&DueDate::from(PresetDueDate::Today)).into()),
+        Some(project_id),
+        Some((&due).into()),
         TodoistItemPriority::P1,
     )
     .await;
     mock_todoist_get_item_service(
         &app.todoist_mock_server,
-        Box::new(
-            universal_inbox::third_party::integrations::todoist::TodoistItem {
-                id: item_id,
-                ..*todoist_item()
-            },
-        ),
+        Box::new(TodoistItem {
+            id: item_id,
+            ..*todoist_item()
+        }),
     )
     .await;
 }
@@ -359,25 +369,25 @@ async fn todoist_creates_the_item_for_that_task(world: &mut ApiWorld, item_id: S
         .description
         .clone()
         .unwrap_or_else(|| task.body.clone());
+    let project_id = linked_project_id(world);
+    let due = task.due_at.clone().expect("The task has no due date");
     let app = world.app.get().await;
     mock_todoist_item_add_service(
         &app.todoist_mock_server,
         &item_id,
         task.title.clone(),
         Some(description),
-        Some("2222".to_string()),
-        Some((&DueDate::from(PresetDueDate::Today)).into()),
+        Some(project_id),
+        Some((&due).into()),
         TodoistItemPriority::P1,
     )
     .await;
     mock_todoist_get_item_service(
         &app.todoist_mock_server,
-        Box::new(
-            universal_inbox::third_party::integrations::todoist::TodoistItem {
-                id: item_id,
-                ..*todoist_item()
-            },
-        ),
+        Box::new(TodoistItem {
+            id: item_id,
+            ..*todoist_item()
+        }),
     )
     .await;
 }
@@ -454,11 +464,11 @@ async fn todoist_no_longer_knows_the_item_on_update(world: &mut ApiWorld) {
 #[given("TickTick creates the sink item of the new task")]
 async fn ticktick_creates_the_item(world: &mut ApiWorld) {
     let title = title_with_link(&the_issue());
-    let item = universal_inbox::third_party::integrations::ticktick::TickTickItem {
+    let item = TickTickItem {
         id: "tt_sink_from_linear".to_string(),
         project_id: "tt_proj_2222".to_string(),
         title: title.clone(),
-        priority: universal_inbox::third_party::integrations::ticktick::TickTickItemPriority::High,
+        priority: TickTickItemPriority::High,
         ..*ticktick_item()
     };
     let app = world.app.get().await;
@@ -486,41 +496,6 @@ async fn ticktick_creates_the_item(world: &mut ApiWorld) {
         .await;
     mock_ticktick_get_task_service(&app.ticktick_mock_server, &item.project_id, &item.id, &item)
         .await;
-}
-
-#[given(
-    expr = "I received the Linear notification of that issue, {string}, which was created already deleted"
-)]
-async fn i_received_the_notification_of_that_issue(world: &mut ApiWorld, name: String) {
-    let notification = create_the_notification(world).await;
-    assert_eq!(notification.status, NotificationStatus::Deleted);
-    world.notifications.by_name.insert(name, *notification);
-}
-
-#[given(expr = "I already have the Linear notification of that issue, {string}, which I have read")]
-async fn i_already_have_the_notification(world: &mut ApiWorld, name: String) {
-    let notification = create_the_notification(world).await;
-    assert_eq!(notification.status, NotificationStatus::Read);
-    world.notifications.by_name.insert(name, *notification);
-}
-
-async fn create_the_notification(
-    world: &mut ApiWorld,
-) -> Box<universal_inbox::notification::Notification> {
-    let user_id = world.user().id;
-    let linear_id = world.integrations.linear_connection.as_ref().unwrap().id;
-    let notifications: Vec<LinearNotification> = sync_linear_notifications_response()
-        .data
-        .unwrap()
-        .try_into()
-        .unwrap();
-    let app = world.app.get().await;
-    create_notification_from_linear_notification(app, &notifications[2], user_id, linear_id).await
-}
-
-#[given("Linear reports new unread activity on that notification")]
-fn linear_reports_new_activity(world: &mut ApiWorld) {
-    world.linear_tasks.new_activity = true;
 }
 
 #[given("I deleted that task")]
@@ -572,27 +547,7 @@ async fn i_sync_my_linear_tasks(world: &mut ApiWorld) {
     .await;
 }
 
-#[when("I sync my Linear notifications")]
-async fn i_sync_my_linear_notifications(world: &mut ApiWorld) {
-    let mut response = sync_linear_notifications_response();
-    if world.linear_tasks.new_activity {
-        let node = &mut response.data.as_mut().unwrap().notifications.nodes[2];
-        node.read_at = None;
-        node.updated_at = Utc::now();
-    }
-    let client = world.client();
-    let app = world.app.get().await;
-    mock_linear_notifications_query(&app.linear_mock_server, &response).await;
-    let _: Vec<universal_inbox::notification::Notification> = sync_notifications(
-        &client,
-        &app.api_address,
-        Some(NotificationSourceKind::Linear),
-        false,
-    )
-    .await;
-}
-
-fn synced_task(world: &ApiWorld) -> &universal_inbox::task::Task {
+fn synced_task(world: &ApiWorld) -> &Task {
     assert_eq!(world.linear_tasks.results.len(), 1);
     &world.linear_tasks.results[0].task
 }
@@ -620,7 +575,7 @@ fn the_task_comes_from_the_issue(world: &mut ApiWorld) {
 fn the_task_is_active_in(world: &mut ApiWorld, project: Project, due: Due) {
     let task = synced_task(world);
     assert_eq!(task.status, TaskStatus::Active);
-    assert_eq!(task.project, project.0.to_string());
+    assert_eq!(task.project, project.name.to_string());
     assert_eq!(task.due_at, due.0.map(Into::into));
 }
 
@@ -647,12 +602,13 @@ fn the_task_is_mirrored_by_ticktick(world: &mut ApiWorld) {
 #[then("my Linear connection recorded a completed tasks sync, without failure")]
 async fn my_connection_recorded_a_completed_sync(world: &mut ApiWorld) {
     let id = world.integrations.linear_connection.as_ref().unwrap().id;
-    let connection = crate::steps::integration_connections::stored_connection(world, id).await;
+    let connection = stored_connection(world, id).await;
     assert!(connection.last_tasks_sync_started_at.is_some());
     assert!(connection.last_tasks_sync_completed_at.is_some());
     assert!(connection.last_tasks_sync_failed_at.is_none());
     assert!(connection.last_tasks_sync_failure_message.is_none());
     assert_eq!(connection.tasks_sync_failures, 0);
+    assert_eq!(connection.status, IntegrationConnectionStatus::Validated);
     assert!(connection.failure_message.is_none());
 }
 
@@ -679,13 +635,18 @@ async fn the_task_kept_its_project_and_due_date(world: &mut ApiWorld) {
 
 #[then("that task kept its title")]
 async fn the_task_kept_its_title(world: &mut ApiWorld) {
+    let retitle = world
+        .linear_tasks
+        .title
+        .clone()
+        .expect("The scenario does not retitle the issue");
     let known = world.linear_tasks.task.clone().unwrap();
     let client = world.client();
     let app = world.app.get().await;
     let task = get_task(&client, &app.api_address, known.id).await.unwrap();
     assert_eq!(task.title, known.title);
     assert!(
-        !task.title.contains("Renamed upstream in Linear"),
+        !task.title.contains(&retitle),
         "the upstream Linear title must not reach the task, got: {}",
         task.title
     );
@@ -733,40 +694,12 @@ async fn the_task_is_titled(world: &mut ApiWorld, title: String) {
     assert_eq!(task.title, title);
 }
 
-#[then(expr = "my Linear notification {string} is {status}")]
-async fn my_notification_is(world: &mut ApiWorld, name: String, status: UserStatus) {
-    let id = world.notifications.named(&name).id;
-    let notification = read_notification(world, &name).await;
-    assert_eq!(notification.id, id);
-    assert_eq!(notification.status, status.0);
-}
-
-async fn status_changes(world: &mut ApiWorld, name: &str) -> usize {
-    let id = world.notifications.named(name).id;
-    let client = world.client();
-    let app = world.app.get().await;
-    let events: Page<AuditEvent> = get_resource_audit(&client, &app.api_address, id).await;
-    events.content.len()
-}
-
-async fn get_resource_audit(
-    client: &reqwest::Client,
-    api_address: &str,
-    id: universal_inbox::notification::NotificationId,
-) -> Page<AuditEvent> {
-    client
-        .get(format!(
-            "{api_address}audit-events?entity_id={id}&change=Status"
-        ))
-        .send()
-        .await
-        .expect("Failed to list audit events")
-        .json()
-        .await
-        .expect("Failed to parse audit events")
-}
-
-#[then(expr = "the status of {string} never changed")]
-async fn the_status_never_changed(world: &mut ApiWorld, name: String) {
-    assert_eq!(status_changes(world, &name).await, 0);
+fn linked_project_id(world: &ApiWorld) -> String {
+    world
+        .integrations
+        .linear_project
+        .as_ref()
+        .expect("The account is not connected to Linear")
+        .source_id
+        .to_string()
 }

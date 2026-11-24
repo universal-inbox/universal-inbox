@@ -16,4 +16,5 @@ pub struct Integrations {
     pub google_connection: Option<Box<IntegrationConnection>>,
     pub google_mail_connection: Option<Box<IntegrationConnection>>,
     pub google_calendar_connection: Option<Box<IntegrationConnection>>,
+    pub other_linear_connection: Option<Box<IntegrationConnection>>,
 }

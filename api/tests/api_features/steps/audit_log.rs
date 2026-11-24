@@ -32,7 +32,7 @@ use crate::{
     world::ApiWorld,
 };
 
-async fn list_events(client: &Client, app: &TestedApp, query: &str) -> Page<AuditEvent> {
+pub async fn list_events(client: &Client, app: &TestedApp, query: &str) -> Page<AuditEvent> {
     client
         .get(format!("{}audit-events?{query}", app.api_address))
         .send()

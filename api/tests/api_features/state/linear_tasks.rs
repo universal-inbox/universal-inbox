@@ -12,7 +12,8 @@ pub struct LinearTasks {
     pub reported: Reported,
     pub title: Option<String>,
     pub description: Option<String>,
-    pub new_activity: bool,
+    pub unread_since: Option<chrono::DateTime<chrono::Utc>>,
+    pub due: Option<universal_inbox::task::PresetDueDate>,
     pub task: Option<Task>,
     pub results: Vec<TaskCreationResult>,
 }
