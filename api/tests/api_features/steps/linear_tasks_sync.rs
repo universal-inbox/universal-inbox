@@ -61,6 +61,7 @@ use crate::{
 
 const SINK_FAILURE_NO_SUCH_ITEM: i32 = 22;
 const KNOWN_TODOIST_ITEM_ID: &str = "todoist_source_id";
+pub const TICKTICK_PROJECT_2_ID: &str = "tt_proj_2222";
 
 #[derive(Clone, Debug)]
 pub struct Due(pub Option<PresetDueDate>);

@@ -38,6 +38,7 @@ mod session;
 mod set_aside;
 pub mod set_aside_support;
 mod slack_emojis;
+mod slack_threads_sync;
 mod span;
 mod status;
 mod sync_scheduling;

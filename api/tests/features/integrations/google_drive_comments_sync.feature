@@ -70,3 +70,4 @@ Feature: Syncing Google Drive comments
     When I sync my Google Drive notifications
     Then the sync returned 0 notification
     And my Google Drive notification "mine" is unread
+    And "mine" was not rewritten by the sync

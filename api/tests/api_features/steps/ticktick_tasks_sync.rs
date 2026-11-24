@@ -37,12 +37,12 @@ use crate::{
         },
         third_party::create_task_third_party_item,
     },
-    steps::integration_connections::stored_connection,
+    steps::{integration_connections::stored_connection, linear_tasks_sync::TICKTICK_PROJECT_2_ID},
     world::ApiWorld,
 };
 
 const INBOX_PROJECT_ID: &str = "tt_proj_1111";
-const PROJECT_2_ID: &str = "tt_proj_2222";
+
 const MIRRORING_ITEM_ID: &str = "tt_task_9999";
 
 async fn connect(world: &mut ApiWorld, config: TickTickConfig) {
@@ -144,13 +144,13 @@ async fn i_have_a_task_mirrored_by_ticktick(world: &mut ApiWorld) {
         &issues[0],
         ProjectSummary {
             name: "Project2".to_string(),
-            source_id: PROJECT_2_ID.into(),
+            source_id: TICKTICK_PROJECT_2_ID.into(),
         },
         user_id,
         linear_id,
         ticktick_id,
         MIRRORING_ITEM_ID.to_string(),
-        PROJECT_2_ID.to_string(),
+        TICKTICK_PROJECT_2_ID.to_string(),
     )
     .await;
     world.integrations.linear_task = Some(task);
@@ -177,7 +177,7 @@ async fn mount_tasks(world: &mut ApiWorld) {
     let server = &app.ticktick_mock_server;
     mock_ticktick_list_projects_service(server, &ticktick_projects_response()).await;
     mock_ticktick_inbox_data_service(server, &[]).await;
-    for project_id in [INBOX_PROJECT_ID, PROJECT_2_ID] {
+    for project_id in [INBOX_PROJECT_ID, TICKTICK_PROJECT_2_ID] {
         let of_project: Vec<TickTickItem> = items
             .iter()
             .filter(|item| item.project_id == project_id)

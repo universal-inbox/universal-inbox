@@ -534,3 +534,10 @@ fn google_drive_reports_the_first_comment_unchanged(world: &mut ApiWorld) {
         }),
     ));
 }
+
+#[then(expr = "{string} was not rewritten by the sync")]
+async fn the_notification_was_not_rewritten(world: &mut ApiWorld, name: String) {
+    let before = world.notifications.named(&name).updated_at;
+    let notification = read_notification(world, &name).await;
+    assert_eq!(notification.updated_at, before);
+}
