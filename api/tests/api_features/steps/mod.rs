@@ -80,6 +80,7 @@ mod throttle;
 mod ticktick_task_changes;
 mod ticktick_tasks_sync;
 mod todoist_legacy_ids;
+mod todoist_notification_changes;
 mod todoist_task_changes;
 mod todoist_tasks_sync;
 mod unread_inbox;

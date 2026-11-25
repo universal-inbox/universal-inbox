@@ -223,7 +223,7 @@ async fn i_rename_the_task(world: &mut ApiWorld, title: String) {
 }
 
 #[then(expr = "the patched TickTick task is {task_state}")]
-fn the_patched_task_is(world: &mut ApiWorld, state: TaskState) {
+async fn the_patched_task_is(world: &mut ApiWorld, state: TaskState) {
     let existing = the_task(world);
     let patched = world
         .ticktick_task_changes
@@ -238,6 +238,8 @@ fn the_patched_task_is(world: &mut ApiWorld, state: TaskState) {
             ..existing
         }
     );
+    let patched = world.ticktick_task_changes.patched.clone().unwrap();
+    crate::steps::todoist_task_changes::assert_the_task_is_stored(world, *patched).await;
 }
 
 #[then("the patched TickTick task has a completion date")]

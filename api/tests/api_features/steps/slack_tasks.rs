@@ -417,7 +417,7 @@ async fn i_mark_the_task_as_done(world: &mut ApiWorld) {
 }
 
 #[then("that task is done, with a completion date, and nothing else changed")]
-fn the_task_is_done_and_nothing_else_changed(world: &mut ApiWorld) {
+async fn the_task_is_done_and_nothing_else_changed(world: &mut ApiWorld) {
     let existing = the_creation(world).task.as_ref().unwrap().clone();
     let patched = world
         .slack_tasks
@@ -433,6 +433,8 @@ fn the_task_is_done_and_nothing_else_changed(world: &mut ApiWorld) {
             ..existing
         }
     );
+    let patched = world.slack_tasks.patched.clone().unwrap();
+    crate::steps::todoist_task_changes::assert_the_task_is_stored(world, *patched).await;
 }
 
 #[then(expr = "that Slack task is {task_state}")]

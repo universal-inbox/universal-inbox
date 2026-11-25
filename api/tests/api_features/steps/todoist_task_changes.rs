@@ -593,11 +593,10 @@ async fn that_task_is(world: &mut ApiWorld, state: TaskState) {
 }
 
 #[then(expr = "the patched task is {task_state}")]
-fn the_patched_task_is(world: &mut ApiWorld, state: TaskState) {
-    assert_eq!(
-        world.todoist_task_changes.patched.as_ref().unwrap().status,
-        state.0
-    );
+async fn the_patched_task_is(world: &mut ApiWorld, state: TaskState) {
+    let patched = world.todoist_task_changes.patched.clone().unwrap();
+    assert_eq!(patched.status, state.0);
+    assert_the_task_is_stored(world, *patched).await;
 }
 
 #[then("the patched task has a completion date")]
@@ -772,4 +771,11 @@ async fn the_notification_is_linked(world: &mut ApiWorld) {
         notification.task.as_ref().map(|task| task.id),
         Some(task_id)
     );
+}
+
+/// The answer of a change is not its effect: reads the task again and compares the stored one,
+/// whole, to the one that the change returned.
+pub(super) async fn assert_the_task_is_stored(world: &mut ApiWorld, patched: Task) {
+    let stored = fetch_task(world, patched.id).await;
+    assert_eq!(*stored, patched);
 }

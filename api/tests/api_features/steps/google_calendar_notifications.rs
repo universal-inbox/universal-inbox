@@ -215,7 +215,7 @@ async fn i_set_the_status(world: &mut ApiWorld, name: String, status: UserStatus
 #[then(
     expr = "the patched notification is {status}, was read just now, and is otherwise as {string} was"
 )]
-fn the_patched_notification_is(world: &mut ApiWorld, status: UserStatus, name: String) {
+async fn the_patched_notification_is(world: &mut ApiWorld, status: UserStatus, name: String) {
     let before = notification_named(world, &name);
     let patched = world
         .notifications
@@ -231,6 +231,7 @@ fn the_patched_notification_is(world: &mut ApiWorld, status: UserStatus, name: S
             ..before
         }
     );
+    crate::steps::notifications::assert_the_patched_notification_is_stored(world).await;
 }
 
 #[when(expr = "I answer the invitation of {string} with {answer}")]

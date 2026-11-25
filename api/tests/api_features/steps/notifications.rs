@@ -565,7 +565,7 @@ async fn i_snooze_a_notification_until(world: &mut ApiWorld, name: String, time:
 }
 
 #[then(expr = "the patched notification is {string} snoozed until {string}")]
-fn the_patched_notification_is_snoozed(world: &mut ApiWorld, name: String, time: String) {
+async fn the_patched_notification_is_snoozed(world: &mut ApiWorld, name: String, time: String) {
     assert_eq!(
         world.notifications.patched.as_ref().unwrap(),
         &Notification {
@@ -573,6 +573,7 @@ fn the_patched_notification_is_snoozed(world: &mut ApiWorld, name: String, time:
             ..world.notifications.named(&name).clone()
         }
     );
+    assert_the_patched_notification_is_stored(world).await;
 }
 
 #[when(expr = "I send {string} the status it already has and the snooze time {string}")]
@@ -825,4 +826,24 @@ async fn i_create_a_task_with_a_title_too_long(world: &mut ApiWorld) {
     )
     .await;
     world.http.record(Response::read(response).await);
+}
+
+/// The answer of a change is not its effect: reads the patched notification again and compares
+/// the stored one, whole, to the one that the change returned.
+pub(super) async fn assert_the_patched_notification_is_stored(world: &mut ApiWorld) {
+    let patched = world
+        .notifications
+        .patched
+        .clone()
+        .expect("The notification was not patched");
+    let client = world.client();
+    let app = world.app.get().await;
+    let stored: Box<NotificationWithTask> = get_resource(
+        &client,
+        &app.api_address,
+        "notifications",
+        patched.id.into(),
+    )
+    .await;
+    assert_eq!(Notification::from(*stored), patched);
 }

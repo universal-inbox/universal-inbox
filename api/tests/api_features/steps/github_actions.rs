@@ -186,15 +186,17 @@ fn assert_patched_with_read_marker_moved_forward(
 }
 
 #[then(expr = "the patched notification is {string}, deleted, with its read marker moved forward")]
-fn the_patched_notification_is_deleted(world: &mut ApiWorld, name: String) {
+async fn the_patched_notification_is_deleted(world: &mut ApiWorld, name: String) {
     assert_patched_with_read_marker_moved_forward(world, &name, NotificationStatus::Deleted);
+    crate::steps::notifications::assert_the_patched_notification_is_stored(world).await;
 }
 
 #[then(
     expr = "the patched notification is {string}, unsubscribed, with its read marker moved forward"
 )]
-fn the_patched_notification_is_unsubscribed(world: &mut ApiWorld, name: String) {
+async fn the_patched_notification_is_unsubscribed(world: &mut ApiWorld, name: String) {
     assert_patched_with_read_marker_moved_forward(world, &name, NotificationStatus::Unsubscribed);
+    crate::steps::notifications::assert_the_patched_notification_is_stored(world).await;
 }
 
 #[then("GitHub was asked once to mark the thread as read, and once to delete it")]

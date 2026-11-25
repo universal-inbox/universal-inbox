@@ -10,4 +10,3 @@ mod test_google_drive_notifications;
 mod test_google_mail_notifications;
 mod test_linear_tasks;
 mod test_multi_task_manager;
-mod test_todoist_notifications;
