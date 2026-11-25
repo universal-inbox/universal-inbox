@@ -144,8 +144,12 @@ fn the_two_authorizations_differ(world: &mut ApiWorld) {
         .as_ref()
         .expect("The flow was started once only");
     assert_ne!(
-        world.oauth_callback.earlier_state,
-        world.oauth_callback.state
+        world
+            .oauth_callback
+            .earlier_state
+            .as_ref()
+            .expect("No earlier state"),
+        world.oauth_callback.state.as_ref().expect("No state")
     );
     assert_ne!(challenge_in(earlier_url).0, challenge_of(world).0);
 }
@@ -202,4 +206,22 @@ async fn the_verifier_matches_only_its_challenge(world: &mut ApiWorld, provider:
                 .expect("The flow was started once only")
         )
     );
+}
+
+#[then(
+    expr = "the token request of {provider} carried the verifier of the earlier authorization, and not of the latest"
+)]
+async fn the_verifier_is_the_one_of_the_earlier_flow(world: &mut ApiWorld, provider: ProviderName) {
+    let verifier = verifier_sent_to_the_token_endpoint(world, provider).await;
+    let digest = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
+    let earlier = challenge_in(
+        world
+            .oauth_callback
+            .earlier_authorization_url
+            .as_ref()
+            .expect("The flow was started once only"),
+    )
+    .0;
+    assert_eq!(digest, earlier);
+    assert_ne!(digest, challenge_of(world).0);
 }

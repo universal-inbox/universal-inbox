@@ -210,6 +210,15 @@ Feature: The OAuth callback
       When the provider calls back with that state and a code, for the owner of the connection
       Then the token request of Google Mail carried a verifier that RFC 7636 allows, which matches no challenge but that one
 
+    Scenario: The earlier of two flows of a connection is completed with the verifier of its own challenge
+      Given I started the OAuth flow of a new Google Mail connection
+      And I started that flow a second time
+      And the two authorizations have different states and different PKCE challenges
+      And the provider exchanges the code for an access token of Google Mail
+      And Google Mail tells that the account of the access token is "Jane.Doe@example.com"
+      When the provider calls back with the earlier state and a code, for the owner of the connection
+      Then the token request of Google Mail carried the verifier of the earlier authorization, and not of the latest
+
     Scenario: A late callback of an earlier flow is refused as expired and leaves the credential alone
       Given I started the OAuth flow of a new Google Mail connection
       And I started that flow a second time
