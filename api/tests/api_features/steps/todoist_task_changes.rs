@@ -600,16 +600,10 @@ async fn the_patched_task_is(world: &mut ApiWorld, state: TaskState) {
 }
 
 #[then("the patched task has a completion date")]
-fn the_patched_task_has_a_completion_date(world: &mut ApiWorld) {
-    assert!(
-        world
-            .todoist_task_changes
-            .patched
-            .as_ref()
-            .unwrap()
-            .completed_at
-            .is_some()
-    );
+async fn the_patched_task_has_a_completion_date(world: &mut ApiWorld) {
+    let patched = world.todoist_task_changes.patched.clone().unwrap();
+    assert!(patched.completed_at.is_some());
+    assert_the_task_is_stored(world, *patched).await;
 }
 
 async fn status_of_the_notification_of_the_task(world: &mut ApiWorld) -> NotificationStatus {
@@ -650,16 +644,17 @@ async fn the_notification_of_the_task_is_unread(world: &mut ApiWorld) {
 #[then(
     expr = "the patched task is in the project {string}, due {string}, with the priority {priority}"
 )]
-fn the_patched_task_is_planned(
+async fn the_patched_task_is_planned(
     world: &mut ApiWorld,
     project: String,
     due: String,
     priority: Priority,
 ) {
-    let task = world.todoist_task_changes.patched.as_ref().unwrap();
+    let task = world.todoist_task_changes.patched.clone().unwrap();
     assert_eq!(task.project, project);
     assert_eq!(task.due_at, Some(DueDate::Date(due.parse().unwrap())));
     assert_eq!(task.priority, TaskPriority::from(priority.0));
+    assert_the_task_is_stored(world, *task).await;
 }
 
 #[given(
@@ -689,6 +684,8 @@ async fn the_patched_task_is_titled(world: &mut ApiWorld, title: String) {
     );
     let id = the_task_id(world);
     assert_eq!(fetch_task(world, id).await.title, title);
+    let patched = world.todoist_task_changes.patched.clone().unwrap();
+    assert_the_task_is_stored(world, *patched).await;
 }
 
 #[then(
@@ -773,8 +770,6 @@ async fn the_notification_is_linked(world: &mut ApiWorld) {
     );
 }
 
-/// The answer of a change is not its effect: reads the task again and compares the stored one,
-/// whole, to the one that the change returned.
 pub(super) async fn assert_the_task_is_stored(world: &mut ApiWorld, patched: Task) {
     let stored = fetch_task(world, patched.id).await;
     assert_eq!(*stored, patched);

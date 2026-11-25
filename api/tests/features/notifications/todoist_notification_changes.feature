@@ -37,13 +37,14 @@ Feature: Changing the notification of a Todoist task
     And the error message is "Unsupported action: Cannot update the status of Todoist notification <id>, update task's project", with <id> being the id of "mine"
     And "mine", read again, is exactly as it was
 
-  Scenario: Another user cannot delete my notification, and my task stays in Todoist
+  Scenario: Another user cannot delete my notification: my task stays in Todoist, and their notification of the same item is left alone
     Given I have a Todoist task, added in the year 2000, in the project Inbox
     And the notification of that task is named "mine"
     And another user is signed in
-    And that other user is connected to Todoist
-    And Todoist is not asked to change anything
+    And that other user has their own Todoist connection, and their own notification "theirs" of the same Todoist item
+    And Todoist is not asked anything more
     When that other user tries to change the status of "mine" to deleted
     Then the app answers 403
     And "mine", read again, is exactly as it was
+    And the notification "theirs" of that other user, read by that other user, is exactly as it was
     And that Todoist task is active

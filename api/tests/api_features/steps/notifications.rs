@@ -828,8 +828,6 @@ async fn i_create_a_task_with_a_title_too_long(world: &mut ApiWorld) {
     world.http.record(Response::read(response).await);
 }
 
-/// The answer of a change is not its effect: reads the patched notification again and compares
-/// the stored one, whole, to the one that the change returned.
 pub(super) async fn assert_the_patched_notification_is_stored(world: &mut ApiWorld) {
     let patched = world
         .notifications

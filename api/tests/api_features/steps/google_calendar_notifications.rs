@@ -261,6 +261,7 @@ async fn the_answered_notification(world: &mut ApiWorld, status: UserStatus, ans
     let event = event_of(&patched);
     assert_eq!(event.get_self_attendee().unwrap().response_status, answer.0);
     world.notifications.patched = Some(patched);
+    crate::steps::notifications::assert_the_patched_notification_is_stored(world).await;
 }
 
 #[then(expr = "{string}, read again, has the event with my answer {answer}")]

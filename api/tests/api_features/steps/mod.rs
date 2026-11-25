@@ -18,6 +18,7 @@ mod google_calendar_notifications;
 mod google_drive_sync;
 mod google_mail_invitations;
 mod google_mail_sync;
+mod google_notification_changes;
 mod grant_revocation;
 mod http;
 mod id_tokens;

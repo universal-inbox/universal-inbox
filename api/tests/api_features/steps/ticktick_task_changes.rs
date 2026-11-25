@@ -243,16 +243,10 @@ async fn the_patched_task_is(world: &mut ApiWorld, state: TaskState) {
 }
 
 #[then("the patched TickTick task has a completion date")]
-fn the_patched_task_has_a_completion_date(world: &mut ApiWorld) {
-    assert!(
-        world
-            .ticktick_task_changes
-            .patched
-            .as_ref()
-            .unwrap()
-            .completed_at
-            .is_some()
-    );
+async fn the_patched_task_has_a_completion_date(world: &mut ApiWorld) {
+    let patched = world.ticktick_task_changes.patched.clone().unwrap();
+    assert!(patched.completed_at.is_some());
+    crate::steps::todoist_task_changes::assert_the_task_is_stored(world, *patched).await;
 }
 
 #[then("the notification of that TickTick task is deleted")]
@@ -281,6 +275,8 @@ async fn the_patched_task_is_titled(world: &mut ApiWorld, title: String) {
     let reloaded: Box<Task> =
         get_resource(&client, &app.api_address, "tasks", existing.id.into()).await;
     assert_eq!(reloaded.title, title);
+    let patched = world.ticktick_task_changes.patched.clone().unwrap();
+    crate::steps::todoist_task_changes::assert_the_task_is_stored(world, *patched).await;
 }
 
 fn the_body_link(world: &ApiWorld) -> Option<String> {
