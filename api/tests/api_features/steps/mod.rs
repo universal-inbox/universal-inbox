@@ -69,6 +69,7 @@ mod slack_revocation;
 mod slack_tasks;
 mod slack_threads_sync;
 mod slack_webhook_events;
+mod slack_webhook_wiring;
 mod span;
 mod status;
 mod sync_scheduling;

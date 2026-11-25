@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use reqwest::{Client, Response};
 use ring::hmac;
 
@@ -13,7 +13,30 @@ pub async fn post_signed_slack_event<T: serde::Serialize>(
     api_address: &str,
     payload: &T,
 ) -> Response {
-    post_slack_event_signed_with(client, api_address, payload, TEST_SLACK_SIGNING_SECRET).await
+    post_slack_event_signed_with(
+        client,
+        api_address,
+        payload,
+        TEST_SLACK_SIGNING_SECRET,
+        Utc::now(),
+    )
+    .await
+}
+
+pub async fn post_slack_event_signed_at<T: serde::Serialize>(
+    client: &Client,
+    api_address: &str,
+    payload: &T,
+    signed_at: DateTime<Utc>,
+) -> Response {
+    post_slack_event_signed_with(
+        client,
+        api_address,
+        payload,
+        TEST_SLACK_SIGNING_SECRET,
+        signed_at,
+    )
+    .await
 }
 
 pub async fn post_slack_event_signed_with<T: serde::Serialize>(
@@ -21,9 +44,10 @@ pub async fn post_slack_event_signed_with<T: serde::Serialize>(
     api_address: &str,
     payload: &T,
     signing_secret: &str,
+    signed_at: DateTime<Utc>,
 ) -> Response {
     let body = serde_json::to_vec(payload).expect("Failed to serialize Slack payload");
-    let timestamp = Utc::now().timestamp().to_string();
+    let timestamp = signed_at.timestamp().to_string();
     let signature = compute_slack_signature(signing_secret, &timestamp, &body);
 
     client

@@ -1,5 +1,7 @@
 use chrono::{TimeDelta, Utc};
-use cucumber::{given, then, when};
+use std::str::FromStr;
+
+use cucumber::{Parameter, given, then, when};
 use pretty_assertions::assert_eq;
 use serde_json::json;
 
@@ -22,7 +24,10 @@ use crate::{
         integration_connection::{
             create_and_mock_integration_connection, slack_context, slack_oauth_credential,
         },
-        slack::{post_signed_slack_event, post_slack_event_signed_with, post_unsigned_slack_event},
+        slack::{
+            post_signed_slack_event, post_slack_event_signed_at, post_slack_event_signed_with,
+            post_unsigned_slack_event,
+        },
         slack_revocation::event_callback,
     },
     world::ApiWorld,
@@ -104,10 +109,12 @@ async fn my_connection_is_paused(world: &mut ApiWorld, name: String) {
     transaction.commit().await.unwrap();
 }
 
-enum Signature {
+#[derive(Clone, Copy, Debug)]
+pub enum Signature {
     Valid,
     Missing,
     WrongSecret,
+    Stale,
 }
 
 async fn send_signed(
@@ -136,6 +143,17 @@ async fn send_signed(
                 &app.api_address,
                 &body,
                 "not-the-signing-secret",
+                Utc::now(),
+            )
+            .await,
+            401,
+        ),
+        Signature::Stale => (
+            post_slack_event_signed_at(
+                &client,
+                &app.api_address,
+                &body,
+                Utc::now() - TimeDelta::minutes(10),
             )
             .await,
             401,
@@ -252,55 +270,76 @@ async fn the_connection_is_still_paused(world: &mut ApiWorld, name: String) {
     );
 }
 
-#[when(
-    expr = "an attacker sends the tokens_revoked event of the team {string} for the Slack users {string}, without a signature"
-)]
-async fn attacker_sends_tokens_revoked_unsigned(world: &mut ApiWorld, team: String, users: String) {
-    send_signed(world, Signature::Missing, &team, tokens_revoked(&users), 0).await;
+#[derive(Clone, Copy, Debug)]
+pub enum RevocationKind {
+    TokensRevoked,
+    AppUninstalled,
+}
+
+impl Parameter for RevocationKind {
+    const REGEX: &'static str = "tokens_revoked|app_uninstalled";
+    const NAME: &'static str = "revocation_kind";
+}
+
+impl FromStr for RevocationKind {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        match text {
+            "tokens_revoked" => Ok(Self::TokensRevoked),
+            "app_uninstalled" => Ok(Self::AppUninstalled),
+            other => Err(format!("Unknown revocation event {other:?}")),
+        }
+    }
+}
+
+impl Parameter for Signature {
+    const REGEX: &'static str =
+        "without a signature|signed with a wrong secret|signed correctly 10 minutes ago";
+    const NAME: &'static str = "forgery";
+}
+
+impl FromStr for Signature {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        match text {
+            "without a signature" => Ok(Self::Missing),
+            "signed with a wrong secret" => Ok(Self::WrongSecret),
+            "signed correctly 10 minutes ago" => Ok(Self::Stale),
+            other => Err(format!("Unknown forgery {other:?}")),
+        }
+    }
+}
+
+fn revocation(kind: RevocationKind, slack_user: &str) -> serde_json::Value {
+    match kind {
+        RevocationKind::TokensRevoked => tokens_revoked(slack_user),
+        RevocationKind::AppUninstalled => json!({ "type": "app_uninstalled" }),
+    }
 }
 
 #[when(
-    expr = "an attacker sends the tokens_revoked event of the team {string} for the Slack users {string}, signed with a wrong secret"
+    expr = "an attacker sends the {revocation_kind} event that would revoke the Slack user {string} of the team {string}, {forgery}"
 )]
-async fn attacker_sends_tokens_revoked_badly_signed(
+async fn an_attacker_sends_a_revocation(
     world: &mut ApiWorld,
+    kind: RevocationKind,
+    slack_user: String,
     team: String,
-    users: String,
+    forgery: Signature,
 ) {
-    send_signed(
-        world,
-        Signature::WrongSecret,
-        &team,
-        tokens_revoked(&users),
-        0,
-    )
-    .await;
+    send_signed(world, forgery, &team, revocation(kind, &slack_user), 0).await;
 }
 
 #[when(
-    expr = "an attacker sends the app_uninstalled event of the team {string}, without a signature"
+    expr = "Slack sends the {revocation_kind} event that revokes the Slack user {string} of the team {string}"
 )]
-async fn attacker_sends_app_uninstalled_unsigned(world: &mut ApiWorld, team: String) {
-    send_signed(
-        world,
-        Signature::Missing,
-        &team,
-        json!({ "type": "app_uninstalled" }),
-        0,
-    )
-    .await;
-}
-
-#[when(
-    expr = "an attacker sends the app_uninstalled event of the team {string}, signed with a wrong secret"
-)]
-async fn attacker_sends_app_uninstalled_badly_signed(world: &mut ApiWorld, team: String) {
-    send_signed(
-        world,
-        Signature::WrongSecret,
-        &team,
-        json!({ "type": "app_uninstalled" }),
-        0,
-    )
-    .await;
+async fn slack_sends_a_revocation(
+    world: &mut ApiWorld,
+    kind: RevocationKind,
+    slack_user: String,
+    team: String,
+) {
+    send(world, &team, revocation(kind, &slack_user), 0).await;
 }
