@@ -70,3 +70,18 @@ Feature: Slack revoking the access of the app
       And Slack sends the app_uninstalled event of the team "T05XXX"
       Then Slack is told that the event was received
       And the Slack connection "mine" is still paused, without failure, and without credential
+
+  Rule: Only Slack can revoke a connection
+
+    Scenario Outline: A <kind> revocation without a valid signature is refused and changes nothing
+      Given I have the Slack connection "mine" of the Slack user "U05XXX" in the team "T05XXX"
+      When <unsigned>
+      And <wrongly signed>
+      Then the Slack connection "mine" is still validated, without failure, with its credential
+      When <signed>
+      Then the Slack connection "mine" failed because its access was revoked, and its credential is gone
+
+      Examples:
+        | kind            | unsigned                                                                                                          | wrongly signed                                                                                                           | signed                                                                                      |
+        | tokens_revoked  | an attacker sends the tokens_revoked event of the team "T05XXX" for the Slack users "U05XXX", without a signature | an attacker sends the tokens_revoked event of the team "T05XXX" for the Slack users "U05XXX", signed with a wrong secret | Slack sends the tokens_revoked event of the team "T05XXX" for the Slack users "U05XXX"      |
+        | app_uninstalled | an attacker sends the app_uninstalled event of the team "T05XXX", without a signature                              | an attacker sends the app_uninstalled event of the team "T05XXX", signed with a wrong secret                              | Slack sends the app_uninstalled event of the team "T05XXX"                                   |

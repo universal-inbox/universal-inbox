@@ -5,8 +5,8 @@ use serde_json::json;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnectionStatus, config::IntegrationConnectionConfig,
-        integrations::slack::SlackConfig,
+        IntegrationConnectionPausedReason, IntegrationConnectionStatus,
+        config::IntegrationConnectionConfig, integrations::slack::SlackConfig,
     },
     user::UserId,
 };
@@ -22,8 +22,8 @@ use crate::{
         integration_connection::{
             create_and_mock_integration_connection, slack_context, slack_oauth_credential,
         },
-        slack::post_signed_slack_event,
-        slack_revocation::{event_callback, pause_for_inactivity},
+        slack::{post_signed_slack_event, post_slack_event_signed_with, post_unsigned_slack_event},
+        slack_revocation::event_callback,
     },
     world::ApiWorld,
 };
@@ -92,18 +92,61 @@ async fn my_connection_is_paused(world: &mut ApiWorld, name: String) {
         .delete_oauth_credential(&mut transaction, id)
         .await
         .unwrap();
+    app.repository
+        .pause_integration_connection(
+            &mut transaction,
+            id,
+            Utc::now(),
+            IntegrationConnectionPausedReason::Inactivity,
+        )
+        .await
+        .unwrap();
     transaction.commit().await.unwrap();
-    pause_for_inactivity(app, id).await;
 }
 
-async fn send(world: &mut ApiWorld, team: &str, event: serde_json::Value, minutes_ago: i64) {
+enum Signature {
+    Valid,
+    Missing,
+    WrongSecret,
+}
+
+async fn send_signed(
+    world: &mut ApiWorld,
+    signature: Signature,
+    team: &str,
+    event: serde_json::Value,
+    minutes_ago: i64,
+) {
     let event_time = (Utc::now() - TimeDelta::minutes(minutes_ago)).timestamp();
     let body = event_callback(team, event, event_time);
     let client = world.client();
     let app = world.app.get().await;
-    let response = post_signed_slack_event(&client, &app.api_address, &body).await;
-    assert_eq!(response.status(), 200);
+    let (response, expected) = match signature {
+        Signature::Valid => (
+            post_signed_slack_event(&client, &app.api_address, &body).await,
+            200,
+        ),
+        Signature::Missing => (
+            post_unsigned_slack_event(&client, &app.api_address, &body).await,
+            401,
+        ),
+        Signature::WrongSecret => (
+            post_slack_event_signed_with(
+                &client,
+                &app.api_address,
+                &body,
+                "not-the-signing-secret",
+            )
+            .await,
+            401,
+        ),
+    };
+    assert_eq!(response.status(), expected);
     world.slack_revocation.status = Some(response.status().as_u16());
+}
+
+async fn send(world: &mut ApiWorld, team: &str, event: serde_json::Value, minutes_ago: i64) {
+    send_signed(world, Signature::Valid, team, event, minutes_ago).await;
 }
 
 fn tokens_revoked(slack_users: &str) -> serde_json::Value {
@@ -207,4 +250,57 @@ async fn the_connection_is_still_paused(world: &mut ApiWorld, name: String) {
         state_of(world, &name).await,
         (IntegrationConnectionStatus::Paused, None, false)
     );
+}
+
+#[when(
+    expr = "an attacker sends the tokens_revoked event of the team {string} for the Slack users {string}, without a signature"
+)]
+async fn attacker_sends_tokens_revoked_unsigned(world: &mut ApiWorld, team: String, users: String) {
+    send_signed(world, Signature::Missing, &team, tokens_revoked(&users), 0).await;
+}
+
+#[when(
+    expr = "an attacker sends the tokens_revoked event of the team {string} for the Slack users {string}, signed with a wrong secret"
+)]
+async fn attacker_sends_tokens_revoked_badly_signed(
+    world: &mut ApiWorld,
+    team: String,
+    users: String,
+) {
+    send_signed(
+        world,
+        Signature::WrongSecret,
+        &team,
+        tokens_revoked(&users),
+        0,
+    )
+    .await;
+}
+
+#[when(
+    expr = "an attacker sends the app_uninstalled event of the team {string}, without a signature"
+)]
+async fn attacker_sends_app_uninstalled_unsigned(world: &mut ApiWorld, team: String) {
+    send_signed(
+        world,
+        Signature::Missing,
+        &team,
+        json!({ "type": "app_uninstalled" }),
+        0,
+    )
+    .await;
+}
+
+#[when(
+    expr = "an attacker sends the app_uninstalled event of the team {string}, signed with a wrong secret"
+)]
+async fn attacker_sends_app_uninstalled_badly_signed(world: &mut ApiWorld, team: String) {
+    send_signed(
+        world,
+        Signature::WrongSecret,
+        &team,
+        json!({ "type": "app_uninstalled" }),
+        0,
+    )
+    .await;
 }

@@ -13,9 +13,18 @@ pub async fn post_signed_slack_event<T: serde::Serialize>(
     api_address: &str,
     payload: &T,
 ) -> Response {
+    post_slack_event_signed_with(client, api_address, payload, TEST_SLACK_SIGNING_SECRET).await
+}
+
+pub async fn post_slack_event_signed_with<T: serde::Serialize>(
+    client: &Client,
+    api_address: &str,
+    payload: &T,
+    signing_secret: &str,
+) -> Response {
     let body = serde_json::to_vec(payload).expect("Failed to serialize Slack payload");
     let timestamp = Utc::now().timestamp().to_string();
-    let signature = compute_slack_signature(TEST_SLACK_SIGNING_SECRET, &timestamp, &body);
+    let signature = compute_slack_signature(signing_secret, &timestamp, &body);
 
     client
         .post(format!("{api_address}hooks/slack/events"))
@@ -38,4 +47,17 @@ fn compute_slack_signature(signing_secret: &str, timestamp: &str, body: &[u8]) -
     let key = hmac::Key::new(hmac::HMAC_SHA256, signing_secret.as_bytes());
     let tag = hmac::sign(&key, &basestring);
     format!("v0={}", hex::encode(tag.as_ref()))
+}
+
+pub async fn post_unsigned_slack_event<T: serde::Serialize>(
+    client: &Client,
+    api_address: &str,
+    payload: &T,
+) -> Response {
+    client
+        .post(format!("{api_address}hooks/slack/events"))
+        .json(payload)
+        .send()
+        .await
+        .expect("Failed to execute request")
 }
