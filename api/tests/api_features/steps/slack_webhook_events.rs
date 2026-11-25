@@ -70,7 +70,7 @@ fn edit_of(world: &mut ApiWorld) -> &mut Value {
 
 fn message_of(world: &mut ApiWorld) -> &mut SlackMessageEvent {
     match world.slack_webhook.event.as_mut() {
-        Some(SlackEvent::Message(event)) => match &mut **event {
+        Some(SlackEvent::Push(event)) => match &mut **event {
             SlackPushEvent::EventCallback(SlackPushEventCallback {
                 event: SlackEventCallbackBody::Message(message),
                 ..
@@ -118,12 +118,12 @@ async fn i_know_a_thread(world: &mut ApiWorld, subscription: Subscription) {
 
 #[given("Slack sends a message in a channel")]
 fn slack_sends_a_message(world: &mut ApiWorld) {
-    world.slack_webhook.event = Some(SlackEvent::Message(slack_push_message_event()));
+    world.slack_webhook.event = Some(SlackEvent::Push(slack_push_message_event()));
 }
 
 #[given("Slack sends a message in a thread")]
 fn slack_sends_a_message_in_a_thread(world: &mut ApiWorld) {
-    world.slack_webhook.event = Some(SlackEvent::Message(slack_push_message_in_thread_event()));
+    world.slack_webhook.event = Some(SlackEvent::Push(slack_push_message_in_thread_event()));
 }
 
 #[given("Slack sends the edit of a message")]
@@ -228,7 +228,7 @@ async fn slack_delivers_the_event(world: &mut ApiWorld) {
     let app = world.app.get().await;
     let api_address = app.api_address.clone();
     let response = match world.slack_webhook.event.as_ref().expect("No Slack event") {
-        SlackEvent::Message(event) => {
+        SlackEvent::Push(event) => {
             post_signed_slack_event(&Client::new(), &api_address, &**event).await
         }
         SlackEvent::Edit(event) => {

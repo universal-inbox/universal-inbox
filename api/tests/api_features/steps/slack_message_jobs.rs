@@ -224,7 +224,7 @@ impl FromStr for Decisions {
 }
 fn callback_of(world: &ApiWorld) -> SlackPushEventCallback {
     match world.slack_webhook.event.as_ref().expect("No Slack event") {
-        SlackEvent::Message(event) => match &**event {
+        SlackEvent::Push(event) => match &**event {
             SlackPushEvent::EventCallback(callback) => callback.clone(),
             _ => panic!("Unexpected event type"),
         },
@@ -404,7 +404,7 @@ async fn know_an_unread_thread(world: &mut ApiWorld, who: Who) {
 
 #[given(expr = "that message mentions the Slack usergroup {string}")]
 fn that_message_mentions_a_usergroup(world: &mut ApiWorld, usergroup_id: String) {
-    let Some(SlackEvent::Message(event)) = world.slack_webhook.event.as_mut() else {
+    let Some(SlackEvent::Push(event)) = world.slack_webhook.event.as_mut() else {
         panic!("The scenario has no message");
     };
     let SlackPushEvent::EventCallback(SlackPushEventCallback {

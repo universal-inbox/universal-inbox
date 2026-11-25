@@ -17,6 +17,7 @@ Feature: Receiving the events of Slack
     When that event reaches the app without a signature
     Then the app answers 401
     And the answer does not give the challenge "test challenge" back
+    And the event is ignored
 
   @legacy:test_slack_webhook::test_receive_slack_ignored_event
   Scenario: An event that is not an event callback is acknowledged and not queued

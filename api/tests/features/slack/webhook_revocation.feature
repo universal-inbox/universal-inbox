@@ -78,8 +78,9 @@ Feature: Slack revoking the access of the app
       When an attacker sends the <kind> event that would revoke the Slack user "U05XXX" of the team "T05XXX", without a signature
       And an attacker sends the <kind> event that would revoke the Slack user "U05XXX" of the team "T05XXX", signed with a wrong secret
       And an attacker sends the <kind> event that would revoke the Slack user "U05XXX" of the team "T05XXX", signed correctly 10 minutes ago
+      And an attacker sends the <kind> event that would revoke the Slack user "U05XXX" of the team "T05XXX", signed correctly 10 minutes ahead
       Then the Slack connection "mine" is still validated, without failure, with its credential
-      When Slack sends the <kind> event that revokes the Slack user "U05XXX" of the team "T05XXX"
+      When Slack sends the <kind> event that revokes the Slack user "U05XXX" of the team "T05XXX", signed correctly 4 minutes ago
       Then the Slack connection "mine" failed because its access was revoked, and its credential is gone
 
       Examples:

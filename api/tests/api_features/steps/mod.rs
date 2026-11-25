@@ -67,6 +67,7 @@ mod slack_message_jobs;
 mod slack_reaction_events;
 mod slack_revocation;
 mod slack_tasks;
+mod slack_thread_notifications;
 mod slack_threads_sync;
 mod slack_webhook_events;
 mod slack_webhook_wiring;

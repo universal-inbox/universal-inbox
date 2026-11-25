@@ -115,6 +115,8 @@ pub enum Signature {
     Missing,
     WrongSecret,
     Stale,
+    Early,
+    Recent,
 }
 
 async fn send_signed(
@@ -157,6 +159,26 @@ async fn send_signed(
             )
             .await,
             401,
+        ),
+        Signature::Early => (
+            post_slack_event_signed_at(
+                &client,
+                &app.api_address,
+                &body,
+                Utc::now() + TimeDelta::minutes(10),
+            )
+            .await,
+            401,
+        ),
+        Signature::Recent => (
+            post_slack_event_signed_at(
+                &client,
+                &app.api_address,
+                &body,
+                Utc::now() - TimeDelta::minutes(4),
+            )
+            .await,
+            200,
         ),
     };
     assert_eq!(response.status(), expected);
@@ -294,8 +316,7 @@ impl FromStr for RevocationKind {
 }
 
 impl Parameter for Signature {
-    const REGEX: &'static str =
-        "without a signature|signed with a wrong secret|signed correctly 10 minutes ago";
+    const REGEX: &'static str = "without a signature|signed with a wrong secret|signed correctly 10 minutes ago|signed correctly 10 minutes ahead";
     const NAME: &'static str = "forgery";
 }
 
@@ -307,6 +328,7 @@ impl FromStr for Signature {
             "without a signature" => Ok(Self::Missing),
             "signed with a wrong secret" => Ok(Self::WrongSecret),
             "signed correctly 10 minutes ago" => Ok(Self::Stale),
+            "signed correctly 10 minutes ahead" => Ok(Self::Early),
             other => Err(format!("Unknown forgery {other:?}")),
         }
     }
@@ -342,4 +364,23 @@ async fn slack_sends_a_revocation(
     team: String,
 ) {
     send(world, &team, revocation(kind, &slack_user), 0).await;
+}
+
+#[when(
+    expr = "Slack sends the {revocation_kind} event that revokes the Slack user {string} of the team {string}, signed correctly 4 minutes ago"
+)]
+async fn slack_sends_a_revocation_signed_earlier(
+    world: &mut ApiWorld,
+    kind: RevocationKind,
+    slack_user: String,
+    team: String,
+) {
+    send_signed(
+        world,
+        Signature::Recent,
+        &team,
+        revocation(kind, &slack_user),
+        0,
+    )
+    .await;
 }

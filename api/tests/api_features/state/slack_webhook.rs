@@ -7,7 +7,7 @@ use universal_inbox::{
 };
 
 pub enum SlackEvent {
-    Message(Box<SlackPushEvent>),
+    Push(Box<SlackPushEvent>),
     Edit(Value),
 }
 

@@ -11,7 +11,7 @@ use crate::{
 };
 
 fn hold(world: &mut ApiWorld, event: SlackPushEvent) {
-    world.slack_webhook.event = Some(SlackEvent::Message(Box::new(event)));
+    world.slack_webhook.event = Some(SlackEvent::Push(Box::new(event)));
 }
 
 #[given(expr = "Slack sends a URL verification with the challenge {string}")]
@@ -61,7 +61,7 @@ async fn the_event_reaches_the_app_unsigned(world: &mut ApiWorld) {
     let client = reqwest::Client::new();
     let app = world.app.get().await;
     let response = match world.slack_webhook.event.as_ref().expect("No Slack event") {
-        SlackEvent::Message(event) => {
+        SlackEvent::Push(event) => {
             post_unsigned_slack_event(&client, &app.api_address, &**event).await
         }
         SlackEvent::Edit(event) => {
