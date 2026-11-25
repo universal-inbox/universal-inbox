@@ -19,4 +19,7 @@ pub struct Billing {
     pub verdict: Option<Result<(), String>>,
     pub stripe_mock: Option<wiremock::MockServer>,
     pub deletion: Option<Result<bool, String>>,
+    pub other_user_id: Option<UserId>,
+    pub interval: Option<i64>,
+    pub pruned: Option<u64>,
 }

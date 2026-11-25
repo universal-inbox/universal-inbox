@@ -17,9 +17,12 @@ Feature: Subscriptions and Stripe events
   @legacy:test_billing::billing_service_resolves_sync_intervals_with_a_mocked_stripe_client
   Scenario: The Free plan syncs at most once a day, while the Paid plan follows the global minimum
     Given the app lets users sign in with a password or a passkey
-    Then the Free plan syncs notifications every 1440 minutes, when the global minimum is 60 minutes
-    And the Free plan syncs notifications every 2880 minutes, when the global minimum is 2880 minutes
-    And the Paid plan syncs tasks every 5 minutes, when the global minimum is 5 minutes
+    When I look up the sync interval of the Free plan for notifications, with a global minimum of 60 minutes
+    Then that interval is 1440 minutes
+    When I look up the sync interval of the Free plan for notifications, with a global minimum of 2880 minutes
+    Then that interval is 2880 minutes
+    When I look up the sync interval of the Paid plan for tasks, with a global minimum of 5 minutes
+    Then that interval is 5 minutes
 
   Rule: The events of Stripe apply in the order that they happened
 
@@ -63,6 +66,15 @@ Feature: Subscriptions and Stripe events
       When Stripe reports at second 400 that the invoice of the subscription "sub_b3" of the customer "cus_b3" was paid, the subscription being active
       Then the subscription of the user is active
 
+    Scenario: An event of one customer leaves the subscription of another user alone
+      Given another user with a password pays, as the customer "cus_other" with the active subscription "sub_other"
+      And Stripe reports at second 0 that the customer "cus_x" checked out with the active subscription "sub_x"
+      When Stripe reports at second 200 that the subscription "sub_x" of the customer "cus_x" was deleted
+      Then the subscription of the user is canceled
+      And the user is on the Free plan
+      And the subscription of the other user is active
+      And the other user is on the Paid plan
+
   Rule: The nightly reconciliation finds what the events missed
 
     Background:
@@ -92,5 +104,8 @@ Feature: Subscriptions and Stripe events
     @legacy:test_billing::prune_stripe_events_removes_only_old_rows
     Scenario: The pruning removes the events received more than the retention window ago, and a dry run removes nothing
       Given Stripe events were received 40 days ago and just now
-      Then a dry run of the pruning removes nothing
-      And the pruning removes exactly the event of 40 days ago
+      When the Stripe events are pruned, as a dry run
+      Then the pruning removed 0 events
+      When the Stripe events are pruned
+      Then the pruning removed 1 event
+      And only the event of 40 days ago is gone

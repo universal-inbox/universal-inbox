@@ -3,14 +3,14 @@ use pretty_assertions::assert_eq;
 use serde_json::{Value, json};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{method, path},
+    matchers::{method, path, query_param},
 };
 
 use universal_inbox::billing::SubscriptionStatus;
 use universal_inbox_api::repository::user::UserRepository;
 
 use crate::{
-    steps::billing::{billing, read_subscription, user_id},
+    steps::billing_support::{billing, read_subscription, user_id},
     world::ApiWorld,
 };
 
@@ -74,11 +74,14 @@ fn mock(world: &ApiWorld) -> &MockServer {
         .expect("Stripe is not a mock server in this scenario")
 }
 
-#[given("Stripe answers as a mock server, which lists no subscription of the customers")]
-async fn stripe_is_a_mock_server(world: &mut ApiWorld) {
+#[given(
+    expr = "Stripe answers as a mock server, which lists no subscription of the customer {string}"
+)]
+async fn stripe_is_a_mock_server(world: &mut ApiWorld, customer: String) {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/v1/subscriptions"))
+        .and(query_param("customer", customer))
         .respond_with(ResponseTemplate::new(200).set_body_json(subscription_list(vec![])))
         .mount(&server)
         .await;
@@ -92,6 +95,7 @@ async fn stripe_lists_a_subscription(world: &mut ApiWorld, subscription: String,
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/v1/subscriptions"))
+        .and(query_param("customer", customer.clone()))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(subscription_list(vec![stripe_subscription(
                 &subscription,
@@ -154,6 +158,7 @@ async fn stripe_refuses_to_cancel(world: &mut ApiWorld, subscription: String, cu
         .respond_with(ResponseTemplate::new(400).set_body_json(json!({
             "error": { "type": "invalid_request_error", "message": "already canceled" }
         })))
+        .expect(1)
         .mount(mock(world))
         .await;
     Mock::given(method("GET"))
@@ -169,25 +174,26 @@ async fn stripe_refuses_to_cancel(world: &mut ApiWorld, subscription: String, cu
         .await;
 }
 
-async fn mount_customer_update(world: &ApiWorld, customer: &str, status: u16) {
+async fn mount_customer_update(world: &ApiWorld, customer: &str, status: u16, expected_calls: u64) {
     Mock::given(method("POST"))
         .and(path(format!("/v1/customers/{customer}")))
         .respond_with(
             ResponseTemplate::new(status)
                 .set_body_json(json!({ "id": customer, "object": "customer" })),
         )
+        .expect(expected_calls)
         .mount(mock(world))
         .await;
 }
 
 #[given(expr = "Stripe accepts to unlink the customer {string} from the user")]
 async fn stripe_accepts_to_unlink(world: &mut ApiWorld, customer: String) {
-    mount_customer_update(world, &customer, 200).await;
+    mount_customer_update(world, &customer, 200, 1).await;
 }
 
 #[given(expr = "Stripe fails to unlink the customer {string} from the user")]
 async fn stripe_fails_to_unlink(world: &mut ApiWorld, customer: String) {
-    mount_customer_update(world, &customer, 500).await;
+    mount_customer_update(world, &customer, 500, 1).await;
 }
 
 #[when("the user deletes their account")]
@@ -263,4 +269,33 @@ async fn stripe_was_told_to_clear_the_customer(world: &mut ApiWorld, customer: S
 #[then("Stripe received every cancellation that it was told to expect, once")]
 async fn stripe_received_the_cancellations(world: &mut ApiWorld) {
     mock(world).verify().await;
+}
+
+#[then(
+    expr = "Stripe received no request about the customer {string} or the subscription {string}"
+)]
+async fn stripe_heard_nothing_about(world: &mut ApiWorld, customer: String, subscription: String) {
+    let requests = mock(world).received_requests().await.unwrap();
+    for request in requests {
+        let body = String::from_utf8_lossy(&request.body).to_string();
+        let seen = format!(
+            "{} {}?{} {body}",
+            request.method,
+            request.url.path(),
+            request.url.query().unwrap_or_default()
+        );
+        assert!(
+            !seen.contains(&customer) && !seen.contains(&subscription),
+            "Stripe heard about someone else: {seen}"
+        );
+    }
+}
+
+#[then("the subscription of the other user is still active")]
+async fn the_other_subscription_is_active(world: &mut ApiWorld) {
+    let other = crate::steps::billing_support::the_other_user_id(world);
+    let subscription = crate::steps::billing_support::read_subscription_of(world, other)
+        .await
+        .expect("The other user lost their subscription row");
+    assert_eq!(subscription.status, SubscriptionStatus::Active);
 }

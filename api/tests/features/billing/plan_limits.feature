@@ -21,6 +21,11 @@ Feature: The integration limit of the Free plan
       When the validated integrations of the user are counted
       Then the usage of the user is 1
 
+
+    Scenario: A real integration is allowed one below the limit
+      Given the user validates one integration fewer than the Free plan allows
+      When the user adds a Todoist integration
+      Then the cap allows it
     @legacy:test_billing::the_cap_does_not_refuse_the_implicit_api_connection
     Scenario: The cap refuses a real integration at the limit, but not the implicit API connection
       Given the user validates as many integrations as the Free plan allows
@@ -64,6 +69,9 @@ Feature: The integration limit of the Free plan
       And the subscription of the user is canceled
       And the over-limit grace deadline of the user is armed
       And every integration of the user is still enabled and not paused
+      When the reconcile job runs
+      Then the reconcile job enforced 0 expired grace deadlines
+      And every integration of the user is still enabled and not paused
       When the grace deadline of the user is set to second 1
       And the reconcile job runs
       Then the reconcile job enforced 1 expired grace deadline
@@ -77,6 +85,20 @@ Feature: The integration limit of the Free plan
       Then the user is on the Paid plan
       And no over-limit grace deadline of the user is armed
       And every integration of the user is restored to its enabled config, without a pause marker or a snapshot
+
+    Scenario: The grace period and the enforcement of one user do not touch another user
+      Given the user validates one more integration than the Free plan allows
+      And another user with a password validates every integration that syncs notifications
+      When the over-limit grace deadline of the user is armed
+      And the over-limit grace deadline of the other user is armed
+      And the Free plan is enforced on the user
+      Then the enforcement paused 1 integration
+      And none of the integrations of the other user is paused, and all of them are still validated
+      And the usage of the other user is 3
+      When the grace deadline of the user is set to second 1
+      And the reconcile job runs
+      Then the reconcile job enforced 1 expired grace deadline
+      And none of the integrations of the other user is paused, and all of them are still validated
 
   Rule: The enforcement pauses only what it must, and what it can restrict
 
