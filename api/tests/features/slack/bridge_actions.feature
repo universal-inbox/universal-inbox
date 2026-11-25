@@ -80,7 +80,8 @@ Feature: Slack bridge actions
       And another user is signed in
       And I remember the state of that action
       When the Slack extension of another user reports that action as completed
-      Then that action is exactly as I remembered it
+      Then the app answers 200
+      And that action is exactly as I remembered it
       And that action is Pending
 
     Scenario: The extension of another user cannot fail my action
@@ -88,6 +89,7 @@ Feature: Slack bridge actions
       And another user is signed in
       And I remember the state of that action
       When the Slack extension of another user reports that action as failed, with the error "not mine"
-      Then that action is exactly as I remembered it
+      Then the app answers 200
+      And that action is exactly as I remembered it
       And that action is Pending
       And that action was retried 0 times

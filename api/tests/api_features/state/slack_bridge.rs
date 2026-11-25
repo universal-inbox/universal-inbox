@@ -7,5 +7,11 @@ pub struct SlackBridge {
     pub action_id: Option<SlackBridgePendingActionId>,
     pub notification_id: Option<NotificationId>,
     pub remembered: Option<ActionState>,
-    pub user_deleted: Option<bool>,
+    pub deletion: Option<Deletion>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Deletion {
+    Deleted,
+    NothingToDelete,
 }

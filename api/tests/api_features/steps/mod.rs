@@ -14,6 +14,7 @@ mod export;
 mod github_actions;
 mod github_details;
 mod github_sync;
+mod google_calendar_notifications;
 mod google_drive_sync;
 mod google_mail_invitations;
 mod google_mail_sync;

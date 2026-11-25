@@ -7,6 +7,7 @@ use serde_json::json;
 use slack_morphism::prelude::*;
 use uuid::Uuid;
 
+use universal_inbox::notification::NotificationId;
 use universal_inbox::slack_bridge::{
     SlackBridgeActionStatus, SlackBridgeActionType, SlackBridgePendingAction,
     SlackBridgePendingActionId,
@@ -17,6 +18,7 @@ use crate::{
     helpers::slack_bridge::{
         count_actions, delete_notification_row, notification_reference, read_action_state,
     },
+    state::Deletion,
     world::{ApiWorld, Response},
 };
 
@@ -26,6 +28,19 @@ pub struct ActionStatus(SlackBridgeActionStatus);
 impl Parameter for ActionStatus {
     const REGEX: &'static str = "Pending|Failed|PermanentlyFailed|Completed";
     const NAME: &'static str = "action_status";
+}
+
+impl ActionStatus {
+    /// The text the status is stored as: spelled out, so that a rename of the Rust variant
+    /// cannot silently change what the scenarios compare against.
+    fn sql_text(self) -> &'static str {
+        match self.0 {
+            SlackBridgeActionStatus::Pending => "Pending",
+            SlackBridgeActionStatus::Failed => "Failed",
+            SlackBridgeActionStatus::PermanentlyFailed => "PermanentlyFailed",
+            SlackBridgeActionStatus::Completed => "Completed",
+        }
+    }
 }
 
 impl FromStr for ActionStatus {
@@ -49,20 +64,16 @@ fn the_action_id(world: &ApiWorld) -> SlackBridgePendingActionId {
         .expect("The scenario has no Slack bridge action")
 }
 
-async fn seed_action(
+async fn seed_action(world: &mut ApiWorld, status: SlackBridgeActionStatus) {
+    seed_action_about(world, status, None).await;
+}
+
+async fn seed_action_about(
     world: &mut ApiWorld,
     status: SlackBridgeActionStatus,
-    with_notification: bool,
+    notification_id: Option<NotificationId>,
 ) {
     let user_id = world.user().id;
-    let notification_id = with_notification.then(|| {
-        world
-            .integrations
-            .github_notification
-            .as_ref()
-            .expect("The account has no GitHub notification")
-            .id
-    });
     let now = Utc::now();
     let action = SlackBridgePendingAction {
         id: Uuid::new_v4().into(),
@@ -94,12 +105,23 @@ async fn seed_action(
 
 #[given(expr = "I have a {action_status} Slack bridge action")]
 async fn i_have_an_action(world: &mut ApiWorld, status: ActionStatus) {
-    seed_action(world, status.0, false).await;
+    seed_action(world, status.0).await;
 }
 
 #[given("I have a Pending Slack bridge action about that notification")]
 async fn i_have_an_action_about_the_notification(world: &mut ApiWorld) {
-    seed_action(world, SlackBridgeActionStatus::Pending, true).await;
+    let notification_id = world
+        .integrations
+        .github_notification
+        .as_ref()
+        .expect("The account has no GitHub notification")
+        .id;
+    seed_action_about(
+        world,
+        SlackBridgeActionStatus::Pending,
+        Some(notification_id),
+    )
+    .await;
 }
 
 async fn record(world: &mut ApiWorld, request: reqwest::RequestBuilder) {
@@ -157,7 +179,7 @@ async fn that_action_is(world: &mut ApiWorld, status: ActionStatus) {
     let id = the_action_id(world);
     let app = world.app.get().await;
     let state = read_action_state(app, id).await;
-    assert_eq!(state.status, format!("{:?}", status.0));
+    assert_eq!(state.status, status.sql_text());
 }
 
 #[then("that action has a completion date")]
@@ -214,12 +236,16 @@ async fn my_user_is_deleted(world: &mut ApiWorld) {
         .await
         .expect("Deleting a user with pending Slack bridge actions must succeed");
     transaction.commit().await.unwrap();
-    world.slack_bridge.user_deleted = Some(deleted);
+    world.slack_bridge.deletion = Some(if deleted {
+        Deletion::Deleted
+    } else {
+        Deletion::NothingToDelete
+    });
 }
 
 #[then("that user is deleted, with that action")]
 async fn that_user_is_deleted_with_the_action(world: &mut ApiWorld) {
-    assert_eq!(world.slack_bridge.user_deleted, Some(true));
+    assert_eq!(world.slack_bridge.deletion, Some(Deletion::Deleted));
     let id = the_action_id(world);
     let app = world.app.get().await;
     assert_eq!(count_actions(app, id).await, 0);

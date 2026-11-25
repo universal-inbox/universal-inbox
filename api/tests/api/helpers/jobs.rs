@@ -86,6 +86,8 @@ pub async fn wait_until_the_jobs_are_done(app: &TestedApp) {
 
 /// For the scenarios where a job is expected to fail: waits until every pushed job is done, dead
 /// or waiting for its retry (scheduled), and returns the counts for the scenario to assert.
+/// It returns while a retry is still waiting, so the scenario must assert the dead or scheduled
+/// count itself; one that needs the final dead count must wait for the retries to run out.
 pub async fn wait_until_the_jobs_have_ended(app: &TestedApp) -> JobCounts {
     let deadline = Instant::now() + DEADLINE;
     let mut calm = 0;

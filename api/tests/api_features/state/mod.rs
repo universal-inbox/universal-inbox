@@ -54,7 +54,7 @@ pub use oauth_callback::OauthCallback;
 pub use passkey::{Device, Passkeys, PendingSignIn, Registration, VisitorPasskey};
 pub use realtime_stream::{EventStream, RealtimeStream};
 pub use set_aside::SetAside;
-pub use slack_bridge::SlackBridge;
+pub use slack_bridge::{Deletion, SlackBridge};
 pub use slack_tasks::SlackTasks;
 pub use slack_threads::{SlackThreadState, SlackThreads};
 pub use slack_webhook::{SlackEvent, SlackWebhook};

@@ -84,7 +84,7 @@ fn calendar_pages(world: &mut ApiWorld) -> &mut CalendarPages {
         .expect("Google Mail reports no invitation in this scenario")
 }
 
-fn with_my_answer(
+pub(super) fn with_my_answer(
     event: &GoogleCalendarEvent,
     answer: GoogleCalendarEventAttendeeResponseStatus,
 ) -> GoogleCalendarEvent {
@@ -217,7 +217,7 @@ fn google_calendar_reports_the_event_cancelled(world: &mut ApiWorld) {
         .push((None, json!({ "items": [cancelled] })));
 }
 
-async fn have_a_notification_of_the_event(
+pub(super) async fn have_a_notification_of_the_event(
     world: &mut ApiWorld,
     name: String,
     thread_id: &str,

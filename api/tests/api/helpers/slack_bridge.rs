@@ -6,18 +6,29 @@ use universal_inbox::{notification::NotificationId, slack_bridge::SlackBridgePen
 
 use crate::helpers::TestedApp;
 
+/// The whole row of a pending action: a change of any column shows.
 #[derive(Debug, Clone, PartialEq, FromRow)]
 pub struct ActionState {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub notification_id: Option<Uuid>,
+    pub action_type: String,
+    pub slack_team_id: String,
+    pub slack_channel_id: String,
+    pub slack_thread_ts: String,
+    pub slack_last_message_ts: String,
     pub status: String,
-    pub retry_count: i32,
-    pub completed_at: Option<DateTime<Utc>>,
     pub failure_message: Option<String>,
+    pub retry_count: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
 }
 
 pub async fn read_action_state(app: &TestedApp, id: SlackBridgePendingActionId) -> ActionState {
     sqlx::query_as::<_, ActionState>(
         r#"
-            SELECT status, retry_count, completed_at, failure_message
+            SELECT *
             FROM slack_bridge_pending_action
             WHERE id = $1
         "#,
