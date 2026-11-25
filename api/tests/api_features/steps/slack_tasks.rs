@@ -153,6 +153,18 @@ async fn i_am_connected_to_slack_with_a_completion_reaction(world: &mut ApiWorld
     "Slack serves the message of the reaction events, with its author, channel, team and user groups"
 )]
 async fn slack_serves_the_message(world: &mut ApiWorld) {
+    mount_the_message_context(world).await;
+    let app = world.app.get().await;
+    mock_slack_fetch_reply(
+        &app.slack_mock_server,
+        CHANNEL_ID,
+        MESSAGE_ID,
+        "slack_fetch_message_response.json",
+    )
+    .await;
+}
+
+pub(super) async fn mount_the_message_context(world: &mut ApiWorld) {
     let app = world.app.get().await;
     let server = &app.slack_mock_server;
     mock_slack_get_chat_permalink(
@@ -165,13 +177,6 @@ async fn slack_serves_the_message(world: &mut ApiWorld) {
     mock_slack_list_emojis(server, "slack_emoji_list_response.json").await;
     // The author of the message, not the user who reacted to it
     mock_slack_fetch_user(server, "U05YYY", "slack_fetch_user_response.json").await;
-    mock_slack_fetch_reply(
-        server,
-        CHANNEL_ID,
-        MESSAGE_ID,
-        "slack_fetch_message_response.json",
-    )
-    .await;
     mock_slack_fetch_channel(server, CHANNEL_ID, "slack_fetch_channel_response.json").await;
     mock_slack_fetch_team(server, "T05XXX", "slack_fetch_team_response.json").await;
     mock_slack_list_usergroups(server, "slack_list_usergroups_response.json").await;

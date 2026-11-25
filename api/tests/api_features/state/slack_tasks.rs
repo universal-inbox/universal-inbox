@@ -9,4 +9,5 @@ pub struct SlackTasks {
     pub creation: Option<Box<ThirdPartyItemCreationResult>>,
     pub patched: Option<Box<Task>>,
     pub edited: Option<Box<ThirdPartyItemCreationResult>>,
+    pub waited: Option<std::time::Duration>,
 }

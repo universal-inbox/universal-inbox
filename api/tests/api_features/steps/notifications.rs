@@ -1,9 +1,7 @@
-use apalis::prelude::Storage;
 use chrono::{DateTime, TimeDelta, TimeZone, Timelike, Utc};
 use cucumber::{gherkin::Step, given, then, when};
 use pretty_assertions::assert_eq;
 use serde_json::json;
-use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 use wiremock::{
     Mock, ResponseTemplate,
@@ -26,6 +24,7 @@ use universal_inbox_api::repository::{
 
 use crate::{
     helpers::{
+        jobs::{count_the_jobs, wait_until_the_jobs_are_done},
         notification::{
             create_task_from_notification_response,
             github::{create_notification_from_github_notification, github_notification},
@@ -783,12 +782,25 @@ fn the_snoozed_notifications_i_see(world: &mut ApiWorld, step: &Step) {
     assert_eq!(listed, sorted_ids(world, step));
 }
 
-#[then("no job is left in the queue after a second")]
-async fn no_job_is_left_in_the_queue(world: &mut ApiWorld) {
-    sleep(Duration::from_millis(1000)).await;
-    let mut storage = world.app.get().await.redis_storage.clone();
-    let job_count = storage.len().await.expect("Failed to get job count");
-    assert_eq!(job_count, 0);
+#[given("I note how many jobs were queued so far")]
+async fn i_note_the_jobs_queued(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    wait_until_the_jobs_are_done(app).await;
+    let pushed = count_the_jobs(app).await.pushed;
+    world.notifications.jobs_noted = Some(pushed);
+}
+
+#[then(expr = "that change queued {int} jobs, and all of them are done")]
+async fn that_change_queued_jobs(world: &mut ApiWorld, count: usize) {
+    let noted = world
+        .notifications
+        .jobs_noted
+        .expect("No job count was noted");
+    let app = world.app.get().await;
+    wait_until_the_jobs_are_done(app).await;
+    let counts = count_the_jobs(app).await;
+    assert_eq!(counts.pushed - noted, count, "{counts:?}");
+    assert_eq!(counts.done, counts.pushed, "{counts:?}");
 }
 
 #[when(

@@ -28,6 +28,7 @@ pub struct Notifications {
     pub tied_updated_at: Option<DateTime<Utc>>,
     pub patched: Option<Notification>,
     pub bulk_changed: Vec<Notification>,
+    pub jobs_noted: Option<usize>,
     pub unknown_id: Option<Uuid>,
 }
 

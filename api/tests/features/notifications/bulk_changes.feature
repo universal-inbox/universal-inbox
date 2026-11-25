@@ -14,19 +14,21 @@ Feature: Changing many notifications at once
     And I have a GitHub notification called "first"
     And I have a GitHub notification called "second"
     Then the notifications "first" and "second" are unread
+    Given I note how many jobs were queued so far
     When I delete all my unread and read GitHub notifications
     Then 2 notifications were changed
     When I list my deleted notifications of GitHub
     Then I see exactly these notifications, in any order:
       | first  |
       | second |
-    And no job is left in the queue after a second
+    And that change queued 2 jobs, and all of them are done
 
   @legacy:test_notifications::patch_notifications_bulk::test_patch_notifications_bulk_snooze_only
   Scenario: A user snoozes all their GitHub notifications at once without changing their status
     Given I have a GitHub notification called "first"
     And I have a GitHub notification called "second"
     Then the notifications "first" and "second" are not snoozed
+    Given I note how many jobs were queued so far
     When I snooze all my unread GitHub notifications until "2050-01-01T01:02:03Z"
     Then 2 notifications were changed
     And all the changed notifications are snoozed until "2050-01-01T01:02:03Z" and still unread
@@ -34,7 +36,7 @@ Feature: Changing many notifications at once
     Then the snoozed notifications I see are exactly these, in any order:
       | first  |
       | second |
-    And no job is left in the queue after a second
+    And that change queued 2 jobs, and all of them are done
 
   @legacy:test_notifications::create_task_from_notification_validation::test_create_task_from_notification_rejects_too_long_title
   Scenario: A task title that is too long is refused before the notification is looked up

@@ -29,7 +29,7 @@ Feature: Syncing Linear tasks
     Scenario: The default project and due date do not overwrite those of a known task
       Given I am connected to Linear, syncing its tasks into the project Project2, due tomorrow
       And I already have the task of that issue in the project Project1, mirrored by Todoist
-      And a second passes
+      And a second passes, so that what follows is dated after what exists
       And Linear reports my assigned issue
       When I sync my Linear tasks
       Then the sync updated the task I already had
@@ -40,7 +40,7 @@ Feature: Syncing Linear tasks
       Given I am connected to Linear, syncing its tasks into the project Project2, due today
       And I already have the task of that issue in the project Project2, mirrored by Todoist
       And Todoist accepts no call from the sync
-      And a second passes
+      And a second passes, so that what follows is dated after what exists
       And Linear reports that issue retitled "Renamed upstream in Linear"
       When I sync my Linear tasks
       Then the sync updated the task I already had
@@ -52,7 +52,7 @@ Feature: Syncing Linear tasks
       Given I am connected to Linear, syncing its tasks into the project Project2, due today
       And I already have the task of that issue in the project Project2, due today, not mirrored by any task manager
       And Todoist accepts no call from the sync
-      And a second passes
+      And a second passes, so that what follows is dated after what exists
       And Linear reports that issue retitled "Renamed upstream in Linear"
       When I sync my Linear tasks
       Then the sync updated the task I already had
@@ -88,7 +88,7 @@ Feature: Syncing Linear tasks
       Given I am connected to Linear, syncing its tasks into the project Project2, due no date
       And I already have the task of that issue in the project Project2, mirrored by Todoist
       And I renamed that task "Reply to Marc about the billing thread" in Todoist
-      And a second passes
+      And a second passes, so that what follows is dated after what exists
       And Linear reports that issue with the description "The issue description changed upstream"
       And Todoist no longer knows the item of that task, so updating its description fails
       And Todoist creates the item "another_id" for that task, with its title and the description Linear reports
@@ -101,7 +101,7 @@ Feature: Syncing Linear tasks
     Scenario: Updating an unmirrored task creates its Todoist item
       Given I am connected to Linear, syncing its tasks into the project Project2, due no date
       And I already have the task of that issue in the project Project2, due today, not mirrored by any task manager
-      And a second passes
+      And a second passes, so that what follows is dated after what exists
       And Linear reports that issue with the description "This issue was edited upstream"
       And Todoist creates the item "new_todoist_id" for that task, with its title and the description Linear reports
       When I sync my Linear tasks

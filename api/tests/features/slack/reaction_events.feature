@@ -98,3 +98,13 @@ Feature: Slack reaction events
       Given Todoist uncompletes the task "1123"
       When Slack delivers the event of the reaction "eyes" being added
       Then that task is active again
+
+  Rule: Waiting for Slack to finish processing an event
+
+    Scenario: The wait lasts as long as a slow job, and the effect of the job is visible when it ends
+      Given I am connected to Slack, syncing its notifications
+      And Slack serves the message of the reaction events, taking a second to answer for the message itself
+      And Slack delivers the event of the reaction "eyes" being added
+      When I measure how long Slack takes to finish processing that event
+      Then that wait lasted as long as the slow answer of Slack
+      And my notifications list, read once without waiting, has the notification of that message

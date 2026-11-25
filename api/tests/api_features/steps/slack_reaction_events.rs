@@ -1,4 +1,12 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+
+use wiremock::{
+    Mock, ResponseTemplate,
+    matchers::{method, path, query_param},
+};
 
 use cucumber::{given, then, when};
 use pretty_assertions::assert_eq;
@@ -27,6 +35,7 @@ use universal_inbox::{
 use crate::{
     common::settings,
     helpers::{
+        fixture_path,
         integration_connection::{
             create_and_mock_integration_connection, slack_context, slack_oauth_credential,
         },
@@ -44,12 +53,16 @@ use crate::{
             },
         },
     },
-    steps::slack_tasks::{DESCRIPTION, ReactionEvent, TITLE_OF_A_SLACK_LINK, connect_to_slack},
+    steps::slack_tasks::{
+        DESCRIPTION, ReactionEvent, TITLE_OF_A_SLACK_LINK, connect_to_slack,
+        mount_the_message_context,
+    },
     steps::todoist_task_changes::expect_once,
     world::ApiWorld,
 };
 
 const MESSAGE_TS: &str = "1707686216.825719";
+const SLOW_ANSWER: Duration = Duration::from_millis(1500);
 
 #[given("I am connected to Slack, with its sync disabled")]
 async fn i_am_connected_to_slack_with_its_sync_disabled(world: &mut ApiWorld) {
@@ -431,4 +444,65 @@ async fn that_other_user_has_no_unread_notification(world: &mut ApiWorld) {
 async fn slack_has_finished_processing_that_event(world: &mut ApiWorld) {
     let app = world.app.get().await;
     wait_until_the_jobs_are_done(app).await;
+}
+
+#[given(
+    "Slack serves the message of the reaction events, taking a second to answer for the message itself"
+)]
+async fn slack_serves_the_message_slowly(world: &mut ApiWorld) {
+    mount_the_message_context(world).await;
+    let app = world.app.get().await;
+    Mock::given(method("GET"))
+        .and(path("/conversations.replies"))
+        .and(query_param("channel", "C05XXX"))
+        .and(query_param("ts", MESSAGE_TS))
+        .and(query_param("latest", MESSAGE_TS))
+        .and(query_param("limit", "1"))
+        .and(query_param("inclusive", "true"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(SLOW_ANSWER)
+                .set_body_raw(
+                    std::fs::read_to_string(fixture_path("slack_fetch_message_response.json"))
+                        .unwrap(),
+                    "application/json",
+                ),
+        )
+        .mount(&app.slack_mock_server)
+        .await;
+}
+
+#[when("I measure how long Slack takes to finish processing that event")]
+async fn i_measure_the_wait(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    let started = Instant::now();
+    wait_until_the_jobs_are_done(app).await;
+    world.slack_tasks.waited = Some(started.elapsed());
+}
+
+#[then("that wait lasted as long as the slow answer of Slack")]
+fn the_wait_lasted_as_long_as_the_slow_answer(world: &mut ApiWorld) {
+    let waited = world.slack_tasks.waited.expect("The wait was not measured");
+    assert!(
+        waited >= SLOW_ANSWER,
+        "the wait lasted {waited:?}, less than the {SLOW_ANSWER:?} the job takes"
+    );
+}
+
+#[then("my notifications list, read once without waiting, has the notification of that message")]
+async fn the_list_read_once_has_the_notification(world: &mut ApiWorld) {
+    let client = world.client();
+    let app = world.app.get().await;
+    let notifications = list_notifications(
+        &client,
+        &app.api_address,
+        vec![NotificationStatus::Unread],
+        false,
+        None,
+        None,
+        false,
+    )
+    .await;
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].source_item.source_id, MESSAGE_TS);
 }
