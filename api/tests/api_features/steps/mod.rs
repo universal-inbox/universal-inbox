@@ -4,6 +4,7 @@ mod audit_log;
 mod auth;
 mod auth_methods;
 mod billing;
+mod billing_deletion;
 mod connection_config;
 mod cron;
 mod data_encryption;

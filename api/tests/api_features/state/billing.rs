@@ -17,4 +17,6 @@ pub struct Billing {
     pub written_status: Option<universal_inbox::billing::SubscriptionStatus>,
     pub used: Option<u32>,
     pub verdict: Option<Result<(), String>>,
+    pub stripe_mock: Option<wiremock::MockServer>,
+    pub deletion: Option<Result<bool, String>>,
 }

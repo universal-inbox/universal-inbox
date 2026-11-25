@@ -4,7 +4,6 @@ mod common;
 #[allow(dead_code)]
 mod helpers;
 mod test_api_notification;
-mod test_billing;
 mod test_cache;
 mod test_cron;
 mod test_google_calendar_notifications;

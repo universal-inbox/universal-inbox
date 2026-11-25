@@ -3,6 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use chrono::{DateTime, Utc};
 use cucumber::{Parameter, given, then, when};
 use pretty_assertions::assert_eq;
+use secrecy::SecretBox;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -23,10 +24,10 @@ use universal_inbox_api::{
         service::{BillingService, RepositoryIntegrationCounter},
         stripe::{
             CheckoutSessionParams, PortalSessionParams, RawSubscription, StripeClient, StripeError,
-            StripeEvent, StripeEventKind,
+            StripeEvent, StripeEventKind, client::StripeApiClient,
         },
     },
-    configuration::FreePlanSettings,
+    configuration::{FreePlanSettings, StripeApiKey, StripeWebhookSecret},
     repository::integration_connection::IntegrationConnectionRepository,
     universal_inbox::UniversalInboxError,
 };
@@ -179,13 +180,36 @@ fn service(app: &TestedApp, customer_subscriptions: Vec<RawSubscription>) -> Arc
     ))
 }
 
-async fn billing(world: &mut ApiWorld) -> (Arc<BillingService>, &TestedApp) {
+pub(super) async fn billing(world: &mut ApiWorld) -> (Arc<BillingService>, &TestedApp) {
     let holds = world.billing.stripe_holds.clone();
+    let mock_uri = world.billing.stripe_mock.as_ref().map(|mock| mock.uri());
     let app = world.app.get().await;
-    (service(app, holds), app)
+    match mock_uri {
+        Some(uri) => (service_against(app, &uri), app),
+        None => (service(app, holds), app),
+    }
 }
 
-fn user_id(world: &ApiWorld) -> universal_inbox::user::UserId {
+fn service_against(app: &TestedApp, stripe_uri: &str) -> Arc<BillingService> {
+    let stripe = Arc::new(StripeApiClient::new_with_base_url(
+        &SecretBox::new(Box::new(StripeApiKey("dummy-stripe-api-key".to_string()))),
+        SecretBox::new(Box::new(StripeWebhookSecret(
+            "dummy-webhook-secret".to_string(),
+        ))),
+        stripe_uri,
+    ));
+    Arc::new(BillingService::new(
+        app.repository.clone(),
+        stripe,
+        &FreePlanSettings::default(),
+        universal_inbox::billing::StripePriceId("price_test".to_string()),
+        Arc::new(RepositoryIntegrationCounter {
+            repository: app.repository.clone(),
+        }),
+    ))
+}
+
+pub(super) fn user_id(world: &ApiWorld) -> universal_inbox::user::UserId {
     world.billing.user_id.expect("No billing user exists")
 }
 
@@ -222,7 +246,7 @@ async fn seed_validated(
     .await
 }
 
-async fn read_subscription(world: &mut ApiWorld) -> Option<UserSubscription> {
+pub(super) async fn read_subscription(world: &mut ApiWorld) -> Option<UserSubscription> {
     let user_id = user_id(world);
     let app = world.app.get().await;
     let mut transaction = app.repository.begin().await.unwrap();
