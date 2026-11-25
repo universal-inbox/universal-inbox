@@ -12,7 +12,7 @@ use crate::{
     world::{ApiWorld, Response},
 };
 
-fn api_token(world: &ApiWorld) -> &AuthenticationToken {
+pub(super) fn api_token(world: &ApiWorld) -> &AuthenticationToken {
     world
         .sessions
         .api_token

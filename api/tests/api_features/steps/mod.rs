@@ -45,6 +45,7 @@ mod password;
 mod pausing;
 mod profile;
 pub mod provider;
+mod realtime_stream;
 mod reauthentication;
 mod registration;
 mod response_body;

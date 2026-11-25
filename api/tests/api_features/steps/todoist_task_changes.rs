@@ -25,7 +25,8 @@ use universal_inbox::{
 };
 use universal_inbox_api::integrations::todoist::{
     TodoistSyncCommandItemCompleteArgs, TodoistSyncCommandItemDeleteArgs,
-    TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUpdateArgs,
+    TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUncompleteArgs,
+    TodoistSyncCommandItemUpdateArgs,
 };
 
 use crate::{
@@ -40,7 +41,7 @@ use crate::{
             TodoistSyncPartialCommand, mock_todoist_get_item_service,
             mock_todoist_item_add_service, mock_todoist_no_sync_call,
             mock_todoist_sync_project_add, mock_todoist_sync_service_expecting_one_call,
-            mock_todoist_uncomplete_item_service, todoist_item,
+            todoist_item,
         },
         third_party::create_task_third_party_item,
     },
@@ -248,7 +249,13 @@ async fn todoist_moves_and_updates(world: &mut ApiWorld, due: String, priority: 
     let due: NaiveDate = due.parse().unwrap();
     let item_id = todoist_item().id;
     let app = world.app.get().await;
-    mock_todoist_uncomplete_item_service(&app.todoist_mock_server, &item_id).await;
+    expect_once(
+        &app.todoist_mock_server,
+        TodoistSyncPartialCommand::ItemUncomplete {
+            args: TodoistSyncCommandItemUncompleteArgs { id: item_id },
+        },
+    )
+    .await;
     mock_todoist_sync_service_expecting_one_call(
         &app.todoist_mock_server,
         vec![

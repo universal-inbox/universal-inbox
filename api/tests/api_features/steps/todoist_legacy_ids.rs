@@ -175,6 +175,7 @@ async fn todoist_refuses_the_mappings(world: &mut ApiWorld) {
     Mock::given(method("GET"))
         .and(path_regex("^/id_mappings/"))
         .respond_with(ResponseTemplate::new(401))
+        .expect(1..)
         .mount(&app.todoist_mock_server)
         .await;
 }
