@@ -12,6 +12,7 @@ Feature: Changing Todoist tasks
       Given I am connected to Todoist
       And Todoist can list my projects
       And I have a Todoist task, added in the year 2000, in the project Inbox
+      And the notification of that task is unread
 
     @legacy:test_todoist_tasks::patch_task::test_patch_todoist_task_status_as_deleted
     Scenario: Deleting a task deletes it in Todoist and deletes its notification
@@ -46,12 +47,14 @@ Feature: Changing Todoist tasks
       Given Todoist renames that task to "Reply to Marc about the billing thread", in exactly one call that changes nothing else
       When I rename that task to "Reply to Marc about the billing thread"
       Then the patched task is titled "Reply to Marc about the billing thread", and so is that task when I read it again
+      And the notification of that task is still unread
 
     @legacy:test_todoist_tasks::patch_task::test_patch_todoist_task_title_unchanged_is_a_no_op
     Scenario: Renaming a task to the title it already has changes nothing and reaches no provider
       Given Todoist is not asked to change anything
       When I rename that task to the title that it already has
       Then the app answers 304
+      And the notification of that task is still unread
 
   Rule: A task is created from a notification
 
@@ -86,6 +89,7 @@ Feature: Changing Todoist tasks
       And I am connected to Todoist
       And Todoist can list my projects
       And I have a Todoist task, added in the year 2000, in the project Inbox
+      And the notification of that task is unread
       And Todoist is told to add a link to that notification to the description of that task
       When I link that notification to that task
       Then that notification is linked to that task, when I read it again

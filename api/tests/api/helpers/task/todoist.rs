@@ -188,8 +188,9 @@ pub async fn mock_todoist_sync_service_with_command_error(
     todoist_mock_server: &MockServer,
     commands: Vec<TodoistSyncPartialCommand>,
     error_code: i32,
+    expected_calls: Option<u64>,
 ) {
-    mock_todoist_sync_service(
+    mount_todoist_sync_mock(
         todoist_mock_server,
         commands,
         Some(TodoistSyncStatusResponse {
@@ -204,13 +205,14 @@ pub async fn mock_todoist_sync_service_with_command_error(
             temp_id_mapping: HashMap::new(),
             sync_token: SyncToken("sync token".to_string()),
         }),
+        expected_calls,
     )
     .await;
 }
 
 /// Mock Todoist's `GET /id_mappings/{obj_name}/{ids}` endpoint translating
 /// legacy IDs (pre API v1) of `obj_name` objects into their new ID. It answers
-/// with all of `mappings` whatever the requested IDs.
+/// with all of `mappings` whatever the requested IDs, and expects to be asked at least once (a change sending several commands asks once per command).
 pub async fn mock_todoist_id_mappings_service(
     todoist_mock_server: &MockServer,
     obj_name: &str,
@@ -231,6 +233,7 @@ pub async fn mock_todoist_id_mappings_service(
                 .insert_header("content-type", "application/json")
                 .set_body_json(&mappings),
         )
+        .expect(1..)
         .mount(todoist_mock_server)
         .await;
 }

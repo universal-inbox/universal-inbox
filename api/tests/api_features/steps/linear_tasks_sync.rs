@@ -428,6 +428,7 @@ async fn todoist_no_longer_knows_the_item_on_complete(world: &mut ApiWorld) {
             args: TodoistSyncCommandItemCompleteArgs { id: item_id },
         }],
         SINK_FAILURE_NO_SUCH_ITEM,
+        None,
     )
     .await;
 }
@@ -458,6 +459,7 @@ async fn todoist_no_longer_knows_the_item_on_update(world: &mut ApiWorld) {
             },
         }],
         SINK_FAILURE_NO_SUCH_ITEM,
+        None,
     )
     .await;
 }
