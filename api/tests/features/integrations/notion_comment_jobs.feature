@@ -188,6 +188,8 @@ Feature: Handling a Notion comment event
       When the Notion job handles the comment "comment-1" written by "a-colleague", visible to someone and me
       And I look at my unread Notion notifications
       Then my only Notion notification is unread
+      When the other user looks at their Notion notifications, whatever their status
+      Then I have 0 Notion notifications listed
 
     @legacy:test_notion_webhook::job::test_a_failing_connection_fails_the_job_after_saving_the_others
     Scenario: A Notion failure fails the job once the other connections are saved, and the retry saves the rest
@@ -211,3 +213,55 @@ Feature: Handling a Notion comment event
       Then I have 1 Notion notification listed
       When the other user looks at their Notion notifications, whatever their status
       Then I have 1 Notion notification listed
+
+  Rule: Switching the comment sync off stops the discussions that the user already follows
+
+    Scenario: A new comment in a discussion that I follow changes my notification, until I disable the comment sync
+      Given I am connected to Notion, in a workspace of its own
+      And Notion now serves a discussion with these comments:
+        | comment   | author  | minute | text     |
+        | comment-1 | someone | 5      | Ping @me |
+      When the Notion job handles the comment "comment-1" written by someone, visible to me only
+      And I look at my unread Notion notifications
+      And I set that Notion notification as read
+      And Notion now serves a discussion with these comments:
+        | comment   | author  | minute | text     |
+        | comment-1 | someone | 5      | Ping @me |
+        | comment-2 | someone | 15     | Any news |
+      And the Notion job handles the comment "comment-2" written by someone, visible to me only
+      And I look at my Notion notifications, whatever their status
+      Then my only Notion notification is unread
+      And that Notion notification was updated at "2026-10-10T09:15:00+00:00"
+
+    Scenario: A new comment in a discussion that I follow leaves my notification alone once I disabled the comment sync
+      Given I am connected to Notion, in a workspace of its own
+      And Notion now serves a discussion with these comments:
+        | comment   | author  | minute | text     |
+        | comment-1 | someone | 5      | Ping @me |
+      When the Notion job handles the comment "comment-1" written by someone, visible to me only
+      And I look at my unread Notion notifications
+      And I set that Notion notification as read
+      And I disable the comment sync of my Notion connection
+      And Notion now serves a discussion with these comments:
+        | comment   | author  | minute | text     |
+        | comment-1 | someone | 5      | Ping @me |
+        | comment-2 | someone | 15     | Any news |
+      And the Notion job handles the comment "comment-2" written by someone, visible to me only
+      And I look at my Notion notifications, whatever their status
+      Then my only Notion notification is read
+      And that Notion notification was updated at "2026-10-10T09:05:00+00:00"
+
+  Rule: An event of a workspace only concerns the connections of that workspace
+
+    Scenario: A comment of another workspace, where only someone else is connected, creates nothing for me
+      Given another user is signed in
+      And I am connected to Notion, in a workspace of its own
+      And the other user is connected to a Notion workspace of their own
+      And Notion serves, to the token "notion-token-someone", a comment by a colleague that mentions someone and me
+      And Notion serves, to the token "notion-token-me", a comment by a colleague that mentions someone and me
+      When the Notion job handles the comment "comment-1" written by "a-colleague" in the workspace of the other user, visible to someone and me
+      And I look at my Notion notifications, whatever their status
+      Then I see no Notion notification
+      When the Notion job handles the comment "comment-1" written by "a-colleague", visible to someone and me
+      And I look at my Notion notifications, whatever their status
+      Then my only Notion notification is unread

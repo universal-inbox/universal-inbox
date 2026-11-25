@@ -37,6 +37,7 @@ use crate::{
         },
         set_audit_actor,
     },
+    steps::slack_message_jobs::Who,
     steps::status::UserStatus,
     world::ApiWorld,
 };
@@ -231,16 +232,12 @@ fn comments_of(step: &Step) -> Vec<Value> {
         .iter()
         .skip(1)
         .map(|row| {
-            let author = match row[1].as_str() {
-                "me" => ME,
-                "someone" => SOMEONE,
-                other => panic!("Unknown author {other:?}"),
-            };
+            let author: Author = row[1].parse().expect("The author must be me or someone");
             notion_comment(
                 &row[0],
                 DISCUSSION_ID,
                 BLOCK_ID,
-                author,
+                author.id(),
                 row[2].parse().expect("The minute must be a number"),
                 rich_text(&row[3]),
             )
@@ -532,9 +529,14 @@ async fn the_job_handles_a_comment_of_another_workspace(world: &mut ApiWorld, co
     handle_comment(world, event).await;
 }
 
-async fn handle_blocks(world: &mut ApiWorld, block_ids: &[&str], audience: Audience) {
+async fn handle_blocks(
+    world: &mut ApiWorld,
+    workspace_id: String,
+    block_ids: &[&str],
+    audience: Audience,
+) {
     let event: NotionWebhookEvent = serde_json::from_value(notion_page_content_event(
-        &workspace_of(world),
+        &workspace_id,
         &format!("event-{}", Uuid::new_v4()),
         PAGE_ID,
         block_ids,
@@ -564,19 +566,22 @@ async fn handle_blocks(world: &mut ApiWorld, block_ids: &[&str], audience: Audie
 
 #[when(expr = "the Notion job handles an update of the block, visible to {audience}")]
 async fn the_job_handles_a_block_update(world: &mut ApiWorld, audience: Audience) {
-    handle_blocks(world, &[BLOCK_ID], audience).await;
+    let workspace_id = workspace_of(world);
+    handle_blocks(world, workspace_id, &[BLOCK_ID], audience).await;
 }
 
 #[when(expr = "the Notion job handles an update that names the block twice, visible to {audience}")]
 async fn the_job_handles_a_repeated_block(world: &mut ApiWorld, audience: Audience) {
-    handle_blocks(world, &[BLOCK_ID, BLOCK_ID], audience).await;
+    let workspace_id = workspace_of(world);
+    handle_blocks(world, workspace_id, &[BLOCK_ID, BLOCK_ID], audience).await;
 }
 
 #[when(expr = "the Notion job handles an update of {int} blocks, visible to {audience}")]
 async fn the_job_handles_many_blocks(world: &mut ApiWorld, count: usize, audience: Audience) {
     let ids = block_ids(count);
     let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
-    handle_blocks(world, &ids, audience).await;
+    let workspace_id = workspace_of(world);
+    handle_blocks(world, workspace_id, &ids, audience).await;
 }
 
 async fn run_the_worker_job(world: &mut ApiWorld, event: Value) {
@@ -630,8 +635,8 @@ async fn the_worker_runs_it_again(world: &mut ApiWorld) {
     run_the_worker_job(world, event).await;
 }
 
-async fn list_for(world: &mut ApiWorld, statuses: Vec<NotificationStatus>, other: bool) {
-    let client = if other {
+async fn list_for(world: &mut ApiWorld, statuses: Vec<NotificationStatus>, who: Who) {
+    let client = if matches!(who, Who::TheOtherUser) {
         world.other_session.as_ref().unwrap().client.clone()
     } else {
         world.client()
@@ -660,17 +665,17 @@ fn all_statuses() -> Vec<NotificationStatus> {
 
 #[when("I look at my unread Notion notifications")]
 async fn i_look_at_unread(world: &mut ApiWorld) {
-    list_for(world, vec![], false).await;
+    list_for(world, vec![], Who::Me).await;
 }
 
 #[when("I look at my Notion notifications, whatever their status")]
 async fn i_look_at_all(world: &mut ApiWorld) {
-    list_for(world, all_statuses(), false).await;
+    list_for(world, all_statuses(), Who::Me).await;
 }
 
 #[when("the other user looks at their Notion notifications, whatever their status")]
 async fn the_other_user_looks(world: &mut ApiWorld) {
-    list_for(world, all_statuses(), true).await;
+    list_for(world, all_statuses(), Who::TheOtherUser).await;
 }
 
 #[when(expr = "I set that Notion notification as {status}")]
@@ -809,4 +814,104 @@ fn the_job_fails(world: &mut ApiWorld, text: String) {
 #[then("the job succeeds")]
 fn the_job_succeeds(world: &mut ApiWorld) {
     assert_eq!(world.notion_webhook.failure, None);
+}
+
+#[given("the other user is connected to a Notion workspace of their own")]
+async fn the_other_user_has_a_workspace(world: &mut ApiWorld) {
+    let other_user_id = world.other_session.as_ref().expect("No other user").user.id;
+    let workspace_id = Uuid::new_v4().to_string();
+    let app = world.app.get().await;
+    create_notion_integration_connection(
+        app,
+        other_user_id,
+        &settings(),
+        SOMEONE,
+        SOMEONE_TOKEN,
+        &workspace_id,
+        NotionConfig::enabled(),
+    )
+    .await;
+    world.notion_webhook.other_workspace_id = Some(workspace_id);
+}
+
+#[when(
+    expr = "the Notion job handles the comment {string} written by {string} in the workspace of the other user, visible to {audience}"
+)]
+async fn the_job_handles_a_comment_of_the_other_workspace(
+    world: &mut ApiWorld,
+    comment_id: String,
+    author: String,
+    audience: Audience,
+) {
+    let workspace_id = world
+        .notion_webhook
+        .other_workspace_id
+        .clone()
+        .expect("The other user has no workspace");
+    let event = notion_comment_event(
+        &workspace_id,
+        "comment.created",
+        &comment_id,
+        &author,
+        DISCUSSION_ID,
+        PAGE_ID,
+        BLOCK_ID,
+        &audience.ids(),
+    );
+    handle_comment(world, event).await;
+}
+
+#[when(
+    expr = "the Notion job handles an update of the block in the workspace of the other user, visible to {audience}"
+)]
+async fn the_job_handles_a_block_update_of_the_other_workspace(
+    world: &mut ApiWorld,
+    audience: Audience,
+) {
+    let workspace_id = world
+        .notion_webhook
+        .other_workspace_id
+        .clone()
+        .expect("The other user has no workspace");
+    handle_blocks(world, workspace_id, &[BLOCK_ID], audience).await;
+}
+
+async fn set_sync(world: &mut ApiWorld, config: NotionConfig) {
+    let id = world.notion_webhook.connection.as_ref().unwrap().id;
+    let client = world.client();
+    let app = world.app.get().await;
+    let response = client
+        .put(format!(
+            "{}integration-connections/{id}/config",
+            app.api_address
+        ))
+        .json(&IntegrationConnectionConfig::Notion(config))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+}
+
+#[when("I disable the comment sync of my Notion connection")]
+async fn i_disable_comment_sync(world: &mut ApiWorld) {
+    set_sync(
+        world,
+        NotionConfig {
+            sync_comments_enabled: false,
+            sync_mentions_enabled: true,
+        },
+    )
+    .await;
+}
+
+#[when("I disable the mention sync of my Notion connection")]
+async fn i_disable_mention_sync(world: &mut ApiWorld) {
+    set_sync(
+        world,
+        NotionConfig {
+            sync_comments_enabled: true,
+            sync_mentions_enabled: false,
+        },
+    )
+    .await;
 }

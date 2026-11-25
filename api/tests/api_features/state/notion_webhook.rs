@@ -9,4 +9,5 @@ pub struct NotionWebhook {
     pub listing: Vec<Notification>,
     pub failure: Option<String>,
     pub last_job: Option<Value>,
+    pub other_workspace_id: Option<String>,
 }

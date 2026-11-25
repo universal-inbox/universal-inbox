@@ -41,7 +41,7 @@ Feature: Handling a Notion page content event
     @legacy:test_notion_webhook::mention::test_mentioning_myself_creates_nothing
     Scenario: A block that I edited myself creates nothing
       Given I am connected to Notion, in a workspace of its own
-      And Notion now serves a block last edited by me at minute 5, reading "Reminder for ", with a mention of me
+      And Notion now serves a block last edited by me at minute 5, reading "Can you check ", with a mention of me
       When the Notion job handles an update of the block, visible to me only
       And I look at my Notion notifications, whatever their status
       Then I see no Notion notification
@@ -132,3 +132,45 @@ Feature: Handling a Notion page content event
       And Notion serves 60 blocks without any mention
       When the Notion job handles an update of 60 blocks, visible to me only
       Then Notion was asked to read 50 blocks
+
+  Rule: Switching the mention sync off stops the blocks that the user already follows
+
+    Scenario: A new edit of a block that I follow changes my notification, until I disable the mention sync
+      Given I am connected to Notion, in a workspace of its own
+      And Notion now serves a block last edited by someone at minute 5, reading "Can you check ", with a mention of me
+      When the Notion job handles an update of the block, visible to me only
+      And I look at my unread Notion notifications
+      And I set that Notion notification as read
+      And Notion now serves a block last edited by someone at minute 7, reading "Could you check ", with a mention of me
+      And the Notion job handles an update of the block, visible to me only
+      And I look at my Notion notifications, whatever their status
+      Then my only Notion notification is read
+      And that Notion notification is the block of the page, reading "Could you check @Me"
+
+    Scenario: A new edit of a block that I follow leaves my notification alone once I disabled the mention sync
+      Given I am connected to Notion, in a workspace of its own
+      And Notion now serves a block last edited by someone at minute 5, reading "Can you check ", with a mention of me
+      When the Notion job handles an update of the block, visible to me only
+      And I look at my unread Notion notifications
+      And I set that Notion notification as read
+      And I disable the mention sync of my Notion connection
+      And Notion now serves a block last edited by someone at minute 7, reading "Could you check ", with a mention of me
+      And the Notion job handles an update of the block, visible to me only
+      And I look at my Notion notifications, whatever their status
+      Then my only Notion notification is read
+      And that Notion notification is the block of the page, reading "Can you check @Me"
+
+  Rule: An event of a workspace only concerns the connections of that workspace
+
+    Scenario: A block update of another workspace, where only someone else is connected, creates nothing for me
+      Given another user is signed in
+      And I am connected to Notion, in a workspace of its own
+      And the other user is connected to a Notion workspace of their own
+      And Notion serves, to the token "notion-token-someone", a block by a colleague that mentions someone and me
+      And Notion serves, to the token "notion-token-me", a block by a colleague that mentions someone and me
+      When the Notion job handles an update of the block in the workspace of the other user, visible to someone and me
+      And I look at my Notion notifications, whatever their status
+      Then I see no Notion notification
+      When the Notion job handles an update of the block, visible to someone and me
+      And I look at my Notion notifications, whatever their status
+      Then my only Notion notification is unread
