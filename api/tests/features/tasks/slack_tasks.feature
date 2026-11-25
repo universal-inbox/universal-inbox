@@ -101,3 +101,13 @@ Feature: Slack tasks mirrored by Todoist
       And Slack adds the reaction "done" on that message, once
       When I mark that Slack task as done
       Then that task is done, with a completion date, and nothing else changed
+
+  Rule: A Slack message edited before it is mirrored
+
+    Scenario: The same edit, when it comes first, gives the task the title of its attachment
+      Given I am connected to Slack, syncing its tasks
+      And I am connected to Todoist
+      And Todoist can list my projects
+      And Todoist adds the Slack message, edited upstream with an attachment titled "Edited upstream in Slack", as an item, and then serves it
+      And I reacted to a Slack message that was already edited upstream, with an attachment titled "Edited upstream in Slack", which Todoist mirrors as a task
+      Then the mirrored task is titled after the attachment "Edited upstream in Slack"

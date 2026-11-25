@@ -47,7 +47,8 @@ use crate::{
             list_tasks_until,
             todoist::{
                 TodoistSyncPartialCommand, mock_todoist_get_item_service,
-                mock_todoist_item_add_service, sync_todoist_items_response, todoist_item,
+                mock_todoist_item_add_service_expecting_one_call, sync_todoist_items_response,
+                todoist_item,
             },
         },
         third_party::create_task_third_party_item,
@@ -62,9 +63,9 @@ const SLACK_USER_TOKEN: &str = "Bearer slack_test_user_access_token";
 const INBOX_ID: &str = "1111";
 const TITLE_OF_AN_EXAMPLE_LINK: &str =
     "[📥  Universal Inbox new release 📥...](https://example.com/)";
-const TITLE_OF_A_SLACK_LINK: &str =
+pub(super) const TITLE_OF_A_SLACK_LINK: &str =
     "[📥  Universal Inbox new release 📥...](https://slack.com/archives/C05XXX/p1234567890)";
-const DESCRIPTION: &str = r#"📥  *Universal Inbox new release* 📥
+pub(super) const DESCRIPTION: &str = r#"📥  *Universal Inbox new release* 📥
 - list 1
 - list 2
 
@@ -106,7 +107,7 @@ impl FromStr for ReactionEvent {
     }
 }
 
-async fn connect_to_slack(world: &mut ApiWorld, config: SlackConfig) {
+pub(super) async fn connect_to_slack(world: &mut ApiWorld, config: SlackConfig) {
     let user_id = world.user().id;
     let app = world.app.get().await;
     let connection = create_and_mock_integration_connection(
@@ -181,7 +182,7 @@ async fn slack_serves_the_message(world: &mut ApiWorld) {
 
 async fn mount_item_add(world: &mut ApiWorld, item: TodoistItem, title: &str) {
     let app = world.app.get().await;
-    mock_todoist_item_add_service(
+    mock_todoist_item_add_service_expecting_one_call(
         &app.todoist_mock_server,
         &item.id,
         title.to_string(),
@@ -549,4 +550,34 @@ async fn slack_follows_the_task(world: &mut ApiWorld, call: ReactionCall, name: 
         ReactionCall::Removes => "/reactions.remove",
     };
     mount_reaction_call(world, endpoint, &name, json!({ "ok": true })).await;
+}
+
+#[given(
+    expr = "Todoist adds the Slack message, edited upstream with an attachment titled {string}, as an item, and then serves it"
+)]
+async fn todoist_adds_the_edited_message(world: &mut ApiWorld, title: String) {
+    mount_item_add(
+        world,
+        *todoist_item(),
+        &format!("[{title}](https://example.com/)"),
+    )
+    .await;
+}
+
+#[given(
+    expr = "I reacted to a Slack message that was already edited upstream, with an attachment titled {string}, which Todoist mirrors as a task"
+)]
+async fn i_reacted_to_an_edited_message(world: &mut ApiWorld, title: String) {
+    let creation = slack_reaction(world, Some(&title)).await;
+    world.slack_tasks.creation = Some(creation);
+}
+
+#[then(expr = "the mirrored task is titled after the attachment {string}")]
+fn the_task_is_titled_after_the_attachment(world: &mut ApiWorld, title: String) {
+    let task = the_creation(world).task.as_ref().unwrap();
+    assert!(
+        task.title.contains(&title),
+        "the task is titled {:?}, not after the attachment",
+        task.title
+    );
 }

@@ -51,6 +51,54 @@ pub async fn mock_todoist_item_add_service(
     due: Option<TodoistItemDue>,
     priority: TodoistItemPriority,
 ) {
+    mount_item_add_mock(
+        todoist_mock_server,
+        new_item_id,
+        content,
+        description,
+        project_id,
+        due,
+        priority,
+        None,
+    )
+    .await;
+}
+
+/// Same as [`mock_todoist_item_add_service`], but pinning the call count to exactly one, so a
+/// second add of the same item fails the test.
+pub async fn mock_todoist_item_add_service_expecting_one_call(
+    todoist_mock_server: &MockServer,
+    new_item_id: &str,
+    content: String,
+    description: Option<String>,
+    project_id: Option<String>,
+    due: Option<TodoistItemDue>,
+    priority: TodoistItemPriority,
+) {
+    mount_item_add_mock(
+        todoist_mock_server,
+        new_item_id,
+        content,
+        description,
+        project_id,
+        due,
+        priority,
+        Some(1),
+    )
+    .await;
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn mount_item_add_mock(
+    todoist_mock_server: &MockServer,
+    new_item_id: &str,
+    content: String,
+    description: Option<String>,
+    project_id: Option<String>,
+    due: Option<TodoistItemDue>,
+    priority: TodoistItemPriority,
+    expected_calls: Option<u64>,
+) {
     let sync_item_add_todoist_response = TodoistSyncStatusResponse {
         sync_status: HashMap::from([(Uuid::new_v4(), TodoistCommandStatus::Ok("ok".to_string()))]),
         full_sync: false,
@@ -58,7 +106,7 @@ pub async fn mock_todoist_item_add_service(
         sync_token: SyncToken("sync token".to_string()),
     };
 
-    mock_todoist_sync_service(
+    mount_todoist_sync_mock(
         todoist_mock_server,
         vec![TodoistSyncPartialCommand::ItemAdd {
             args: TodoistSyncCommandItemAddArgs {
@@ -71,6 +119,7 @@ pub async fn mock_todoist_item_add_service(
             },
         }],
         Some(sync_item_add_todoist_response),
+        expected_calls,
     )
     .await;
 }
