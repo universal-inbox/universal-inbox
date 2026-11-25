@@ -456,7 +456,7 @@ async fn the_connection_is_untouched(world: &mut ApiWorld) {
     assert_eq!(connection.provider_user_id, None);
 }
 
-#[then("the state of that flow is still stored, as a call without session consumes nothing")]
+#[then("the state of that flow is still stored")]
 async fn the_state_is_still_stored(world: &mut ApiWorld) {
     let state = world.oauth_callback.state.clone().unwrap();
     let app = world.app.get().await;

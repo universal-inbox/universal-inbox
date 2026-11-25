@@ -68,7 +68,7 @@ Feature: Registering OAuth2 clients
       When I keep registering OAuth2 clients with the redirect URI "https://example.com/cb", from the address "1.2.3.4", up to 40 times, until I am refused
       Then I was refused for too many requests
       When I register an OAuth2 client with the redirect URI "https://example.com/cb", from the address "5.6.7.8"
-      Then the app does not answer that it is refused for too many requests
+      Then the app answers 201
 
     @legacy:test_mcp::oauth2::register_rejects_unspecified_forwarded_ip
     Scenario: A client whose address cannot be told is refused, not pooled with others
@@ -80,5 +80,4 @@ Feature: Registering OAuth2 clients
     Given an OAuth2 client is registered for a loopback callback
     When a visitor asks to authorize that client
     Then the app answers 302
-    And the response header "location" contains "login"
-    And the response header "location" contains "redirect="
+    And the visitor is sent to log in, with a way back to the authorization of that client

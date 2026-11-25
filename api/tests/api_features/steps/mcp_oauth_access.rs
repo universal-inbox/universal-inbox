@@ -188,12 +188,34 @@ fn i_was_refused(world: &mut ApiWorld) {
     );
 }
 
-#[then("the app does not answer that it is refused for too many requests")]
-fn the_app_does_not_refuse(world: &mut ApiWorld) {
-    assert_ne!(world.http.last().status, StatusCode::TOO_MANY_REQUESTS);
-}
-
-#[then(expr = "the app answers {int} to the last registration")]
-fn the_last_registration_is_answered(world: &mut ApiWorld, status: u16) {
-    assert_eq!(world.http.last().status, status);
+#[then("the visitor is sent to log in, with a way back to the authorization of that client")]
+async fn the_visitor_is_sent_to_log_in(world: &mut ApiWorld) {
+    let client_id = world.mcp_oauth.client_id().to_string();
+    let app = world.app.get().await;
+    let login = format!(
+        "{}/login",
+        app.front_base_url.as_str().trim_end_matches('/')
+    );
+    let location = world
+        .http
+        .last()
+        .header("location")
+        .expect("No Location header")
+        .to_string();
+    let url = url::Url::parse(&location).expect("Invalid redirect URL");
+    assert_eq!(
+        format!("{}{}", url.origin().ascii_serialization(), url.path()),
+        login
+    );
+    let way_back = url
+        .query_pairs()
+        .find(|(name, _)| name == "redirect")
+        .expect("The login redirect has no way back")
+        .1
+        .to_string();
+    assert!(
+        way_back.contains("/oauth2/authorize"),
+        "way back is {way_back}"
+    );
+    assert!(way_back.contains(&client_id), "way back is {way_back}");
 }

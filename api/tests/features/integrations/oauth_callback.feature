@@ -28,7 +28,7 @@ Feature: The OAuth callback
       When the provider calls back with that state and a code, without any session
       Then I am redirected to my settings with "oauth_error=invalid-state"
       And TickTick was not called by that callback
-      And the state of that flow is still stored, as a call without session consumes nothing
+      And the state of that flow is still stored
 
     @legacy:test_oauth_callback::test_oauth_callback_redacts_internal_error_chain
     Scenario: A state nobody issued is reported with a public code only
@@ -174,10 +174,9 @@ Feature: The OAuth callback
     Scenario: An OAuth2 access token for MCP cannot complete a callback
       Given I started the OAuth flow of a new Google Mail connection
       And Google Mail would accept any code and say that the account is "Jane.Doe@example.com", if it were asked
-      And I have an API token
       And I hold an OAuth2 access token for MCP with the scope "read write"
       When the provider calls back with that state and a code, bearing my OAuth2 access token for MCP
       Then I am redirected to my settings with "oauth_error=invalid-state"
       And Google Mail was not called by that callback
-      And the state of that flow is still stored, as a call without session consumes nothing
+      And the state of that flow is still stored
       And no credential is stored for my connection

@@ -50,4 +50,4 @@ Feature: Triaging through MCP
     And that call left the notification "1003" "Unread"
     And that call snoozed the notification "1003" until "2050-01-01T01:02:03Z"
     And that call did not touch the unknown notification
-    And GitHub received the calls it was told to expect, and no job is left in the queue
+    And GitHub received the calls it was told to expect, and no job is left in the queue, waiting up to 10 seconds

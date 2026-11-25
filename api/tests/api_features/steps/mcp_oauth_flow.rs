@@ -10,6 +10,7 @@ use crate::{
         mcp_client::{self, tools_list},
         mcp_oauth_access::register_loopback_client,
         mcp_protocol::{body, my_token, record_http},
+        reauthentication::create_api_token,
     },
     world::{ApiWorld, Response},
 };
@@ -321,6 +322,11 @@ async fn i_exchange_with_a_verifier(world: &mut ApiWorld, verifier: String) {
 
 #[given(expr = "I hold an OAuth2 access token for MCP with the scope {string}")]
 async fn i_hold_a_token(world: &mut ApiWorld, scope: String) {
+    if world.sessions.api_token.is_none() {
+        let client = world.client();
+        let app = world.app.get().await;
+        world.sessions.api_token = Some(create_api_token(&client, app).await.json().await.unwrap());
+    }
     register_loopback_client(world).await;
     world.mcp_oauth.verifier = Some("scope-test-verifier-0123456789-abcdefghijklmnop".to_string());
     i_already_consented(world, "read write".to_string()).await;

@@ -262,14 +262,8 @@ fn content_len(world: &ApiWorld) -> usize {
         .len()
 }
 
-#[then(expr = "the MCP answer lists {int} notification(s)")]
-fn the_answer_lists_notifications(world: &mut ApiWorld, count: usize) {
-    assert_eq!(body(world)["result"]["isError"], false);
-    assert_eq!(content_len(world), count);
-}
-
-#[then(expr = "the MCP answer lists {int} task(s)")]
-fn the_answer_lists_tasks(world: &mut ApiWorld, count: usize) {
+#[then(regex = r"^the MCP answer lists (\d+) (?:notifications?|tasks?)$")]
+fn the_answer_lists_items(world: &mut ApiWorld, count: usize) {
     assert_eq!(body(world)["result"]["isError"], false);
     assert_eq!(content_len(world), count);
 }
@@ -337,7 +331,9 @@ fn the_task_was_created(world: &mut ApiWorld) {
     assert!(world.mcp.task_id.is_some(), "{}", body(world));
 }
 
-#[then("GitHub received the calls it was told to expect, and no job is left in the queue")]
+#[then(
+    "GitHub received the calls it was told to expect, and no job is left in the queue, waiting up to 10 seconds"
+)]
 async fn github_received_the_calls(world: &mut ApiWorld) {
     let expected = world.mcp.expected_github_calls.clone();
     let app = world.app.get().await;
