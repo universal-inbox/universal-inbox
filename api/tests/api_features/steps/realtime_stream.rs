@@ -174,8 +174,8 @@ async fn a_worker_publishes_for_the_other_user(world: &mut ApiWorld, kind: Event
     publish_event(user_id, kind.0).await;
 }
 
-#[when("two scheduling intervals pass")]
-async fn two_scheduling_intervals_pass(_world: &mut ApiWorld) {
+#[when("I wait two seconds, as long as two scheduling intervals")]
+async fn i_wait_two_scheduling_intervals(_world: &mut ApiWorld) {
     tokio::time::sleep(Duration::from_secs(2)).await;
 }
 
@@ -267,4 +267,23 @@ async fn my_connection_was_never_scheduled(world: &mut ApiWorld) {
 #[then("my GitHub connection was scheduled for a sync")]
 async fn my_connection_was_scheduled(world: &mut ApiWorld) {
     assert!(github_scheduled_at(world).await.is_some());
+}
+
+#[when("a visitor without any credential requests the event stream")]
+async fn a_visitor_requests_the_event_stream(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    let request = Client::new().get(format!("{}events", app.api_address));
+    record_the_answer(world, request).await;
+}
+
+#[then("that other user can still open an event stream")]
+async fn the_other_user_can_still_open_a_stream(world: &mut ApiWorld) {
+    let client = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .client
+        .clone();
+    let app = world.app.get().await;
+    EventStream::open(&client, &app.api_address).await;
 }

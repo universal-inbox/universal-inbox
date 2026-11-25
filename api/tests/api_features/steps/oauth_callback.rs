@@ -20,52 +20,37 @@ use universal_inbox::{
             google_calendar::GoogleCalendarConfig,
             google_drive::GoogleDriveConfig,
             google_mail::{GoogleMailConfig, GoogleMailContext},
-            notion::{NotionConfig, NotionContext},
+            notion::NotionConfig,
             ticktick::TickTickConfig,
         },
-        provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
+        provider::{IntegrationConnectionContext, IntegrationProviderKind},
     },
-    notification::NotificationSourceKind,
     pii::Pii,
     user::UserId,
 };
-use universal_inbox_api::{
-    integrations::google_mail::GoogleMailThreadList,
-    repository::oauth_credential::OAuthCredentialRepository,
-    universal_inbox::integration_connection::service::OAUTH_STATE_PREFIX,
-};
+use universal_inbox_api::universal_inbox::integration_connection::service::OAUTH_STATE_PREFIX;
 
 use crate::{
     common::settings,
     helpers::{
         TestedApp,
         integration_connection::{create_integration_connection, google_account_id},
-        notification::{
-            google_mail::{
-                google_mail_labels_list, mock_google_mail_labels_list_service,
-                mock_google_mail_threads_list_service,
-            },
-            sync_notifications,
-        },
-        notion::{
-            BLOCK_ID, DISCUSSION_ID, PAGE_ID, notion_comment_event, post_signed_notion_event,
-        },
         user::front_origin_header,
     },
     steps::{integration_connections::stored_connection, provider::ProviderName},
     world::ApiWorld,
 };
 
-const GOOGLE_ACCESS_TOKEN: &str = "google_mail_test_access_token";
+pub(super) const GOOGLE_ACCESS_TOKEN: &str = "google_mail_test_access_token";
 
-fn front(app: &TestedApp) -> String {
+pub(super) fn front(app: &TestedApp) -> String {
     app.front_base_url
         .as_str()
         .trim_end_matches('/')
         .to_string()
 }
 
-fn config_of(kind: IntegrationProviderKind) -> IntegrationConnectionConfig {
+pub(super) fn config_of(kind: IntegrationProviderKind) -> IntegrationConnectionConfig {
     match kind {
         IntegrationProviderKind::GoogleMail => {
             IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled())
@@ -86,8 +71,15 @@ fn config_of(kind: IntegrationProviderKind) -> IntegrationConnectionConfig {
     }
 }
 
-async fn authorization_url(world: &mut ApiWorld) -> url::Url {
+pub(super) async fn authorization_url(world: &mut ApiWorld) -> url::Url {
     let id = world.oauth_callback.connection_id.unwrap();
+    authorization_url_of(world, id).await
+}
+
+pub(super) async fn authorization_url_of(
+    world: &mut ApiWorld,
+    id: IntegrationConnectionId,
+) -> url::Url {
     let client = world.client();
     let app = world.app.get().await;
     let body: Value = client
@@ -106,7 +98,7 @@ async fn authorization_url(world: &mut ApiWorld) -> url::Url {
     .expect("Invalid authorization URL")
 }
 
-async fn new_connection(
+pub(super) async fn new_connection(
     app: &TestedApp,
     user_id: UserId,
     kind: IntegrationProviderKind,
@@ -127,7 +119,7 @@ async fn new_connection(
     .await
 }
 
-async fn start_flow(
+pub(super) async fn start_flow(
     world: &mut ApiWorld,
     kind: IntegrationProviderKind,
     provider_user_id: Option<String>,
@@ -302,7 +294,7 @@ async fn notion_exchanges_the_code(world: &mut ApiWorld) {
         .await;
 }
 
-async fn api_key(client: &Client, app: &TestedApp) -> AuthenticationToken {
+pub(super) async fn api_key(client: &Client, app: &TestedApp) -> AuthenticationToken {
     client
         .post(format!("{}users/me/authentication-tokens", app.api_address))
         .header(reqwest::header::ORIGIN, front_origin_header(app))
@@ -314,14 +306,14 @@ async fn api_key(client: &Client, app: &TestedApp) -> AuthenticationToken {
         .expect("Failed to deserialize API key response")
 }
 
-enum Caller {
+pub(super) enum Caller {
     Owner,
     OtherUser,
     Anonymous,
     McpToken,
 }
 
-async fn call_back(world: &mut ApiWorld, caller: Caller, query: String) {
+pub(super) async fn call_back(world: &mut ApiWorld, caller: Caller, query: String) {
     let bearer = match caller {
         Caller::Owner => {
             let client = world.client();
@@ -373,7 +365,7 @@ async fn call_back(world: &mut ApiWorld, caller: Caller, query: String) {
         .map(|location| location.to_str().unwrap().to_string());
 }
 
-fn state_query(world: &ApiWorld, code: &str) -> String {
+pub(super) fn state_query(world: &ApiWorld, code: &str) -> String {
     format!(
         "state={}&code={code}",
         urlencoding::encode(world.oauth_callback.state.as_ref().unwrap())
@@ -455,365 +447,22 @@ async fn the_connection_is_untouched(world: &mut ApiWorld) {
     assert_eq!(connection.provider_user_id, None);
 }
 
-#[then("the state of that flow is still stored")]
-async fn the_state_is_still_stored(world: &mut ApiWorld) {
+async fn stored_state(world: &mut ApiWorld) -> Option<String> {
     let state = world.oauth_callback.state.clone().unwrap();
     let app = world.app.get().await;
     let mut conn = app.cache.connection_manager.clone();
-    let stored: Option<String> =
-        redis::AsyncCommands::get(&mut conn, format!("{OAUTH_STATE_PREFIX}{state}"))
-            .await
-            .expect("Failed to read OAuth state");
-    assert!(
-        stored.is_some(),
-        "an anonymous callback must not consume the state"
-    );
-}
-
-#[then(expr = "my connection is validated, and pinned to the Google account of {string}")]
-async fn the_connection_is_pinned(world: &mut ApiWorld, account: String) {
-    let id = world.oauth_callback.connection_id.unwrap();
-    let connection = stored_connection(world, id).await;
-    assert_eq!(connection.status, IntegrationConnectionStatus::Validated);
-    assert_eq!(
-        connection.provider_user_id,
-        Some(google_account_id(&account))
-    );
-}
-
-#[when("I sync my Google Mail notifications, which has no thread")]
-async fn i_sync_gmail_with_no_thread(world: &mut ApiWorld) {
-    let client = world.client();
-    let app = world.app.get().await;
-    let server = &app.google_mail_mock_server;
-    mock_google_mail_labels_list_service(server, &google_mail_labels_list()).await;
-    let page_size = settings().integrations["google_mail"].page_size.unwrap();
-    mock_google_mail_threads_list_service(
-        server,
-        None,
-        page_size,
-        Some(vec![GoogleMailConfig::enabled().synced_label.id]),
-        &GoogleMailThreadList {
-            threads: None,
-            result_size_estimate: 0,
-            next_page_token: None,
-        },
-    )
-    .await;
-    sync_notifications(
-        &client,
-        &app.api_address,
-        Some(NotificationSourceKind::GoogleMail),
-        false,
-    )
-    .await;
-}
-
-#[then(expr = "my Google Mail connection caches the address {string}")]
-async fn the_connection_caches_the_address(world: &mut ApiWorld, address: String) {
-    let id = world.oauth_callback.connection_id.unwrap();
-    let connection = stored_connection(world, id).await;
-    let IntegrationProvider::GoogleMail {
-        context: Some(GoogleMailContext {
-            user_email_address, ..
-        }),
-        ..
-    } = connection.provider
-    else {
-        panic!("Google Mail integration connection must have a context");
-    };
-    assert_eq!(
-        user_email_address,
-        Pii::<EmailAddress>::from_str(&address).unwrap()
-    );
-}
-
-#[then(
-    "the Google Calendar authorization asks for the scope to read the primary calendar, and the one to write events"
-)]
-fn the_calendar_scopes(world: &mut ApiWorld) {
-    let url = world.oauth_callback.authorization_url.clone().unwrap();
-    let scope = url
-        .query_pairs()
-        .find(|(key, _)| key == "scope")
-        .expect("Missing scope in authorization URL")
-        .1
-        .to_string();
-    let scopes: Vec<&str> = scope.split(' ').collect();
-    assert!(scopes.contains(&"https://www.googleapis.com/auth/calendar.calendars.readonly"));
-    assert!(scopes.contains(&"https://www.googleapis.com/auth/calendar.events"));
-}
-
-#[then("the Notion authorization asks for a user owner, with the client id and no scope")]
-fn the_notion_authorization(world: &mut ApiWorld) {
-    let url = world.oauth_callback.authorization_url.clone().unwrap();
-    assert_eq!(
-        format!(
-            "{}://{}{}",
-            url.scheme(),
-            url.host_str().unwrap(),
-            url.path()
-        ),
-        "https://api.notion.com/v1/oauth/authorize"
-    );
-    let params: Vec<(String, String)> = url
-        .query_pairs()
-        .map(|(key, value)| (key.to_string(), value.to_string()))
-        .collect();
-    assert!(params.contains(&("owner".to_string(), "user".to_string())));
-    assert!(params.contains(&(
-        "client_id".to_string(),
-        settings().integrations["notion"].oauth_client_id.clone()
-    )));
-    assert!(!params.iter().any(|(key, _)| key == "scope"));
-}
-
-#[then(
-    "my Notion connection is validated, pinned to the Notion user, and keeps the workspace and bot"
-)]
-async fn the_notion_connection_is_pinned(world: &mut ApiWorld) {
-    let id = world.oauth_callback.connection_id.unwrap();
-    let connection = stored_connection(world, id).await;
-    assert_eq!(connection.status, IntegrationConnectionStatus::Validated);
-    assert_eq!(
-        connection.provider_user_id,
-        Some("notion-user-id".to_string())
-    );
-    assert_eq!(
-        connection.provider,
-        IntegrationProvider::Notion {
-            context: Some(NotionContext {
-                workspace_id: "notion-workspace-id".to_string(),
-                workspace_name: Some("Acme".to_string()),
-                bot_id: "notion-bot-id".to_string(),
-                user_display_name: Some(Pii::new("Jane Doe".to_string())),
-                user_email_address: Some(Pii::new(
-                    EmailAddress::from_str("jane.doe@example.com").unwrap()
-                )),
-                comments_reconciled_at: None,
-            }),
-            config: NotionConfig {
-                sync_comments_enabled: true,
-                sync_mentions_enabled: true,
-            },
-        }
-    );
-}
-
-fn notion_event() -> Value {
-    notion_comment_event(
-        "notion-workspace-id",
-        "comment.created",
-        "comment-1",
-        "notion-user-someone",
-        DISCUSSION_ID,
-        PAGE_ID,
-        BLOCK_ID,
-        &["notion-user-id"],
-    )
-}
-
-#[when("Notion sends an event of that workspace")]
-#[given("Notion sends an event of that workspace")]
-async fn notion_sends_an_event(world: &mut ApiWorld) {
-    let client = world.client();
-    let app = world.app.get().await;
-    post_signed_notion_event(&client, &app.api_address, &notion_event()).await;
-}
-
-#[given(expr = "I have a new {provider} connection, not authorized yet")]
-async fn i_have_a_new_connection(world: &mut ApiWorld, provider: ProviderName) {
-    let user_id = world.user().id;
-    let app = world.app.get().await;
-    let connection = new_connection(app, user_id, provider.0, None, None).await;
-    world.oauth_callback.connection_id = Some(connection.id);
-}
-
-#[when("the other user asks for the authorization URL of my connection")]
-async fn the_other_user_asks_for_my_authorization_url(world: &mut ApiWorld) {
-    let id = world.oauth_callback.connection_id.unwrap();
-    let client = world.other_session.as_ref().unwrap().client.clone();
-    let app = world.app.get().await;
-    let response = client
-        .get(format!("{}oauth/authorize-url/{id}", app.api_address))
-        .send()
+    redis::AsyncCommands::get(&mut conn, format!("{OAUTH_STATE_PREFIX}{state}"))
         .await
-        .expect("Failed to start OAuth authorization");
-    world.oauth_callback.status = Some(response.status());
+        .expect("Failed to read OAuth state")
 }
 
-#[then("that request is refused as forbidden")]
-fn that_request_is_forbidden(world: &mut ApiWorld) {
-    assert_eq!(world.oauth_callback.status, Some(StatusCode::FORBIDDEN));
+#[then("the state of that flow is gone")]
+async fn the_state_is_gone(world: &mut ApiWorld) {
+    assert_eq!(stored_state(world).await, None);
 }
 
-#[given("the other user has a new Google Mail connection, not authorized yet")]
-async fn the_other_user_has_a_connection(world: &mut ApiWorld) {
-    let user_id = world.other_session.as_ref().unwrap().user.id;
-    let app = world.app.get().await;
-    let connection = new_connection(
-        app,
-        user_id,
-        IntegrationProviderKind::GoogleMail,
-        None,
-        None,
-    )
-    .await;
-    world.oauth_callback.other_connection_id = Some(connection.id);
-}
-
-#[given("a state of mine naming that connection of the other user is stored")]
-async fn a_state_naming_the_other_connection_is_stored(world: &mut ApiWorld) {
-    let user_id = world.user().id;
-    let other_id = world.oauth_callback.other_connection_id.unwrap();
-    let app = world.app.get().await;
-    let own = new_connection(
-        app,
-        user_id,
-        IntegrationProviderKind::GoogleMail,
-        None,
-        None,
-    )
-    .await;
-    world.oauth_callback.connection_id = Some(own.id);
-    let issued_state = authorization_url(world)
-        .await
-        .query_pairs()
-        .find(|(key, _)| key == "state")
-        .map(|(_, value)| value.to_string())
-        .unwrap();
-    let app = world.app.get().await;
-    let mut conn = app.cache.connection_manager.clone();
-    let stored: String =
-        redis::AsyncCommands::get(&mut conn, format!("{OAUTH_STATE_PREFIX}{issued_state}"))
-            .await
-            .expect("Failed to read the issued OAuth state");
-    let mut data: serde_json::Value = serde_json::from_str(&stored).unwrap();
-    data["integration_connection_id"] = json!(other_id);
-    let state = uuid::Uuid::new_v4().to_string();
-    redis::AsyncCommands::set_ex::<_, _, ()>(
-        &mut conn,
-        format!("{OAUTH_STATE_PREFIX}{state}"),
-        data.to_string(),
-        600,
-    )
-    .await
-    .expect("Failed to store the OAuth state");
-    world.oauth_callback.state = Some(state);
-}
-
-#[then("I am redirected to my settings with an OAuth error")]
-async fn i_am_redirected_with_an_error(world: &mut ApiWorld) {
-    let app = world.app.get().await;
-    let prefix = format!("{}/settings?oauth_error=", front(app));
-    let location = world.oauth_callback.location.clone().unwrap_or_default();
-    assert!(
-        location.starts_with(&prefix),
-        "unexpected redirect: {location}"
-    );
-}
-
-#[then("the connection of the other user is still not validated, and not pinned")]
-async fn the_other_connection_is_untouched(world: &mut ApiWorld) {
-    let id = world.oauth_callback.other_connection_id.unwrap();
-    let connection = stored_connection(world, id).await;
-    assert_eq!(connection.status, IntegrationConnectionStatus::Created);
-    assert_eq!(connection.provider_user_id, None);
-}
-
-#[then(expr = "{provider} was not called by that callback")]
-async fn the_provider_received_no_request(world: &mut ApiWorld, provider: ProviderName) {
-    let app = world.app.get().await;
-    let requests = provider
-        .mock_server(app)
-        .received_requests()
-        .await
-        .unwrap()
-        .len();
-    assert_eq!(requests, 0);
-}
-
-async fn credentials_of(world: &mut ApiWorld, connection_id: IntegrationConnectionId) -> usize {
-    let app = world.app.get().await;
-    let mut transaction = app.repository.begin().await.unwrap();
-    let credential = app
-        .repository
-        .get_oauth_credential(&mut transaction, connection_id)
-        .await
-        .unwrap();
-    transaction.commit().await.unwrap();
-    usize::from(credential.is_some())
-}
-
-#[then("the credential of my connection is stored")]
-async fn the_credential_is_stored(world: &mut ApiWorld) {
-    let id = world.oauth_callback.connection_id.unwrap();
-    assert_eq!(credentials_of(world, id).await, 1);
-}
-
-#[then("no credential is stored for my connection")]
-async fn no_credential_is_stored(world: &mut ApiWorld) {
-    let id = world.oauth_callback.connection_id.unwrap();
-    assert_eq!(credentials_of(world, id).await, 0);
-}
-
-#[then("no credential is stored for the connection of the other user")]
-async fn no_credential_for_the_other_user(world: &mut ApiWorld) {
-    let id = world.oauth_callback.other_connection_id.unwrap();
-    assert_eq!(credentials_of(world, id).await, 0);
-}
-
-#[given(
-    expr = "Google Mail would accept any code and say that the account is {string}, if it were asked"
-)]
-async fn google_mail_would_accept_any_code(world: &mut ApiWorld, email: String) {
-    let app = world.app.get().await;
-    let server = &app.google_mail_mock_server;
-    Mock::given(method("POST"))
-        .and(path("/token"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "access_token": GOOGLE_ACCESS_TOKEN,
-            "refresh_token": "google-refresh-token",
-            "token_type": "Bearer",
-            "expires_in": 3599,
-            "scope": "https://www.googleapis.com/auth/gmail.modify"
-        })))
-        .mount(server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/users/me/profile"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "emailAddress": email, "messagesTotal": 42, "threadsTotal": 12, "historyId": "1234"
-        })))
-        .mount(server)
-        .await;
-}
-
-#[then("no OAuth state is stored for my connection")]
-async fn no_oauth_state_is_stored(world: &mut ApiWorld) {
-    let id = world.oauth_callback.connection_id.unwrap().to_string();
-    let app = world.app.get().await;
-    let mut conn = app.cache.connection_manager.clone();
-    let keys: Vec<String> = redis::cmd("KEYS")
-        .arg(format!("{OAUTH_STATE_PREFIX}*"))
-        .query_async(&mut conn)
-        .await
-        .expect("Failed to list OAuth states");
-    for key in keys {
-        let state: Option<String> = redis::AsyncCommands::get(&mut conn, &key)
-            .await
-            .expect("Failed to read OAuth state");
-        assert!(
-            !state.unwrap_or_default().contains(&id),
-            "an OAuth state names my connection: {key}"
-        );
-    }
-}
-
-#[when(
-    "the provider calls back with that state and a code, bearing my OAuth2 access token for MCP"
-)]
-async fn the_provider_calls_back_with_an_mcp_token(world: &mut ApiWorld) {
-    let query = state_query(world, "provider-code");
-    call_back(world, Caller::McpToken, query).await;
+#[then("the state of that flow is still stored")]
+async fn the_state_is_still_stored(world: &mut ApiWorld) {
+    let stored = stored_state(world).await;
+    assert!(stored.is_some(), "the callback must not consume the state");
 }

@@ -29,6 +29,8 @@ Feature: The realtime event stream
       Then my stream delivers the event notifications.changed, for "mine" only
       When a worker publishes the event tasks.changed for that other user
       Then the stream of that other user delivers the event tasks.changed, with no ids
+      When a worker publishes the event integration_connection.changed for me
+      Then my stream delivers the event integration_connection.changed, with no ids
 
     @legacy:test_realtime_stream::test_event_stream_delivers_events_published_by_another_process
     Scenario: An event published by a worker reaches the stream of its user
@@ -52,6 +54,10 @@ Feature: The realtime event stream
 
   Rule: Who may open a stream
 
+    Scenario: A visitor without any credential is refused
+      When a visitor without any credential requests the event stream
+      Then the app answers 401
+
     @legacy:test_realtime_stream::test_event_stream_rejects_api_keys
     Scenario: An API token is refused
       Given I am signed in
@@ -69,9 +75,11 @@ Feature: The realtime event stream
     @legacy:test_realtime_stream::test_event_stream_is_refused_above_the_streams_cap
     Scenario: A user above the cap of open streams is refused
       Given I am signed in
+      Given another user is signed in
       When I open as many event streams as a user may
       And I request the event stream
       Then the app answers 429
+      And that other user can still open an event stream
 
   Rule: The syncs of the users with an open stream are scheduled
 
@@ -89,5 +97,5 @@ Feature: The realtime event stream
 
     @legacy:test_realtime_stream::test_due_syncs_of_a_disconnected_user_are_not_scheduled
     Scenario: The syncs of a user without an open stream are not scheduled
-      When two scheduling intervals pass
+      When I wait two seconds, as long as two scheduling intervals
       Then my GitHub connection was never scheduled for a sync

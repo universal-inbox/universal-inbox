@@ -159,6 +159,7 @@ Feature: The OAuth callback
       When the provider calls back with that state and a code, for the owner of the connection
       Then I am redirected to my settings with "oauth_error=invalid-state"
       And the connection of the other user is still not validated, and not pinned
+      And the state of that flow is gone
       And no credential is stored for the connection of the other user
       And Google Mail was not called by that callback
 
@@ -167,9 +168,10 @@ Feature: The OAuth callback
       And the provider exchanges the code for an access token of Google Mail
       And Google Mail tells that the account of the access token is "Jane.Doe@example.com"
       When the provider calls back with that state and a code, for the owner of the connection
+      And I note the credential of my connection
       And the provider calls back with that state and a code, for the owner of the connection
       Then I am redirected to my settings with "oauth_error=invalid-state"
-      And the credential of my connection is stored
+      And the credential of my connection is as I noted it
 
     Scenario: An OAuth2 access token for MCP cannot complete a callback
       Given I started the OAuth flow of a new Google Mail connection
@@ -180,3 +182,33 @@ Feature: The OAuth callback
       And Google Mail was not called by that callback
       And the state of that flow is still stored
       And no credential is stored for my connection
+
+  Rule: A callback completes the flow it was started for
+
+    Scenario: A callback without code is refused and consumes nothing
+      Given I started the OAuth flow of a new Google Mail connection
+      When the provider calls back with that state and no code, for the owner of the connection
+      Then I am redirected to my settings with "oauth_error=invalid-state"
+      And Google Mail was not called by that callback
+      And the state of that flow is still stored
+      And no credential is stored for my connection
+
+    Scenario: The authorization asks for a PKCE challenge and the token request proves it with the verifier
+      Given I started the OAuth flow of a new Google Mail connection
+      And the authorization asks for a PKCE challenge, with the method S256
+      And the provider exchanges the code for an access token of Google Mail
+      And Google Mail tells that the account of the access token is "Jane.Doe@example.com"
+      When the provider calls back with that state and a code, for the owner of the connection
+      Then the token request of Google Mail carried the verifier of that challenge
+
+    Scenario: A late callback of an earlier flow is refused as expired and leaves the credential alone
+      Given I started the OAuth flow of a new Google Mail connection
+      And I started that flow a second time
+      And the provider exchanges the code for an access token of Google Mail
+      And Google Mail tells that the account of the access token is "Jane.Doe@example.com"
+      When the provider calls back with that state and a code, for the owner of the connection
+      Then my connection is validated, and pinned to the Google account of "Jane.Doe@example.com"
+      When I note the credential of my connection
+      And the provider calls back with the earlier state and a code, for the owner of the connection
+      Then I am redirected to my settings with "oauth_error=expired-state"
+      And the credential of my connection is as I noted it
