@@ -30,6 +30,7 @@ Feature: Google Calendar notifications
     @legacy:test_google_calendar_notifications::patch_resource::test_patch_google_calendar_notification_snoozed_until
     Scenario: Snoozing the notification reaches neither Google Mail nor Google Calendar
       Given I already have the notification "invitation" of that invitation, which I have not answered
+      And Google Mail is not asked anything
       And Google Calendar is not asked anything
       When I snooze "invitation" until "2022-01-01T01:02:03Z"
       Then the patched notification is "invitation" snoozed until "2022-01-01T01:02:03Z"
@@ -62,7 +63,29 @@ Feature: Google Calendar notifications
     @legacy:test_google_calendar_notifications::update_invitation::test_answer_google_calendar_invitation_reply_is_rejected
     Scenario: The reply to an invitation cannot be answered
       Given I already have the notification "reply" of a reply to an invitation
+      And Google Mail is not asked anything
       And Google Calendar is not asked anything
       When I answer the invitation of "reply" with accepted
       Then the app answers 400
       And "reply", read again, keeps its status
+
+  Rule: Another user cannot act on my notification of an invitation
+
+    Background:
+      Given I already have the notification "invitation" of that invitation, which I have not answered
+      And another user is signed in
+      And that other user has their own Google Mail and Google Calendar connections, with access tokens of their own, and the notification "theirs" of the same invitation
+      And Google Mail is not asked anything
+      And Google Calendar is not asked anything
+
+    Scenario: Another user cannot answer my invitation, and their own notification of it is left alone
+      When that other user answers the invitation of "invitation" with accepted
+      Then the app answers 403
+      And "invitation", read again, is exactly as it was
+      And the notification "theirs" of that other user, read by that other user, is exactly as it was
+
+    Scenario: Another user cannot unsubscribe me from my invitation, which would delete the event
+      When that other user tries to set the status of "invitation" to unsubscribed
+      Then the app answers 403
+      And "invitation", read again, is exactly as it was
+      And the notification "theirs" of that other user, read by that other user, is exactly as it was

@@ -10,7 +10,10 @@ use wiremock::{
 };
 
 use universal_inbox::{
-    integration_connection::integrations::google_mail::GoogleMailConfig,
+    integration_connection::{
+        config::IntegrationConnectionConfig,
+        integrations::{google_calendar::GoogleCalendarConfig, google_mail::GoogleMailConfig},
+    },
     notification::{
         Notification, NotificationStatus, NotificationWithTask,
         service::{InvitationPatch, NotificationPatch},
@@ -20,18 +23,34 @@ use universal_inbox::{
             google_calendar::{
                 EventAttendee, GoogleCalendarEvent, GoogleCalendarEventAttendeeResponseStatus,
             },
-            google_mail::GOOGLE_MAIL_INBOX_LABEL,
+            google_mail::{GOOGLE_MAIL_INBOX_LABEL, GoogleMailThread},
         },
         item::ThirdPartyItemData,
     },
 };
 
+use universal_inbox_api::integrations::oauth2::AccessToken;
+
 use crate::{
+    common::settings,
     helpers::{
-        notification::google_calendar::google_calendar_event_reply,
+        integration_connection::{
+            OAuthCredentialFixture, create_and_mock_integration_connection,
+            google_calendar_oauth_credential, google_mail_oauth_credential,
+        },
+        notification::google_calendar::{
+            create_notification_from_google_calendar_event, google_calendar_event,
+            google_calendar_event_reply,
+        },
         rest::{get_resource, patch_resource},
     },
-    steps::{google_mail_invitations::have_a_notification_of_the_event, status::UserStatus},
+    steps::{
+        google_mail_invitations::{
+            KNOWN_INVITATION_THREAD_ID, have_a_notification_of_the_event, invitation_thread,
+            with_my_answer,
+        },
+        status::UserStatus,
+    },
     world::{ApiWorld, Response},
 };
 
@@ -72,15 +91,14 @@ fn event_with_my_answer(
     answer: GoogleCalendarEventAttendeeResponseStatus,
 ) -> (Vec<EventAttendee>, GoogleCalendarEvent) {
     let mut attendees = event.attendees.clone();
-    if let Some(index) = attendees
+    let index = attendees
         .iter()
         .position(|attendee| attendee.self_ == Some(true))
-    {
-        attendees[index] = EventAttendee {
-            response_status: answer,
-            ..attendees[index].clone()
-        };
-    }
+        .expect("the event has no self attendee");
+    attendees[index] = EventAttendee {
+        response_status: answer,
+        ..attendees[index].clone()
+    };
     let updated = GoogleCalendarEvent {
         attendees: attendees.clone(),
         ..event.clone()
@@ -266,4 +284,144 @@ async fn the_notification_keeps_its_status(world: &mut ApiWorld, name: String) {
     let read: Box<NotificationWithTask> =
         get_resource(&client, &app.api_address, "notifications", before.id.into()).await;
     assert_eq!(read.status, before.status);
+}
+
+#[given("Google Mail is not asked anything")]
+async fn google_mail_is_not_asked_anything(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    Mock::given(any())
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&app.google_mail_mock_server)
+        .await;
+}
+
+#[given(
+    expr = "that other user has their own Google Mail and Google Calendar connections, with access tokens of their own, and the notification {string} of the same invitation"
+)]
+async fn that_other_user_has_the_same_invitation(world: &mut ApiWorld, name: String) {
+    let other_user_id = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .user
+        .id;
+    let app = world.app.get().await;
+    let mail = create_and_mock_integration_connection(
+        app,
+        other_user_id,
+        IntegrationConnectionConfig::GoogleMail(GoogleMailConfig::enabled()),
+        &settings(),
+        OAuthCredentialFixture {
+            access_token: AccessToken("other_user_google_mail_access_token".to_string()),
+            ..google_mail_oauth_credential()
+        },
+        None,
+        None,
+    )
+    .await;
+    let calendar = create_and_mock_integration_connection(
+        app,
+        other_user_id,
+        IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
+        &settings(),
+        OAuthCredentialFixture {
+            access_token: AccessToken("other_user_google_calendar_access_token".to_string()),
+            ..google_calendar_oauth_credential()
+        },
+        None,
+        None,
+    )
+    .await;
+    let thread = GoogleMailThread {
+        id: KNOWN_INVITATION_THREAD_ID.to_string(),
+        ..invitation_thread()
+    };
+    let notification = create_notification_from_google_calendar_event(
+        app,
+        &thread,
+        &with_my_answer(
+            &google_calendar_event(),
+            GoogleCalendarEventAttendeeResponseStatus::NeedsAction,
+        ),
+        other_user_id,
+        mail.id,
+        calendar.id,
+    )
+    .await;
+    world.notifications.by_name.insert(name, *notification);
+}
+
+#[when(expr = "that other user answers the invitation of {string} with {answer}")]
+async fn that_other_user_answers(world: &mut ApiWorld, name: String, answer: Answer) {
+    let id = notification_named(world, &name).id;
+    let client = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .client
+        .clone();
+    let app = world.app.get().await;
+    let response = client
+        .patch(format!("{}notifications/{id}/invitation", app.api_address))
+        .json(&InvitationPatch {
+            response_status: answer.0,
+        })
+        .send()
+        .await
+        .expect("Failed to execute request");
+    world.http.record(Response::read(response).await);
+}
+
+#[when(expr = "that other user tries to set the status of {string} to {status}")]
+async fn that_other_user_tries_to_set_the_status(
+    world: &mut ApiWorld,
+    name: String,
+    status: UserStatus,
+) {
+    let id = notification_named(world, &name).id;
+    let client = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .client
+        .clone();
+    let app = world.app.get().await;
+    let response = client
+        .patch(format!("{}notifications/{id}", app.api_address))
+        .json(&NotificationPatch {
+            status: Some(status.0),
+            ..Default::default()
+        })
+        .send()
+        .await
+        .expect("Failed to execute request");
+    world.http.record(Response::read(response).await);
+}
+
+#[then(expr = "{string}, read again, is exactly as it was")]
+async fn the_notification_is_exactly_as_it_was(world: &mut ApiWorld, name: String) {
+    let before = notification_named(world, &name);
+    let client = world.client();
+    let app = world.app.get().await;
+    let read: Box<NotificationWithTask> =
+        get_resource(&client, &app.api_address, "notifications", before.id.into()).await;
+    assert_eq!(Notification::from(*read), before);
+}
+
+#[then(
+    expr = "the notification {string} of that other user, read by that other user, is exactly as it was"
+)]
+async fn the_notification_of_the_other_user_is_as_it_was(world: &mut ApiWorld, name: String) {
+    let before = notification_named(world, &name);
+    let client = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .client
+        .clone();
+    let app = world.app.get().await;
+    let read: Box<NotificationWithTask> =
+        get_resource(&client, &app.api_address, "notifications", before.id.into()).await;
+    assert_eq!(Notification::from(*read), before);
 }

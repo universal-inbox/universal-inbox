@@ -51,9 +51,9 @@ use crate::{
 const INVITATION_ICAL_UID: &str = "event_icaluid1";
 const REPLY_ICAL_UID: &str = "event_icaluid2";
 const EARLIER_THREAD_ID: &str = "anything";
-const KNOWN_INVITATION_THREAD_ID: &str = "invitation_thread";
+pub(super) const KNOWN_INVITATION_THREAD_ID: &str = "invitation_thread";
 
-fn invitation_thread() -> GoogleMailThread {
+pub(super) fn invitation_thread() -> GoogleMailThread {
     google_mail_thread_with_invitation(
         raw_google_mail_thread_with_invitation(),
         google_mail_user_profile(),
