@@ -20,6 +20,8 @@ Feature: Revoking the authorization of an OAuth2 client
     When I exchange the authorization code of the client "A"
     Then the exchange issued tokens
     And the client "A" has 1 refresh token, 1 of them live
+    When I use the refresh token that the exchange of the client "A" gave me
+    Then the exchange issued tokens
 
   @legacy:test_oauth2_revocation::exchange_fails_when_consent_is_gone_even_if_code_survives
   Scenario: A code whose consent is gone cannot be exchanged, even though the code survives
