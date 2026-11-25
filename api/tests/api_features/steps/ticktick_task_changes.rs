@@ -572,6 +572,7 @@ async fn that_other_user_has_a_task(world: &mut ApiWorld) {
                 .set_body_json(ticktick_projects_response()),
         )
         .up_to_n_times(1)
+        .expect(1)
         .mount(&app.ticktick_mock_server)
         .await;
     let creation = create_task_third_party_item(
