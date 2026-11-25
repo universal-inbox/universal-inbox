@@ -62,6 +62,7 @@ mod slack_bridge;
 mod slack_emojis;
 mod slack_message_jobs;
 mod slack_reaction_events;
+mod slack_revocation;
 mod slack_tasks;
 mod slack_threads_sync;
 mod slack_webhook_events;

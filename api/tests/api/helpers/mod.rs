@@ -47,6 +47,7 @@ pub mod realtime;
 pub mod rest;
 pub mod slack;
 pub mod slack_bridge;
+pub mod slack_revocation;
 pub mod task;
 pub mod third_party;
 pub mod user;

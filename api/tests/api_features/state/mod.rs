@@ -20,6 +20,7 @@ mod passkey;
 mod realtime_stream;
 mod set_aside;
 mod slack_bridge;
+mod slack_revocation;
 mod slack_tasks;
 mod slack_threads;
 mod slack_webhook;
@@ -56,6 +57,7 @@ pub use passkey::{Device, Passkeys, PendingSignIn, Registration, VisitorPasskey}
 pub use realtime_stream::{EventStream, RealtimePublication, RealtimeStream};
 pub use set_aside::SetAside;
 pub use slack_bridge::{Deletion, SlackBridge};
+pub use slack_revocation::SlackRevocation;
 pub use slack_tasks::SlackTasks;
 pub use slack_threads::{SlackThreadState, SlackThreads};
 pub use slack_webhook::{SlackEvent, SlackWebhook};
