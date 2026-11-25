@@ -19,16 +19,17 @@ use crate::{
         Account, Audit, Authorizations, Billing, Browser, Connections, EmailVerification,
         Encryption, GithubSync, GoogleDriveSync, GoogleMailSync, Integrations, Jobs, LinearTasks,
         LinkedMethod, McpOauth, McpProtocol, McpSessions, Notifications, NotionSync, NotionWebhook,
-        OauthCallback, Passkeys, PasswordReset, Probe, RealtimePublication, RealtimeStream,
-        Sessions, SetAside, SlackBackfill, SlackBridge, SlackEmojis, SlackRevocation, SlackTasks,
-        SlackThreads, SlackWebhook, Tasks, ThirdPartyItems, TickTickTaskChanges, TickTickTasks,
-        TodoistTaskChanges, TodoistTasks,
+        OauthCallback, OauthRevocation, Passkeys, PasswordReset, Probe, RealtimePublication,
+        RealtimeStream, Sessions, SetAside, SlackBackfill, SlackBridge, SlackEmojis,
+        SlackRevocation, SlackTasks, SlackThreads, SlackWebhook, Tasks, ThirdPartyItems,
+        TickTickTaskChanges, TickTickTasks, TodoistTaskChanges, TodoistTasks,
     },
     steps::set_aside_support::Scene,
 };
 
 #[derive(Default, World)]
 pub struct ApiWorld {
+    pub oauth_revocation: OauthRevocation,
     pub app: AppUnderTest<TestedApp>,
     pub other_app: AppUnderTest<TestedApp>,
     pub session: Option<Session>,

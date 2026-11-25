@@ -44,6 +44,7 @@ mod oauth_callback;
 mod oauth_callback_flows;
 mod oauth_callback_ownership;
 mod oauth_callback_providers;
+mod oauth_revocation;
 mod passkey;
 mod passkey_ceremony;
 mod password;
