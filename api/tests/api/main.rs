@@ -13,7 +13,6 @@ mod test_google_mail_notifications;
 mod test_linear_notifications;
 mod test_linear_tasks;
 mod test_multi_task_manager;
-mod test_notion_webhook;
 mod test_oauth2_cimd;
 mod test_oauth2_revocation;
 mod test_realtime_events;

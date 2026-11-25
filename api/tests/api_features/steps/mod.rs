@@ -31,6 +31,7 @@ mod mcp_session_store;
 mod mcp_triage;
 mod mention;
 mod notifications;
+mod notion_jobs;
 mod notion_sync;
 mod notion_webhook;
 mod oauth_callback;
