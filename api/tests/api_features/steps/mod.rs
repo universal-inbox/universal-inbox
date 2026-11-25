@@ -55,6 +55,7 @@ mod response_body;
 mod session;
 mod set_aside;
 pub mod set_aside_support;
+mod slack_bridge;
 mod slack_emojis;
 mod slack_message_jobs;
 mod slack_reaction_events;

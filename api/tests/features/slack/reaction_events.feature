@@ -105,6 +105,6 @@ Feature: Slack reaction events
       Given I am connected to Slack, syncing its notifications
       And Slack serves the message of the reaction events, taking a second to answer for the message itself
       And Slack delivers the event of the reaction "eyes" being added
-      When I measure how long Slack takes to finish processing that event
+      When I measure how long after its delivery Slack finished processing that event
       Then that wait lasted as long as the slow answer of Slack
       And my notifications list, read once without waiting, has the notification of that message

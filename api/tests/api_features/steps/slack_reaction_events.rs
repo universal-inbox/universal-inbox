@@ -112,6 +112,7 @@ async fn slack_delivers_the_reaction_event(world: &mut ApiWorld, event: Reaction
         ReactionEvent::Added => slack_push_reaction_added_event(),
         ReactionEvent::Removed => slack_push_reaction_removed_event(),
     };
+    world.slack_tasks.delivered_at = Some(Instant::now());
     let response = post_signed_slack_event(&client, &app.api_address, &*pushed).await;
     assert_eq!(response.status(), 200);
 }
@@ -472,12 +473,15 @@ async fn slack_serves_the_message_slowly(world: &mut ApiWorld) {
         .await;
 }
 
-#[when("I measure how long Slack takes to finish processing that event")]
+#[when("I measure how long after its delivery Slack finished processing that event")]
 async fn i_measure_the_wait(world: &mut ApiWorld) {
     let app = world.app.get().await;
-    let started = Instant::now();
     wait_until_the_jobs_are_done(app).await;
-    world.slack_tasks.waited = Some(started.elapsed());
+    let delivered_at = world
+        .slack_tasks
+        .delivered_at
+        .expect("No event was delivered");
+    world.slack_tasks.waited = Some(delivered_at.elapsed());
 }
 
 #[then("that wait lasted as long as the slow answer of Slack")]

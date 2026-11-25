@@ -22,6 +22,10 @@ impl JobCounts {
     fn all_finished(&self) -> bool {
         self.pending == 0 && self.scheduled == 0 && self.pushed == self.done + self.dead
     }
+
+    fn all_ended(&self) -> bool {
+        self.pending == 0 && self.pushed == self.done + self.dead + self.scheduled
+    }
 }
 
 /// Counts the jobs of the queue of the app. A running job is in none of the pending, scheduled,
@@ -63,6 +67,10 @@ pub async fn wait_until_the_jobs_are_done(app: &TestedApp) {
     while calm < CALM_POLLS {
         let counts = count_the_jobs(app).await;
         assert_eq!(counts.dead, 0, "a job died: {counts:?}");
+        assert_eq!(
+            counts.scheduled, 0,
+            "a job failed and waits for its retry: {counts:?}"
+        );
         if counts.all_finished() {
             calm += 1;
         } else {
@@ -71,6 +79,29 @@ pub async fn wait_until_the_jobs_are_done(app: &TestedApp) {
         assert!(
             Instant::now() < deadline,
             "the jobs are not all done after {DEADLINE:?}: {counts:?}"
+        );
+        sleep(POLL_INTERVAL).await;
+    }
+}
+
+/// For the scenarios where a job is expected to fail: waits until every pushed job is done, dead
+/// or waiting for its retry (scheduled), and returns the counts for the scenario to assert.
+pub async fn wait_until_the_jobs_have_ended(app: &TestedApp) -> JobCounts {
+    let deadline = Instant::now() + DEADLINE;
+    let mut calm = 0;
+    loop {
+        let counts = count_the_jobs(app).await;
+        if counts.all_ended() {
+            calm += 1;
+            if calm == CALM_POLLS {
+                return counts;
+            }
+        } else {
+            calm = 0;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the jobs have not all ended after {DEADLINE:?}: {counts:?}"
         );
         sleep(POLL_INTERVAL).await;
     }

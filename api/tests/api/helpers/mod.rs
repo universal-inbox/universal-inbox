@@ -45,6 +45,7 @@ pub mod notification;
 pub mod notion;
 pub mod rest;
 pub mod slack;
+pub mod slack_bridge;
 pub mod task;
 pub mod third_party;
 pub mod user;

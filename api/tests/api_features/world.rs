@@ -20,8 +20,8 @@ use crate::{
         Encryption, GithubSync, GoogleDriveSync, GoogleMailSync, Integrations, Jobs, LinearTasks,
         LinkedMethod, McpOauth, McpProtocol, McpSessions, Notifications, NotionSync, NotionWebhook,
         OauthCallback, Passkeys, PasswordReset, Probe, RealtimeStream, Sessions, SetAside,
-        SlackEmojis, SlackTasks, SlackThreads, SlackWebhook, Tasks, ThirdPartyItems, TickTickTasks,
-        TodoistTaskChanges, TodoistTasks,
+        SlackBridge, SlackEmojis, SlackTasks, SlackThreads, SlackWebhook, Tasks, ThirdPartyItems,
+        TickTickTasks, TodoistTaskChanges, TodoistTasks,
     },
     steps::set_aside_support::Scene,
 };
@@ -57,6 +57,7 @@ pub struct ApiWorld {
     pub todoist_tasks: TodoistTasks,
     pub realtime_stream: RealtimeStream,
     pub slack_tasks: SlackTasks,
+    pub slack_bridge: SlackBridge,
     pub todoist_task_changes: TodoistTaskChanges,
     pub ticktick_tasks: TickTickTasks,
     pub slack_threads: SlackThreads,
