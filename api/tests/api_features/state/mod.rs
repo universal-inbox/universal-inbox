@@ -1,5 +1,6 @@
 mod account;
 mod audit;
+mod billing;
 mod caches;
 mod connections;
 mod encryption;
@@ -30,6 +31,7 @@ pub use account::{
     cookie_client, ordinal,
 };
 pub use audit::Audit;
+pub use billing::Billing;
 pub use caches::{McpSessions, SlackEmojis};
 pub use connections::Connections;
 pub use encryption::{Encryption, RawTokenResponse, RecordedProgress, StoredItem};

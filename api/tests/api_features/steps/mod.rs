@@ -3,6 +3,7 @@ mod api_tokens;
 mod audit_log;
 mod auth;
 mod auth_methods;
+mod billing;
 mod connection_config;
 mod cron;
 mod data_encryption;
