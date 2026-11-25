@@ -183,6 +183,7 @@ pub async fn create_notion_integration_connection(
         IntegrationConnectionConfig::Notion(config),
         settings,
         OAuthCredentialFixture {
+            access_token_expires_at: None,
             access_token: AccessToken(access_token.to_string()),
             refresh_token: None,
             provider_user_id: Some(notion_user_id.to_string()),

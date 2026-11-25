@@ -37,6 +37,7 @@ use crate::helpers::{TestedApp, auth::AuthenticatedApp};
 #[derive(Debug, Clone)]
 pub struct OAuthCredentialFixture {
     pub access_token: AccessToken,
+    pub access_token_expires_at: Option<DateTime<Utc>>,
     pub refresh_token: Option<RefreshToken>,
     pub provider_user_id: Option<String>,
     pub registered_oauth_scopes: Vec<String>,
@@ -254,10 +255,9 @@ pub async fn create_and_mock_integration_connection_with_backoff(
             integration_connection.id,
             encrypted_access_token,
             encrypted_refresh_token,
-            // Tests don't exercise the eager-refresh path, so we leave the
-            // expiry unset and the runtime read path will skip the refresh
-            // check.
-            None,
+            // Left unset unless a fixture sets it: the runtime read path then
+            // skips the eager refresh.
+            credential.access_token_expires_at,
             serde_json::json!({}),
         )
         .await
@@ -275,6 +275,7 @@ pub async fn create_and_mock_integration_connection_with_backoff(
 #[fixture]
 pub fn github_oauth_credential() -> OAuthCredentialFixture {
     OAuthCredentialFixture {
+        access_token_expires_at: None,
         access_token: AccessToken("github_test_access_token".to_string()),
         refresh_token: Some(RefreshToken("github_test_refresh_token".to_string())),
         provider_user_id: None,
@@ -290,6 +291,7 @@ pub fn github_oauth_credential() -> OAuthCredentialFixture {
 #[fixture]
 pub fn linear_oauth_credential() -> OAuthCredentialFixture {
     OAuthCredentialFixture {
+        access_token_expires_at: None,
         access_token: AccessToken("linear_test_access_token".to_string()),
         refresh_token: Some(RefreshToken("linear_test_refresh_token".to_string())),
         provider_user_id: None,
@@ -300,6 +302,7 @@ pub fn linear_oauth_credential() -> OAuthCredentialFixture {
 #[fixture]
 pub fn google_calendar_oauth_credential() -> OAuthCredentialFixture {
     OAuthCredentialFixture {
+        access_token_expires_at: None,
         access_token: AccessToken("google_calendar_test_access_token".to_string()),
         refresh_token: Some(RefreshToken(
             "google_calendar_test_refresh_token".to_string(),
@@ -315,6 +318,7 @@ pub fn google_calendar_oauth_credential() -> OAuthCredentialFixture {
 #[fixture]
 pub fn google_mail_oauth_credential() -> OAuthCredentialFixture {
     OAuthCredentialFixture {
+        access_token_expires_at: None,
         access_token: AccessToken("google_mail_test_access_token".to_string()),
         refresh_token: Some(RefreshToken("google_mail_test_refresh_token".to_string())),
         provider_user_id: None,
@@ -325,6 +329,7 @@ pub fn google_mail_oauth_credential() -> OAuthCredentialFixture {
 #[fixture]
 pub fn google_drive_oauth_credential() -> OAuthCredentialFixture {
     OAuthCredentialFixture {
+        access_token_expires_at: None,
         access_token: AccessToken("google_drive_test_access_token".to_string()),
         refresh_token: Some(RefreshToken("google_drive_test_refresh_token".to_string())),
         provider_user_id: None,
@@ -335,6 +340,7 @@ pub fn google_drive_oauth_credential() -> OAuthCredentialFixture {
 #[fixture]
 pub fn slack_oauth_credential() -> OAuthCredentialFixture {
     OAuthCredentialFixture {
+        access_token_expires_at: None,
         access_token: AccessToken("slack_test_user_access_token".to_string()),
         refresh_token: None,
         provider_user_id: Some("U05XXX".to_string()),
@@ -369,6 +375,7 @@ pub fn slack_context(team_id: impl Into<String>) -> IntegrationConnectionContext
 #[fixture]
 pub fn todoist_oauth_credential() -> OAuthCredentialFixture {
     OAuthCredentialFixture {
+        access_token_expires_at: None,
         access_token: AccessToken("todoist_test_access_token".to_string()),
         refresh_token: None,
         provider_user_id: None,
@@ -379,6 +386,7 @@ pub fn todoist_oauth_credential() -> OAuthCredentialFixture {
 #[fixture]
 pub fn ticktick_oauth_credential() -> OAuthCredentialFixture {
     OAuthCredentialFixture {
+        access_token_expires_at: None,
         access_token: AccessToken("ticktick_test_access_token".to_string()),
         refresh_token: None,
         provider_user_id: None,
@@ -416,6 +424,7 @@ pub fn google_account_id(email: &str) -> String {
 #[fixture]
 pub fn notion_oauth_credential() -> OAuthCredentialFixture {
     OAuthCredentialFixture {
+        access_token_expires_at: None,
         access_token: AccessToken("notion_test_access_token".to_string()),
         refresh_token: None,
         provider_user_id: Some("notion_test_user_id".to_string()),

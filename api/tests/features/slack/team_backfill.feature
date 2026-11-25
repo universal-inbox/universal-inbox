@@ -20,10 +20,12 @@ Feature: Backfilling the team of the Slack connections
   @legacy:test_slack_backfill_team_id::test_backfill_team_id_dry_run
   Scenario: A dry run reports the update and changes nothing
     Given I have a Slack connection that has no team yet
+    And I remember my Slack connection and its credential
     And Slack tells that the access token of my connection belongs to the team "T053BSKET", and is asked once
     When I run the team backfill as a dry run
     Then the backfill report says 1 updated, 0 skipped without credential, 0 skipped without access token and 0 failed
     And my Slack connection has no team
+    And my Slack connection and its credential are exactly as I remembered them
 
   @legacy:test_slack_backfill_team_id::test_backfill_team_id_ignores_connection_with_context
   Scenario: A connection that already has a team is not asked about
@@ -61,3 +63,15 @@ Feature: Backfilling the team of the Slack connections
     Then the backfill report says 1 updated, 0 skipped without credential, 0 skipped without access token and 1 failed
     And my Slack connection is in the team "T053BSKET"
     And the Slack connection of that other user has no team
+    And the Slack connection of that other user is still validated
+
+  Scenario: Each connection gets the team of its own access token
+    Given another user is signed in
+    And another user has a Slack connection with an access token of their own, and no team yet
+    And I have a Slack connection that has no team yet
+    And Slack tells that the access token of that other user belongs to the team "T0OTHER", and is asked once
+    And Slack tells that the access token of my connection belongs to the team "T053BSKET", and is asked once
+    When I run the team backfill
+    Then the backfill report says 2 updated, 0 skipped without credential, 0 skipped without access token and 0 failed
+    And my Slack connection is in the team "T053BSKET"
+    And the Slack connection of that other user is in the team "T0OTHER"

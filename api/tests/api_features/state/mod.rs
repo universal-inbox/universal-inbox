@@ -57,7 +57,7 @@ pub use oauth_callback::OauthCallback;
 pub use passkey::{Device, Passkeys, PendingSignIn, Registration, VisitorPasskey};
 pub use realtime_stream::{EventStream, RealtimePublication, RealtimeStream};
 pub use set_aside::SetAside;
-pub use slack_backfill::SlackBackfill;
+pub use slack_backfill::{Remembered, SlackBackfill, StoredTokens};
 pub use slack_bridge::{Deletion, SlackBridge};
 pub use slack_revocation::SlackRevocation;
 pub use slack_tasks::SlackTasks;

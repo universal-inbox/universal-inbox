@@ -46,7 +46,6 @@ pub mod notion;
 pub mod realtime;
 pub mod rest;
 pub mod slack;
-pub mod slack_backfill;
 pub mod slack_bridge;
 pub mod slack_revocation;
 pub mod task;
