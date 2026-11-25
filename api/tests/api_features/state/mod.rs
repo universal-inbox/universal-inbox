@@ -55,7 +55,7 @@ pub use notifications::{GithubCall, Notifications};
 pub use notion_sync::{NotionSync, WorkspacePage};
 pub use notion_webhook::NotionWebhook;
 pub use oauth_callback::OauthCallback;
-pub use oauth_revocation::OauthRevocation;
+pub use oauth_revocation::{Exchange, OauthRevocation};
 pub use passkey::{Device, Passkeys, PendingSignIn, Registration, VisitorPasskey};
 pub use realtime_stream::{EventStream, RealtimePublication, RealtimeStream};
 pub use set_aside::SetAside;

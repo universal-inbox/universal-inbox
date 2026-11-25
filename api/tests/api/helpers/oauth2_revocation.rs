@@ -1,8 +1,10 @@
 use base64::prelude::*;
 use ring::digest;
 
-use universal_inbox::user::UserId;
-use universal_inbox_api::repository::oauth2::OAuth2Repository;
+use universal_inbox::{auth::oauth2::TokenResponse, user::UserId};
+use universal_inbox_api::{
+    repository::oauth2::OAuth2Repository, universal_inbox::UniversalInboxError,
+};
 
 use crate::helpers::TestedApp;
 
@@ -87,19 +89,38 @@ pub async fn delete_consent(app: &TestedApp, user_id: UserId, client_id: &str) {
     tx.commit().await.unwrap();
 }
 
-pub async fn exchange(app: &TestedApp, code: &str, client_id: &str) -> bool {
+pub async fn exchange(
+    app: &TestedApp,
+    code: &str,
+    client_id: &str,
+) -> Result<TokenResponse, UniversalInboxError> {
     let mut tx = app.oauth2_service.begin().await.unwrap();
-    match app
+    let tokens = app
         .oauth2_service
         .exchange_code(&mut tx, code, client_id, REDIRECT_URI, VERIFIER)
-        .await
-    {
-        Ok(_) => {
-            tx.commit().await.unwrap();
-            true
-        }
-        Err(_) => false,
-    }
+        .await?;
+    tx.commit().await.unwrap();
+    Ok(tokens)
+}
+
+pub async fn refresh(
+    app: &TestedApp,
+    refresh_token: &str,
+    client_id: &str,
+) -> Result<TokenResponse, UniversalInboxError> {
+    let mut tx = app.oauth2_service.begin().await.unwrap();
+    let tokens = app
+        .oauth2_service
+        .refresh_token(&mut tx, refresh_token, client_id)
+        .await?;
+    tx.commit().await.unwrap();
+    Ok(tokens)
+}
+
+/// The consent and a code of another user for a client that already exists.
+pub async fn approve_existing_client(app: &TestedApp, user_id: UserId, client_id: &str) -> String {
+    consent_again(app, user_id, client_id).await;
+    issue_code(app, user_id, client_id).await
 }
 
 pub async fn revoke(app: &TestedApp, user_id: UserId, client_id: &str) {
