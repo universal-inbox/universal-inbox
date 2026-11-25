@@ -23,7 +23,6 @@ mod test_slack_bridge;
 mod test_slack_notifications;
 mod test_slack_tasks;
 mod test_slack_webhook;
-mod test_slack_webhook_message;
 mod test_slack_webhook_revocation;
 mod test_slack_webhook_star_reaction;
 mod test_ticktick_tasks;

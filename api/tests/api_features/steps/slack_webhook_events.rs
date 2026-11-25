@@ -33,7 +33,16 @@ use crate::{
 };
 
 #[derive(Clone, Copy, Debug)]
-pub struct Subscription(bool);
+pub enum Subscription {
+    Subscribed,
+    Unsubscribed,
+}
+
+impl Subscription {
+    pub fn is_subscribed(self) -> bool {
+        matches!(self, Self::Subscribed)
+    }
+}
 
 impl Parameter for Subscription {
     const REGEX: &'static str = "subscribed|unsubscribed";
@@ -45,8 +54,8 @@ impl FromStr for Subscription {
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         match text {
-            "subscribed" => Ok(Self(true)),
-            "unsubscribed" => Ok(Self(false)),
+            "subscribed" => Ok(Self::Subscribed),
+            "unsubscribed" => Ok(Self::Unsubscribed),
             other => Err(format!("Unknown subscription {other:?}")),
         }
     }
@@ -101,7 +110,7 @@ async fn i_know_a_thread(world: &mut ApiWorld, subscription: Subscription) {
         .expect("The account is not connected to Slack")
         .id;
     let mut thread = slack_thread();
-    thread.subscribed = subscription.0;
+    thread.subscribed = subscription.is_subscribed();
     let app = world.app.get().await;
     create_notification_from_slack_thread(app, &thread, user_id, connection_id).await;
     world.slack_webhook.known_thread = Some(thread);
@@ -117,7 +126,7 @@ fn slack_sends_a_message_in_a_thread(world: &mut ApiWorld) {
     world.slack_webhook.event = Some(SlackEvent::Message(slack_push_message_in_thread_event()));
 }
 
-#[given("Slack sends the edit of a message, which now mentions the Slack user U01")]
+#[given("Slack sends the edit of a message")]
 fn slack_sends_an_edit(world: &mut ApiWorld) {
     world.slack_webhook.event = Some(SlackEvent::Edit(load_json_fixture_file(
         "slack_push_message_changed_event.json",
@@ -256,7 +265,17 @@ async fn the_event_is_ignored(world: &mut ApiWorld) {
 #[then("the event is queued for processing")]
 async fn the_event_is_queued(world: &mut ApiWorld) {
     let app = world.app.get().await;
-    assert_eq!(pushed_jobs(app).await.len(), 1);
+    let jobs = pushed_jobs(app).await;
+    assert!(
+        matches!(
+            jobs.as_slice(),
+            [JobEnvelope {
+                job: UniversalInboxJob::SlackPushEventCallback(_),
+                ..
+            }]
+        ),
+        "Expected a single Slack push event job, got {jobs:?}"
+    );
 }
 
 #[then(
@@ -291,14 +310,16 @@ async fn the_queued_job_is(
         Some(thread_ts)
     );
     assert_eq!(message.subtype, None);
-    let mentioned = message
+    // The same function that production uses to find the mentions is the oracle here, as in the legacy test
+    let references = message
         .content
         .as_ref()
-        .map(|content| {
-            universal_inbox_api::integrations::slack::find_slack_references_in_message(content)
-                .users
-                .contains_key(&SlackUserId(slack_user_id))
-        })
-        .unwrap_or(false);
-    assert!(mentioned);
+        .map(universal_inbox_api::integrations::slack::find_slack_references_in_message)
+        .unwrap_or_else(|| panic!("The queued message has no content: {message:?}"));
+    assert!(
+        references
+            .users
+            .contains_key(&SlackUserId(slack_user_id.clone())),
+        "The queued message does not mention {slack_user_id}: {message:?}"
+    );
 }
