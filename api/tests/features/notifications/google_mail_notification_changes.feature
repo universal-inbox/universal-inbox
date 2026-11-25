@@ -22,7 +22,7 @@ Feature: Changing the notification of a Google Mail thread
 
   @legacy:test_google_mail_notifications::patch_resource::test_patch_google_mail_notification_status_as_deleted_with_google_mail_error_response
   Scenario: A refusal of Google Mail is a public internal error, and the notification stays
-    Given Google Mail refuses, once, to modify the thread 123
+    Given Google Mail refuses, once and with my access token, to modify the thread 123
     When I try to delete "mine"
     Then the app answers 500
     And the answer is the public error "An internal error occurred. Please retry later or contact support with the correlation id."

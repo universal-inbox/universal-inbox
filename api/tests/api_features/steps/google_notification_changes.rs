@@ -148,7 +148,7 @@ async fn google_mail_archives_the_thread(world: &mut ApiWorld) {
         .await;
 }
 
-#[given("Google Mail refuses, once, to modify the thread 123")]
+#[given("Google Mail refuses, once and with my access token, to modify the thread 123")]
 async fn google_mail_refuses_to_modify_the_thread(world: &mut ApiWorld) {
     let app = world.app.get().await;
     Mock::given(method("POST"))

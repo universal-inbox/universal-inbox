@@ -19,6 +19,11 @@ Feature: Changing the notification of a Google Drive comment
     When I set the status of "mine" to unsubscribed
     Then the patched notification is unsubscribed, was read just now, and is otherwise as "mine" was
 
+  Scenario: Snoozing the notification asks Google Drive nothing
+    Given Google Drive is not asked anything
+    When I snooze "mine" until "2022-01-01T01:02:03Z"
+    Then the patched notification is "mine" snoozed until "2022-01-01T01:02:03Z"
+
   Scenario Outline: Another user cannot set my notification to <status>, and their notification of the same comment is left alone
     Given another user is signed in
     And that other user has their own Google Drive connection, and their own notification "theirs" of the same comment
