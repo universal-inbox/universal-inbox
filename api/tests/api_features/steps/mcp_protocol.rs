@@ -56,6 +56,13 @@ fn my_session_id(world: &ApiWorld) -> String {
         .expect("No MCP session is open")
 }
 
+pub(super) async fn record_http(world: &mut ApiWorld, response: reqwest::Response) {
+    world.mcp.status = Some(response.status());
+    world
+        .http
+        .record(crate::world::Response::read(response).await);
+}
+
 async fn record(world: &mut ApiWorld, response: reqwest::Response) {
     world.mcp.status = Some(response.status());
     world.mcp.body = if response.status() == StatusCode::OK {
@@ -144,6 +151,7 @@ async fn i_initialize_without_a_token(world: &mut ApiWorld) {
     let app = world.app.get().await;
     let response = Client::new()
         .post(format!("{}mcp", app.api_address))
+        .header("Accept", "application/json, text/event-stream")
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -153,7 +161,7 @@ async fn i_initialize_without_a_token(world: &mut ApiWorld) {
         .send()
         .await
         .expect("Failed to execute request");
-    record(world, response).await;
+    record_http(world, response).await;
 }
 
 #[when(expr = "I try to initialize an MCP session addressed to the host {string}")]
@@ -543,4 +551,43 @@ async fn get_notification(app: &TestedApp, token: &str, id: Uuid) -> Value {
 fn the_call_acted_on(world: &mut ApiWorld, count: u64) {
     assert_eq!(body(world)["result"]["isError"], false, "{}", body(world));
     assert_eq!(body(world)["result"]["structuredContent"]["count"], count);
+}
+
+// Mirrors SYNC_RATE_LIMIT_PER_MINUTE in api/src/utils/rate_limit.rs
+const SYNC_BUDGET: usize = 10;
+
+#[when("I use the whole sync budget of a minute through MCP, alternating notifications and tasks")]
+async fn i_use_the_sync_budget(world: &mut ApiWorld) {
+    for call in 0..SYNC_BUDGET {
+        let tool = if call % 2 == 0 {
+            "sync_notifications"
+        } else {
+            "sync_tasks"
+        };
+        call_tool_in_a_new_session(world, tool, json!({})).await;
+        assert_eq!(
+            body(world)["result"]["isError"],
+            false,
+            "call {call}: {}",
+            body(world)
+        );
+    }
+}
+
+#[when("I ask through MCP to sync my tasks once more")]
+async fn i_sync_once_more(world: &mut ApiWorld) {
+    call_tool_in_a_new_session(world, "sync_tasks", json!({})).await;
+}
+
+#[then("that sync is refused for too many requests")]
+fn that_sync_is_refused(world: &mut ApiWorld) {
+    assert_eq!(body(world)["result"]["isError"], true, "{}", body(world));
+    assert!(
+        body(world)["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Too many requests"),
+        "{}",
+        body(world)
+    );
 }

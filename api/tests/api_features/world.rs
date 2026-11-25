@@ -18,7 +18,7 @@ use crate::{
     state::{
         Account, Audit, Authorizations, Browser, Connections, EmailVerification, Encryption,
         GithubSync, GoogleDriveSync, GoogleMailSync, Integrations, Jobs, LinearTasks, LinkedMethod,
-        McpProtocol, McpSessions, Notifications, NotionSync, OauthCallback, Passkeys,
+        McpOauth, McpProtocol, McpSessions, Notifications, NotionSync, OauthCallback, Passkeys,
         PasswordReset, Probe, Sessions, SetAside, SlackEmojis, SlackThreads, Tasks,
         ThirdPartyItems, TickTickTasks, TodoistTasks,
     },
@@ -59,6 +59,7 @@ pub struct ApiWorld {
     pub notion_sync: NotionSync,
     pub mcp_sessions: McpSessions,
     pub mcp: McpProtocol,
+    pub mcp_oauth: McpOauth,
     pub slack_emojis: SlackEmojis,
     pub third_party: ThirdPartyItems,
     pub http: HttpExchanges,
