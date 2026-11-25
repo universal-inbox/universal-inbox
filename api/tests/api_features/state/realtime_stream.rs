@@ -74,6 +74,7 @@ pub struct RealtimeStream {
 #[derive(Default)]
 pub struct RealtimePublication {
     pub subscriber: Option<crate::helpers::realtime::RealtimeEventsSubscriber>,
+    pub other_subscriber: Option<crate::helpers::realtime::RealtimeEventsSubscriber>,
     pub events: Vec<universal_inbox::realtime::RealtimeEvent>,
     pub seeded_actions: Vec<uuid::Uuid>,
 }

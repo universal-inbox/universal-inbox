@@ -3,6 +3,8 @@ Feature: Realtime events published by the API
   channel, when it is committed: a failed or rolled back change publishes nothing, a sync
   publishes one batched event, and the actions of the Slack bridge extension are announced
   only when the API creates them.
+  A scenario collects the events of the user up to 300 ms after the one it awaits, so that an extra
+  event published in the same request is seen; one published later goes unnoticed.
 
   Background:
     Given I am signed in
@@ -76,4 +78,19 @@ Feature: Realtime events published by the API
       And I have the Slack notification "thread"
       And I listen to the realtime events of my user
       When I delete the Slack notification "thread"
-      Then I received no slack_bridge_pending_actions.changed event, and no action was created
+      Then the deletion has finished, as its own notifications.changed event arrived, and no slack_bridge_pending_actions.changed event came with it, nor any action
+
+  Rule: The events of one user are for that user only
+
+    Scenario: Another user, who listens too, receives only the events of their own notification
+      Given I have a GitHub notification called "mine"
+      And another user is signed in
+      And GitHub reports the notifications 123 and 456
+      And that other user is connected to GitHub
+      And that other user has the unread GitHub notification "theirs" of the thread 456
+      And I listen to the realtime events of my user
+      And that other user listens to the realtime events of their user
+      When I snooze "mine" until "2050-01-01T01:02:03Z"
+      And that other user snoozes "theirs" until "2050-01-01T01:02:03Z"
+      Then I received exactly one notifications.changed event, about "mine" only
+      And that other user received exactly one notifications.changed event, about "theirs" only, and none about mine

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use cucumber::{given, then, when};
 use pretty_assertions::assert_eq;
 use uuid::Uuid;
@@ -66,22 +68,28 @@ async fn i_received_one_event_about(world: &mut ApiWorld, name: String) {
 
 #[then("I received one notifications.changed event, about all the synced notifications")]
 async fn i_received_the_batched_event(world: &mut ApiWorld) {
-    let events = collect_until(world, RealtimeEventKind::IntegrationConnectionChanged, 2).await;
-    let mut ids: Vec<Uuid> = world
+    let events = world
+        .realtime_publication
+        .subscriber
+        .as_mut()
+        .expect("The scenario does not listen to the realtime events")
+        .events_until(|events| {
+            events_of_kind(events, RealtimeEventKind::IntegrationConnectionChanged).len() >= 2
+                && !events_of_kind(events, RealtimeEventKind::NotificationsChanged).is_empty()
+        })
+        .await;
+    world.realtime_publication.events = events.clone();
+    let received = events_of_kind(&events, RealtimeEventKind::NotificationsChanged);
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].user_id, user_id_of(world));
+    let received_ids: HashSet<Uuid> = received[0].ids.clone().unwrap().into_iter().collect();
+    let synced_ids: HashSet<Uuid> = world
         .github_sync
         .synced
         .iter()
         .map(|notification| notification.id.0)
         .collect();
-    ids.sort();
-    assert_eq!(
-        events_of_kind(&events, RealtimeEventKind::NotificationsChanged),
-        vec![RealtimeEvent {
-            user_id: user_id_of(world),
-            kind: RealtimeEventKind::NotificationsChanged,
-            ids: Some(ids),
-        }]
-    );
+    assert_eq!(received_ids, synced_ids);
 }
 
 #[then("I received two integration_connection.changed events, about my GitHub connection only")]
@@ -108,17 +116,19 @@ async fn i_received_the_connection_events(world: &mut ApiWorld) {
 
 #[given("I am connected to Slack, syncing its notifications, with the extension bridge enabled")]
 async fn i_am_connected_with_the_bridge(world: &mut ApiWorld) {
-    connect_to_slack(world, true).await;
+    let mut config = SlackConfig::enabled_as_notifications();
+    config.message_config.extension_enabled = true;
+    connect_to_slack(world, config).await;
 }
 
 #[given("I am connected to Slack, syncing its notifications, with the extension bridge disabled")]
 async fn i_am_connected_without_the_bridge(world: &mut ApiWorld) {
-    connect_to_slack(world, false).await;
+    let mut config = SlackConfig::enabled_as_notifications();
+    config.message_config.extension_enabled = false;
+    connect_to_slack(world, config).await;
 }
 
-async fn connect_to_slack(world: &mut ApiWorld, extension_enabled: bool) {
-    let mut config = SlackConfig::enabled_as_notifications();
-    config.message_config.extension_enabled = extension_enabled;
+async fn connect_to_slack(world: &mut ApiWorld, config: SlackConfig) {
     let user_id = user_id_of(world);
     let app = world.app.get().await;
     let connection = create_and_mock_integration_connection(
@@ -210,7 +220,9 @@ async fn i_received_the_pending_actions_event(world: &mut ApiWorld) {
     );
 }
 
-#[then("I received no slack_bridge_pending_actions.changed event, and no action was created")]
+#[then(
+    "the deletion has finished, as its own notifications.changed event arrived, and no slack_bridge_pending_actions.changed event came with it, nor any action"
+)]
 async fn i_received_no_pending_actions_event(world: &mut ApiWorld) {
     let events = collect_until(world, RealtimeEventKind::NotificationsChanged, 1).await;
     assert_eq!(
@@ -239,4 +251,70 @@ async fn i_delete_the_slack_notification(world: &mut ApiWorld, name: String) {
     )
     .await;
     assert_eq!(response.status(), 200);
+}
+
+#[given("that other user listens to the realtime events of their user")]
+async fn that_other_user_listens(world: &mut ApiWorld) {
+    let other_user_id = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .user
+        .id;
+    world.realtime_publication.other_subscriber =
+        Some(RealtimeEventsSubscriber::new(&settings(), other_user_id).await);
+}
+
+#[when(expr = "that other user snoozes {string} until {string}")]
+async fn that_other_user_snoozes(world: &mut ApiWorld, name: String, time: String) {
+    let id = world.notifications.named(&name).id;
+    let client = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .client
+        .clone();
+    let app = world.app.get().await;
+    let response = crate::helpers::rest::patch_resource_response(
+        &client,
+        &app.api_address,
+        "notifications",
+        id.into(),
+        &universal_inbox::notification::service::NotificationPatch {
+            snoozed_until: Some(crate::steps::notifications::parse_time(&time)),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(response.status(), 200);
+}
+
+#[then(
+    expr = "that other user received exactly one notifications.changed event, about {string} only, and none about mine"
+)]
+async fn that_other_user_received_one_event(world: &mut ApiWorld, name: String) {
+    let their_id = world.notifications.named(&name).id;
+    let other_user_id = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .user
+        .id;
+    let events = world
+        .realtime_publication
+        .other_subscriber
+        .as_mut()
+        .expect("That other user does not listen to the realtime events")
+        .events_until(|events| {
+            !events_of_kind(events, RealtimeEventKind::NotificationsChanged).is_empty()
+        })
+        .await;
+    assert_eq!(
+        events_of_kind(&events, RealtimeEventKind::NotificationsChanged),
+        vec![RealtimeEvent {
+            user_id: other_user_id,
+            kind: RealtimeEventKind::NotificationsChanged,
+            ids: Some(vec![their_id.0]),
+        }]
+    );
 }

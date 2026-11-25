@@ -9,8 +9,6 @@ use universal_inbox::{
 };
 use universal_inbox_api::configuration::{RealtimeSettings, Settings};
 
-/// Subscriber to the realtime events channel, keeping only the events of one user: scenarios
-/// running in parallel publish on the same channel.
 pub struct RealtimeEventsSubscriber {
     pubsub: redis::aio::PubSub,
     user_id: UserId,
@@ -27,9 +25,6 @@ impl RealtimeEventsSubscriber {
         Self { pubsub, user_id }
     }
 
-    /// The events of the user received until `until` returns true for them, then for a short
-    /// while (300 ms) to catch unexpected extra events. An extra event arriving later than that
-    /// goes unnoticed: under load the scenario can miss one, it cannot fail spuriously.
     pub async fn events_until(
         &mut self,
         until: impl Fn(&[RealtimeEvent]) -> bool,
