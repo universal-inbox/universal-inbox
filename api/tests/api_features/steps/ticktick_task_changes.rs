@@ -5,7 +5,11 @@ use pretty_assertions::assert_eq;
 use universal_inbox::{
     HasHtmlUrl,
     integration_connection::{
-        integrations::task_time_config::TaskTimeConfig, provider::IntegrationProviderKind,
+        config::IntegrationConnectionConfig,
+        integrations::{
+            github::GithubConfig, task_time_config::TaskTimeConfig, ticktick::TickTickConfig,
+        },
+        provider::IntegrationProviderKind,
     },
     notification::{NotificationStatus, NotificationWithTask, service::NotificationPatch},
     task::{DueDate, Task, TaskCreation, service::TaskPatch},
@@ -13,9 +17,17 @@ use universal_inbox::{
 };
 use universal_inbox_api::integrations::ticktick::TickTickCreateTaskResponse;
 
+use universal_inbox_api::integrations::oauth2::AccessToken;
+
 use crate::{
+    common::settings,
     helpers::{
+        integration_connection::{
+            OAuthCredentialFixture, create_and_mock_integration_connection,
+            github_oauth_credential, ticktick_oauth_credential,
+        },
         notification::create_task_from_notification,
+        notification::github::{create_notification_from_github_notification, github_notification},
         rest::{get_resource, patch_resource},
         task::ticktick::{
             mock_ticktick_complete_task_service, mock_ticktick_create_task_service,
@@ -324,7 +336,11 @@ async fn ticktick_creates_the_scheduled_item(world: &mut ApiWorld) {
         .await;
 }
 
-async fn create_from_the_notification(world: &mut ApiWorld, scheduled: bool) {
+async fn create_from_the_notification(
+    world: &mut ApiWorld,
+    due_at: Option<DueDate>,
+    time_config: Option<TaskTimeConfig>,
+) {
     let notification_id = world
         .integrations
         .github_notification
@@ -332,20 +348,6 @@ async fn create_from_the_notification(world: &mut ApiWorld, scheduled: bool) {
         .expect("The account has no GitHub notification")
         .id;
     let item = ticktick_item();
-    let (due_at, time_config) = if scheduled {
-        (
-            Some(DueDate::DateTimeWithTz(
-                Utc.with_ymd_and_hms(2026, 6, 29, 12, 0, 0).unwrap(),
-            )),
-            Some(TaskTimeConfig {
-                time: NaiveTime::from_hms_opt(14, 0, 0).unwrap(),
-                duration_minutes: Some(30),
-                timezone: "Europe/Paris".to_string(),
-            }),
-        )
-    } else {
-        (item.get_due_date(), None)
-    };
     let creation = TaskCreation {
         title: item.title.clone(),
         body: the_body_link(world),
@@ -365,14 +367,25 @@ async fn create_from_the_notification(world: &mut ApiWorld, scheduled: bool) {
 
 #[when("I create a TickTick task from that notification, in the project Project2")]
 async fn i_create_a_task(world: &mut ApiWorld) {
-    create_from_the_notification(world, false).await;
+    create_from_the_notification(world, ticktick_item().get_due_date(), None).await;
 }
 
 #[when(
     "I create a TickTick task from that notification, in the project Project2, due at 12:00 UTC on 2026-06-29, at 14:00 for 30 minutes in Europe/Paris"
 )]
 async fn i_create_a_scheduled_task(world: &mut ApiWorld) {
-    create_from_the_notification(world, true).await;
+    create_from_the_notification(
+        world,
+        Some(DueDate::DateTimeWithTz(
+            Utc.with_ymd_and_hms(2026, 6, 29, 12, 0, 0).unwrap(),
+        )),
+        Some(TaskTimeConfig {
+            time: NaiveTime::from_hms_opt(14, 0, 0).unwrap(),
+            duration_minutes: Some(30),
+            timezone: "Europe/Paris".to_string(),
+        }),
+    )
+    .await;
 }
 
 #[then(
@@ -460,4 +473,213 @@ async fn the_task_has_the_title_in_its_body(world: &mut ApiWorld) {
         "expected the body to contain {title:?}, got: {}",
         task.body
     );
+}
+
+#[then(
+    "the TickTick create request of that creation carried a due date only: no start date and no time zone"
+)]
+async fn the_create_request_had_a_due_date_only(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    let requests = app.ticktick_mock_server.received_requests().await.unwrap();
+    let bodies: Vec<serde_json::Value> = requests
+        .iter()
+        .filter(|request| request.method.as_str() == "POST" && request.url.path() == "/task")
+        .map(|request| serde_json::from_slice(&request.body).unwrap())
+        .collect();
+    assert_eq!(bodies.len(), 1, "{bodies:?}");
+    assert!(bodies[0].get("dueDate").is_some(), "{}", bodies[0]);
+    assert!(bodies[0].get("startDate").is_none(), "{}", bodies[0]);
+    assert!(bodies[0].get("timeZone").is_none(), "{}", bodies[0]);
+    assert_eq!(bodies[0]["allDay"], false);
+}
+
+#[given("TickTick is not asked anything")]
+async fn ticktick_is_not_asked_anything(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    wiremock::Mock::given(wiremock::matchers::any())
+        .respond_with(wiremock::ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&app.ticktick_mock_server)
+        .await;
+}
+
+async fn other_user_with_ticktick(
+    world: &mut ApiWorld,
+    ticktick_credential: OAuthCredentialFixture,
+) {
+    let other_user_id = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .user
+        .id;
+    let app = world.app.get().await;
+    let github = create_and_mock_integration_connection(
+        app,
+        other_user_id,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings(),
+        github_oauth_credential(),
+        None,
+        None,
+    )
+    .await;
+    let ticktick = create_and_mock_integration_connection(
+        app,
+        other_user_id,
+        IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
+        &settings(),
+        ticktick_credential,
+        None,
+        None,
+    )
+    .await;
+    let notification = create_notification_from_github_notification(
+        app,
+        &github_notification(),
+        other_user_id,
+        github.id,
+    )
+    .await;
+    let _ = ticktick;
+    world.ticktick_task_changes.others_notification = Some(*notification);
+}
+
+#[given("that other user has their own TickTick task")]
+async fn that_other_user_has_a_task(world: &mut ApiWorld) {
+    let other_user_id = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .user
+        .id;
+    let item = TickTickItem {
+        project_id: PROJECT2_ID.to_string(),
+        ..*ticktick_item()
+    };
+    let app = world.app.get().await;
+    let creation = create_task_third_party_item(
+        app,
+        ThirdPartyItemData::TickTickItem(Box::new(item)),
+        other_user_id,
+    )
+    .await;
+    world.ticktick_task_changes.others_task = creation.task;
+}
+
+#[when("that other user creates a TickTick task from my notification, in the project Project2")]
+async fn that_other_user_creates_from_mine(world: &mut ApiWorld) {
+    let notification_id = world.integrations.github_notification.as_ref().unwrap().id;
+    let client = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .client
+        .clone();
+    let item = ticktick_item();
+    let creation = TaskCreation {
+        title: item.title.clone(),
+        body: the_body_link(world),
+        project_name: Some("Project2".to_string()),
+        due_at: item.get_due_date(),
+        priority: item.priority.into(),
+        task_provider_kind: Some(IntegrationProviderKind::TickTick),
+        time_config: None,
+    };
+    let app = world.app.get().await;
+    let response = crate::helpers::notification::create_task_from_notification_response(
+        &client,
+        &app.api_address,
+        notification_id,
+        Some(creation),
+    )
+    .await;
+    world
+        .http
+        .record(crate::world::Response::read(response).await);
+}
+
+#[when("that other user links my notification to their TickTick task, deleting it")]
+async fn that_other_user_links_mine(world: &mut ApiWorld) {
+    let notification_id = world.integrations.github_notification.as_ref().unwrap().id;
+    let task_id = world
+        .ticktick_task_changes
+        .others_task
+        .as_ref()
+        .expect("That other user has no TickTick task")
+        .id;
+    let client = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .client
+        .clone();
+    let app = world.app.get().await;
+    let response = crate::helpers::rest::patch_resource_response(
+        &client,
+        &app.api_address,
+        "notifications",
+        notification_id.into(),
+        &NotificationPatch {
+            status: Some(NotificationStatus::Deleted),
+            task_id: Some(task_id),
+            ..Default::default()
+        },
+    )
+    .await;
+    world
+        .http
+        .record(crate::world::Response::read(response).await);
+}
+
+#[then("my GitHub notification, read again, is exactly as it was, with no task")]
+async fn my_notification_is_as_it_was(world: &mut ApiWorld) {
+    let before = world.integrations.github_notification.clone().unwrap();
+    let client = world.client();
+    let app = world.app.get().await;
+    let read: Box<NotificationWithTask> =
+        get_resource(&client, &app.api_address, "notifications", before.id.into()).await;
+    assert!(read.task.is_none());
+    assert_eq!(
+        universal_inbox::notification::Notification::from(*read),
+        *before
+    );
+}
+
+#[then("the notification of that other user, read by that other user, is exactly as it was")]
+async fn their_notification_is_as_it_was(world: &mut ApiWorld) {
+    let before = world
+        .ticktick_task_changes
+        .others_notification
+        .clone()
+        .expect("That other user has no notification");
+    let client = world.other_session.as_ref().unwrap().client.clone();
+    let app = world.app.get().await;
+    let read: Box<NotificationWithTask> =
+        get_resource(&client, &app.api_address, "notifications", before.id.into()).await;
+    assert_eq!(
+        universal_inbox::notification::Notification::from(*read),
+        before
+    );
+}
+
+#[given(
+    "that other user has their own TickTick connection, with an access token of their own, and their own notification of the same GitHub thread"
+)]
+async fn that_other_user_has_a_ticktick_connection(world: &mut ApiWorld) {
+    other_user_with_ticktick(
+        world,
+        OAuthCredentialFixture {
+            access_token: AccessToken("other_user_ticktick_access_token".to_string()),
+            ..ticktick_oauth_credential()
+        },
+    )
+    .await;
+}
+
+#[given(
+    "that other user has their own TickTick connection, and their own notification of the same GitHub thread"
+)]
+async fn that_other_user_has_a_ticktick_connection_like_mine(world: &mut ApiWorld) {
+    other_user_with_ticktick(world, ticktick_oauth_credential()).await;
 }

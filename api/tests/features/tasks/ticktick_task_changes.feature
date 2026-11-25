@@ -48,6 +48,7 @@ Feature: Changing TickTick tasks
       When I create a TickTick task from that notification, in the project Project2
       Then the task that I created is the TickTick item in the project Project2, and its notification is deleted and was read just now
       And the notification stays linked to the TickTick task that I created
+      And the TickTick create request of that creation carried a due date only: no start date and no time zone
 
     @legacy:test_ticktick_tasks::patch_task::test_create_ticktick_task_from_notification_with_time_config
     Scenario: A task created with a time of the day reaches TickTick with its schedule
@@ -67,3 +68,28 @@ Feature: Changing TickTick tasks
       And TickTick adds the notification title to the body of that task, once, with its real project id
       When I link that notification to that TickTick task, deleting it
       Then that TickTick task, read again, has the title of that notification in its body
+
+  Rule: Another user cannot spend my notification
+
+    Background:
+      Given I am connected to GitHub
+      And I have a GitHub notification
+      And GitHub accepts to mark that notification as done
+      And another user is signed in
+
+    Scenario: Another user cannot create a TickTick task from my notification
+      Given that other user has their own TickTick connection, with an access token of their own, and their own notification of the same GitHub thread
+      And TickTick is not asked anything
+      When that other user creates a TickTick task from my notification, in the project Project2
+      Then the app answers 403
+      And my GitHub notification, read again, is exactly as it was, with no task
+      And the notification of that other user, read by that other user, is exactly as it was
+
+    Scenario: Another user cannot link my notification to their TickTick task
+      Given that other user has their own TickTick connection, and their own notification of the same GitHub thread
+      And that other user has their own TickTick task
+      And TickTick is not asked anything
+      When that other user links my notification to their TickTick task, deleting it
+      Then the app answers 403
+      And my GitHub notification, read again, is exactly as it was, with no task
+      And the notification of that other user, read by that other user, is exactly as it was

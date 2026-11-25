@@ -8,4 +8,6 @@ pub struct TickTickTaskChanges {
     pub patched: Option<Box<Task>>,
     pub created: Option<Option<NotificationWithTask>>,
     pub item_id: Option<String>,
+    pub others_notification: Option<universal_inbox::notification::Notification>,
+    pub others_task: Option<Task>,
 }
