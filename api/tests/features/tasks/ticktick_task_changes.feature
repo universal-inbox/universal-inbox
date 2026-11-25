@@ -86,7 +86,7 @@ Feature: Changing TickTick tasks
       And the notification of that other user, read by that other user, is exactly as it was
 
     Scenario: Another user cannot link my notification to their TickTick task
-      Given that other user has their own TickTick connection, and their own notification of the same GitHub thread
+      Given that other user has their own TickTick connection, with an access token of their own, and their own notification of the same GitHub thread
       And that other user has their own TickTick task
       And TickTick is not asked anything
       When that other user links my notification to their TickTick task, deleting it

@@ -33,6 +33,7 @@ use crate::{
             mock_ticktick_complete_task_service, mock_ticktick_create_task_service,
             mock_ticktick_create_task_service_with_schedule, mock_ticktick_delete_task_service,
             mock_ticktick_get_task_service, mock_ticktick_update_task_service, ticktick_item,
+            ticktick_projects_response,
         },
         third_party::create_task_third_party_item,
     },
@@ -503,6 +504,8 @@ async fn ticktick_is_not_asked_anything(world: &mut ApiWorld) {
         .await;
 }
 
+const OTHER_USER_TOKEN: &str = "other_user_ticktick_access_token";
+
 async fn other_user_with_ticktick(
     world: &mut ApiWorld,
     ticktick_credential: OAuthCredentialFixture,
@@ -524,7 +527,7 @@ async fn other_user_with_ticktick(
         None,
     )
     .await;
-    let ticktick = create_and_mock_integration_connection(
+    create_and_mock_integration_connection(
         app,
         other_user_id,
         IntegrationConnectionConfig::TickTick(TickTickConfig::enabled()),
@@ -541,7 +544,6 @@ async fn other_user_with_ticktick(
         github.id,
     )
     .await;
-    let _ = ticktick;
     world.ticktick_task_changes.others_notification = Some(*notification);
 }
 
@@ -558,6 +560,19 @@ async fn that_other_user_has_a_task(world: &mut ApiWorld) {
         ..*ticktick_item()
     };
     let app = world.app.get().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path("/project"))
+        .and(wiremock::matchers::header(
+            "authorization",
+            format!("Bearer {OTHER_USER_TOKEN}").as_str(),
+        ))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(ticktick_projects_response()),
+        )
+        .mount(&app.ticktick_mock_server)
+        .await;
     let creation = create_task_third_party_item(
         app,
         ThirdPartyItemData::TickTickItem(Box::new(item)),
@@ -670,16 +685,9 @@ async fn that_other_user_has_a_ticktick_connection(world: &mut ApiWorld) {
     other_user_with_ticktick(
         world,
         OAuthCredentialFixture {
-            access_token: AccessToken("other_user_ticktick_access_token".to_string()),
+            access_token: AccessToken(OTHER_USER_TOKEN.to_string()),
             ..ticktick_oauth_credential()
         },
     )
     .await;
-}
-
-#[given(
-    "that other user has their own TickTick connection, and their own notification of the same GitHub thread"
-)]
-async fn that_other_user_has_a_ticktick_connection_like_mine(world: &mut ApiWorld) {
-    other_user_with_ticktick(world, ticktick_oauth_credential()).await;
 }
