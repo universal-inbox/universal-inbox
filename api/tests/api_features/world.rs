@@ -18,9 +18,9 @@ use crate::{
     state::{
         Account, Audit, Authorizations, Browser, Connections, EmailVerification, Encryption,
         GithubSync, GoogleDriveSync, GoogleMailSync, Integrations, Jobs, LinearTasks, LinkedMethod,
-        McpOauth, McpProtocol, McpSessions, Notifications, NotionSync, OauthCallback, Passkeys,
-        PasswordReset, Probe, Sessions, SetAside, SlackEmojis, SlackThreads, SlackWebhook, Tasks,
-        ThirdPartyItems, TickTickTasks, TodoistTasks,
+        McpOauth, McpProtocol, McpSessions, Notifications, NotionSync, NotionWebhook,
+        OauthCallback, Passkeys, PasswordReset, Probe, Sessions, SetAside, SlackEmojis,
+        SlackThreads, SlackWebhook, Tasks, ThirdPartyItems, TickTickTasks, TodoistTasks,
     },
     steps::set_aside_support::Scene,
 };
@@ -58,6 +58,7 @@ pub struct ApiWorld {
     pub slack_webhook: SlackWebhook,
     pub oauth_callback: OauthCallback,
     pub notion_sync: NotionSync,
+    pub notion_webhook: NotionWebhook,
     pub mcp_sessions: McpSessions,
     pub mcp: McpProtocol,
     pub mcp_oauth: McpOauth,

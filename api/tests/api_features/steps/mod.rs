@@ -32,6 +32,7 @@ mod mcp_triage;
 mod mention;
 mod notifications;
 mod notion_sync;
+mod notion_webhook;
 mod oauth_callback;
 mod passkey;
 mod passkey_ceremony;

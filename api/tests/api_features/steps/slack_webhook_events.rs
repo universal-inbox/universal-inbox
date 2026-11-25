@@ -310,7 +310,6 @@ async fn the_queued_job_is(
         Some(thread_ts)
     );
     assert_eq!(message.subtype, None);
-    // The same function that production uses to find the mentions is the oracle here, as in the legacy test
     let references = message
         .content
         .as_ref()
@@ -321,5 +320,14 @@ async fn the_queued_job_is(
             .users
             .contains_key(&SlackUserId(slack_user_id.clone())),
         "The queued message does not mention {slack_user_id}: {message:?}"
+    );
+}
+
+#[given(expr = "that edit mentions the Slack user {string}")]
+fn that_edit_mentions(world: &mut ApiWorld, slack_user_id: String) {
+    let message = edit_of(world)["event"]["message"].to_string();
+    assert!(
+        message.contains(&format!("\"user_id\":\"{slack_user_id}\"")),
+        "The edit does not mention {slack_user_id}: {message}"
     );
 }

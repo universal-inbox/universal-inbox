@@ -21,7 +21,7 @@ Feature: Handling a Slack message
       And Slack sends a message in a channel
       And that message mentions the Slack user "U01"
       When the Slack message job handles that event
-      Then the job decides "sync_disabled"
+      Then the job decides sync_disabled
       When I look at my notifications
       Then nobody has any notification
 
@@ -45,8 +45,8 @@ Feature: Handling a Slack message
       And Slack serves the channel "C05XXX"
       And Slack serves the team "T01"
       When the Slack message job handles that event, then handles it again as Slack retries events it did not see acknowledged
-      Then the job decides "created"
-      And the second time, the job decides "unchanged"
+      Then the job decides created
+      And the second time, the job decides unchanged
       When I look at my notifications
       Then that is the only notification: the Slack thread "1732535291.911209", titled "Hello", unread
       And that notification is unread, with no read date, no task and no snooze
@@ -67,8 +67,8 @@ Feature: Handling a Slack message
       And Slack serves the channel "C05XXX"
       And Slack serves the team "T01"
       When the Slack message job handles that event, then handles it again as Slack retries events it did not see acknowledged
-      Then the job decides "created"
-      And the second time, the job decides "unchanged"
+      Then the job decides created
+      And the second time, the job decides unchanged
       When I look at my notifications
       Then that is the only notification: the Slack thread "1732535291.911209", titled "Hello", unread
       And that notification is unread, with no read date, no task and no snooze
@@ -94,7 +94,7 @@ Feature: Handling a Slack message
       And Slack serves the channel "C05XXX"
       And Slack serves the team "T01"
       When the Slack message job handles that event
-      Then the job decides "created, deleted_last_from_user"
+      Then the job decides created, deleted_last_from_user
       When the other user looks at their notifications
       Then that is the only notification: the Slack thread "1732535291.911209", deleted
       When I look at my notifications
@@ -109,6 +109,7 @@ Feature: Handling a Slack message
     Scenario: An edit that adds a mention creates the notification
       Given I am connected to Slack as the Slack user "U01"
       And Slack sends the edit of a message
+      And that edit mentions the Slack user "U01"
       And Slack serves the permalink of that message
       And Slack serves the Slack user "U01"
       And Slack serves the Slack user "U02"
@@ -116,7 +117,7 @@ Feature: Handling a Slack message
       And Slack serves the channel "C05XXX"
       And Slack serves the team "T01"
       When the Slack message job handles that event
-      Then the job decides "created"
+      Then the job decides created
       When I look at my notifications
       Then that is the only notification: the Slack thread "1732535291.911209", unread
       And that Slack thread is in the channel "C05XXX"
@@ -135,7 +136,7 @@ Feature: Handling a Slack message
       And Slack serves the channel "C05XXX"
       And Slack serves the team "T01"
       When the Slack message job handles that event
-      Then the job decides "created"
+      Then the job decides created
       When I look at my notifications
       Then that is the only notification: the Slack thread "1732535291.911209", titled "Hello", unread
       And that Slack thread has the sender profile of "U01", but not the one of "B05YYY"
@@ -183,7 +184,7 @@ Feature: Handling a Slack message
       And Slack serves the channel "C05XXX"
       And Slack does not know the team "T01"
       When the Slack message job handles that event
-      Then the job decides "created"
+      Then the job decides created
       When I look at my notifications
       Then that is the only notification: the Slack thread "1732535291.911209", unread
       And that Slack thread only knows the team "T01"
@@ -195,7 +196,7 @@ Feature: Handling a Slack message
       And that message mentions the Slack user "U01"
       And Slack does not let the token "slack_test_user_access_token" see the thread of that message, and is asked about it once
       When the Slack message job handles that event
-      Then the job decides "thread_not_accessible"
+      Then the job decides thread_not_accessible
       When I look at my notifications
       Then nobody has any notification
 
@@ -215,7 +216,7 @@ Feature: Handling a Slack message
       And Slack does not know the usergroup "S06UNKNOWN"
       And Slack serves its emojis
       When the Slack message job handles that event
-      Then the job decides "created"
+      Then the job decides created
       When I look at my notifications
       Then that is the only notification: the Slack thread "1732535291.911209", unread
       And that Slack thread names the usergroup "S05ZZZ" "admins"
@@ -235,7 +236,7 @@ Feature: Handling a Slack message
       And Slack serves the team "T01"
       And Slack serves its emojis
       When the Slack message job handles that event
-      Then the job decides "created"
+      Then the job decides created
       When I look at my notifications
       Then that is the only notification: the Slack thread "1732535291.911209", unread
       And the last message of that Slack thread keeps its plan block and its unknown block
@@ -268,14 +269,14 @@ Feature: Handling a Slack message
       And Slack serves the channel "C05XXX"
       And Slack serves the team "T01"
       When the Slack message job handles that event
-      Then the job decides "deleted_last_from_user, updated"
+      Then the job decides deleted_last_from_user, updated
       When the other user looks at their notifications
       Then that is the only notification: the Slack thread "1732535291.911209", deleted
       When I look at my notifications
       Then that is the only notification: the Slack thread "1732535291.911209", unread
 
     Scenario Outline: With two-way sync, the notification follows the subscription of the thread in Slack
-      Given I am connected to Slack, with 2-way sync
+      Given I am connected to Slack, with two-way sync
       And Slack serves the permalink of the last message of the thread
       And I know a Slack thread that is <was>, read up to its last message
       And Slack sends a message in a thread
@@ -286,7 +287,7 @@ Feature: Handling a Slack message
       And Slack serves the channel "C05XXX"
       And Slack serves the team "T01"
       When the Slack message job handles that event
-      Then the job decides "<decision>"
+      Then the job decides <decision>
       When I look at my notifications
       Then that is the only notification: the Slack thread "1732535291.911209", titled "World", <status>
       And that Slack thread is <subscribed_after>
@@ -312,7 +313,7 @@ Feature: Handling a Slack message
         | unsubscribed | a subscribed thread, read up to its first message  | updated  | unread | subscribed       |
 
     Scenario Outline: With one-way sync, a mention of the user brings the notification back when the thread is subscribed
-      Given I am connected to Slack as the Slack user "U01", with 1-way sync
+      Given I am connected to Slack as the Slack user "U01", with one-way sync
       And Slack serves the permalink of the last message of the thread
       And I know a Slack thread that is <was>, read up to its last message
       And Slack sends a message in a thread
@@ -324,7 +325,7 @@ Feature: Handling a Slack message
       And Slack serves the channel "C05XXX"
       And Slack serves the team "T01"
       When the Slack message job handles that event
-      Then the job decides "<decision>"
+      Then the job decides <decision>
       When I look at my notifications
       Then that is the only notification: the Slack thread "1732535291.911209", titled "World", <status>
       And that Slack thread is <subscribed_after>
@@ -350,7 +351,7 @@ Feature: Handling a Slack message
         | unsubscribed | a subscribed thread, read up to its first message  | updated  | unread | subscribed       |
 
     Scenario Outline: With one-way sync, a reply that mentions no one only keeps the notification of a thread that was followed
-      Given I am connected to Slack, with 1-way sync
+      Given I am connected to Slack, with one-way sync
       And Slack serves the permalink of the last message of the thread
       And I know a Slack thread that is <was>, read up to its last message
       And Slack sends a message in a thread
@@ -361,7 +362,7 @@ Feature: Handling a Slack message
       And Slack serves the channel "C05XXX"
       And Slack serves the team "T01"
       When the Slack message job handles that event
-      Then the job decides "<decision>"
+      Then the job decides <decision>
       When I look at my notifications
       Then that is the only notification: the Slack thread "1732535291.911209", titled "World", <status>
       And that Slack thread is <subscribed_after>

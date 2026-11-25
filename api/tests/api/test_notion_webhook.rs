@@ -8,8 +8,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, config::IntegrationConnectionConfig,
-        integrations::notion::NotionConfig,
+        config::IntegrationConnectionConfig, integrations::notion::NotionConfig,
     },
     notification::{
         Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
@@ -34,10 +33,9 @@ use crate::helpers::{
         create_notion_integration_connection, mock_my_discussion, mock_notion_blocks,
         mock_notion_deleted_block, mock_notion_discussion, mock_notion_failure_after_triage,
         mock_notion_not_accessible, notion_comment, notion_comment_event,
-        notion_page_content_event, notion_paragraph_block, notion_webhook_actor,
-        post_signed_notion_event, pushed_jobs_count, text_segment, user_mention_segment,
+        notion_page_content_event, notion_paragraph_block, notion_webhook_actor, text_segment,
+        user_mention_segment,
     },
-    rest::delete_resource,
     set_audit_actor, settings,
 };
 
@@ -114,241 +112,6 @@ async fn notion_notifications_of(app: &AuthenticatedApp, client: &reqwest::Clien
     )
     .await
     .len()
-}
-
-mod route {
-    use super::*;
-    use pretty_assertions::assert_eq;
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_verification_handshake_is_acknowledged(
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
-        let app = authenticated_app.await;
-
-        let response = app
-            .client
-            .post(format!("{}hooks/notion/events", app.app.api_address))
-            .json(&json!({ "verification_token": "secret_handshake_token" }))
-            .send()
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), 200);
-        assert_eq!(pushed_jobs_count(&app.app).await, 0);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_unsigned_or_badly_signed_event_is_rejected(
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
-        let app = authenticated_app.await;
-        let event = comment_event(&new_workspace_id(), "comment.created", "comment-1");
-
-        let unsigned = app
-            .client
-            .post(format!("{}hooks/notion/events", app.app.api_address))
-            .json(&event)
-            .send()
-            .await
-            .unwrap();
-        let badly_signed = app
-            .client
-            .post(format!("{}hooks/notion/events", app.app.api_address))
-            .header("X-Notion-Signature", "sha256=00ff")
-            .json(&event)
-            .send()
-            .await
-            .unwrap();
-
-        assert_eq!(unsigned.status(), 401);
-        assert_eq!(badly_signed.status(), 401);
-        assert_eq!(pushed_jobs_count(&app.app).await, 0);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_comment_event_of_a_connected_workspace_is_queued(
-        settings: Settings,
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
-        let app = authenticated_app.await;
-        let workspace_id = new_workspace_id();
-        create_notion_integration_connection(
-            &app.app,
-            app.user.id,
-            &settings,
-            ME,
-            MY_TOKEN,
-            &workspace_id,
-            NotionConfig::enabled(),
-        )
-        .await;
-
-        let response = post_signed_notion_event(
-            &app.client,
-            &app.app.api_address,
-            &comment_event(&workspace_id, "comment.created", "comment-1"),
-        )
-        .await;
-
-        assert_eq!(response.status(), 200);
-        assert_eq!(pushed_jobs_count(&app.app).await, 1);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_page_content_event_of_a_connected_workspace_is_queued(
-        settings: Settings,
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
-        let app = authenticated_app.await;
-        let workspace_id = new_workspace_id();
-        create_notion_integration_connection(
-            &app.app,
-            app.user.id,
-            &settings,
-            ME,
-            MY_TOKEN,
-            &workspace_id,
-            NotionConfig::enabled(),
-        )
-        .await;
-
-        let response = post_signed_notion_event(
-            &app.client,
-            &app.app.api_address,
-            &notion_page_content_event(&workspace_id, "event-1", PAGE_ID, &[BLOCK_ID], &[ME]),
-        )
-        .await;
-
-        assert_eq!(response.status(), 200);
-        assert_eq!(pushed_jobs_count(&app.app).await, 1);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_comment_event_of_an_unknown_workspace_is_dropped(
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
-        let app = authenticated_app.await;
-
-        let response = post_signed_notion_event(
-            &app.client,
-            &app.app.api_address,
-            &comment_event(&new_workspace_id(), "comment.created", "comment-1"),
-        )
-        .await;
-
-        assert_eq!(response.status(), 200);
-        assert_eq!(pushed_jobs_count(&app.app).await, 0);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_other_event_types_are_dropped(
-        settings: Settings,
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
-        let app = authenticated_app.await;
-        let workspace_id = new_workspace_id();
-        create_notion_integration_connection(
-            &app.app,
-            app.user.id,
-            &settings,
-            ME,
-            MY_TOKEN,
-            &workspace_id,
-            NotionConfig::enabled(),
-        )
-        .await;
-
-        let response = post_signed_notion_event(
-            &app.client,
-            &app.app.api_address,
-            &comment_event(&workspace_id, "page.locked", "comment-1"),
-        )
-        .await;
-
-        assert_eq!(response.status(), 200);
-        assert_eq!(pushed_jobs_count(&app.app).await, 0);
-    }
-
-    #[rstest]
-    #[case::comment_page_id(|workspace_id: &str| notion_comment_event(
-        workspace_id, "comment.created", "comment-1", SOMEONE, DISCUSSION_ID, "../v1/users",
-        BLOCK_ID, &[ME],
-    ))]
-    #[case::comment_parent(|workspace_id: &str| notion_comment_event(
-        workspace_id, "comment.created", "comment-1", SOMEONE, DISCUSSION_ID, PAGE_ID,
-        "../v1/users", &[ME],
-    ))]
-    #[case::updated_block(|workspace_id: &str| notion_page_content_event(
-        workspace_id, "event-1", PAGE_ID, &[BLOCK_ID, "../v1/users"], &[ME],
-    ))]
-    #[tokio::test]
-    async fn test_event_with_a_malformed_resource_id_is_dropped(
-        settings: Settings,
-        #[future] authenticated_app: AuthenticatedApp,
-        #[case] event: fn(&str) -> Value,
-    ) {
-        let app = authenticated_app.await;
-        let workspace_id = new_workspace_id();
-        create_notion_integration_connection(
-            &app.app,
-            app.user.id,
-            &settings,
-            ME,
-            MY_TOKEN,
-            &workspace_id,
-            NotionConfig::enabled(),
-        )
-        .await;
-
-        let response =
-            post_signed_notion_event(&app.client, &app.app.api_address, &event(&workspace_id))
-                .await;
-
-        assert_eq!(response.status(), 200);
-        assert_eq!(pushed_jobs_count(&app.app).await, 0);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_events_of_a_disconnected_workspace_are_dropped(
-        settings: Settings,
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
-        let app = authenticated_app.await;
-        let workspace_id = new_workspace_id();
-        let connection = create_notion_integration_connection(
-            &app.app,
-            app.user.id,
-            &settings,
-            ME,
-            MY_TOKEN,
-            &workspace_id,
-            NotionConfig::enabled(),
-        )
-        .await;
-        let event = comment_event(&workspace_id, "comment.created", "comment-1");
-        post_signed_notion_event(&app.client, &app.app.api_address, &event).await;
-        assert_eq!(pushed_jobs_count(&app.app).await, 1);
-
-        let _: Box<IntegrationConnection> = delete_resource(
-            &app.client,
-            &app.app.api_address,
-            "integration-connections",
-            connection.id.into(),
-        )
-        .await;
-        let response = post_signed_notion_event(&app.client, &app.app.api_address, &event).await;
-
-        assert_eq!(response.status(), 200);
-        assert_eq!(pushed_jobs_count(&app.app).await, 1);
-    }
 }
 
 mod job {
@@ -1380,17 +1143,4 @@ mod mention {
             .context("Failed to commit transaction")
             .unwrap();
     }
-}
-
-fn comment_event(workspace_id: &str, event_type: &str, comment_id: &str) -> Value {
-    notion_comment_event(
-        workspace_id,
-        event_type,
-        comment_id,
-        SOMEONE,
-        DISCUSSION_ID,
-        PAGE_ID,
-        BLOCK_ID,
-        &[ME],
-    )
 }

@@ -160,6 +160,68 @@ impl FromStr for MessageRef {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum Sync {
+    OneWay,
+    TwoWay,
+}
+
+impl Parameter for Sync {
+    const REGEX: &'static str = "one-way|two-way";
+    const NAME: &'static str = "sync";
+}
+
+impl FromStr for Sync {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        match text {
+            "one-way" => Ok(Self::OneWay),
+            "two-way" => Ok(Self::TwoWay),
+            other => Err(format!("Unknown sync {other:?}")),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ReadTo {
+    Nothing,
+    TheLastMessage,
+}
+
+const DECISIONS: [&str; 7] = [
+    "created",
+    "updated",
+    "unchanged",
+    "unsubscribed",
+    "deleted_last_from_user",
+    "sync_disabled",
+    "thread_not_accessible",
+];
+
+#[derive(Debug)]
+pub struct Decisions(Vec<&'static str>);
+
+impl Parameter for Decisions {
+    const REGEX: &'static str = "(?:created|updated|unchanged|unsubscribed|deleted_last_from_user|sync_disabled|thread_not_accessible)(?:, (?:created|updated|unchanged|unsubscribed|deleted_last_from_user|sync_disabled|thread_not_accessible))*";
+    const NAME: &'static str = "decisions";
+}
+
+impl FromStr for Decisions {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        text.split(", ")
+            .map(|decision| {
+                DECISIONS
+                    .into_iter()
+                    .find(|known| *known == decision)
+                    .ok_or_else(|| format!("Unknown decision {decision:?}"))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(Self)
+    }
+}
 fn callback_of(world: &ApiWorld) -> SlackPushEventCallback {
     match world.slack_webhook.event.as_ref().expect("No Slack event") {
         SlackEvent::Message(event) => match &**event {
@@ -211,7 +273,7 @@ async fn connect(
     who: Who,
     slack_user: Option<&str>,
     access_token: Option<&str>,
-    two_way: Option<bool>,
+    sync: Option<Sync>,
 ) {
     let user_id = match who {
         Who::Me => world.user().id,
@@ -226,8 +288,8 @@ async fn connect(
             universal_inbox_api::integrations::oauth2::AccessToken(access_token.to_string());
     }
     let mut config = SlackConfig::enabled_as_notifications();
-    if let Some(two_way) = two_way {
-        config.message_config.is_2way_sync = two_way;
+    if let Some(sync) = sync {
+        config.message_config.is_2way_sync = matches!(sync, Sync::TwoWay);
     }
     let app = world.app.get().await;
     let connection = create_and_mock_integration_connection(
@@ -258,14 +320,14 @@ async fn connected_with_a_token(world: &mut ApiWorld, who: Who, slack_user: Stri
     connect(world, who, Some(&slack_user), Some(&token), None).await;
 }
 
-#[given(expr = "I am connected to Slack as the Slack user {string}, with {int}-way sync")]
-async fn connected_as_with_sync(world: &mut ApiWorld, slack_user: String, ways: u8) {
-    connect(world, Who::Me, Some(&slack_user), None, Some(ways == 2)).await;
+#[given(expr = "I am connected to Slack as the Slack user {string}, with {sync} sync")]
+async fn connected_as_with_sync(world: &mut ApiWorld, slack_user: String, sync: Sync) {
+    connect(world, Who::Me, Some(&slack_user), None, Some(sync)).await;
 }
 
-#[given(expr = "I am connected to Slack, with {int}-way sync")]
-async fn connected_with_sync(world: &mut ApiWorld, ways: u8) {
-    connect(world, Who::Me, None, None, Some(ways == 2)).await;
+#[given(expr = "I am connected to Slack, with {sync} sync")]
+async fn connected_with_sync(world: &mut ApiWorld, sync: Sync) {
+    connect(world, Who::Me, None, None, Some(sync)).await;
 }
 
 #[given(expr = "I am connected to Slack as the Slack user {string}, with its sync disabled")]
@@ -289,8 +351,8 @@ async fn connected_with_the_sync_disabled(world: &mut ApiWorld, slack_user: Stri
 async fn know_a_thread(
     world: &mut ApiWorld,
     who: Who,
-    subscribed: bool,
-    read_to_the_last: bool,
+    subscribed: Subscription,
+    read_to: ReadTo,
     expected: NotificationStatus,
 ) {
     let (user_id, connection_id) = match who {
@@ -304,8 +366,11 @@ async fn know_a_thread(
         ),
     };
     let mut thread = slack_thread();
-    thread.subscribed = subscribed;
-    thread.last_read = read_to_the_last.then(|| thread.messages.last().origin.ts.clone());
+    thread.subscribed = subscribed.is_subscribed();
+    thread.last_read = match read_to {
+        ReadTo::Nothing => None,
+        ReadTo::TheLastMessage => Some(thread.messages.last().origin.ts.clone()),
+    };
     let app = world.app.get().await;
     let notification =
         create_notification_from_slack_thread(app, &thread, user_id, connection_id).await;
@@ -322,12 +387,19 @@ async fn know_a_read_thread(world: &mut ApiWorld, who: Who, subscription: Subscr
     } else {
         NotificationStatus::Unsubscribed
     };
-    know_a_thread(world, who, subscription.is_subscribed(), true, expected).await;
+    know_a_thread(world, who, subscription, ReadTo::TheLastMessage, expected).await;
 }
 
 #[given(expr = "{who} know(s) a Slack thread that is subscribed and not read yet")]
 async fn know_an_unread_thread(world: &mut ApiWorld, who: Who) {
-    know_a_thread(world, who, true, false, NotificationStatus::Unread).await;
+    know_a_thread(
+        world,
+        who,
+        Subscription::Subscribed,
+        ReadTo::Nothing,
+        NotificationStatus::Unread,
+    )
+    .await;
 }
 
 #[given(expr = "that message mentions the Slack usergroup {string}")]
@@ -644,10 +716,9 @@ async fn look_at_notifications(world: &mut ApiWorld, who: Who) {
     world.slack_webhook.listing = listing;
 }
 
-#[then(expr = "the job decides {string}")]
-fn the_job_decides(world: &mut ApiWorld, expected: String) {
-    let expected: Vec<&str> = expected.split(", ").collect();
-    assert_eq!(world.slack_webhook.runs.first(), Some(&expected));
+#[then(expr = "the job decides {decisions}")]
+fn the_job_decides(world: &mut ApiWorld, expected: Decisions) {
+    assert_eq!(world.slack_webhook.runs.first(), Some(&expected.0));
 }
 
 #[then("the job decides nothing")]
@@ -655,12 +726,9 @@ fn the_job_decides_nothing(world: &mut ApiWorld) {
     assert_eq!(world.slack_webhook.runs.first(), Some(&Vec::<&str>::new()));
 }
 
-#[then(expr = "the second time, the job decides {string}")]
-fn the_job_decides_the_second_time(world: &mut ApiWorld, expected: String) {
-    assert_eq!(
-        world.slack_webhook.runs.get(1),
-        Some(&vec![expected.as_str()])
-    );
+#[then(expr = "the second time, the job decides {decisions}")]
+fn the_job_decides_the_second_time(world: &mut ApiWorld, expected: Decisions) {
+    assert_eq!(world.slack_webhook.runs.get(1), Some(&expected.0));
 }
 
 #[then(expr = "the job fails, with an error mentioning {string}")]
