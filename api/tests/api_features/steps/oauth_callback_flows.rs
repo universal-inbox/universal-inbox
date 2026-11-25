@@ -24,6 +24,7 @@ fn state_of(url: &url::Url) -> Option<String> {
 async fn i_started_the_flow_a_second_time(world: &mut ApiWorld) {
     let url = authorization_url(world).await;
     world.oauth_callback.earlier_state = world.oauth_callback.state.take();
+    world.oauth_callback.earlier_authorization_url = world.oauth_callback.authorization_url.take();
     world.oauth_callback.state = state_of(&url);
     world.oauth_callback.authorization_url = Some(url);
 }
@@ -89,8 +90,7 @@ async fn the_credential_is_as_noted(world: &mut ApiWorld) {
     assert_eq!(credential_of(world, id).await, noted);
 }
 
-fn challenge_of(world: &ApiWorld) -> (String, Option<String>) {
-    let url = world.oauth_callback.authorization_url.as_ref().unwrap();
+fn challenge_in(url: &url::Url) -> (String, Option<String>) {
     let pair = |name: &str| {
         url.query_pairs()
             .find(|(key, _)| key == name)
@@ -100,6 +100,10 @@ fn challenge_of(world: &ApiWorld) -> (String, Option<String>) {
         pair("code_challenge").expect("The authorization URL has no PKCE challenge"),
         pair("code_challenge_method"),
     )
+}
+
+fn challenge_of(world: &ApiWorld) -> (String, Option<String>) {
+    challenge_in(world.oauth_callback.authorization_url.as_ref().unwrap())
 }
 
 #[given("the authorization asks for a PKCE challenge, with the method S256")]
@@ -129,5 +133,73 @@ async fn the_token_request_carried_the_verifier(world: &mut ApiWorld, provider: 
     assert_eq!(
         URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes())),
         challenge
+    );
+}
+
+#[given("the two authorizations have different states and different PKCE challenges")]
+fn the_two_authorizations_differ(world: &mut ApiWorld) {
+    let earlier_url = world
+        .oauth_callback
+        .earlier_authorization_url
+        .as_ref()
+        .expect("The flow was started once only");
+    assert_ne!(
+        world.oauth_callback.earlier_state,
+        world.oauth_callback.state
+    );
+    assert_ne!(challenge_in(earlier_url).0, challenge_of(world).0);
+}
+
+async fn verifier_sent_to_the_token_endpoint(
+    world: &mut ApiWorld,
+    provider: ProviderName,
+) -> String {
+    let app = world.app.get().await;
+    let requests = provider.mock_server(app).received_requests().await.unwrap();
+    let token_requests: Vec<_> = requests
+        .iter()
+        .filter(|request| request.url.path() == "/token")
+        .collect();
+    assert_eq!(token_requests.len(), 1);
+    let pairs: Vec<(String, String)> =
+        serde_urlencoded::from_bytes(&token_requests[0].body).unwrap();
+    pairs
+        .into_iter()
+        .find(|(key, _)| key == "code_verifier")
+        .map(|(_, value)| value)
+        .expect("The token request has no code_verifier")
+}
+
+#[then(
+    expr = "the token request of {provider} carried a verifier that RFC 7636 allows, which matches no challenge but that one"
+)]
+async fn the_verifier_matches_only_its_challenge(world: &mut ApiWorld, provider: ProviderName) {
+    let verifier = verifier_sent_to_the_token_endpoint(world, provider).await;
+    assert!(
+        (43..=128).contains(&verifier.len()),
+        "verifier length {}",
+        verifier.len()
+    );
+    assert!(
+        verifier
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-._~".contains(c)),
+        "the verifier has a reserved character"
+    );
+    let challenge = |url: &url::Url| challenge_in(url).0;
+    let digest = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
+    assert_eq!(
+        digest,
+        challenge(world.oauth_callback.authorization_url.as_ref().unwrap())
+    );
+    assert_ne!(
+        digest,
+        challenge(
+            world
+                .oauth_callback
+                .earlier_authorization_url
+                .as_ref()
+                .expect("The flow was started once only")
+        )
     );
 }

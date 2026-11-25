@@ -11,5 +11,6 @@ pub struct OauthCallback {
     pub location: Option<String>,
     pub other_connection_id: Option<IntegrationConnectionId>,
     pub earlier_state: Option<String>,
+    pub earlier_authorization_url: Option<url::Url>,
     pub noted_credential: Option<(Vec<u8>, chrono::DateTime<chrono::Utc>)>,
 }
