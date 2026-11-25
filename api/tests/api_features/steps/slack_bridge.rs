@@ -64,7 +64,7 @@ fn the_action_id(world: &ApiWorld) -> SlackBridgePendingActionId {
         .expect("The scenario has no Slack bridge action")
 }
 
-async fn seed_action(world: &mut ApiWorld, status: SlackBridgeActionStatus) {
+pub(super) async fn seed_action(world: &mut ApiWorld, status: SlackBridgeActionStatus) {
     seed_action_about(world, status, None).await;
 }
 

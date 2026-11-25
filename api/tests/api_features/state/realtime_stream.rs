@@ -70,3 +70,10 @@ pub struct RealtimeStream {
     pub own: Vec<EventStream>,
     pub other: Option<EventStream>,
 }
+
+#[derive(Default)]
+pub struct RealtimePublication {
+    pub subscriber: Option<crate::helpers::realtime::RealtimeEventsSubscriber>,
+    pub events: Vec<universal_inbox::realtime::RealtimeEvent>,
+    pub seeded_actions: Vec<uuid::Uuid>,
+}

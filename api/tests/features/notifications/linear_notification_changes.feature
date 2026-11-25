@@ -24,6 +24,7 @@ Feature: Changing Linear notifications
       When I try to delete "mine"
       Then the app answers 500
       And the answer is the public error "An internal error occurred. Please retry later or contact support with the correlation id."
+      And "mine", read again, is exactly as it was
 
     @legacy:test_linear_notifications::patch_resource::test_patch_linear_notification_status_as_deleted_with_linear_unsuccessful_response
     Scenario: A Linear answer that says it did not archive is a public internal error
@@ -32,6 +33,7 @@ Feature: Changing Linear notifications
       When I try to delete "mine"
       Then the app answers 500
       And the answer is the public error "An internal error occurred. Please retry later or contact support with the correlation id."
+      And "mine", read again, is exactly as it was
 
   Rule: Unsubscribing from a notification
 
@@ -63,7 +65,7 @@ Feature: Changing Linear notifications
 
   Rule: Another user cannot act on my notification
 
-    Scenario Outline: Another user cannot make me <status> a notification, and their notification of the same issue is left alone
+    Scenario Outline: Another user cannot set my notification to <status>, and their notification of the same issue is left alone
       Given I have the Linear issue notification "mine"
       And another user is signed in
       And that other user is connected to Linear, syncing its tasks into the project Project2, due today

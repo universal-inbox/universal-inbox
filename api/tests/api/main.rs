@@ -12,7 +12,6 @@ mod test_linear_tasks;
 mod test_multi_task_manager;
 mod test_oauth2_cimd;
 mod test_oauth2_revocation;
-mod test_realtime_events;
 mod test_slack_backfill_team_id;
 mod test_slack_notifications;
 mod test_slack_webhook;

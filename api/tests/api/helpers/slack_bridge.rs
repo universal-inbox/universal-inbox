@@ -65,3 +65,14 @@ pub async fn notification_reference(
         .await
         .expect("The pending action should still exist")
 }
+
+pub async fn pending_action_ids(
+    app: &TestedApp,
+    user_id: universal_inbox::user::UserId,
+) -> Vec<Uuid> {
+    sqlx::query_scalar("SELECT id FROM slack_bridge_pending_action WHERE user_id = $1")
+        .bind(user_id.0)
+        .fetch_all(&*app.repository.pool)
+        .await
+        .expect("Failed to list the pending actions")
+}

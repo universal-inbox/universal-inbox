@@ -43,6 +43,7 @@ pub mod jobs;
 pub mod mailer;
 pub mod notification;
 pub mod notion;
+pub mod realtime;
 pub mod rest;
 pub mod slack;
 pub mod slack_bridge;
