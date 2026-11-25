@@ -62,6 +62,7 @@ mod tasks;
 mod third_party;
 mod throttle;
 mod ticktick_tasks_sync;
+mod todoist_task_changes;
 mod todoist_tasks_sync;
 mod unread_inbox;
 mod user_rate_limits;

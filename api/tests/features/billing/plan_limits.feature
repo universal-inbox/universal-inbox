@@ -21,11 +21,11 @@ Feature: The integration limit of the Free plan
       When the validated integrations of the user are counted
       Then the usage of the user is 1
 
-
     Scenario: A real integration is allowed one below the limit
       Given the user validates one integration fewer than the Free plan allows
       When the user adds a Todoist integration
       Then the cap allows it
+
     @legacy:test_billing::the_cap_does_not_refuse_the_implicit_api_connection
     Scenario: The cap refuses a real integration at the limit, but not the implicit API connection
       Given the user validates as many integrations as the Free plan allows

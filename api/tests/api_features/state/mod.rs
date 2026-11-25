@@ -24,6 +24,7 @@ mod tasks;
 mod third_party;
 mod throttle;
 mod ticktick_tasks;
+mod todoist_task_changes;
 mod todoist_tasks;
 
 pub use account::{
@@ -55,4 +56,5 @@ pub use tasks::Tasks;
 pub use third_party::ThirdPartyItems;
 pub use throttle::{Observed, Probe};
 pub use ticktick_tasks::TickTickTasks;
+pub use todoist_task_changes::TodoistTaskChanges;
 pub use todoist_tasks::TodoistTasks;
