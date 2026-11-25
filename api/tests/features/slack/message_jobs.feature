@@ -11,7 +11,7 @@ Feature: Handling a Slack message
     Scenario: A message that mentions no one creates nothing
       Given Slack sends a message in a channel
       When the Slack message job handles that event
-      Then the job decides nothing
+      Then the job makes no decision
       When I look at my notifications
       Then nobody has any notification
 
@@ -31,7 +31,7 @@ Feature: Handling a Slack message
       And Slack sends a message in a channel
       And that message mentions the Slack user "U02"
       When the Slack message job handles that event
-      Then the job decides nothing
+      Then the job makes no decision
       When I look at my notifications
       Then nobody has any notification
 
@@ -108,8 +108,7 @@ Feature: Handling a Slack message
     @legacy:test_slack_webhook_message::job::test_handle_slack_message_edited_to_add_a_ping_to_known_user
     Scenario: An edit that adds a mention creates the notification
       Given I am connected to Slack as the Slack user "U01"
-      And Slack sends the edit of a message
-      And that edit mentions the Slack user "U01"
+      And Slack sends the edit of a message that mentions the Slack user "U01"
       And Slack serves the permalink of that message
       And Slack serves the Slack user "U01"
       And Slack serves the Slack user "U02"
@@ -168,7 +167,7 @@ Feature: Handling a Slack message
       And that message mentions the Slack usergroup "S06UNKNOWN"
       And Slack does not know the usergroup "S06UNKNOWN"
       When the Slack message job handles that event
-      Then the job decides nothing
+      Then the job makes no decision
       When I look at my notifications
       Then nobody has any notification
 
@@ -247,7 +246,7 @@ Feature: Handling a Slack message
     Scenario: A reply in a thread that no one follows creates nothing
       Given Slack sends a message in a thread
       When the Slack message job handles that event
-      Then the job decides nothing
+      Then the job makes no decision
       When I look at my notifications
       Then nobody has any notification
 

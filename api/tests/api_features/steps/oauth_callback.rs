@@ -49,7 +49,6 @@ use crate::{
         },
         notion::{
             BLOCK_ID, DISCUSSION_ID, PAGE_ID, notion_comment_event, post_signed_notion_event,
-            pushed_jobs_count,
         },
         user::front_origin_header,
     },
@@ -620,12 +619,6 @@ async fn notion_sends_an_event(world: &mut ApiWorld) {
     let client = world.client();
     let app = world.app.get().await;
     post_signed_notion_event(&client, &app.api_address, &notion_event()).await;
-}
-
-#[then(expr = "{int} Notion event(s) is/are queued")]
-async fn notion_events_are_queued(world: &mut ApiWorld, count: usize) {
-    let app = world.app.get().await;
-    assert_eq!(pushed_jobs_count(app).await, count);
 }
 
 #[given(expr = "I have a new {provider} connection, not authorized yet")]

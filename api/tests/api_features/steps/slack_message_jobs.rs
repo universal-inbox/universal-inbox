@@ -161,17 +161,17 @@ impl FromStr for MessageRef {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum Sync {
+pub enum SyncWays {
     OneWay,
     TwoWay,
 }
 
-impl Parameter for Sync {
+impl Parameter for SyncWays {
     const REGEX: &'static str = "one-way|two-way";
     const NAME: &'static str = "sync";
 }
 
-impl FromStr for Sync {
+impl FromStr for SyncWays {
     type Err = String;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
@@ -203,7 +203,7 @@ const DECISIONS: [&str; 7] = [
 pub struct Decisions(Vec<&'static str>);
 
 impl Parameter for Decisions {
-    const REGEX: &'static str = "(?:created|updated|unchanged|unsubscribed|deleted_last_from_user|sync_disabled|thread_not_accessible)(?:, (?:created|updated|unchanged|unsubscribed|deleted_last_from_user|sync_disabled|thread_not_accessible))*";
+    const REGEX: &'static str = "[a-z_]+(?:, [a-z_]+)*";
     const NAME: &'static str = "decisions";
 }
 
@@ -273,7 +273,7 @@ async fn connect(
     who: Who,
     slack_user: Option<&str>,
     access_token: Option<&str>,
-    sync: Option<Sync>,
+    sync: Option<SyncWays>,
 ) {
     let user_id = match who {
         Who::Me => world.user().id,
@@ -289,7 +289,7 @@ async fn connect(
     }
     let mut config = SlackConfig::enabled_as_notifications();
     if let Some(sync) = sync {
-        config.message_config.is_2way_sync = matches!(sync, Sync::TwoWay);
+        config.message_config.is_2way_sync = matches!(sync, SyncWays::TwoWay);
     }
     let app = world.app.get().await;
     let connection = create_and_mock_integration_connection(
@@ -321,12 +321,12 @@ async fn connected_with_a_token(world: &mut ApiWorld, who: Who, slack_user: Stri
 }
 
 #[given(expr = "I am connected to Slack as the Slack user {string}, with {sync} sync")]
-async fn connected_as_with_sync(world: &mut ApiWorld, slack_user: String, sync: Sync) {
+async fn connected_as_with_sync(world: &mut ApiWorld, slack_user: String, sync: SyncWays) {
     connect(world, Who::Me, Some(&slack_user), None, Some(sync)).await;
 }
 
 #[given(expr = "I am connected to Slack, with {sync} sync")]
-async fn connected_with_sync(world: &mut ApiWorld, sync: Sync) {
+async fn connected_with_sync(world: &mut ApiWorld, sync: SyncWays) {
     connect(world, Who::Me, None, None, Some(sync)).await;
 }
 
@@ -721,7 +721,7 @@ fn the_job_decides(world: &mut ApiWorld, expected: Decisions) {
     assert_eq!(world.slack_webhook.runs.first(), Some(&expected.0));
 }
 
-#[then("the job decides nothing")]
+#[then("the job makes no decision")]
 fn the_job_decides_nothing(world: &mut ApiWorld) {
     assert_eq!(world.slack_webhook.runs.first(), Some(&Vec::<&str>::new()));
 }

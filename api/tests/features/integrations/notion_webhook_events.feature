@@ -11,15 +11,7 @@ Feature: Receiving Notion webhook events
     Then the app answers 200
     And 0 Notion events are queued
 
-  @legacy:test_notion_webhook::route::test_unsigned_or_badly_signed_event_is_rejected
-  Scenario: An event without a valid signature is refused
-    When Notion sends a comment event without a signature
-    Then the app answers 401
-    When Notion sends a comment event with a wrong signature
-    Then the app answers 401
-    And 0 Notion events are queued
-
-  Rule: An event of a connected workspace is queued
+  Rule: An event is queued when it is signed, handled, well formed and of a connected workspace
 
     Background:
       Given I am connected to Notion, in a workspace of its own
@@ -36,9 +28,29 @@ Feature: Receiving Notion webhook events
       Then the app answers 200
       And 1 Notion event is queued
 
+    @legacy:test_notion_webhook::route::test_unsigned_or_badly_signed_event_is_rejected
+    Scenario: An event without a valid signature is refused and not queued, while the same event signed is queued
+      When Notion sends a comment event of my workspace, without a signature
+      Then the app answers 401
+      When Notion sends a comment event of my workspace, with a wrong signature
+      Then the app answers 401
+      And 0 Notion events are queued
+      When Notion sends a comment event of my workspace
+      Then the app answers 200
+      And 1 Notion event is queued
+
+    @legacy:test_notion_webhook::route::test_comment_event_of_an_unknown_workspace_is_dropped
+    Scenario: A comment event of another workspace is dropped, while the one of my workspace is queued
+      When Notion sends a comment event of another workspace
+      Then the app answers 200
+      And 0 Notion events are queued
+      When Notion sends a comment event of my workspace
+      Then the app answers 200
+      And 1 Notion event is queued
+
     @legacy:test_notion_webhook::route::test_other_event_types_are_dropped
     Scenario: An event of another type is dropped
-      When Notion sends a event of another type of my workspace
+      When Notion sends an event of another type of my workspace
       Then the app answers 200
       And 0 Notion events are queued
 
@@ -68,9 +80,3 @@ Feature: Receiving Notion webhook events
       And Notion sends a comment event of my workspace
       Then the app answers 200
       And 1 Notion event is queued
-
-  @legacy:test_notion_webhook::route::test_comment_event_of_an_unknown_workspace_is_dropped
-  Scenario: A comment event of a workspace that nobody connected is dropped
-    When Notion sends a comment event of a workspace that nobody connected
-    Then the app answers 200
-    And 0 Notion events are queued

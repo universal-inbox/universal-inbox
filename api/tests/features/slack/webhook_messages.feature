@@ -62,8 +62,7 @@ Feature: Receiving Slack messages
 
     @legacy:test_slack_webhook_message::webhook::test_receive_slack_message_edited_to_add_a_reference
     Scenario: An edit that adds a mention is queued
-      Given Slack sends the edit of a message
-      And that edit mentions the Slack user "U01"
+      Given Slack sends the edit of a message that mentions the Slack user "U01"
       When Slack delivers that event to the app
       Then the app answers 200
       And the event is queued for processing
@@ -89,8 +88,7 @@ Feature: Receiving Slack messages
 
     @legacy:test_slack_webhook_message::webhook::test_receive_slack_thread_reply_edited_to_add_a_reference
     Scenario: The edit of a reply is queued as that reply, in its own thread
-      Given Slack sends the edit of a message
-      And that edit mentions the Slack user "U01"
+      Given Slack sends the edit of a message that mentions the Slack user "U01"
       And that edit is the one of the reply "1732535350.000100" in the thread "1732535291.911209"
       When Slack delivers that event to the app
       Then the app answers 200

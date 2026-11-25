@@ -323,8 +323,9 @@ async fn the_queued_job_is(
     );
 }
 
-#[given(expr = "that edit mentions the Slack user {string}")]
-fn that_edit_mentions(world: &mut ApiWorld, slack_user_id: String) {
+#[given(expr = "Slack sends the edit of a message that mentions the Slack user {string}")]
+fn slack_sends_an_edit_that_mentions(world: &mut ApiWorld, slack_user_id: String) {
+    slack_sends_an_edit(world);
     let message = edit_of(world)["event"]["message"].to_string();
     assert!(
         message.contains(&format!("\"user_id\":\"{slack_user_id}\"")),
