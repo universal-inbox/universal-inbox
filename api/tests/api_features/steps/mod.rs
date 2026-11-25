@@ -24,6 +24,7 @@ mod linear_issue_notifications;
 mod linear_tasks_sync;
 mod mcp_client;
 mod mcp_oauth_access;
+mod mcp_oauth_flow;
 mod mcp_protocol;
 mod mcp_session_store;
 mod mcp_triage;

@@ -14,6 +14,10 @@ pub fn no_redirect_client() -> Client {
 
 #[given("an OAuth2 client is registered for a loopback callback")]
 async fn a_client_is_registered(world: &mut ApiWorld) {
+    register_loopback_client(world).await;
+}
+
+pub(super) async fn register_loopback_client(world: &mut ApiWorld) {
     let app = world.app.get().await;
     let mut transaction = app
         .oauth2_service
