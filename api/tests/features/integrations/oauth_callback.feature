@@ -170,3 +170,14 @@ Feature: The OAuth callback
       And the provider calls back with that state and a code, for the owner of the connection
       Then I am redirected to my settings with "oauth_error=invalid-state"
       And the credential of my connection is stored
+
+    Scenario: An OAuth2 access token for MCP cannot complete a callback
+      Given I started the OAuth flow of a new Google Mail connection
+      And Google Mail would accept any code and say that the account is "Jane.Doe@example.com", if it were asked
+      And I have an API token
+      And I hold an OAuth2 access token for MCP with the scope "read write"
+      When the provider calls back with that state and a code, bearing my OAuth2 access token for MCP
+      Then I am redirected to my settings with "oauth_error=invalid-state"
+      And Google Mail was not called by that callback
+      And the state of that flow is still stored, as a call without session consumes nothing
+      And no credential is stored for my connection

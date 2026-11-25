@@ -537,3 +537,16 @@ fn each_call_is_refused_for_lack_of_scope(world: &mut ApiWorld) {
         );
     }
 }
+
+#[when(expr = "I call the app API at {string} with that OAuth2 token")]
+async fn i_call_the_api_with_the_token(world: &mut ApiWorld, path: String) {
+    let token = world.mcp_oauth.token("access_token").to_string();
+    let app = world.app.get().await;
+    let response = Client::new()
+        .get(format!("{}{path}", app.api_address))
+        .bearer_auth(token)
+        .send()
+        .await
+        .expect("Failed to call the API");
+    record_http(world, response).await;
+}

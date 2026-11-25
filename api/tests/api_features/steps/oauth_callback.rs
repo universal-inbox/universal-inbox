@@ -319,6 +319,7 @@ enum Caller {
     Owner,
     OtherUser,
     Anonymous,
+    McpToken,
 }
 
 async fn call_back(world: &mut ApiWorld, caller: Caller, query: String) {
@@ -326,14 +327,29 @@ async fn call_back(world: &mut ApiWorld, caller: Caller, query: String) {
         Caller::Owner => {
             let client = world.client();
             let app = world.app.get().await;
-            Some(api_key(&client, app).await)
+            Some(
+                api_key(&client, app)
+                    .await
+                    .jwt_token
+                    .expose_secret()
+                    .0
+                    .clone(),
+            )
         }
         Caller::OtherUser => {
             let client = world.other_session.as_ref().unwrap().client.clone();
             let app = world.app.get().await;
-            Some(api_key(&client, app).await)
+            Some(
+                api_key(&client, app)
+                    .await
+                    .jwt_token
+                    .expose_secret()
+                    .0
+                    .clone(),
+            )
         }
         Caller::Anonymous => None,
+        Caller::McpToken => Some(world.mcp_oauth.token("access_token").to_string()),
     };
     let app = world.app.get().await;
     let mut request = Client::builder()
@@ -345,7 +361,7 @@ async fn call_back(world: &mut ApiWorld, caller: Caller, query: String) {
             app.app_address.trim_end_matches('/')
         ));
     if let Some(token) = bearer {
-        request = request.bearer_auth(&token.jwt_token.expose_secret().0);
+        request = request.bearer_auth(token);
     }
     let response = request
         .send()
@@ -799,4 +815,12 @@ async fn no_oauth_state_is_stored(world: &mut ApiWorld) {
             "an OAuth state names my connection: {key}"
         );
     }
+}
+
+#[when(
+    "the provider calls back with that state and a code, bearing my OAuth2 access token for MCP"
+)]
+async fn the_provider_calls_back_with_an_mcp_token(world: &mut ApiWorld) {
+    let query = state_query(world, "provider-code");
+    call_back(world, Caller::McpToken, query).await;
 }
