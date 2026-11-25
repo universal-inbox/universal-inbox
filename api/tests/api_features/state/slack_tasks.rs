@@ -1,8 +1,11 @@
-use universal_inbox::{task::Task, third_party::item::ThirdPartyItemCreationResult};
+use universal_inbox::{
+    notification::NotificationId, task::Task, third_party::item::ThirdPartyItemCreationResult,
+};
 
 #[derive(Default)]
 pub struct SlackTasks {
     pub task: Option<Task>,
+    pub notification_id: Option<NotificationId>,
     pub creation: Option<Box<ThirdPartyItemCreationResult>>,
     pub patched: Option<Box<Task>>,
     pub edited: Option<Box<ThirdPartyItemCreationResult>>,

@@ -15,7 +15,7 @@ use universal_inbox::{
         config::IntegrationConnectionConfig,
         integrations::slack::{SlackConfig, SlackReactionConfig},
     },
-    notification::{NotificationSourceKind, NotificationStatus},
+    notification::NotificationSourceKind,
     task::{Task, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::{
@@ -53,7 +53,10 @@ use crate::{
         },
         third_party::create_task_third_party_item,
     },
-    steps::todoist_task_changes::{TaskState, expect_once},
+    steps::{
+        status::UserStatus,
+        todoist_task_changes::{TaskState, expect_once},
+    },
     world::ApiWorld,
 };
 
@@ -460,11 +463,8 @@ fn the_sync_brought_two_tasks(world: &mut ApiWorld) {
     assert_eq!(world.todoist_tasks.results.len(), 2);
 }
 
-#[then(expr = "the notification of that Slack task is {notification_status}")]
-async fn the_notification_of_that_slack_task_is(
-    world: &mut ApiWorld,
-    status: NotificationStatusName,
-) {
+#[then(expr = "the notification of that Slack task is {status}")]
+async fn the_notification_of_that_slack_task_is(world: &mut ApiWorld, status: UserStatus) {
     let id = world.slack_tasks.task.as_ref().unwrap().id;
     let client = world.client();
     let app = world.app.get().await;
@@ -498,26 +498,6 @@ async fn that_slack_task_has_no_notification(world: &mut ApiWorld) {
     )
     .await;
     assert_eq!(notifications.len(), 0);
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct NotificationStatusName(NotificationStatus);
-
-impl Parameter for NotificationStatusName {
-    const REGEX: &'static str = "unread|deleted";
-    const NAME: &'static str = "notification_status";
-}
-
-impl FromStr for NotificationStatusName {
-    type Err = String;
-
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        match text {
-            "unread" => Ok(Self(NotificationStatus::Unread)),
-            "deleted" => Ok(Self(NotificationStatus::Deleted)),
-            other => Err(format!("Unknown notification status {other:?}")),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -566,6 +546,9 @@ async fn todoist_adds_the_edited_message(world: &mut ApiWorld, title: String) {
 
 #[given(
     expr = "I reacted to a Slack message that was already edited upstream, with an attachment titled {string}, which Todoist mirrors as a task"
+)]
+#[when(
+    expr = "I react to a Slack message that was already edited upstream, with an attachment titled {string}, which Todoist mirrors as a task"
 )]
 async fn i_reacted_to_an_edited_message(world: &mut ApiWorld, title: String) {
     let creation = slack_reaction(world, Some(&title)).await;

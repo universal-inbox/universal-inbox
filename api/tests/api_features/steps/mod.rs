@@ -57,6 +57,7 @@ mod set_aside;
 pub mod set_aside_support;
 mod slack_emojis;
 mod slack_message_jobs;
+mod slack_reaction_events;
 mod slack_tasks;
 mod slack_threads_sync;
 mod slack_webhook_events;
