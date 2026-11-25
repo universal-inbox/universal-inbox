@@ -119,6 +119,7 @@ pub async fn mock_linear_issue_notification_subscribers_query(
                     extensions: None,
                 }),
         )
+        .expect(1)
         .mount(linear_mock_server)
         .await;
 }
@@ -146,6 +147,7 @@ pub async fn mock_linear_project_notification_subscribers_query(
                     extensions: None,
                 }),
         )
+        .expect(1)
         .mount(linear_mock_server)
         .await;
 }
@@ -179,6 +181,7 @@ pub async fn mock_linear_update_issue_subscribers_query(
                     extensions: None,
                 }),
         )
+        .expect(1)
         .mount(linear_mock_server)
         .await;
 }
@@ -213,6 +216,7 @@ pub async fn mock_linear_archive_notification_query(
                     extensions: None,
                 }),
         )
+        .expect(1)
         .mount(linear_mock_server)
         .await;
 }
@@ -245,6 +249,7 @@ pub async fn mock_linear_update_notification_snoozed_until_at_query(
                     extensions: None,
                 }),
         )
+        .expect(1)
         .mount(linear_mock_server)
         .await;
 }

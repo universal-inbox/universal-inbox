@@ -26,6 +26,7 @@ mod integrations;
 mod jobs;
 mod kept_triage;
 mod linear_issue_notifications;
+mod linear_notification_changes;
 mod linear_tasks_sync;
 mod mcp_client;
 mod mcp_oauth_access;
