@@ -21,7 +21,8 @@ use crate::{
         LinkedMethod, McpOauth, McpProtocol, McpSessions, Notifications, NotionSync, NotionWebhook,
         OauthCallback, Passkeys, PasswordReset, Probe, RealtimePublication, RealtimeStream,
         Sessions, SetAside, SlackBridge, SlackEmojis, SlackTasks, SlackThreads, SlackWebhook,
-        Tasks, ThirdPartyItems, TickTickTasks, TodoistTaskChanges, TodoistTasks,
+        Tasks, ThirdPartyItems, TickTickTaskChanges, TickTickTasks, TodoistTaskChanges,
+        TodoistTasks,
     },
     steps::set_aside_support::Scene,
 };
@@ -61,6 +62,7 @@ pub struct ApiWorld {
     pub slack_bridge: SlackBridge,
     pub todoist_task_changes: TodoistTaskChanges,
     pub ticktick_tasks: TickTickTasks,
+    pub ticktick_task_changes: TickTickTaskChanges,
     pub slack_threads: SlackThreads,
     pub slack_webhook: SlackWebhook,
     pub oauth_callback: OauthCallback,

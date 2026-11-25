@@ -16,5 +16,4 @@ mod test_slack_backfill_team_id;
 mod test_slack_notifications;
 mod test_slack_webhook;
 mod test_slack_webhook_revocation;
-mod test_ticktick_tasks;
 mod test_todoist_notifications;

@@ -137,6 +137,7 @@ pub async fn mock_ticktick_create_task_service(
                 .insert_header("content-type", "application/json")
                 .set_body_json(result),
         )
+        .expect(1)
         .mount(ticktick_mock_server)
         .await;
 }
@@ -174,6 +175,7 @@ pub async fn mock_ticktick_create_task_service_with_schedule(
                 .insert_header("content-type", "application/json")
                 .set_body_json(result),
         )
+        .expect(1)
         .mount(ticktick_mock_server)
         .await;
 }
@@ -222,6 +224,7 @@ pub async fn mock_ticktick_complete_task_service(
         )))
         .and(header("authorization", "Bearer ticktick_test_access_token"))
         .respond_with(ResponseTemplate::new(200))
+        .expect(1)
         .mount(ticktick_mock_server)
         .await;
 }
@@ -235,6 +238,7 @@ pub async fn mock_ticktick_delete_task_service(
         .and(path(format!("/project/{project_id}/task/{task_id}")))
         .and(header("authorization", "Bearer ticktick_test_access_token"))
         .respond_with(ResponseTemplate::new(200))
+        .expect(1)
         .mount(ticktick_mock_server)
         .await;
 }

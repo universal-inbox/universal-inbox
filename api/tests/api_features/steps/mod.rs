@@ -71,6 +71,7 @@ mod sync_scheduling;
 mod tasks;
 mod third_party;
 mod throttle;
+mod ticktick_task_changes;
 mod ticktick_tasks_sync;
 mod todoist_legacy_ids;
 mod todoist_task_changes;
