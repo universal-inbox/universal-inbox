@@ -39,6 +39,7 @@ pub use crate::common::{db_connection, redis_storage, settings, tracing_setup};
 pub mod auth;
 pub mod billing;
 pub mod integration_connection;
+pub mod jobs;
 pub mod mailer;
 pub mod notification;
 pub mod notion;

@@ -30,6 +30,7 @@ use crate::{
         integration_connection::{
             create_and_mock_integration_connection, slack_context, slack_oauth_credential,
         },
+        jobs::wait_until_the_jobs_are_done,
         notification::{
             list_notifications, list_notifications_until, slack::slack_push_reaction_added_event,
             slack::slack_push_reaction_removed_event,
@@ -89,13 +90,9 @@ async fn todoist_adds_the_message_in_the_inbox(world: &mut ApiWorld) {
     mock_todoist_get_item_service(&app.todoist_mock_server, Box::new(item)).await;
 }
 
-#[given(expr = "Slack delivers the event of the reaction {string} being {reaction_event}")]
-#[when(expr = "Slack delivers the event of the reaction {string} being {reaction_event}")]
-async fn slack_delivers_the_reaction_event(
-    world: &mut ApiWorld,
-    _name: String,
-    event: ReactionEvent,
-) {
+#[given(expr = "Slack delivers the event of the reaction \"eyes\" being {reaction_event}")]
+#[when(expr = "Slack delivers the event of the reaction \"eyes\" being {reaction_event}")]
+async fn slack_delivers_the_reaction_event(world: &mut ApiWorld, event: ReactionEvent) {
     let client = world.client();
     let app = world.app.get().await;
     let pushed = match event {
@@ -266,10 +263,16 @@ async fn i_remember_the_notification(world: &mut ApiWorld) {
 async fn i_get_one_active_task_and_no_notification(world: &mut ApiWorld) {
     let client = world.client();
     let app = world.app.get().await;
-    list_notifications_until(&client, &app.api_address, vec![], 0).await;
     let tasks = list_tasks_until(&client, &app.api_address, TaskStatus::Active, 1).await;
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].status, TaskStatus::Active);
+    wait_until_the_jobs_are_done(app).await;
+    let notifications =
+        list_notifications(&client, &app.api_address, vec![], false, None, None, false).await;
+    assert!(
+        notifications.is_empty(),
+        "the reaction also made a notification"
+    );
     assert_eq!(tasks[0].source_item.source_id, MESSAGE_TS);
     assert_eq!(
         tasks[0].source_item.get_third_party_item_source_kind(),
@@ -303,15 +306,20 @@ async fn i_still_get_one_task(world: &mut ApiWorld) {
 async fn that_task_is_done(world: &mut ApiWorld) {
     let client = world.client();
     let app = world.app.get().await;
-    list_notifications_until(
+    let tasks = list_tasks_until(&client, &app.api_address, TaskStatus::Done, 1).await;
+    assert_eq!(tasks.len(), 1);
+    wait_until_the_jobs_are_done(app).await;
+    let deleted = list_notifications(
         &client,
         &app.api_address,
         vec![NotificationStatus::Deleted],
-        0,
+        false,
+        None,
+        None,
+        false,
     )
     .await;
-    let tasks = list_tasks_until(&client, &app.api_address, TaskStatus::Done, 1).await;
-    assert_eq!(tasks.len(), 1);
+    assert!(deleted.is_empty(), "the removal deleted a notification");
     assert_eq!(
         Some(tasks[0].id),
         world.slack_tasks.task.as_ref().map(|task| task.id)
@@ -334,7 +342,7 @@ async fn that_task_is_active_again(world: &mut ApiWorld) {
 
 #[when("Slack delivers the same event again")]
 async fn slack_delivers_the_same_event_again(world: &mut ApiWorld) {
-    slack_delivers_the_reaction_event(world, "eyes".to_string(), ReactionEvent::Added).await;
+    slack_delivers_the_reaction_event(world, ReactionEvent::Added).await;
 }
 
 #[given(expr = "Todoist uncompletes the task {string}")]
@@ -415,4 +423,12 @@ async fn that_other_user_has_no_unread_notification(world: &mut ApiWorld) {
     )
     .await;
     assert!(notifications.is_empty());
+}
+
+#[given("Slack has finished processing that event")]
+#[when("Slack has finished processing that event")]
+#[then("Slack has finished processing that event")]
+async fn slack_has_finished_processing_that_event(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    wait_until_the_jobs_are_done(app).await;
 }

@@ -232,8 +232,8 @@ fn todoist_then_reports_the_item(world: &mut ApiWorld, state: TaskState, project
     world.todoist_tasks.reported = Some(response);
 }
 
-#[when(expr = "Slack tells that the reaction {string} was {reaction_event} on that message")]
-async fn slack_tells_the_reaction(world: &mut ApiWorld, _name: String, event: ReactionEvent) {
+#[when(expr = "Slack tells that the reaction \"eyes\" was {reaction_event} on that message")]
+async fn slack_tells_the_reaction(world: &mut ApiWorld, event: ReactionEvent) {
     let client = world.client();
     let app = world.app.get().await;
     let (pushed, waited_status) = match event {

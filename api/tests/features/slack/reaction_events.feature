@@ -46,8 +46,9 @@ Feature: Slack reaction events
       And another user is signed in
       And that other user is connected to Slack, syncing its notifications, as the Slack user "U05XXX"
       When Slack delivers the event of the reaction "eyes" being added
-      Then I have no unread notification
+      Then Slack has finished processing that event
       And that other user has one unread notification, which is the Slack message of that reaction
+      And I have no unread notification
 
   Rule: A reaction makes a notification
 
@@ -60,7 +61,8 @@ Feature: Slack reaction events
       When Slack delivers the event of the reaction "eyes" being added
       Then I get one unread notification, which is the Slack message of that reaction, with all its details
       When Slack delivers the same event again
-      Then I still get one unread notification, the one of that message
+      Then Slack has finished processing that event
+      And I still get one unread notification, the one of that message
 
     @legacy:test_slack_webhook_star_reaction::test_receive_reaction_removed_event_as_notification
     Scenario: A reaction removed deletes the notification of the reaction added
@@ -83,7 +85,8 @@ Feature: Slack reaction events
       When Slack delivers the event of the reaction "eyes" being added
       Then I get one active task, mirrored in Todoist, and no notification
       When Slack delivers the same event again
-      Then I still get one active task, the one of that message
+      Then Slack has finished processing that event
+      And I still get one active task, the one of that message
 
     @legacy:test_slack_webhook_star_reaction::test_receive_reaction_removed_and_added_event_as_task
     Scenario: A reaction removed completes the task and the reaction added makes it active again
