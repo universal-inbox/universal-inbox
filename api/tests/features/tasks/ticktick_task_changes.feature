@@ -13,14 +13,12 @@ Feature: Changing TickTick tasks
       Given I have a TickTick task in my Inbox
       And the notification of that TickTick task is unread
 
-    @legacy:test_ticktick_tasks::patch_task::test_patch_ticktick_task_status_as_deleted
     Scenario: Deleting a task deletes it in TickTick and deletes its notification
       Given TickTick deletes that task, once
       When I mark that TickTick task as deleted
       Then the patched TickTick task is deleted
       And the notification of that TickTick task is deleted
 
-    @legacy:test_ticktick_tasks::patch_task::test_patch_ticktick_task_status_as_done
     Scenario: Completing a task completes it in TickTick and deletes its notification
       Given TickTick completes that task, once
       When I mark that TickTick task as done
@@ -28,7 +26,6 @@ Feature: Changing TickTick tasks
       And the patched TickTick task has a completion date
       And the notification of that TickTick task is deleted
 
-    @legacy:test_ticktick_tasks::patch_task::test_patch_ticktick_task_title_only
     Scenario: A rename alone reaches TickTick, with the real project id
       Given TickTick renames that task to "Reply to Marc about the billing thread", once, with its real project id
       When I rename that TickTick task to "Reply to Marc about the billing thread"
@@ -42,7 +39,6 @@ Feature: Changing TickTick tasks
       And I have a GitHub notification
       And GitHub accepts to mark that notification as done
 
-    @legacy:test_ticktick_tasks::patch_task::test_create_ticktick_task_from_notification
     Scenario: A task created from a notification is added to TickTick and takes the place of the notification
       Given TickTick creates the item in the project Project2, as the Universal Inbox item, and then serves it
       When I create a TickTick task from that notification, in the project Project2
@@ -50,7 +46,6 @@ Feature: Changing TickTick tasks
       And the notification stays linked to the TickTick task that I created
       And the TickTick create request of that creation carried a due date only: no start date and no time zone
 
-    @legacy:test_ticktick_tasks::patch_task::test_create_ticktick_task_from_notification_with_time_config
     Scenario: A task created with a time of the day reaches TickTick with its schedule
       Given TickTick creates the item in the project Project2, from 12:00 to 12:30 UTC on 2026-06-29, in the time zone Europe/Paris, and then serves it
       When I create a TickTick task from that notification, in the project Project2, due at 12:00 UTC on 2026-06-29, at 14:00 for 30 minutes in Europe/Paris
@@ -59,7 +54,6 @@ Feature: Changing TickTick tasks
 
   Rule: A notification is linked to an existing task
 
-    @legacy:test_ticktick_tasks::patch_task::test_link_notification_with_ticktick_task_sends_real_project_id
     Scenario: Linking a notification adds its title to the body of the task, sent with the real project id
       Given I am connected to GitHub
       And I have a GitHub notification

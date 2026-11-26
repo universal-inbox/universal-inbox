@@ -6,7 +6,6 @@ Feature: Signing in with a password
     Given the app lets users sign in with a password or a passkey
     And I have signed up with the email "john@doe.name" and a password
 
-  @legacy:test_users::login_user::test_login_user
   Scenario: A user signs in and gets a hardened session cookie
     Then I have no API tokens
     When I look at my account from a new browser
@@ -19,20 +18,17 @@ Feature: Signing in with a password
     And I have no API tokens
     And from that browser my account uses the email "john@doe.name" and is not verified yet
 
-  @legacy:test_users::login_user::test_login_with_wrong_password
   Scenario: A wrong password is refused
     When I sign in from a new browser with the password "wrong"
     Then the app answers 401
     And the error message is "Unauthorized access: Invalid email address or password"
 
-  @legacy:test_users::login_user::test_login_with_unknown_user
   Scenario: An email address nobody registered gets the same answer as a wrong password
     Given I have no account
     When I sign in from a new browser with the password ""
     Then the app answers 401
     And the error message is "Unauthorized access: Invalid email address or password"
 
-  @legacy:test_users::login_user::test_logout_user
   Scenario: Signing out ends the session
     When I sign out
     Then any session cookie it sets is cleared

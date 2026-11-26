@@ -8,7 +8,6 @@ Feature: Choosing the task manager of a new task
 
   Rule: The default task manager is a preference of the user
 
-    @legacy:test_multi_task_manager::user_preferences::test_get_and_patch_user_preferences
     Scenario: The default task manager is not set at first, and can be set and changed
       When I read my preferences
       Then the app answers 200
@@ -42,7 +41,6 @@ Feature: Choosing the task manager of a new task
       And I have a GitHub notification
       And GitHub accepts to mark that notification as done
 
-    @legacy:test_multi_task_manager::create_task_with_explicit_provider::test_create_task_from_notification_with_explicit_ticktick_provider
     Scenario: A request that names TickTick creates the task in TickTick, although Todoist is connected too
       Given I am connected to Todoist
       And Todoist is not asked anything more
@@ -52,7 +50,6 @@ Feature: Choosing the task manager of a new task
       And the notification stays linked to the TickTick task that I created
       And the TickTick task that I created belongs to my TickTick connection
 
-    @legacy:test_multi_task_manager::create_task_with_default_preference::test_create_task_from_notification_with_ticktick_default_preference
     Scenario: A request without detail creates the task in TickTick when it is my default task manager
       Given I am connected to Todoist
       And Todoist is not asked anything more

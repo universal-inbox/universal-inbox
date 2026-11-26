@@ -14,22 +14,18 @@ Feature: Syncing Slack threads
     When I sync my Slack notifications
     Then I get one Slack notification, <status>
 
-    @legacy:test_sync_slack_threads::sync_slack_thread_notifications::test_sync_slack_thread_marked_as_read
     Examples:
       | state | status  |
       | read  | deleted |
 
-    @legacy:test_sync_slack_threads::sync_slack_thread_notifications::test_sync_slack_thread_marked_as_unsubscribed
     Examples:
       | state        | status       |
       | unsubscribed | unsubscribed |
 
-    @legacy:test_sync_slack_threads::sync_slack_thread_notifications::test_sync_slack_thread_no_change
     Examples:
       | state     | status |
       | unchanged | unread |
 
-  @legacy:test_sync_slack_threads::sync_slack_thread_notifications::test_sync_slack_threads_stores_missing_team_context
   Scenario: A sync stores the team the connection was missing
     Given Slack tells me that my team is "T053BSKET"
     When I sync my Slack notifications

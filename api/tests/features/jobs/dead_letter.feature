@@ -5,7 +5,6 @@ Feature: Dead jobs
 
   Rule: Dead jobs are listed
 
-    @legacy:test_dead_letter::test_list_dead_jobs
     Scenario: Dead jobs are listed from the most recently dead, with what they failed on
       Given a dead "purge" job "older purge" that died 2 hours ago
       And a dead "purge" job "purge" that died 1 hour ago
@@ -20,7 +19,6 @@ Feature: Dead jobs
       When I list at most 1 dead job of the type "PurgeAuditEvents"
       Then the only listed job is "purge"
 
-    @legacy:test_dead_letter::test_list_undecodable_dead_jobs
     Scenario: Dead jobs that cannot be decoded are listed too and can be filtered
       Given a dead "sync tasks" job "sync" that died 1 hour ago
       And a dead job "raw" whose payload is not JSON, that died just now
@@ -39,7 +37,6 @@ Feature: Dead jobs
 
   Rule: A dead job is requeued to run again
 
-    @legacy:test_dead_letter::test_requeue_dead_job
     Scenario: A requeued job is active again and its workers are woken up
       Given a dead "sync tasks" job "sync" that died just now
       When I requeue the dead job "sync"
@@ -52,7 +49,6 @@ Feature: Dead jobs
       Then the app says the job is not dead
       And "sync" is still the only active job
 
-    @legacy:test_dead_letter::test_requeue_undecodable_dead_job
     Scenario: A job that cannot be decoded is not requeued
       Given a dead job "removed" of a type that no longer exists, that died just now
       When I requeue the dead job "removed"
@@ -61,7 +57,6 @@ Feature: Dead jobs
 
   Rule: A dead job is deleted for good
 
-    @legacy:test_dead_letter::test_cleanup_dead_job_by_id
     Scenario: Deleting a dead job by its id removes its data and its result and nothing else
       Given a dead "purge" job "deleted" that died just now
       And a dead "purge" job "kept" that died just now
@@ -73,7 +68,6 @@ Feature: Dead jobs
       And "kept" is still dead
       And deleting "deleted" again finds nothing to delete
 
-    @legacy:test_dead_letter::test_cleanup_dead_jobs_by_age
     Scenario: Dead jobs older than a week are selected and deleted, recent ones are kept
       Given a dead "purge" job "old" that died 8 days ago
       And a dead "purge" job "recent" that died 6 days ago
@@ -83,7 +77,6 @@ Feature: Dead jobs
       Then "old" is no longer dead
       And "recent" is still dead
 
-    @legacy:test_dead_letter::test_cleanup_undecodable_dead_job_by_id
     Scenario: A dead job that cannot be decoded is deleted by its id
       Given a dead job "raw" whose payload is not JSON, that died just now
       When I select the undecodable dead jobs with the id of "raw"

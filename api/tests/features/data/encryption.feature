@@ -4,7 +4,6 @@ Feature: Encrypting the stored data
   key and encrypt what was stored in plaintext, and an email address stays
   searchable through a blind index.
 
-  @legacy:test_data_encryption::test_reencrypt_oauth_tokens_with_rotated_key
   Scenario: Rotating the key re-encrypts every value, and the old key alone is refused afterwards
     Given I am signed in
     And I am connected to Todoist
@@ -17,7 +16,6 @@ Feature: Encrypting the stored data
     And starting with the old key alone is refused, naming the column of the access tokens
     And re-encrypting again changes nothing
 
-  @legacy:test_data_encryption::test_third_party_item_data_is_encrypted
   Scenario: The data of a third-party item is stored encrypted
     Given I am signed in
     And I am connected to Todoist
@@ -27,7 +25,6 @@ Feature: Encrypting the stored data
     And the data encryption status counts 1 third-party item value on the first key
     And reading the item back gives the data that was stored
 
-  @legacy:test_data_encryption::test_task_body_is_encrypted
   Scenario: The body of a task is stored encrypted and kept out of the search vector
     Given I am signed in
     And I am connected to Todoist
@@ -37,7 +34,6 @@ Feature: Encrypting the stored data
     And the stored task body is encrypted and absent from the search vector
     And reading the task back gives the same body
 
-  @legacy:test_data_encryption::test_raw_token_response_is_encrypted
   Scenario: The raw token response of an OAuth credential is stored encrypted
     Given I am signed in
     And I am connected to Todoist
@@ -46,7 +42,6 @@ Feature: Encrypting the stored data
     And the raw token response is stored encrypted
     And reading the credential back gives the same raw token response
 
-  @legacy:test_data_encryption::test_user_email_is_encrypted_and_looked_up_case_insensitively
   Scenario: An email address is stored encrypted and found whatever its case
     Given the app lets users sign in with a password or a passkey
     And I have signed up with the email "Jane.Secret@Example.com" and a password
@@ -56,7 +51,6 @@ Feature: Encrypting the stored data
     And a user with the email "JANE.SECRET@example.com" cannot be created, as it already exists
     And looking up the address "jane.secret@example.com" finds me, with my email address as it was written
 
-  @legacy:test_data_encryption::test_encrypt_plaintext_google_account_email
   Scenario: Encrypting the plaintext values turns a Google account email into its blind index
     Given I am signed in
     And I have a Google Mail connection pinned to the address "john.roe@example.com" before addresses were encrypted

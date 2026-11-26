@@ -10,7 +10,6 @@ Feature: Syncing GitHub notifications
 
   Rule: A sync adds and updates notifications
 
-    @legacy:test_sync_github_notifications::test_sync_notifications_should_add_new_notification_and_update_existing_one
     Scenario: A sync adds the new threads and updates the known one without losing my triage
       Given I am connected to Todoist
       And Todoist can list my projects
@@ -27,7 +26,6 @@ Feature: Syncing GitHub notifications
       And "existing" is still linked to my Todoist task
       And my GitHub connection recorded a completed sync, without failure
 
-    @legacy:test_sync_github_notifications::test_sync_notifications_should_handle_pull_request_without_commits
     Scenario: A pull request without any commit does not fail the sync
       Given GitHub reports the notifications 123 and 456
       And GitHub knows pull request 123, which has no commit
@@ -36,7 +34,6 @@ Feature: Syncing GitHub notifications
       And they carry what GitHub reported, with the details of pull request 123
       And my GitHub connection recorded a completed sync, without failure
 
-    @legacy:test_sync_github_notifications::test_sync_notifications_should_heal_undecodable_existing_third_party_item
     Scenario: Stored data that no longer decodes is overwritten by what GitHub reports
       Given GitHub reports the notifications 123 and 456
       And GitHub knows pull request 123
@@ -48,7 +45,6 @@ Feature: Syncing GitHub notifications
 
   Rule: A deleted notification brought back by new activity keeps the latest read marker
 
-    @legacy:test_sync_github_notifications::test_sync_notifications_should_keep_latest_last_read_at_of_deleted_notification::case_1_github_marker_is_older
     Scenario: GitHub's read marker is older than the moment I deleted the notification
       Given GitHub reports the notifications 123 and 456
       And GitHub knows pull request 123
@@ -58,7 +54,6 @@ Feature: Syncing GitHub notifications
       When I sync my GitHub notifications
       Then "mine" is unread, its read marker being the moment I deleted it
 
-    @legacy:test_sync_github_notifications::test_sync_notifications_should_keep_latest_last_read_at_of_deleted_notification::case_2_github_marker_is_newer
     Scenario: GitHub's read marker is newer than the moment I deleted the notification
       Given GitHub reports the notifications 123 and 456
       And GitHub knows pull request 123
@@ -80,22 +75,18 @@ Feature: Syncing GitHub notifications
       And I force a new sync of my GitHub notifications, which reports the same threads
       Then "mine" keeps the status I gave it, its update time and its task
 
-      @legacy:test_sync_github_notifications::test_sync_notifications_should_keep_user_status_of_unchanged_notification::case_1_read
       Examples:
         | status       |
         | read         |
 
-      @legacy:test_sync_github_notifications::test_sync_notifications_should_keep_user_status_of_unchanged_notification::case_2_deleted
       Examples:
         | status       |
         | deleted      |
 
-      @legacy:test_sync_github_notifications::test_sync_notifications_should_keep_user_status_of_unchanged_notification::case_3_unsubscribed
       Examples:
         | status       |
         | unsubscribed |
 
-    @legacy:test_sync_github_notifications::test_sync_notifications_should_keep_user_status_of_unchanged_notification::case_4_read_linked_to_task
     Scenario: A thread I marked read and linked to a task stays read and linked
       Given I am connected to Todoist
       And Todoist can list my projects

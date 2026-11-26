@@ -18,9 +18,6 @@ use crate::common::{init_tracing, settings};
 
 pub const FEATURES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/features");
 
-const LEGACY_REPORT_ENV: &str = "UI_SCENARIOS_LEGACY_REPORT";
-const LEGACY_TAG_PREFIX: &str = "legacy:";
-
 pub trait ScenarioWorld: World + Debug + WorldInventory {
     fn tear_down(&mut self) -> LocalBoxFuture<'_, ()>;
 }
@@ -99,7 +96,6 @@ pub struct Scenario {
     pub path: PathBuf,
     pub line: usize,
     pub scenario_name: String,
-    pub legacy_tags: Vec<String>,
 }
 
 pub fn collect(include: fn(&Path) -> bool) -> Vec<Scenario> {
@@ -174,23 +170,11 @@ fn feature_scenarios(root: &Path, path: &Path) -> Vec<Scenario> {
                 Some(rule) => format!("{prefix}::{}::{}", rule.name, scenario.name),
                 None => format!("{prefix}::{}", scenario.name),
             };
-            let legacy_tags = feature
-                .tags
-                .iter()
-                .chain(rule.iter().flat_map(|rule| &rule.tags))
-                .chain(&scenario.tags)
-                .filter_map(|tag| {
-                    tag.trim_start_matches('@')
-                        .strip_prefix(LEGACY_TAG_PREFIX)
-                        .map(str::to_string)
-                })
-                .collect();
             Scenario {
                 name,
                 path: path.to_path_buf(),
                 line: scenario.position.line,
                 scenario_name: scenario.name.clone(),
-                legacy_tags,
             }
         })
         .collect();
@@ -208,15 +192,6 @@ fn feature_scenarios(root: &Path, path: &Path) -> Vec<Scenario> {
 
 pub fn main<W: ScenarioWorld>(include: fn(&Path) -> bool) {
     let scenarios = collect(include);
-
-    if std::env::var_os(LEGACY_REPORT_ENV).is_some() {
-        for scenario in &scenarios {
-            for tag in &scenario.legacy_tags {
-                println!("{tag}\t{}", scenario.name);
-            }
-        }
-        return;
-    }
 
     let mut args = Arguments::from_args();
     // Run by hand (`cargo test`), the trials of one process still run one at a time.

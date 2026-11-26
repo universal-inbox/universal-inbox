@@ -10,14 +10,12 @@ Feature: Changing Linear notifications
 
   Rule: Deleting a notification archives it in Linear
 
-    @legacy:test_linear_notifications::patch_resource::test_patch_linear_notification_status_as_deleted
     Scenario: Linear archives the notification that is deleted
       Given I have the Linear issue notification "mine"
       And Linear archives, once, the notification "mine"
       When I set the status of "mine" to deleted
       Then the patched notification is deleted, was read just now, and is otherwise as "mine" was
 
-    @legacy:test_linear_notifications::patch_resource::test_patch_linear_notification_status_as_deleted_with_linear_error_response
     Scenario: A Linear error is a public internal error and the notification stays
       Given I have the Linear issue notification "mine"
       And Linear answers, once, with the error "Entity not found" when asked to archive the notification "mine"
@@ -26,7 +24,6 @@ Feature: Changing Linear notifications
       And the answer is the public error "An internal error occurred. Please retry later or contact support with the correlation id."
       And "mine", read again, is exactly as it was
 
-    @legacy:test_linear_notifications::patch_resource::test_patch_linear_notification_status_as_deleted_with_linear_unsuccessful_response
     Scenario: A Linear answer that says it did not archive is a public internal error
       Given I have the Linear issue notification "mine"
       And Linear answers, once, that it did not archive the notification "mine", without any error
@@ -37,7 +34,6 @@ Feature: Changing Linear notifications
 
   Rule: Unsubscribing from a notification
 
-    @legacy:test_linear_notifications::patch_resource::test_patch_linear_issue_notification_status_as_unsubscribed
     Scenario: The user stops following the issue, and Linear archives the notification
       Given I have the Linear issue notification "mine"
       And Linear tells, once, that the user "user_id" and the user "other_user_id" follow the issue "issue_id" of the notification "mine"
@@ -46,7 +42,6 @@ Feature: Changing Linear notifications
       When I set the status of "mine" to unsubscribed
       Then the patched notification is unsubscribed, was read just now, and is otherwise as "mine" was
 
-    @legacy:test_linear_notifications::patch_resource::test_patch_linear_project_notification_status_as_unsubscribed
     Scenario: The notification of a project has no followers to update, and Linear only archives it
       Given I have the Linear project notification "mine"
       And Linear tells, once, that the notification "mine" is about a project, which has no followers
@@ -56,7 +51,6 @@ Feature: Changing Linear notifications
 
   Rule: Snoozing a notification
 
-    @legacy:test_linear_notifications::patch_resource::test_patch_linear_notification_snoozed_until
     Scenario: Linear records the snooze
       Given I have the Linear project notification "mine"
       And Linear records, once, the snooze of the notification "mine" until "2022-01-01T01:02:03Z"

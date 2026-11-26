@@ -8,12 +8,10 @@ Feature: The notification inbox
 
   Rule: Listing notifications
 
-    @legacy:test_notifications::list_notifications::test_empty_list_notifications
     Scenario: A user without notifications sees none
       When I list my unread notifications
       Then I see no notifications
 
-    @legacy:test_notifications::list_notifications::test_list_notifications
     Scenario: Notifications are listed by status, snoozed ones apart, and never to another user
       Given I am connected to GitHub
       And I have a GitHub notification called "review request"
@@ -39,7 +37,6 @@ Feature: The notification inbox
       When another user lists their unread notifications
       Then I see no notifications
 
-    @legacy:test_notifications::list_notifications::test_list_notifications_with_same_updated_at_in_stable_order
     Scenario Outline: Notifications updated at the same second keep one stable order in <order> order
       Given I am connected to GitHub
       And I have 5 GitHub notifications updated in the same second
@@ -53,7 +50,6 @@ Feature: The notification inbox
         | ascending  |
         | descending |
 
-    @legacy:test_notifications::list_notifications::test_list_only_snoozed_and_unsnooze_and_undelete
     Scenario: Only snoozed notifications are listed apart, and snoozing or deleting can be undone
       Given I am connected to GitHub
       And I have a GitHub notification called "untouched"
@@ -73,7 +69,6 @@ Feature: The notification inbox
       When I list my deleted notifications
       Then I see no notifications
 
-    @legacy:test_notifications::list_notifications::test_list_notifications_filtered_by_kind
     Scenario: Notifications are filtered by their source
       Given I am connected to GitHub
       And I am connected to Linear
@@ -86,7 +81,6 @@ Feature: The notification inbox
       When I list my read and unread notifications of Todoist
       Then I see no notifications
 
-    @legacy:test_notifications::list_notifications::test_list_notifications_skips_undecodable_third_party_item
     Scenario: A notification whose stored item can no longer be decoded is skipped
       Given I am connected to GitHub
       And I have a GitHub notification called "readable"
@@ -97,7 +91,6 @@ Feature: The notification inbox
 
   Rule: Reading one notification
 
-    @legacy:test_notifications::get_notification::test_get_notification_of_another_user
     Scenario: A user cannot read the notification of another user
       Given I am connected to GitHub
       And I have a GitHub notification called "mine"
@@ -106,7 +99,6 @@ Feature: The notification inbox
       Then the app answers 403
       And the error message is "Forbidden access: Only the owner of the notification <id> can access it", with <id> being the id of "mine"
 
-    @legacy:test_notifications::get_notification::test_get_unknown_notification
     Scenario: A notification that does not exist is not found
       When I get a notification that does not exist
       Then the app answers 404
@@ -114,14 +106,12 @@ Feature: The notification inbox
 
   Rule: Changing one notification
 
-    @legacy:test_notifications::patch_notification::test_patch_notification_snoozed_until
     Scenario: A user snoozes a notification
       Given I am connected to GitHub
       And I have a GitHub notification called "mine"
       When I snooze "mine" until "2022-01-01T01:02:03Z"
       Then the patched notification is "mine" snoozed until "2022-01-01T01:02:03Z"
 
-    @legacy:test_notifications::patch_notification::test_patch_notification_status_without_modification
     Scenario: A change that changes nothing is not modified
       Given I am connected to GitHub
       And I have a GitHub notification called "mine"
@@ -129,7 +119,6 @@ Feature: The notification inbox
       And I send "mine" the status it already has and the snooze time "2022-01-01T01:02:03Z"
       Then the app answers 304
 
-    @legacy:test_notifications::patch_notification::test_patch_notification_of_another_user
     Scenario: A user cannot change the notification of another user
       Given I am connected to GitHub
       And I have a GitHub notification called "mine"
@@ -138,7 +127,6 @@ Feature: The notification inbox
       Then the app answers 403
       And "mine" is still unread
 
-    @legacy:test_notifications::patch_notification::test_patch_notification_without_values_to_update
     Scenario: A change without any value is refused
       Given I am connected to GitHub
       And I have a GitHub notification called "mine"
@@ -146,7 +134,6 @@ Feature: The notification inbox
       Then the app answers 400
       And the error message is "Invalid input data: Missing `status` field value to update notification <id>", with <id> being the id of "mine"
 
-    @legacy:test_notifications::patch_notification::test_patch_unknown_notification
     Scenario: A notification that does not exist cannot be changed
       When I mark a notification that does not exist as deleted
       Then the app answers 404

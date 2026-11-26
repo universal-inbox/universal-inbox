@@ -6,7 +6,6 @@ Feature: The MCP endpoint
     Given I am signed in
     And I have an API token
 
-  @legacy:test_mcp::protocol::initialize_and_list_tools
   Scenario: An MCP session announces the server and lists the tools
     When I initialize an MCP session with my API token
     Then the MCP server speaks protocol version "2025-06-18" as "universal-inbox"
@@ -20,7 +19,6 @@ Feature: The MCP endpoint
       | update_task                     |
       | search_audit_log                |
 
-  @legacy:test_mcp::protocol::session_is_bound_to_the_user_who_created_it
   Scenario: Nobody else can read, use or close the MCP session of a user
     Given an MCP session is open with my API token
     And another user is signed in
@@ -37,12 +35,10 @@ Feature: The MCP endpoint
     Then the MCP request is answered with status 200
     And the MCP server lists its tools
 
-  @legacy:test_mcp::protocol::rejects_missing_bearer_token
   Scenario: An MCP session cannot be opened without a token
     When I try to initialize an MCP session without any token
     Then the MCP request is answered with status 401
 
-  @legacy:test_mcp::protocol::validates_protocol_version_header
   Scenario: The protocol version header is optional, but must be a valid one when given
     When I list the tools of a new MCP session, announcing no protocol version
     Then the MCP request is answered with status 200
@@ -53,7 +49,6 @@ Feature: The MCP endpoint
     Then the MCP request is answered with status 200
     And the MCP server lists its tools
 
-  @legacy:test_mcp::protocol::returns_protocol_errors_for_unknown_tool_and_invalid_arguments
   Scenario: An unknown tool and invalid arguments are protocol errors
     When I call the MCP tool "unknown_tool" in a new session, with:
       """
@@ -68,7 +63,6 @@ Feature: The MCP endpoint
     When I update a task in a new MCP session with a title one character over the limit
     Then the MCP call is rejected as invalid parameters
 
-  @legacy:test_mcp::protocol::bulk_act_notifications_rejects_malformed_list_args
   Scenario: A malformed bulk request is rejected and applies nothing
     Given I am connected to GitHub
     And I have a GitHub notification
@@ -99,29 +93,24 @@ Feature: The MCP endpoint
     When I ask in a new MCP session to bulk act on notifications with an unfiltered sweep that confirms
     Then that call acted on 1 notification
 
-  @legacy:test_mcp::protocol::restores_session_unknown_in_memory_from_store
   Scenario: A session opened on another instance of the app is restored from Redis
     Given my MCP session was opened on another instance of the app, which shared it through Redis
     When I list my notifications in that session
     Then the MCP request is answered with status 200
     And the answer is not an error
 
-  @legacy:test_mcp::protocol::session_unknown_in_memory_and_in_store_returns_404
   Scenario: A session that nobody opened is not found
     When I list the tools of an MCP session that nobody opened
     Then the MCP request is answered with status 404
 
-  @legacy:test_mcp::protocol::initialize_persists_session_to_store
   Scenario: Opening an MCP session stores it in Redis
     When I initialize an MCP session with my API token
     Then my MCP session is stored with the client name "test-client"
 
-  @legacy:test_mcp::protocol::accepts_front_base_url_host
   Scenario: The host of the front end is accepted
     When I try to initialize an MCP session addressed to the host of the front end
     Then the MCP request is answered with status 200
 
-  @legacy:test_mcp::protocol::rejects_unknown_host
   Scenario: An unknown host is refused
     When I try to initialize an MCP session addressed to the host "evil.example.com"
     Then the MCP request is answered with status 403

@@ -5,8 +5,8 @@
 # frees after 2 x net.inet.tcp.msl (30 s by default), see .claude/QUICK_START.md.
 #
 # Usage (from api/, with pg + redis up): mise exec -- scripts/count-time-wait.sh [filterset]
-#   scripts/count-time-wait.sh 'test(=test_health_check::health_check_works)'
-# The filterset defaults to the whole API suite, 'not binary(browser)'.
+#   scripts/count-time-wait.sh 'test(/health/)'
+# The filterset defaults to the whole API suite, 'not binary(browser_features)'.
 #
 # Keep the run shorter than the TIME_WAIT duration, or the first sockets expire
 # before the count: the result is then a lower bound. Other processes on the
@@ -27,7 +27,7 @@ count() {
     END { printf "%d %d %d\n", p, r, o }'
 }
 
-filter=${1:-not binary(browser)}
+filter=${1:-not binary(browser_features)}
 
 cargo nextest run --no-run -E "$filter" >/dev/null 2>&1
 

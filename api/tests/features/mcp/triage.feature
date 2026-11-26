@@ -6,7 +6,6 @@ Feature: Triaging through MCP
     And I have an API token
     And I am connected to GitHub
 
-  @legacy:test_mcp::scenario::manage_notifications_and_tasks_via_mcp
   Scenario: Notifications are listed, unsubscribed from and turned into a task, which is then completed
     Given I am connected to Todoist
     And Todoist can list my projects
@@ -27,7 +26,6 @@ Feature: Triaging through MCP
     When I mark that task as done through MCP
     Then the MCP answer shows that task as done
 
-  @legacy:test_mcp::scenario::acts_on_a_chosen_list_of_notifications
   Scenario: A mixed triage pass applies a different action to each notification and skips an unknown one
     Given I have a GitHub notification with the source id "1000"
     And I have a GitHub notification with the source id "1001"

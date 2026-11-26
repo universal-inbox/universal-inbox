@@ -10,7 +10,6 @@ Feature: Protecting accounts from guessing and abuse
     Background:
       Given the app lets users sign in with a password or a passkey
 
-    @legacy:test_login_throttle::test_account_locks_after_max_failed_attempts
     Scenario: The account locks after 5 wrong passwords
       The 5th wrong password answers like the others but locks the account.
       The next attempt is refused before the password is even checked.
@@ -24,7 +23,6 @@ Feature: Protecting accounts from guessing and abuse
       Then the app answers 429
       And I received 1 account lockout email
 
-    @legacy:test_login_throttle::test_successful_login_resets_counter
     Scenario: A successful sign-in clears the wrong passwords counted so far
       Given I have an account with a password
       When I sign in 4 times with the password "wrong-password", each time answered 401
@@ -33,7 +31,6 @@ Feature: Protecting accounts from guessing and abuse
       When I sign in 4 times with the password "wrong-password", each time answered 401
       Then I received 0 account lockout emails
 
-    @legacy:test_login_throttle::test_unknown_account_is_throttled_without_enumeration
     Scenario: An email address nobody registered is throttled like a registered one
       The answers are the same, but no lockout email is sent because no
       account exists. Nothing leaks.
@@ -51,7 +48,6 @@ Feature: Protecting accounts from guessing and abuse
       Given each account may make 8 login requests and each email address may receive 3 account emails in a period
       And the app lets users sign in with a password or a passkey
 
-    @legacy:test_login_throttle::test_password_reset_is_rate_limited_per_email_across_ips
     Scenario: Password resets are limited per email address
       Given I have an account with a password
       And an email address that no account uses
@@ -60,7 +56,6 @@ Feature: Protecting accounts from guessing and abuse
       And both email addresses got exactly the same responses
       And the registered email address received 3 emails
 
-    @legacy:test_login_throttle::test_registration_is_rate_limited_per_email_across_ips
     Scenario: Registrations are limited per email address
       The first registration of a new address creates the account. Later ones
       find it registered, which emails its owner as well.
@@ -72,7 +67,6 @@ Feature: Protecting accounts from guessing and abuse
       And both email addresses got exactly the same responses
       And the registered email address received 3 emails
 
-    @legacy:test_login_throttle::test_registration_and_password_reset_share_the_email_budget
     Scenario: Registrations and password resets share the same budget
       Given I have an account with a password
       When I alternate 3 times between registering the registered email address and asking for its password to be reset, each from a different network address and each answered 200
@@ -81,7 +75,6 @@ Feature: Protecting accounts from guessing and abuse
       When I register the registered email address again from a new network address
       Then the app answers 429
 
-    @legacy:test_login_throttle::test_login_requests_are_rate_limited_per_account_across_ips
     Scenario: Sign-in requests are limited per account, successful ones included
       Every attempt counts, not only the wrong passwords the lockout tracks.
 
@@ -91,7 +84,6 @@ Feature: Protecting accounts from guessing and abuse
       Then the app answers 429
       And the response has a "retry-after" header
 
-    @legacy:test_login_throttle::test_verification_email_resend_is_rate_limited_per_email_across_ips
     Scenario: Verification emails are limited per email address
       Given I have an account with a password
       And I signed in with my password
@@ -101,7 +93,6 @@ Feature: Protecting accounts from guessing and abuse
       And the response has a "retry-after" header
       And the registered email address received 3 emails
 
-    @legacy:test_login_throttle::test_verification_email_resend_and_password_reset_share_the_email_budget
     Scenario: Verification emails and password resets share the same budget
       Given I have an account with a password
       And I signed in with my password

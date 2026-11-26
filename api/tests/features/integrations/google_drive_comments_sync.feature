@@ -9,7 +9,6 @@ Feature: Syncing Google Drive comments
     And I am connected to Google Drive
     And Google Drive knows me as "Jane Doe", with the address "jane.doe@example.com"
 
-  @legacy:test_sync_google_drive_comments::test_sync_notifications_should_add_new_notification_and_update_existing_one
   Scenario: A sync adds the new comments and updates the known one without losing my triage
     Given I am connected to Todoist
     And Todoist can list my projects
@@ -35,17 +34,14 @@ Feature: Syncing Google Drive comments
     Then the sync returned <returned> notification
     And my Google Drive notification "mine" is <status>
 
-    @legacy:test_sync_google_drive_comments::test_sync_notifications_of_unsubscribed_notification_with_new_messages::case_1
     Examples:
       | mention           | newness | returned | status       |
       | not mentioning me | newer   | 0        | unsubscribed |
 
-    @legacy:test_sync_google_drive_comments::test_sync_notifications_of_unsubscribed_notification_with_new_messages::case_2
     Examples:
       | mention           | newness | returned | status       |
       | not mentioning me | older   | 0        | unsubscribed |
 
-    @legacy:test_sync_google_drive_comments::test_sync_notifications_of_unsubscribed_notification_with_new_messages::case_3
     Examples:
       | mention       | newness | returned | status |
       | mentioning me | newer   | 1        | unread |
@@ -55,7 +51,6 @@ Feature: Syncing Google Drive comments
       | mention       | newness | returned | status       |
       | mentioning me | older   | 0        | unsubscribed |
 
-  @legacy:test_sync_google_drive_comments::test_sync_notifications_skips_files_returning_404_on_comments
   Scenario: A file without comments resource does not abort the sync
     Given Google Drive lists two files, on a single page
     And Google Drive reports the fixture comments on the first file

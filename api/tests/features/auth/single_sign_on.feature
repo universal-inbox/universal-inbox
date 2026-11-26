@@ -5,7 +5,6 @@ Feature: Signing in with the identity provider
 
   Rule: A session starts when the identity provider confirms the tokens
 
-    @legacy:test_auth::authenticate_session::test_authenticate_session_creation
     Scenario: Signing in creates the account and keeps the latest identity token
       Given the identity provider knows me as "John" "Doe" with the email "test@example.com"
       When I sign in with the first identity token
@@ -17,7 +16,6 @@ Feature: Signing in with the identity provider
       Then the app answers 200
       And my account stores the second identity token
 
-    @legacy:test_auth::authenticate_session::test_authenticate_session_creation_wrong_access_token
     Scenario: Signing in with an access token the identity provider rejects is refused
       Given the identity provider rejects my access token
       When I sign in with the first identity token
@@ -25,7 +23,6 @@ Feature: Signing in with the identity provider
 
   Rule: Every sign-in starts a fresh flow
 
-    @legacy:test_auth::authorize_session::test_authorize_session_clears_cached_authorization_url
     Scenario: Asking to sign in twice gives two different addresses with different states
       Starting a second sign-in must not reuse the first one's anti-forgery
       state. A flow that was reused would make the callback sign the user in

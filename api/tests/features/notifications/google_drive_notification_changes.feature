@@ -7,13 +7,11 @@ Feature: Changing the notification of a Google Drive comment
     And I am connected to Google Drive
     And I already have the Google Drive notification "mine" of the comment 123
 
-  @legacy:test_google_drive_notifications::patch_resource::test_patch_google_drive_notification_status_as_deleted
   Scenario: Deleting the notification asks Google Drive nothing
     Given Google Drive is not asked anything
     When I set the status of "mine" to deleted
     Then the patched notification is deleted, was read just now, and is otherwise as "mine" was
 
-  @legacy:test_google_drive_notifications::patch_resource::test_patch_google_drive_notification_status_as_unsubscribed
   Scenario: Unsubscribing from the notification asks Google Drive nothing
     Given Google Drive is not asked anything
     When I set the status of "mine" to unsubscribed

@@ -53,6 +53,8 @@ Feature: The webhook of Stripe
     When the webhook of Stripe receives, signed correctly, the event "evt_upgrade" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to canceled
     Then the app answers 200
     And the subscription of the user is active
+    When I read my billing state
+    Then my billing state says the Paid plan, with the subscription status active
     When the webhook of Stripe receives, signed correctly, the event "evt_downgrade" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to canceled
     Then the app answers 204
     And the subscription of the user is canceled

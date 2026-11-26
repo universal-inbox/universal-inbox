@@ -16,42 +16,34 @@ Feature: Setting notifications aside
       When I save, one after the other, every change to my <provider> connection that leaves what belongs in my inbox alone
       Then my notification is unchanged in my inbox
 
-      @legacy:test_set_aside_notifications::test_config_update_preserves_triage_state::case_1
       Examples:
         | provider        |
         | GitHub          |
 
-      @legacy:test_set_aside_notifications::test_config_update_preserves_triage_state::case_2
       Examples:
         | provider        |
         | Linear          |
 
-      @legacy:test_set_aside_notifications::test_config_update_preserves_triage_state::case_3
       Examples:
         | provider        |
         | Google Mail     |
 
-      @legacy:test_set_aside_notifications::test_config_update_preserves_triage_state::case_4
       Examples:
         | provider        |
         | Google Drive    |
 
-      @legacy:test_set_aside_notifications::test_config_update_preserves_triage_state::case_5
       Examples:
         | provider        |
         | Google Calendar |
 
-      @legacy:test_set_aside_notifications::test_config_update_preserves_triage_state::case_6
       Examples:
         | provider        |
         | Slack           |
 
-      @legacy:test_set_aside_notifications::test_config_update_preserves_triage_state::case_7
       Examples:
         | provider        |
         | Todoist         |
 
-      @legacy:test_set_aside_notifications::test_config_update_preserves_triage_state::case_8
       Examples:
         | provider        |
         | TickTick        |
@@ -67,27 +59,22 @@ Feature: Setting notifications aside
       When the notifications sync of <provider> completes
       Then my notification is unchanged in my inbox
 
-      @legacy:test_set_aside_notifications::test_mute_sets_aside_and_unmute_restores::case_1
       Examples:
         | provider     |
         | GitHub       |
 
-      @legacy:test_set_aside_notifications::test_mute_sets_aside_and_unmute_restores::case_2
       Examples:
         | provider     |
         | Linear       |
 
-      @legacy:test_set_aside_notifications::test_mute_sets_aside_and_unmute_restores::case_3
       Examples:
         | provider     |
         | Google Mail  |
 
-      @legacy:test_set_aside_notifications::test_mute_sets_aside_and_unmute_restores::case_4
       Examples:
         | provider     |
         | Google Drive |
 
-      @legacy:test_set_aside_notifications::test_mute_sets_aside_and_unmute_restores::case_5
       Examples:
         | provider     |
         | Slack        |
@@ -97,17 +84,14 @@ Feature: Setting notifications aside
       When I switch off the synchronisation of my <provider> connection
       Then my notification is unchanged in my inbox
 
-      @legacy:test_set_aside_notifications::test_mute_does_not_set_aside_task_derived_notifications::case_1
       Examples:
         | provider |
         | Todoist  |
 
-      @legacy:test_set_aside_notifications::test_mute_does_not_set_aside_task_derived_notifications::case_2
       Examples:
         | provider |
         | TickTick |
 
-    @legacy:test_set_aside_notifications::test_repeated_mute_does_not_refresh_set_aside_at
     Scenario: Muting again does not refresh the moment the notification was set aside
       Given I have a Slack notification that I read, snoozed and turned into a task
       When my Slack notifications are muted, with nothing set aside before
@@ -125,47 +109,38 @@ Feature: Setting notifications aside
       When the sync that restores the <provider> notifications completes
       Then my notification is unchanged in my inbox
 
-      @legacy:test_set_aside_notifications::test_disconnect_sets_aside_and_reconnect_restores::case_1
       Examples:
         | provider        |
         | GitHub          |
 
-      @legacy:test_set_aside_notifications::test_disconnect_sets_aside_and_reconnect_restores::case_2
       Examples:
         | provider        |
         | Linear          |
 
-      @legacy:test_set_aside_notifications::test_disconnect_sets_aside_and_reconnect_restores::case_3
       Examples:
         | provider        |
         | Google Mail     |
 
-      @legacy:test_set_aside_notifications::test_disconnect_sets_aside_and_reconnect_restores::case_4
       Examples:
         | provider        |
         | Google Drive    |
 
-      @legacy:test_set_aside_notifications::test_disconnect_sets_aside_and_reconnect_restores::case_5
       Examples:
         | provider        |
         | Google Calendar |
 
-      @legacy:test_set_aside_notifications::test_disconnect_sets_aside_and_reconnect_restores::case_6
       Examples:
         | provider        |
         | Slack           |
 
-      @legacy:test_set_aside_notifications::test_disconnect_sets_aside_and_reconnect_restores::case_7
       Examples:
         | provider        |
         | Todoist         |
 
-      @legacy:test_set_aside_notifications::test_disconnect_sets_aside_and_reconnect_restores::case_8
       Examples:
         | provider        |
         | TickTick        |
 
-    @legacy:test_set_aside_notifications::test_inactivity_pause_sets_aside_and_reconnect_restores
     Scenario: A connection paused for inactivity sets its notifications aside the same way
       Given I have a Slack notification that I read, snoozed and turned into a task
       And I was last active 100 days ago
@@ -176,7 +151,6 @@ Feature: Setting notifications aside
       And the sync that restores the Slack notifications completes
       Then my notification is unchanged in my inbox
 
-    @legacy:test_set_aside_notifications::test_disconnect_does_not_set_aside_api_notifications
     Scenario: Notifications pushed through the API stay in the inbox when their connection is disconnected
       Given I have a notification from a web page sent through the API
       When I disconnect my API connection
@@ -184,7 +158,6 @@ Feature: Setting notifications aside
 
   Rule: Only a user's own action sets notifications aside
 
-    @legacy:test_set_aside_notifications::test_failing_connection_keeps_notifications_visible
     Scenario: A connection the API moved to failing keeps its notifications visible
       Given I have a GitHub notification that I read, snoozed and turned into a task
       And my GitHub connection turned failing, as the API does when a refresh token expires

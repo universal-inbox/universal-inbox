@@ -10,7 +10,6 @@ Feature: Slack bridge actions
 
   Rule: The extension reports an action
 
-    @legacy:test_slack_bridge::test_complete_pending_action_succeeds
     Scenario: A pending action is completed
       Given I have a Pending Slack bridge action
       When the Slack extension reports that action as completed
@@ -18,7 +17,6 @@ Feature: Slack bridge actions
       And that action is Completed
       And that action has a completion date
 
-    @legacy:test_slack_bridge::test_complete_failed_action_succeeds
     Scenario: A failed action is completed
       Given I have a Failed Slack bridge action
       When the Slack extension reports that action as completed
@@ -26,7 +24,6 @@ Feature: Slack bridge actions
       And that action is Completed
       And that action has a completion date
 
-    @legacy:test_slack_bridge::test_fail_after_complete_is_noop
     Scenario: A stale failure report does not revert a completed action
       Given I have a Pending Slack bridge action
       And the Slack extension reports that action as completed
@@ -37,7 +34,6 @@ Feature: Slack bridge actions
       And that action is Completed
       And that action was retried 0 times
 
-    @legacy:test_slack_bridge::test_complete_after_permanently_failed_is_noop
     Scenario: A completion report does not revive a permanently failed action
       Given I have a PermanentlyFailed Slack bridge action
       When the Slack extension reports that action as completed
@@ -45,7 +41,6 @@ Feature: Slack bridge actions
       And that action is PermanentlyFailed
       And that action has no completion date
 
-    @legacy:test_slack_bridge::test_fail_transitions_to_permanently_failed_after_max_retries
     Scenario: An action that failed five times is permanently failed
       Given I have a Pending Slack bridge action
       When the Slack extension reports that action as failed 4 times, with the error "transient"
@@ -58,13 +53,11 @@ Feature: Slack bridge actions
 
   Rule: The actions do not block a deletion
 
-    @legacy:test_slack_bridge::test_delete_user_with_pending_actions_succeeds
     Scenario: A user with pending actions can be deleted, and their actions go with them
       Given I have a Pending Slack bridge action
       When my user is deleted
       Then that user is deleted, with that action
 
-    @legacy:test_slack_bridge::test_delete_notification_referenced_by_pending_action_succeeds
     Scenario: A notification that a pending action refers to can be deleted, and the action is kept
       Given I am connected to GitHub
       And I have a GitHub notification

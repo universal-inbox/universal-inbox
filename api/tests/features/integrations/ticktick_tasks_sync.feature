@@ -6,7 +6,6 @@ Feature: Syncing TickTick tasks
   Background:
     Given I am signed in
 
-  @legacy:test_sync_ticktick_tasks::test_sync_ticktick_tasks_should_add_new_task_and_update_existing_one
   Scenario: A sync adds the new tasks and updates the known one
     Given I am connected to TickTick, syncing its tasks
     And I already have the task "old task 1" of the second TickTick task, in my Inbox
@@ -18,7 +17,6 @@ Feature: Syncing TickTick tasks
     And the new task of the first TickTick task, which is in my Inbox, has an unread notification
     And my TickTick connection recorded the date of the sync and a completed tasks sync, without failure
 
-  @legacy:test_sync_ticktick_tasks::test_sync_ticktick_tasks_should_adopt_the_sink_rename_of_a_linear_task
   Scenario: Renaming the TickTick item of a Linear task renames the task
     Given I am connected to TickTick, syncing its tasks
     And I am connected to Linear, syncing its tasks into the project TickTick Project2, due today, to TickTick
@@ -27,7 +25,6 @@ Feature: Syncing TickTick tasks
     When I sync my TickTick tasks
     Then the sync updated the task I already had, which is now titled "Reply to Marc about the billing thread"
 
-  @legacy:test_sync_ticktick_tasks::test_sync_ticktick_tasks_with_no_validated_integration_connections
   Scenario: A connection that is not validated yet is not synced
     Given I have a TickTick connection that is not validated yet
     And TickTick answers every request with a success and no data
@@ -35,7 +32,6 @@ Feature: Syncing TickTick tasks
     Then TickTick accepts the sync request
     And TickTick received no request
 
-  @legacy:test_sync_ticktick_tasks::test_sync_ticktick_tasks_with_synchronization_disabled
   Scenario: A connection with its synchronization disabled is not synced
     Given I am connected to TickTick, with its synchronization disabled
     And TickTick answers every request with a success and no data

@@ -8,19 +8,16 @@ Feature: Changing the notification of a Google Mail thread
     And I am connected to Google Mail
     And I have the notification "mine" of the Google Mail thread 123
 
-  @legacy:test_google_mail_notifications::patch_resource::test_patch_google_mail_notification_status_as_deleted
   Scenario: Deleting the notification archives the thread in Google Mail
     Given Google Mail archives, once and with my access token, the thread 123: it removes the inbox label and the synced label, and adds none
     When I set the status of "mine" to deleted
     Then the patched notification is deleted, was read just now, and is otherwise as "mine" was
 
-  @legacy:test_google_mail_notifications::patch_resource::test_patch_google_mail_notification_status_as_unsubscribed
   Scenario: Unsubscribing from the notification only archives the thread in Google Mail
     Given Google Mail archives, once and with my access token, the thread 123: it removes the inbox label and the synced label, and adds none
     When I set the status of "mine" to unsubscribed
     Then the patched notification is unsubscribed, was read just now, and is otherwise as "mine" was
 
-  @legacy:test_google_mail_notifications::patch_resource::test_patch_google_mail_notification_status_as_deleted_with_google_mail_error_response
   Scenario: A refusal of Google Mail is a public internal error, and the notification stays
     Given Google Mail refuses, once and with my access token, to modify the thread 123
     When I try to delete "mine"
@@ -28,7 +25,6 @@ Feature: Changing the notification of a Google Mail thread
     And the answer is the public error "An internal error occurred. Please retry later or contact support with the correlation id."
     And "mine", read again, is exactly as it was
 
-  @legacy:test_google_mail_notifications::patch_resource::test_patch_google_mail_notification_snoozed_until
   Scenario: Snoozing the notification asks Google Mail nothing
     Given Google Mail is not asked anything
     When I snooze "mine" until "2022-01-01T01:02:03Z"

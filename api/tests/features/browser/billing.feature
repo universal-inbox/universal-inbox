@@ -2,7 +2,6 @@ Feature: Upgrading to the paid plan
   A user on the Free plan upgrades to the Paid plan through Stripe Checkout.
   Stripe is replaced by a fake that sends the browser back to the app.
 
-  @legacy:test_billing_upgrade::test_user_can_upgrade_to_paid_plan
   Scenario: A new user upgrades from the Free plan to the Paid plan
     Given billing with Stripe is enabled
     When I register with a new email address

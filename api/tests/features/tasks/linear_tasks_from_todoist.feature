@@ -22,12 +22,10 @@ Feature: A Linear task follows its item in Todoist
       And the task of that Linear issue, read again, is <after>, and still the same task
       And the task of that Linear issue has one Todoist notification, which is <notification>
 
-      @legacy:test_linear_tasks::test_sync_todoist_linear_task::case_1_with_completed_task_in_inbox
       Examples:
         | before | after | notification |
         | active | done  | deleted      |
 
-      @legacy:test_linear_tasks::test_sync_todoist_linear_task::case_3_with_uncompleted_task_in_inbox
       Examples:
         | before | after  | notification |
         | done   | active | unread       |
@@ -41,12 +39,10 @@ Feature: A Linear task follows its item in Todoist
       And the task of that Linear issue, read again, is <after>, and still the same task
       And the task of that Linear issue has no notification
 
-      @legacy:test_linear_tasks::test_sync_todoist_linear_task::case_2_with_completed_task_not_in_inbox
       Examples:
         | before | after |
         | active | done  |
 
-      @legacy:test_linear_tasks::test_sync_todoist_linear_task::case_4_with_uncompleted_task_not_in_inbox
       Examples:
         | before | after  |
         | done   | active |
@@ -65,7 +61,6 @@ Feature: A Linear task follows its item in Todoist
 
   Rule: Renaming the item in Todoist renames the task
 
-    @legacy:test_linear_tasks::test_sync_todoist_linear_task_should_adopt_the_sink_rename
     Scenario: The title that the user gave to the item in Todoist is adopted by the task
       Given I am connected to Linear, syncing its tasks into the project Project2, due today
       And I already have the task of that issue in the project Project2, mirrored by Todoist

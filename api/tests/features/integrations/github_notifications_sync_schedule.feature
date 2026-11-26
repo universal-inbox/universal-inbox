@@ -9,7 +9,6 @@ Feature: Scheduling GitHub notification syncs
 
   Rule: Syncing in the background
 
-    @legacy:test_sync_github_notifications::test_sync_all_notifications_asynchronously::case_1_trigger_sync_when_listing_notifications
     Scenario: Listing the notifications starts a background sync, and the next one is too soon to run
       Given I am connected to GitHub
       And GitHub reports the notifications 123 and 456
@@ -25,7 +24,6 @@ Feature: Scheduling GitHub notification syncs
       And the background jobs are all done
       Then I have no read notification
 
-    @legacy:test_sync_github_notifications::test_sync_all_notifications_asynchronously::case_2_trigger_sync_with_sync_endpoint
     Scenario: The sync endpoint starts a background sync, and the next one is too soon to run
       Given I am connected to GitHub
       And GitHub reports the notifications 123 and 456
@@ -43,7 +41,6 @@ Feature: Scheduling GitHub notification syncs
 
   Rule: Connections that cannot sync
 
-    @legacy:test_sync_github_notifications::test_sync_all_notifications_with_no_validated_integration_connections
     Scenario: A connection that was never validated is not synced
       Given I have a GitHub connection that was never validated
       And GitHub would answer 200 to anything
@@ -51,7 +48,6 @@ Feature: Scheduling GitHub notification syncs
       Then the app answers 200
       And GitHub was not asked anything
 
-    @legacy:test_sync_github_notifications::test_sync_all_notifications_with_synchronization_disabled
     Scenario: A connection whose synchronisation is disabled is not synced
       Given I have a GitHub connection whose synchronisation is disabled
       And GitHub would answer 200 to anything
@@ -59,7 +55,6 @@ Feature: Scheduling GitHub notification syncs
       Then the app answers 200
       And GitHub was not asked anything
 
-    @legacy:test_sync_github_notifications::test_sync_all_notifications_asynchronously_in_error
     Scenario: A background sync that fails is recorded, leaves my notifications alone, and the connection ends up failing
       Given my GitHub connection already failed 5 times, the first failure being 2 hours old
       And GitHub reports the notifications 123 and 456

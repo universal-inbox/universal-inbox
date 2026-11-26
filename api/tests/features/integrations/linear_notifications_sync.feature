@@ -7,7 +7,6 @@ Feature: Syncing Linear notifications
     Given I am signed in
     And I am connected to Linear
 
-  @legacy:test_sync_linear_notifications::test_sync_notifications_should_add_new_notification_and_update_existing_one
   Scenario: A sync adds the new notifications and updates the known one
     Given I am connected to Todoist
     And Todoist can list my projects
@@ -21,7 +20,6 @@ Feature: Syncing Linear notifications
     And "existing" is still linked to my Todoist task
     And my Linear connection recorded a completed notifications sync, without failure
 
-  @legacy:test_sync_linear_notifications::test_sync_linear_notifications_should_mark_existing_notifications_for_same_issue_as_deleted
   Scenario: An older notification of an issue is deleted when a newer one arrives
     Given I already have the Linear notification of that issue, "mine", which I have read
     And Linear reports a second notification of that issue, with a newer comment
@@ -30,7 +28,6 @@ Feature: Syncing Linear notifications
     And my Linear notification "mine" is deleted
     And the newer notification of that issue is read
 
-  @legacy:test_sync_linear_notifications::test_sync_notifications_should_keep_user_status_of_unchanged_notification
   Scenario: Reading a notification in Universal Inbox survives a sync that reports it unchanged
     When I sync my Linear notifications
     And I take note of the unread notification Linear reported as "mine"

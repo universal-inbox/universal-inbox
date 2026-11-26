@@ -2,7 +2,6 @@ Feature: Caching the Slack emojis
   The emojis of a Slack workspace are cached per credential: two tokens never
   share a cache entry, even without a team id, and one token asks Slack once.
 
-  @legacy:test_slack_emoji_cache::test_list_emojis_cache_is_not_shared_between_credentials_without_team_context
   Scenario: Two credentials without a team id do not share their emojis
     Given workspace "a" has a Slack token without a team id, and Slack knows the emoji "secret_a" and is asked for it once
     And workspace "b" has a Slack token without a team id, and Slack knows the emoji "secret_b" and is asked for it once
@@ -11,7 +10,6 @@ Feature: Caching the Slack emojis
     Then the emojis listed for workspace "a" are only "secret_a"
     And the emojis listed for workspace "b" are only "secret_b"
 
-  @legacy:test_slack_emoji_cache::test_list_emojis_cache_hit_for_repeated_lookups_by_same_credential
   Scenario: Listing the emojis twice with one credential asks Slack once
     Given workspace "a" has a Slack token without a team id, and Slack knows the emoji "party" and is asked for it once
     When I list the emojis of workspace "a"

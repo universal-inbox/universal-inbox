@@ -25,12 +25,10 @@ Feature: Slack tasks mirrored by Todoist
       And the sync brought two tasks, each with one notification
       And the notification of that Slack task is <notification>
 
-      @legacy:test_slack_tasks::test_sync_todoist_slack_task::case_1_with_completed_task_in_inbox
       Examples:
         | event | before | after | notification | reaction_call |
         | added | active | done  | deleted      | removes       |
 
-      @legacy:test_slack_tasks::test_sync_todoist_slack_task::case_3_with_uncompleted_task_in_inbox
       Examples:
         | event   | before | after  | notification | reaction_call |
         | removed | done   | active | unread       | adds          |
@@ -46,12 +44,10 @@ Feature: Slack tasks mirrored by Todoist
       And the sync brought two tasks
       And that Slack task has no notification
 
-      @legacy:test_slack_tasks::test_sync_todoist_slack_task::case_2_with_completed_task_not_in_inbox
       Examples:
         | event | before | after | reaction_call |
         | added | active | done  | removes       |
 
-      @legacy:test_slack_tasks::test_sync_todoist_slack_task::case_4_with_uncompleted_task_not_in_inbox
       Examples:
         | event   | before | after  | reaction_call |
         | removed | done   | active | adds          |
@@ -65,7 +61,6 @@ Feature: Slack tasks mirrored by Todoist
       And Todoist adds the Slack message as an item, and then serves it
       And I reacted to a Slack message, which Todoist mirrors as a task
 
-    @legacy:test_slack_tasks::test_slack_task_should_not_overwrite_nor_push_the_title_of_a_mirrored_task
     Scenario: Editing the Slack message neither overwrites the title of the task nor pushes anything to Todoist
       Given Todoist is not asked to change anything
       When that Slack message is edited upstream, with an attachment titled "Edited upstream in Slack"
@@ -77,19 +72,16 @@ Feature: Slack tasks mirrored by Todoist
       When I mark that Slack task as done
       Then that task is done, with a completion date, and nothing else changed
 
-      @legacy:test_slack_tasks::test_patch_slack_task_status_as_done::case_1_reaction_removed
       Examples:
         | slack_case                     | slack_answer                                                                      |
         | as Slack removes the reaction  | Slack removes the reaction "eyes" from that message, once                         |
 
-      @legacy:test_slack_tasks::test_patch_slack_task_status_as_done::case_2_reaction_already_removed
       Examples:
         | slack_case                          | slack_answer                                                                                   |
         | though the reaction is already gone | Slack answers, once, that the reaction "eyes" is already removed from that message              |
 
   Rule: A Slack task completed with a reaction of its own
 
-    @legacy:test_slack_tasks::test_patch_slack_task_status_as_done_with_completion_reaction
     Scenario: Completing the task swaps the reaction of the message for the completion reaction
       Given I am connected to Slack, syncing its tasks, and marking the completed ones with the reaction "done"
       And I am connected to Todoist

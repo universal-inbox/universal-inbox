@@ -2,12 +2,10 @@ Feature: Exporting the account data
   A signed-in user downloads all their data as a file that contains no
   secret. The export holds only the user's own data and is limited per user.
 
-  @legacy:test_export_user_data::test_export_requires_authentication
   Scenario: A visitor who is not signed in cannot export data
     When a visitor who is not signed in exports their data
     Then the app answers 401
 
-  @legacy:test_export_user_data::test_export_contains_user_data_without_secrets
   Scenario: The export holds the user's data without any secret and nobody else's
     Given I am signed in
     And I have an API token
@@ -30,7 +28,6 @@ Feature: Exporting the account data
     And the export lists exactly my task
 
   # The budget 2 mirrors EXPORT_RATE_LIMIT_PER_MINUTE in api/src/utils/rate_limit.rs
-  @legacy:test_export_user_data::test_export_has_a_per_user_budget
   Scenario: Exporting is limited per user
     Given I am signed in
     When I export my data 2 times, each answered 200

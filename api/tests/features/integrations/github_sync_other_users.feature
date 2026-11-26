@@ -2,7 +2,6 @@ Feature: Syncing GitHub notifications of several users
   A sync only touches the notifications of the user who syncs: a thread GitHub no
   longer reports is deleted for that user, and never for anybody else.
 
-  @legacy:test_sync_github_notifications::test_sync_notifications_should_mark_deleted_notification_without_subscription
   Scenario: A thread GitHub no longer reports is deleted for its user only
     Given the app lets users sign in with a password or a passkey
     And GitHub reports the notifications 123 and 456

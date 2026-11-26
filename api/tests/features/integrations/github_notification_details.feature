@@ -9,7 +9,6 @@ Feature: Details of synced GitHub notifications
 
   Rule: Pull requests
 
-    @legacy:test_sync_github_notifications::test_sync_pull_request_notification_with_comments_and_review_threads
     Scenario: A pull request notification holds all the pages of its comments and review threads
       Given GitHub reports one notification, on pull request 123
       And GitHub knows pull request 123, with comments, reviews and review threads over several pages
@@ -28,7 +27,6 @@ Feature: Details of synced GitHub notifications
 
   Rule: Discussions
 
-    @legacy:test_sync_github_notifications::test_sync_discussion_notification_with_details
     Scenario: A discussion notification holds all the pages of its comments and replies
       Given GitHub reports one notification, on the discussion 123 titled "test discussion"
       And GitHub knows the discussion 123, with comments and replies over several pages
@@ -38,7 +36,6 @@ Feature: Details of synced GitHub notifications
       And its first comment says "<p>first comment</p>", is not the answer, has 3 replies and holds the replies "<p>a reply</p>, <p>a late reply</p>"
       And its comment 2 is the answer and holds no reply
 
-    @legacy:test_sync_github_notifications::test_sync_discussion_notification_stops_on_non_advancing_cursor
     Scenario: A page of comments that points back to a page already read stops the paging
       Given GitHub reports one notification, on the discussion 123 titled "test discussion"
       And GitHub knows the discussion 123, whose second page of comments is the first one again
@@ -46,7 +43,6 @@ Feature: Details of synced GitHub notifications
       Then I have one unread GitHub notification, whose discussion is "test discussion" at "https://github.com/octocat/universal-inbox/discussions/1", in the answerable category "Q&A", emoji ":pray:", slug "q-a"
       And that discussion holds the comments "DC_1, DC_4, DC_1, DC_4"
 
-    @legacy:test_sync_github_notifications::test_sync_discussion_notification_with_error
     Scenario: A discussion GitHub fails to give fails the sync and leaves the inbox as it was
       Given GitHub reports one notification, on the discussion 123 titled "test discussion"
       And I have a GitHub notification called "mine"

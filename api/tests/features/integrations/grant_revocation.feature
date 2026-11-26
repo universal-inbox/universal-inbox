@@ -14,39 +14,32 @@ Feature: Revoking provider grants
       When I disconnect it
       Then <provider> was asked once to revoke my grant
 
-      @legacy:test_integration_connections::revoke_provider_grants::test_disconnecting_github_revokes_the_grant
       Examples:
         | provider    |
         | GitHub      |
 
-      @legacy:test_integration_connections::revoke_provider_grants::test_disconnecting_google_revokes_the_grant
       Examples:
         | provider    |
         | Google Mail |
 
-      @legacy:test_integration_connections::revoke_provider_grants::test_disconnecting_slack_revokes_the_token
       Examples:
         | provider    |
         | Slack       |
 
-      @legacy:test_integration_connections::revoke_provider_grants::test_disconnecting_linear_revokes_the_grant
       Examples:
         | provider    |
         | Linear      |
 
-      @legacy:test_integration_connections::revoke_provider_grants::test_disconnecting_ticktick_revokes_the_token
       Examples:
         | provider    |
         | TickTick    |
 
-      @legacy:test_integration_connections::revoke_provider_grants::test_disconnecting_notion_revokes_the_token
       Examples:
         | provider    |
         | Notion      |
 
   Rule: A revocation the provider refuses is retried
 
-    @legacy:test_integration_connections::revoke_provider_grants::test_a_failed_revocation_is_queued_then_retried
     Scenario: A refused revocation is queued, then revoked at the next retry
       Given I have a validated GitHub connection with a stored credential
       And GitHub fails to revoke my grant
@@ -65,7 +58,6 @@ Feature: Revoking provider grants
         | status  | attempts | tokens | connection |
         | Revoked | 1        | erased | mine       |
 
-    @legacy:test_integration_connections::revoke_provider_grants::test_a_failing_revocation_backs_off_then_is_abandoned
     Scenario: A revocation that keeps failing backs off, then is abandoned with its tokens kept
       Given I have a validated GitHub connection with a stored credential
       And GitHub fails to revoke my grant
@@ -85,7 +77,6 @@ Feature: Revoking provider grants
         | status    | attempts | tokens | connection |
         | Abandoned | 3        | kept   | mine       |
 
-    @legacy:test_integration_connections::revoke_provider_grants::test_a_reconnect_cancels_the_pending_revocation
     Scenario: Connecting again cancels the queued revocation, which would kill the new token
       Given I have a validated GitHub connection with a stored credential
       And GitHub fails to revoke my grant
@@ -103,7 +94,6 @@ Feature: Revoking provider grants
 
   Rule: Slack tokens that rotate
 
-    @legacy:test_integration_connections::revoke_provider_grants::test_an_expired_slack_token_is_refreshed_then_revoked
     Scenario: An expired Slack token is renewed, then revoked
       Given I have a validated Slack connection whose credential rotates
       And its access token expired an hour ago
@@ -114,7 +104,6 @@ Feature: Revoking provider grants
       And Slack was asked once to revoke my grant
       And no revocation is stored
 
-    @legacy:test_integration_connections::revoke_provider_grants::test_a_queued_slack_token_expired_at_retry_is_refreshed_then_revoked
     Scenario: A queued Slack token that expired meanwhile is renewed at the retry, then revoked
       Given I have a validated Slack connection whose credential rotates
       And Slack is unavailable when asked to revoke a token
@@ -136,7 +125,6 @@ Feature: Revoking provider grants
         | status  | attempts | tokens | connection |
         | Revoked | 1        | erased | mine       |
 
-    @legacy:test_integration_connections::revoke_provider_grants::test_an_already_dead_slack_token_counts_as_revoked
     Scenario: A Slack token that is already dead counts as revoked
       Given I have a validated Slack connection with a stored credential
       And Slack answers that my token was already revoked
@@ -146,7 +134,6 @@ Feature: Revoking provider grants
 
   Rule: Deleting the account revokes every grant
 
-    @legacy:test_integration_connections::revoke_provider_grants::test_account_deletion_revokes_every_grant
     Scenario: Deleting the account revokes the grants of every connection
       Given I have a validated GitHub connection with a stored credential
       And I have a validated Google Mail connection with a stored credential
@@ -157,7 +144,6 @@ Feature: Revoking provider grants
       And GitHub was asked once to revoke my grant
       And Google Mail was asked once to revoke my grant
 
-    @legacy:test_integration_connections::revoke_provider_grants::test_account_deletion_queues_the_failed_revocations
     Scenario: Deleting the account keeps a refused revocation, though its connection is gone
       Given I have a validated GitHub connection with a stored credential
       And GitHub fails to revoke my grant

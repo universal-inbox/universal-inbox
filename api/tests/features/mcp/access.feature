@@ -2,7 +2,6 @@ Feature: Reaching the MCP endpoint
   MCP clients discover how to authenticate, then call the endpoint with a bearer token.
   A session cookie, a foreign origin and a missing session are refused.
 
-  @legacy:test_mcp::oauth2::well_known_metadata_endpoints
   Scenario: The app publishes where and how to authenticate
     When I request "/.well-known/oauth-protected-resource"
     Then the app answers 200
@@ -49,7 +48,6 @@ Feature: Reaching the MCP endpoint
       true
       """
 
-  @legacy:test_mcp::oauth2::mcp_returns_www_authenticate_without_token
   Scenario: A request without a token is told where to authenticate
     When I try to initialize an MCP session without any token
     Then the MCP request is answered with status 401
@@ -62,23 +60,19 @@ Feature: Reaching the MCP endpoint
       Given I am signed in
       And I have an API token
 
-    @legacy:test_mcp::oauth2::mcp_get_without_session_returns_400
     Scenario: The event stream cannot be opened without a session
       When I open the event stream of MCP without a session
       Then the MCP request is answered with status 400
 
-    @legacy:test_mcp::oauth2::mcp_rejects_session_cookie_auth
     Scenario: A session cookie is not accepted, so that a web page cannot act for the user
       When I try to initialize an MCP session with my session cookie only
       Then the MCP request is answered with status 401
       And the response header "www-authenticate" starts with "Bearer resource_metadata="
 
-    @legacy:test_mcp::oauth2::mcp_rejects_invalid_origin
     Scenario: A request from a foreign origin is refused
       When I try to initialize an MCP session from the origin "https://evil.example.com"
       Then the MCP request is answered with status 403
 
-    @legacy:test_mcp::rate_limits::sync_tools_share_the_per_user_sync_budget
     Scenario: The sync tools share the sync budget of the user
       When I use the whole sync budget of a minute through MCP, alternating notifications and tasks
       And I ask through MCP to sync my tasks once more

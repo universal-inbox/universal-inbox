@@ -9,7 +9,6 @@ Feature: Registering and signing in with a passkey, step by step
 
   Rule: Starting a ceremony does not reveal which usernames are registered
 
-    @legacy:test_users::passkey_start_non_enumerable::test_start_passkey_registration_is_non_enumerable
     Scenario: Starting a registration for a registered username looks like starting it for a free one
       Given a visitor registered a passkey for the username "alice_existing_passkey"
       When a visitor starts registering a passkey for the username "bob_fresh_passkey"
@@ -19,7 +18,6 @@ Feature: Registering and signing in with a passkey, step by step
       And the first challenge is for the user "bob_fresh_passkey" and the second one for the user "alice_existing_passkey"
       And the second answer does not say that the username already exists
 
-    @legacy:test_users::passkey_start_non_enumerable::test_start_passkey_authentication_is_non_enumerable
     Scenario: Starting a sign-in for an unknown username looks like starting it for a registered one
       Given a visitor registered a passkey for the username "carol_registered_passkey"
       When a visitor starts a passkey sign-in as "carol_registered_passkey"
@@ -33,7 +31,6 @@ Feature: Registering and signing in with a passkey, step by step
 
   Rule: A sign-in in progress belongs to the browser that started it
 
-    @legacy:test_users::passkey_authentication_ceremony_isolation::test_concurrent_start_does_not_clobber_an_in_flight_ceremony
     Scenario: Someone else starting a sign-in for the same username does not break it
       Given a visitor registered a passkey for the username "dave_passkey_victim"
       When a visitor starts a passkey sign-in as "dave_passkey_victim"
@@ -44,7 +41,6 @@ Feature: Registering and signing in with a passkey, step by step
 
   Rule: A registration is finished only as it was started
 
-    @legacy:test_users::passkey_finish_non_leaking::test_finish_passkey_registration_with_taken_username_does_not_leak
     Scenario: Finishing a registration for a username that is taken is refused without details
       Given a visitor registered a passkey for the username "alice_taken_username"
       When a visitor starts registering a passkey for the username "alice_taken_username"
@@ -55,7 +51,6 @@ Feature: Registering and signing in with a passkey, step by step
       And the error message is "This username is already taken. Please choose a different one."
       And the response mentions neither the database, the username nor any identifier
 
-    @legacy:test_users::passkey_ceremony_csrf_hardening::test_finish_passkey_registration_requires_matching_nonce
     Scenario: A registration finished with a nonce the app did not issue is refused
       When a visitor starts registering a passkey for the username "nonce_match_alice"
       Then the app issued a nonce for the registration
@@ -67,7 +62,6 @@ Feature: Registering and signing in with a passkey, step by step
       And the passkey registration is finished as a new account
       Then the app answers 200
 
-    @legacy:test_users::passkey_ceremony_csrf_hardening::test_finish_passkey_registration_rejects_foreign_origin
     Scenario: A registration finished from another website is refused, from the app's own website it succeeds
       When a visitor starts registering a passkey for the username "origin_check_bob"
       And the device answers the registration challenge
@@ -76,7 +70,6 @@ Feature: Registering and signing in with a passkey, step by step
       When the passkey registration is finished as a new account
       Then the app answers 200
 
-    @legacy:test_users::passkey_ceremony_csrf_hardening::test_add_passkey_state_cannot_complete_initial_passkey_finish
     Scenario: A registration started to add a passkey cannot be finished as a new account
       Given I have signed up with the email "carol@doe.name" and a password
       When I start adding a passkey named "carol_passkey"

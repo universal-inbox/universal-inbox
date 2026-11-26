@@ -43,12 +43,8 @@ clean-test-db:
       | psql -q "$server_url"
     echo "🧹 Dropped the test databases"
 
-test test-filter="" $RUST_LOG="info": check-legacy-mapping
+test test-filter="" $RUST_LOG="info":
     cargo nextest run -E 'not binary(browser_features)' --color always {{test-filter}}
-
-# Every legacy API/browser test is still a test, a `@legacy:` tagged scenario or a kept plain test.
-check-legacy-mapping:
-    scripts/check-legacy-mapping.sh
 
 test-browser test-filter="" $RUST_LOG="info":
     #!/usr/bin/env bash
@@ -127,7 +123,7 @@ record-landing-screencast output="./screen.webm" base-url="http://localhost:8080
 anonymize-db:
     cargo run -- test anonymize-db
     
-test-ci: check-legacy-mapping
+test-ci:
     cargo nextest run --profile ci -E 'not binary(browser_features)'
 
 test-ci-browser:

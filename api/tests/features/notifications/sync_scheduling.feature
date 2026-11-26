@@ -3,7 +3,6 @@ Feature: Scheduling syncs
   Overlapping requests must not deadlock on the connections they schedule, and
   only a signed-in user can schedule a sync, of their own connections.
 
-  @legacy:test_sync_scheduling_concurrency::test_concurrent_list_notifications_never_deadlocks
   Scenario: Concurrent requests that each schedule a sync never fail
     Given I am signed in
     And I am connected to GitHub
@@ -12,7 +11,6 @@ Feature: Scheduling syncs
     When I list my unread and read notifications 16 at a time, 5 times in a row, each time asking for a sync
     Then the app answered 200, 80 times
 
-  @legacy:test_sync_scheduling_concurrency::test_anonymous_sync_trigger_is_rejected
   Scenario: A visitor who is not signed in cannot schedule any sync
     When a visitor who is not signed in asks for a GitHub notification sync, a notification sync and a task sync
     Then the app answered 401, 3 times

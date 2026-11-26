@@ -4,7 +4,6 @@ Feature: Paths served by the web app
 
   Rule: Paths that cannot be static files are not found
 
-    @legacy:test_misc::invalid_static_paths::test_invalid_static_path_returns_not_found
     Scenario Outline: Requesting <path> answers Not Found
       When I request "<path>"
       Then the app answers 404
@@ -27,7 +26,6 @@ Feature: Paths served by the web app
         | /home/user/%2eaws/credentials     |
         | /https://app.universal-inbox.com/ |
 
-    @legacy:test_misc::invalid_static_paths::test_valid_static_path_is_served
     Scenario Outline: Requesting <path> serves the web application
       Unknown routes of the web application fall back to its index page.
 
@@ -40,7 +38,6 @@ Feature: Paths served by the web app
         | /notifications/a:b |
         | /foo*bar           |
 
-    @legacy:test_misc::invalid_static_paths::test_registered_well_known_route_still_served
     Scenario: A registered well-known route is still served
       When I request "/.well-known/oauth-authorization-server"
       Then the app answers 200

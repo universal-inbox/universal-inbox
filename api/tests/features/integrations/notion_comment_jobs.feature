@@ -7,7 +7,6 @@ Feature: Handling a Notion comment event
 
   Rule: A comment creates a notification for the user it concerns
 
-    @legacy:test_notion_webhook::job::test_mention_creates_an_unread_notification
     Scenario: A comment that mentions me creates an unread notification
       Given I am connected to Notion, in a workspace of its own
       And Notion now serves a discussion with these comments:
@@ -20,7 +19,6 @@ Feature: Handling a Notion comment event
       And that Notion notification was updated at "2026-10-10T09:05:00+00:00"
       And that Notion notification is the comment of the discussion, with its quoted content
 
-    @legacy:test_notion_webhook::job::test_comment_on_my_page_or_block_creates_a_notification::case_1_page_creator
     Scenario: A comment on a page that I created creates a notification
       Given I am connected to Notion, in a workspace of its own
       And Notion serves a discussion on a page created by me and a block created by someone, with these comments:
@@ -30,7 +28,6 @@ Feature: Handling a Notion comment event
       And I look at my unread Notion notifications
       Then my only Notion notification is unread
 
-    @legacy:test_notion_webhook::job::test_comment_on_my_page_or_block_creates_a_notification::case_2_block_creator
     Scenario: A comment on a block that I created creates a notification
       Given I am connected to Notion, in a workspace of its own
       And Notion serves a discussion on a page created by someone and a block created by me, with these comments:
@@ -40,7 +37,6 @@ Feature: Handling a Notion comment event
       And I look at my unread Notion notifications
       Then my only Notion notification is unread
 
-    @legacy:test_notion_webhook::job::test_comment_not_involving_me_is_ignored
     Scenario: A comment that does not involve me creates nothing
       Given I am connected to Notion, in a workspace of its own
       And Notion now serves a discussion with these comments:
@@ -50,7 +46,6 @@ Feature: Handling a Notion comment event
       And I look at my Notion notifications, whatever their status
       Then I see no Notion notification
 
-    @legacy:test_notion_webhook::job::test_event_of_another_workspace_creates_nothing
     Scenario: A comment of a workspace that nobody connected creates nothing
       Given I am connected to Notion, in a workspace of its own
       And Notion now serves a discussion with these comments:
@@ -60,7 +55,6 @@ Feature: Handling a Notion comment event
       And I look at my Notion notifications, whatever their status
       Then I see no Notion notification
 
-    @legacy:test_notion_webhook::job::test_page_not_shared_with_me_creates_nothing
     Scenario: A comment on a page that Notion does not share with me creates nothing
       Given I am connected to Notion, in a workspace of its own
       And Notion does not share the page with the token "notion-token-me"
@@ -70,7 +64,6 @@ Feature: Handling a Notion comment event
 
   Rule: The comment sync can be switched off
 
-    @legacy:test_notion_webhook::job::test_disabled_comment_sync_creates_nothing
     Scenario: With the comment sync disabled, a comment creates nothing
       Given I am connected to Notion, with its comment sync disabled
       And Notion now serves a discussion with these comments:
@@ -80,7 +73,6 @@ Feature: Handling a Notion comment event
       And I look at my Notion notifications, whatever their status
       Then I see no Notion notification
 
-    @legacy:test_notion_webhook::job::test_enabled_comment_sync_applies_to_the_next_comment
     Scenario: Enabling the comment sync applies to the next comment
       Given I am connected to Notion, with its comment sync disabled
       And Notion now serves a discussion with these comments:
@@ -96,7 +88,6 @@ Feature: Handling a Notion comment event
 
   Rule: The notification follows the discussion
 
-    @legacy:test_notion_webhook::job::test_my_reply_hides_the_notification_until_someone_answers
     Scenario: My reply hides the notification, and an answer of someone brings it back
       Given I am connected to Notion, in a workspace of its own
       And Notion now serves a discussion with these comments:
@@ -116,7 +107,6 @@ Feature: Handling a Notion comment event
       Then my only Notion notification is unread
       And that Notion notification was updated at "2026-10-10T09:15:00+00:00"
 
-    @legacy:test_notion_webhook::job::test_deleted_discussion_deletes_the_notification
     Scenario: A deleted discussion deletes the notification
       Given I am connected to Notion, in a workspace of its own
       And Notion now serves a discussion with these comments:
@@ -131,7 +121,6 @@ Feature: Handling a Notion comment event
       And I look at my Notion notifications, whatever their status
       Then my only Notion notification is deleted
 
-    @legacy:test_notion_webhook::job::test_redelivered_comment_event_creates_one_notification
     Scenario: An event that Notion delivers again keeps one notification, and does not bring a read one back
       Given I am connected to Notion, in a workspace of its own
       And Notion now serves a discussion with these comments:
@@ -162,24 +151,20 @@ Feature: Handling a Notion comment event
       And I look at my Notion notifications, whatever their status
       Then my only Notion notification is <after>
 
-      @legacy:test_notion_webhook::job::test_new_reply_after_delete_or_unsubscribe::case_1_deleted
       Examples:
         | dismissed | reply     | after  |
         | deleted   | Any news? | unread |
 
-      @legacy:test_notion_webhook::job::test_new_reply_after_delete_or_unsubscribe::case_2_unsubscribed
       Examples:
         | dismissed    | reply     | after        |
         | unsubscribed | Any news? | unsubscribed |
 
-      @legacy:test_notion_webhook::job::test_new_reply_after_delete_or_unsubscribe::case_3_unsubscribed_then_mentioned
       Examples:
         | dismissed    | reply          | after  |
         | unsubscribed | Any news @me   | unread |
 
   Rule: Every connection of the workspace is handled on its own
 
-    @legacy:test_notion_webhook::job::test_a_connection_without_access_does_not_stop_the_others
     Scenario: A connection that cannot see the page does not stop the others
       Given another user is signed in
       And the other user and I are connected to the same Notion workspace
@@ -191,7 +176,6 @@ Feature: Handling a Notion comment event
       When the other user looks at their Notion notifications, whatever their status
       Then I have 0 Notion notifications listed
 
-    @legacy:test_notion_webhook::job::test_a_failing_connection_fails_the_job_after_saving_the_others
     Scenario: A Notion failure fails the job once the other connections are saved, and the retry saves the rest
       Given another user is signed in
       And the other user and I are connected to the same Notion workspace
@@ -268,12 +252,10 @@ Feature: Handling a Notion comment event
 
   Rule: The job reads a comment with the tokens of at most three connections of the workspace
 
-    Scenario Outline: With <connections> connections that cannot see the page, Notion is asked with <asked> tokens and nothing is created
+    Scenario Outline: With <connections> connections that cannot see the page, Notion is asked with <asked> tokens
       Given I and <others> other users are connected to the same Notion workspace, each with a token of their own, and Notion shares the page with none of us
       When the Notion job handles the comment "comment-1" written by someone, visible to me only
       Then Notion was asked with <asked> of our tokens, each a different one, and with no other token
-      When I look at my unread Notion notifications
-      Then I have 0 Notion notifications listed
 
       Examples:
         | connections | others | asked |

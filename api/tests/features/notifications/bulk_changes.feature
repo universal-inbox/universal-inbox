@@ -8,7 +8,6 @@ Feature: Changing many notifications at once
     Given I am signed in
     And I am connected to GitHub
 
-  @legacy:test_notifications::patch_notifications_bulk::test_patch_notifications_bulk_delete_all
   Scenario: A user deletes all their GitHub notifications at once
     Given GitHub accepts to delete the notification threads 1 and 2
     And I have a GitHub notification called "first"
@@ -23,7 +22,6 @@ Feature: Changing many notifications at once
       | second |
     And that change queued 2 jobs, and all of them are done
 
-  @legacy:test_notifications::patch_notifications_bulk::test_patch_notifications_bulk_snooze_only
   Scenario: A user snoozes all their GitHub notifications at once without changing their status
     Given I have a GitHub notification called "first"
     And I have a GitHub notification called "second"
@@ -38,7 +36,6 @@ Feature: Changing many notifications at once
       | second |
     And that change queued 2 jobs, and all of them are done
 
-  @legacy:test_notifications::create_task_from_notification_validation::test_create_task_from_notification_rejects_too_long_title
   Scenario: A task title that is too long is refused before the notification is looked up
     When I create a task from a notification that does not exist, with a title one character too long
     Then the app answers 400

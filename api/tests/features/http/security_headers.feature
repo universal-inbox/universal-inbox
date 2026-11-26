@@ -5,7 +5,6 @@ Feature: Security headers and cross-origin requests
 
   Rule: Pages and other responses declare their security policy
 
-    @legacy:test_misc::content_security_policy::test_csp_header_on_html_page
     Scenario: The web app page restricts what it can load
       The policy allows the app's own origin, its identity provider and a few
       third-party widgets, and the inline bootstrap script of the page.
@@ -22,7 +21,6 @@ Feature: Security headers and cross-origin requests
       And the response carries the common security headers
       And the response header "content-disposition" is not "attachment"
 
-    @legacy:test_misc::content_security_policy::test_csp_header_on_other_url
     Scenario: A JSON response has no content security policy but keeps the other headers
       The policy only constrains pages, but clickjacking and HTTPS protections
       apply to every response.
@@ -39,7 +37,6 @@ Feature: Security headers and cross-origin requests
 
   Rule: API responses are not cached nor rendered by the browser
 
-    @legacy:test_misc::api_response_headers::test_authenticated_api_response_is_not_cached_nor_rendered
     Scenario: A signed-in user's API response is not cached nor rendered
       Given I am signed in
       When I request "/api/notifications"
@@ -48,7 +45,6 @@ Feature: Security headers and cross-origin requests
       And the response header "content-disposition" is "attachment"
       And the response carries the common security headers
 
-    @legacy:test_misc::api_response_headers::test_api_error_response_is_not_cached_nor_rendered
     Scenario: An API error response is not cached nor rendered
       When I request "/api/notifications"
       Then the app answers 401
@@ -56,7 +52,6 @@ Feature: Security headers and cross-origin requests
       And the response header "content-disposition" is "attachment"
       And the response carries the common security headers
 
-    @legacy:test_misc::api_response_headers::test_explicit_cache_control_is_kept
     Scenario: A cache policy chosen by an API route is kept
       Given I am signed in
       When I request "/api/front_config"
@@ -69,7 +64,6 @@ Feature: Security headers and cross-origin requests
 
   Rule: Other websites cannot use a visitor's session
 
-    @legacy:test_misc::cors::test_cors_rejects_arbitrary_origin_on_cookie_authed_endpoint
     Scenario: An arbitrary website is not allowed to call a cookie-authenticated endpoint
       Browsers ask before sending a cross-origin request. The answer must not
       echo the website's origin, nor combine any origin with credentials.
@@ -81,7 +75,6 @@ Feature: Security headers and cross-origin requests
       Then the response does not allow the origin "https://evil.example"
       And the response does not combine a wildcard origin with credentials
 
-    @legacy:test_misc::cors::test_cors_mcp_endpoint_does_not_credential_arbitrary_origin
     Scenario: An arbitrary website cannot use credentials with the MCP endpoint
       The MCP endpoint only accepts bearer tokens, so no website origin may be
       allowed to send credentials to it.

@@ -3,7 +3,6 @@ Feature: User activity
   connections are paused for inactivity. A signed-in request records it, at
   most once a day.
 
-  @legacy:test_pause_integration_connections::test_authenticated_requests_record_user_activity_once_a_day
   Scenario: A signed-in request records the activity, once a day
     Given the app lets users sign in with a password or a passkey
     And I have an account with a password

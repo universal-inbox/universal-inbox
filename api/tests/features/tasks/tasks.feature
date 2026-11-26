@@ -8,13 +8,11 @@ Feature: The tasks
 
   Rule: Reading one task
 
-    @legacy:test_tasks::get_task::test_get_unknown_task
     Scenario: A task that does not exist is not found
       When I get a task that does not exist
       Then the app answers 404
       And the error message is "Cannot find task <id>", with <id> being the id of that unknown task
 
-    @legacy:test_tasks::get_task::test_get_task_of_another_user
     Scenario: A user cannot read the task of another user
       Given I am connected to Todoist
       And Todoist can list my projects
@@ -26,12 +24,10 @@ Feature: The tasks
 
   Rule: Listing tasks
 
-    @legacy:test_tasks::list_tasks::test_empty_list_tasks
     Scenario: A user without tasks sees none
       When I list my active tasks
       Then I see no tasks
 
-    @legacy:test_tasks::list_tasks::test_list_tasks
     Scenario: Tasks are listed by status and never to another user
       Given I am connected to Todoist
       And Todoist can list my projects
@@ -47,7 +43,6 @@ Feature: The tasks
 
   Rule: Changing one task
 
-    @legacy:test_tasks::patch_task::test_patch_task_status_without_modification
     Scenario: A change that changes nothing is not modified
       Given I am connected to Todoist
       And Todoist can list my projects
@@ -55,7 +50,6 @@ Feature: The tasks
       When I send "mine" the status it already has
       Then the app answers 304
 
-    @legacy:test_tasks::patch_task::test_patch_task_of_another_user
     Scenario: A user cannot change the task of another user
       Given I am connected to Todoist
       And Todoist can list my projects
@@ -64,7 +58,6 @@ Feature: The tasks
       When that other user marks "mine" as done
       Then the app answers 403
 
-    @legacy:test_tasks::patch_task::test_patch_task_cannot_point_at_another_users_sink_item
     Scenario: A task cannot point at the stored item of another user
       Given Todoist can list my projects
       And I am connected to Todoist
@@ -77,7 +70,6 @@ Feature: The tasks
       When I point "mine" at the stored item of "mine"
       Then the app does not answer 403
 
-    @legacy:test_tasks::patch_task::test_patch_task_without_values_to_update
     Scenario: A change without any value is refused
       Given I am connected to Todoist
       And Todoist can list my projects
@@ -86,7 +78,6 @@ Feature: The tasks
       Then the app answers 400
       And the error message is "Invalid input data: Missing `status` field value to update task <id>", with <id> being the id of the task "mine"
 
-    @legacy:test_tasks::patch_task::test_patch_unknown_task
     Scenario: A task that does not exist cannot be changed
       When I mark a task that does not exist as active
       Then the app answers 404
@@ -94,7 +85,6 @@ Feature: The tasks
 
   Rule: An invalid change is refused before the task is looked up
 
-    @legacy:test_tasks::patch_task_validation::test_patch_task_rejects_invalid_patch
     Scenario Outline: A patch with <field> <problem> is refused
       When I send a patch with <field> <problem> to a task that does not exist
       Then the app answers 400
@@ -106,19 +96,16 @@ Feature: The tasks
         | body         | too-long |
         | project-name | too-long |
 
-    @legacy:test_tasks::patch_task_validation::test_patch_task_rejects_unknown_field
     Scenario: A patch with a field that does not exist is refused
       When I send a patch with the unknown field "user_id" to a task that does not exist
       Then the app answers 400
 
   Rule: Searching tasks
 
-    @legacy:test_tasks::search_tasks::test_empty_search_tasks
     Scenario: Searching with nothing to find returns nothing
       When I search my tasks for ""
       Then I find no task
 
-    @legacy:test_tasks::search_tasks::test_search_tasks
     Scenario: Tasks are found by title and tags, not by description, and never for another user
       Given I am connected to Todoist
       And Todoist can list my projects
@@ -139,7 +126,6 @@ Feature: The tasks
       When that other user searches their tasks for "Task"
       Then I find no task
 
-    @legacy:test_tasks::search_tasks::test_search_tasks_filtered_by_provider_kind
     Scenario: Tasks are searched across providers or in one of them
       Given I am connected to Todoist
       And Todoist can list my projects
@@ -155,7 +141,6 @@ Feature: The tasks
 
   Rule: Searching projects
 
-    @legacy:test_tasks::search_projects::test_search_projects
     Scenario: Projects are found by part of their name
       Given I am connected to Todoist
       And Todoist can list my projects

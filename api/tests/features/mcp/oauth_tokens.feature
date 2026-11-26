@@ -9,7 +9,6 @@ Feature: OAuth2 tokens for MCP
 
   Rule: The tokens give access to MCP, and to nothing else
 
-    @legacy:test_mcp::oauth2::full_oauth2_flow_to_mcp_tools
     Scenario: A client gets its tokens, uses MCP, refreshes its token and uses MCP again
       Given an OAuth2 client is registered for a loopback callback
       And my PKCE verifier is "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
@@ -28,7 +27,6 @@ Feature: OAuth2 tokens for MCP
       When I initialize an MCP session with that OAuth2 token
       Then the MCP session gets an id
 
-    @legacy:test_mcp::oauth2::oauth2_token_audience_validation
     Scenario: A token issued for another resource is refused by MCP
       Given an OAuth2 client is registered for a loopback callback
       And my PKCE verifier is "audience-test-verifier"
@@ -38,7 +36,6 @@ Feature: OAuth2 tokens for MCP
       And I try to initialize an MCP session with that OAuth2 token
       Then the MCP request is answered with status 403
 
-    @legacy:test_mcp::oauth2::oauth2_token_rejected_on_non_mcp_route
     Scenario: A token for MCP is refused on the rest of the API, while the session of the user still works
       Given I hold an OAuth2 access token for MCP with the scope "read write"
       When I call the app API at "users/me" with that OAuth2 token
@@ -48,7 +45,6 @@ Feature: OAuth2 tokens for MCP
 
   Rule: The scope of the token limits what MCP lets it do
 
-    @legacy:test_mcp::oauth2::read_scoped_oauth2_token_cannot_call_write_tools
     Scenario: A token that can only read is refused every tool that changes something
       Given I hold an OAuth2 access token for MCP with the scope "read"
       Then the token response has the scope "read"
@@ -66,7 +62,6 @@ Feature: OAuth2 tokens for MCP
         | sync_tasks             | {}                                                                                     |
       Then each of those calls is refused for lack of scope
 
-    @legacy:test_mcp::oauth2::read_write_scoped_oauth2_token_can_call_write_tools
     Scenario: A token that can read and write may use the tools that change something
       Given I hold an OAuth2 access token for MCP with the scope "read write"
       When I call the MCP tool "bulk_act_notifications" with that OAuth2 token, with:
@@ -77,7 +72,6 @@ Feature: OAuth2 tokens for MCP
 
   Rule: A refresh token is used once, and reusing it ends the whole family
 
-    @legacy:test_mcp::oauth2::refresh_token_rotation_is_atomic_under_concurrent_reuse
     Scenario: Two refreshes at the same time with one refresh token: one wins, and the family is revoked
       Given I hold an OAuth2 access token for MCP with the scope "read write"
       When I refresh that OAuth2 token twice at the same time
@@ -85,7 +79,6 @@ Feature: OAuth2 tokens for MCP
       When I refresh with the latest refresh token that the app gave me
       Then the app answers 400
 
-    @legacy:test_mcp::oauth2::refresh_token_reuse_revokes_entire_family
     Scenario: Replaying a used refresh token is refused and revokes the refresh token that replaced it
       Given I hold an OAuth2 access token for MCP with the scope "read write"
       When I refresh that OAuth2 token
@@ -97,7 +90,6 @@ Feature: OAuth2 tokens for MCP
 
   Rule: The changes made through MCP are recorded in the audit log
 
-    @legacy:test_mcp::oauth2::oauth2_mcp_changes_are_recorded_and_searchable_in_the_audit_log
     Scenario: A change made by an MCP client is recorded with that client, and only its user can find it
       Given I am connected to GitHub
       And I have a GitHub notification

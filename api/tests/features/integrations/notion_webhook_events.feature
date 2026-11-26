@@ -5,7 +5,6 @@ Feature: Receiving Notion webhook events
   Background:
     Given I am signed in
 
-  @legacy:test_notion_webhook::route::test_verification_handshake_is_acknowledged
   Scenario: The verification handshake of Notion is acknowledged
     When Notion sends the verification handshake
     Then the app answers 200
@@ -16,19 +15,16 @@ Feature: Receiving Notion webhook events
     Background:
       Given I am connected to Notion, in a workspace of its own
 
-    @legacy:test_notion_webhook::route::test_comment_event_of_a_connected_workspace_is_queued
     Scenario: A comment event is queued
       When Notion sends a comment event of my workspace
       Then the app answers 200
       And 1 Notion event is queued
 
-    @legacy:test_notion_webhook::route::test_page_content_event_of_a_connected_workspace_is_queued
     Scenario: A page content event is queued
       When Notion sends a page content event of my workspace
       Then the app answers 200
       And 1 Notion event is queued
 
-    @legacy:test_notion_webhook::route::test_unsigned_or_badly_signed_event_is_rejected
     Scenario: An event without a valid signature is refused and not queued, while the same event signed is queued
       When Notion sends a comment event of my workspace, without a signature
       Then the app answers 401
@@ -39,7 +35,6 @@ Feature: Receiving Notion webhook events
       Then the app answers 200
       And 1 Notion event is queued
 
-    @legacy:test_notion_webhook::route::test_comment_event_of_an_unknown_workspace_is_dropped
     Scenario: A comment event of another workspace is dropped, while the one of my workspace is queued
       When Notion sends a comment event of another workspace
       Then the app answers 200
@@ -48,31 +43,26 @@ Feature: Receiving Notion webhook events
       Then the app answers 200
       And 1 Notion event is queued
 
-    @legacy:test_notion_webhook::route::test_other_event_types_are_dropped
     Scenario: An event of another type is dropped
       When Notion sends an event of another type of my workspace
       Then the app answers 200
       And 0 Notion events are queued
 
-    @legacy:test_notion_webhook::route::test_event_with_a_malformed_resource_id_is_dropped::case_1_comment_page_id
     Scenario: A comment event whose page id is malformed is dropped
       When Notion sends a comment event whose page id is malformed of my workspace
       Then the app answers 200
       And 0 Notion events are queued
 
-    @legacy:test_notion_webhook::route::test_event_with_a_malformed_resource_id_is_dropped::case_2_comment_parent
     Scenario: A comment event whose parent block id is malformed is dropped
       When Notion sends a comment event whose parent block id is malformed of my workspace
       Then the app answers 200
       And 0 Notion events are queued
 
-    @legacy:test_notion_webhook::route::test_event_with_a_malformed_resource_id_is_dropped::case_3_updated_block
     Scenario: A page content event whose updated block id is malformed is dropped
       When Notion sends a page content event whose updated block id is malformed of my workspace
       Then the app answers 200
       And 0 Notion events are queued
 
-    @legacy:test_notion_webhook::route::test_events_of_a_disconnected_workspace_are_dropped
     Scenario: Once the connection is deleted, the events of its workspace are dropped
       When Notion sends a comment event of my workspace
       Then 1 Notion event is queued

@@ -1,8 +1,0 @@
-# Legacy tests kept as plain Rust tests rather than scenarios (agreed in the migration plan).
-helpers::notification::google_calendar::tests::test_google_calendar_event_fixture_has_recurrence
-test_cache::test_cached_slack_blocks_round_trip
-test_cache::test_undecodable_cached_value_is_a_cache_miss
-test_cron::test_pause_integration_connections_cron_settings
-test_cron::test_purge_audit_events_cron_settings
-test_cron::test_refresh_oauth_tokens_cron_settings
-test_cron::test_vacuum_jobs_cron_settings

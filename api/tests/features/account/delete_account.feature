@@ -3,7 +3,6 @@ Feature: Deleting the account
   deletion removes everything the account owns, including stored credentials,
   and ends the session.
 
-  @legacy:test_users::delete_user::test_user_can_delete_their_account
   Scenario: A user deletes their account and everything it owns
     Given I am signed in
     And I have an API token
@@ -17,7 +16,6 @@ Feature: Deleting the account
     And no data of my account is left, nor any stored credential
     And my session no longer works
 
-  @legacy:test_users::delete_user::test_account_deletion_requires_the_email_confirmation
   Scenario Outline: Deleting needs the user to confirm with their own email address
     Given I am signed in
     When I delete my account, confirming with "<confirmation>"
@@ -30,7 +28,6 @@ Feature: Deleting the account
       | someone.else@example.com  |
       | DELETE                    |
 
-  @legacy:test_users::delete_user::test_account_deletion_requires_authentication
   Scenario: A visitor who is not signed in cannot delete an account
     When a visitor who is not signed in deletes an account, confirming with "john@doe.name"
     Then the app answers 401

@@ -8,7 +8,6 @@ Feature: Changing the notification of a Todoist task
     And I am connected to Todoist
     And Todoist can list my projects
 
-  @legacy:test_todoist_notifications::patch_notification::test_patch_todoist_notification_status_as_deleted
   Scenario: Deleting the notification deletes its task, in Todoist too
     Given I have a Todoist task, added in the year 2000, in the project Inbox
     And that Todoist task is active
@@ -18,7 +17,6 @@ Feature: Changing the notification of a Todoist task
     Then the patched notification is deleted, was read just now, and is otherwise as "mine" was
     And that Todoist task is deleted
 
-  @legacy:test_todoist_notifications::patch_notification::test_patch_todoist_notification_status_as_snoozed
   Scenario: Snoozing the notification leaves its task alone
     Given I have a Todoist task, added in the year 2000, in the project Inbox
     And that Todoist task is active
@@ -28,7 +26,6 @@ Feature: Changing the notification of a Todoist task
     Then the patched notification is "mine" snoozed until "2022-01-01T01:02:03Z"
     And that Todoist task is active
 
-  @legacy:test_todoist_notifications::patch_notification::test_patch_todoist_notification_status
   Scenario: Unsubscribing from a Todoist notification is not supported
     Given I have the notification "mine" of a Todoist item
     And Todoist is not asked to change anything

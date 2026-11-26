@@ -6,7 +6,6 @@ Feature: Limiting requests per network address
   Background:
     Given the app lets users sign in with a password or a passkey
 
-  @legacy:test_users::auth_rate_limit::test_auth_endpoints_are_ip_rate_limited
   Scenario: A network address that sent too many requests is throttled, another one is not
     When 35 sign-in attempts with a wrong password for an email address that no account uses arrive at the same time from one network address
     Then some of those attempts were throttled
