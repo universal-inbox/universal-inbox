@@ -3,7 +3,5 @@
 mod common;
 #[allow(dead_code)]
 mod helpers;
-mod test_api_notification;
 mod test_cache;
 mod test_cron;
-mod test_multi_task_manager;

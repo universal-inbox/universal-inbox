@@ -57,8 +57,10 @@ Feature: A Linear task follows its item in Todoist
       And that other user has connections to Todoist and Linear of their own, and their own active task of the same Linear issue, mirrored by a Todoist item with the same id
       And Todoist then reports that item as done, in the project "2222"
       And Linear moves that issue to its done state, once and with my access token
+      And Linear is not asked anything more
       When I sync the tasks of my Todoist connection
       Then the task of that Linear issue, read again, is done, and still the same task
+      And the sync brought back only tasks of mine
       And the task of that other user, read by that other user, is exactly as it was
 
   Rule: Renaming the item in Todoist renames the task

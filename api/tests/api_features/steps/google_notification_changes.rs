@@ -156,6 +156,10 @@ async fn google_mail_refuses_to_modify_the_thread(world: &mut ApiWorld) {
             "/users/me/threads/{}/modify",
             thread_123().id
         )))
+        .and(header(
+            "authorization",
+            format!("Bearer {MY_GOOGLE_MAIL_TOKEN}").as_str(),
+        ))
         .respond_with(ResponseTemplate::new(403))
         .expect(1)
         .mount(&app.google_mail_mock_server)

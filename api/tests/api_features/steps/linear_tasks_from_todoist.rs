@@ -4,7 +4,7 @@ use graphql_client::{GraphQLQuery, Response};
 use pretty_assertions::assert_eq;
 use wiremock::{
     Mock, ResponseTemplate,
-    matchers::{body_json, header, method, path},
+    matchers::{any, body_json, header, method, path},
 };
 
 use universal_inbox::{
@@ -337,4 +337,30 @@ async fn the_other_task_is_unchanged(world: &mut ApiWorld) {
     let app = world.app.get().await;
     let task: Box<Task> = get_resource(&client, &app.api_address, "tasks", before.id.into()).await;
     assert_eq!(*task, before);
+}
+
+#[given("Linear is not asked anything more")]
+async fn linear_is_not_asked_anything_more(world: &mut ApiWorld) {
+    let app = world.app.get().await;
+    Mock::given(any())
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&app.linear_mock_server)
+        .await;
+}
+
+#[then("the sync brought back only tasks of mine")]
+async fn the_sync_brought_back_only_my_tasks(world: &mut ApiWorld) {
+    let user_id = world.user().id;
+    let others = world
+        .linear_tasks_from_todoist
+        .others_task
+        .as_ref()
+        .expect("That other user has no task")
+        .id;
+    assert!(!world.todoist_tasks.results.is_empty());
+    for creation in &world.todoist_tasks.results {
+        assert_eq!(creation.task.user_id, user_id);
+        assert_ne!(creation.task.id, others);
+    }
 }
