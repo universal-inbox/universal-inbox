@@ -153,12 +153,20 @@ pub async fn fetch_and_validate(
     // SSRF defense: resolve up-front and reject if any address is in a
     // special-use range. We then pin the resolved address via reqwest's
     // `.resolve()` so the connect step cannot re-resolve to a private
-    // address (DNS rebinding).
-    let safe_addr = resolve_safe(&host, port).await?;
+    // address (DNS rebinding). Skipped when the tests-only loopback address is set.
+    let (safe_addr, fetch_url) = match settings.unguarded_address() {
+        Some(addr) => {
+            let mut url = parsed_url.clone();
+            let _ = url.set_scheme("http");
+            let _ = url.set_port(Some(addr.port()));
+            (addr, url)
+        }
+        None => (resolve_safe(&host, port).await?, parsed_url.clone()),
+    };
 
     let pinned_client = build_pinned_client(&host, safe_addr, settings)?;
     let response = pinned_client
-        .get(parsed_url.as_str())
+        .get(fetch_url.as_str())
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::USER_AGENT, "universal-inbox-cimd/1.0")
         .send()
@@ -267,7 +275,7 @@ fn build_pinned_client(
         .connect_timeout(Duration::from_secs(2))
         .pool_max_idle_per_host(2)
         .resolve(host, addr)
-        .https_only(true)
+        .https_only(settings.unguarded_address().is_none())
         .build()
         .context("Failed to build CIMD HTTP client")
         .map_err(UniversalInboxError::Unexpected)

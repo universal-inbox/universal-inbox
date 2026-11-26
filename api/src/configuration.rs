@@ -974,6 +974,16 @@ pub struct CimdSettings {
     /// TTL used when the response carries no `Cache-Control: max-age`.
     #[serde(default = "default_cimd_default_ttl_secs")]
     pub default_ttl_secs: u64,
+    /// Tests only, not deserialized, loopback only: fetch from it over plain HTTP, unresolved.
+    #[serde(skip)]
+    pub unguarded_fetch_address: Option<std::net::SocketAddr>,
+}
+
+impl CimdSettings {
+    pub fn unguarded_address(&self) -> Option<std::net::SocketAddr> {
+        self.unguarded_fetch_address
+            .filter(|addr| addr.ip().is_loopback())
+    }
 }
 
 impl Default for CimdSettings {
@@ -984,6 +994,7 @@ impl Default for CimdSettings {
             min_ttl_secs: default_cimd_min_ttl_secs(),
             max_ttl_secs: default_cimd_max_ttl_secs(),
             default_ttl_secs: default_cimd_default_ttl_secs(),
+            unguarded_fetch_address: None,
         }
     }
 }
