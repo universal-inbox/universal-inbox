@@ -13,7 +13,7 @@ use crate::{
         TEST_STRIPE_WEBHOOK_SECRET,
         billing::{stripe_signature, subscription_event},
     },
-    steps::billing_support::StripeStatus,
+    steps::billing_support::{PlanName, StripeStatus, read_subscription_of, the_other_user_id},
     world::{ApiWorld, Response},
 };
 
@@ -22,11 +22,13 @@ pub enum Signing {
     Missing,
     WrongSecret,
     Stale,
+    Early,
+    Recent,
     Valid,
 }
 
 impl Parameter for Signing {
-    const REGEX: &'static str = "without a signature|signed with a wrong secret|signed correctly 10 minutes ago|signed correctly";
+    const REGEX: &'static str = "without a signature|signed with a wrong secret|signed correctly 10 minutes ago|signed correctly 10 minutes ahead|signed correctly 4 minutes ago|signed correctly";
     const NAME: &'static str = "stripe_signing";
 }
 
@@ -38,6 +40,8 @@ impl FromStr for Signing {
             "without a signature" => Ok(Self::Missing),
             "signed with a wrong secret" => Ok(Self::WrongSecret),
             "signed correctly 10 minutes ago" => Ok(Self::Stale),
+            "signed correctly 10 minutes ahead" => Ok(Self::Early),
+            "signed correctly 4 minutes ago" => Ok(Self::Recent),
             "signed correctly" => Ok(Self::Valid),
             other => Err(format!("Unknown signing {other:?}")),
         }
@@ -106,6 +110,16 @@ async fn the_webhook_receives_an_update(
             now - 600,
             &payload,
         )),
+        Signing::Early => Some(stripe_signature(
+            TEST_STRIPE_WEBHOOK_SECRET,
+            now + 600,
+            &payload,
+        )),
+        Signing::Recent => Some(stripe_signature(
+            TEST_STRIPE_WEBHOOK_SECRET,
+            now - 240,
+            &payload,
+        )),
         Signing::Valid => Some(stripe_signature(TEST_STRIPE_WEBHOOK_SECRET, now, &payload)),
     };
     let app = world.app.get().await;
@@ -138,12 +152,36 @@ fn the_answer_is_the_refusal(world: &mut ApiWorld, message: String) {
     assert_eq!(body, serde_json::json!({ "message": message }));
 }
 
-#[then(expr = "my billing state says the {word} plan, with the subscription status {word}")]
-fn my_billing_state_says(world: &mut ApiWorld, plan: String, status: String) {
+#[then(
+    expr = "my billing state says the {plan} plan, with the subscription status {stripe_status}"
+)]
+fn my_billing_state_says(world: &mut ApiWorld, plan: PlanName, status: StripeStatus) {
     assert_eq!(world.http.last().status, 200);
     let body: Value = world.http.last().json();
     assert_eq!(
         (body["plan"].clone(), body["status"].clone()),
-        (Value::String(plan), Value::String(status))
+        (
+            serde_json::to_value(plan.0).unwrap(),
+            serde_json::to_value(status.0).unwrap()
+        )
+    );
+}
+
+#[given("I remember the subscription of the other user")]
+async fn i_remember_the_other_subscription(world: &mut ApiWorld) {
+    let other = the_other_user_id(world);
+    world.billing.others_subscription = Some(
+        read_subscription_of(world, other)
+            .await
+            .expect("The other user has no subscription"),
+    );
+}
+
+#[then("the subscription of the other user is exactly as I remembered it")]
+async fn the_other_subscription_is_as_remembered(world: &mut ApiWorld) {
+    let other = the_other_user_id(world);
+    assert_eq!(
+        read_subscription_of(world, other).await,
+        world.billing.others_subscription.clone()
     );
 }

@@ -20,6 +20,7 @@ pub struct Billing {
     pub stripe_mock: Option<wiremock::MockServer>,
     pub deletion: Option<Result<bool, String>>,
     pub other_user_id: Option<UserId>,
+    pub others_subscription: Option<universal_inbox::billing::UserSubscription>,
     pub interval: Option<i64>,
     pub pruned: Option<u64>,
 }

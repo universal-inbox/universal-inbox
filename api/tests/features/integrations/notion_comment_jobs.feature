@@ -265,3 +265,19 @@ Feature: Handling a Notion comment event
       When the Notion job handles the comment "comment-1" written by "a-colleague", visible to someone and me
       And I look at my Notion notifications, whatever their status
       Then my only Notion notification is unread
+
+  Rule: The job reads a comment with the tokens of at most three connections of the workspace
+
+    Scenario Outline: With <connections> connections that cannot see the page, Notion is asked with <asked> tokens and nothing is created
+      Given I and <others> other users are connected to the same Notion workspace, each with a token of their own, and Notion shares the page with none of us
+      When the Notion job handles the comment "comment-1" written by someone, visible to me only
+      Then Notion was asked with <asked> of our tokens, each a different one, and with no other token
+      When I look at my unread Notion notifications
+      Then I have 0 Notion notifications listed
+
+      Examples:
+        | connections | others | asked |
+        | 2           | 1      | 2     |
+        | 3           | 2      | 3     |
+        | 4           | 3      | 3     |
+        | 5           | 4      | 3     |

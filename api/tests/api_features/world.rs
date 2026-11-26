@@ -56,6 +56,7 @@ pub struct ApiWorld {
     pub google_mail_sync: GoogleMailSync,
     pub google_drive_sync: GoogleDriveSync,
     pub job_drain: Option<crate::helpers::jobs::JobCounts>,
+    pub notion_triage_connections: usize,
     pub linear_tasks: LinearTasks,
     pub linear_tasks_from_todoist: LinearTasksFromTodoist,
     pub todoist_tasks: TodoistTasks,

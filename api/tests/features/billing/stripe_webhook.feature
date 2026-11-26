@@ -15,39 +15,56 @@ Feature: The webhook of Stripe
 
   Scenario: With a billing configuration, the billing routes exist
     When I read my billing state
-    Then my billing state says the free plan, with the subscription status canceled
+    Then my billing state says the Free plan, with the subscription status canceled
     When I send a POST request to "/api/billing/stripe/webhook"
     Then the app answers 400
     And the answer is the refusal "Missing Stripe-Signature header"
 
-  Scenario: An event that Stripe did not sign, or signed too long ago, is refused and changes nothing
+  Scenario: An event that Stripe did not sign, or signed at the wrong time, is refused, changes nothing and does not use up its event id
     Given Stripe is not asked anything
-    When the webhook of Stripe receives, without a signature, the event "evt_forged_1" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to active
+    And I remember the subscription of the other user
+    When the webhook of Stripe receives, without a signature, the event "evt_upgrade" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to active
     Then the app answers 400
     And the answer is the refusal "Missing Stripe-Signature header"
-    When the webhook of Stripe receives, signed with a wrong secret, the event "evt_forged_2" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to active
+    When the webhook of Stripe receives, signed with a wrong secret, the event "evt_upgrade" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to active
     Then the app answers 400
     And the answer is the refusal "Invalid Stripe webhook signature"
-    When the webhook of Stripe receives, signed correctly 10 minutes ago, the event "evt_forged_3" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to active
+    When the webhook of Stripe receives, signed correctly 10 minutes ago, the event "evt_upgrade" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to active
+    Then the app answers 400
+    And the answer is the refusal "Invalid Stripe webhook signature"
+    When the webhook of Stripe receives, signed correctly 10 minutes ahead, the event "evt_upgrade" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to active
     Then the app answers 400
     And the answer is the refusal "Invalid Stripe webhook signature"
     And the subscription of the user is canceled
     When I read my billing state
-    Then my billing state says the free plan, with the subscription status canceled
-    When the webhook of Stripe receives, signed correctly, the event "evt_real" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to active
+    Then my billing state says the Free plan, with the subscription status canceled
+    When the webhook of Stripe receives, signed correctly 4 minutes ago, the event "evt_upgrade" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to active
     Then the app answers 204
     And the subscription of the user is active
     When I read my billing state
-    Then my billing state says the paid plan, with the subscription status active
-    And the subscription of the other user is active
+    Then my billing state says the Paid plan, with the subscription status active
+    And the subscription of the other user is exactly as I remembered it
 
-  Scenario: A forged cancellation of the subscription of another user is refused, and a real one of mine does not touch theirs
+  Scenario: An event that Stripe delivers twice is applied once, whatever the second delivery says
     Given Stripe is not asked anything
-    When the webhook of Stripe receives, signed with a wrong secret, the event "evt_forged_4" telling that the subscription "sub_theirs" of the customer "cus_theirs" was updated to canceled
+    When the webhook of Stripe receives, signed correctly, the event "evt_upgrade" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to active
+    Then the app answers 204
+    And the subscription of the user is active
+    When the webhook of Stripe receives, signed correctly, the event "evt_upgrade" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to canceled
+    Then the app answers 200
+    And the subscription of the user is active
+    When the webhook of Stripe receives, signed correctly, the event "evt_downgrade" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to canceled
+    Then the app answers 204
+    And the subscription of the user is canceled
+
+  Scenario: A forged cancellation of the subscription of another user is refused, and a real event of mine does not touch theirs
+    Given Stripe is not asked anything
+    And I remember the subscription of the other user
+    When the webhook of Stripe receives, signed with a wrong secret, the event "evt_forged" telling that the subscription "sub_theirs" of the customer "cus_theirs" was updated to canceled
     Then the app answers 400
     And the answer is the refusal "Invalid Stripe webhook signature"
-    And the subscription of the other user is active
-    When the webhook of Stripe receives, signed correctly, the event "evt_real_2" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to past due
+    And the subscription of the other user is exactly as I remembered it
+    When the webhook of Stripe receives, signed correctly, the event "evt_late" telling that the subscription "sub_mine" of the customer "cus_mine" was updated to past due
     Then the app answers 204
     And the subscription of the user is past due
-    And the subscription of the other user is active
+    And the subscription of the other user is exactly as I remembered it

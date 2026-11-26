@@ -43,6 +43,7 @@ mod mention;
 mod notifications;
 mod notion_jobs;
 mod notion_sync;
+mod notion_triage;
 mod notion_webhook;
 mod oauth_callback;
 mod oauth_callback_flows;
