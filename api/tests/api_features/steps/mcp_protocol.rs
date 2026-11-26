@@ -36,7 +36,7 @@ pub(super) fn my_token(world: &ApiWorld) -> String {
         .clone()
 }
 
-fn other_token(world: &ApiWorld) -> String {
+pub(super) fn other_token(world: &ApiWorld) -> String {
     world
         .mcp
         .other_api_token

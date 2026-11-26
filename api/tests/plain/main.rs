@@ -5,5 +5,6 @@ mod common;
 #[path = "../common/helpers/mod.rs"]
 mod helpers;
 mod test_cache;
+mod test_cimd_settings;
 mod test_cron;
 mod test_fixtures;

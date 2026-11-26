@@ -37,3 +37,25 @@ Feature: Authorizing an OAuth2 client identified by a URL
       """
       true
       """
+
+  Scenario: A metadata document on this machine is refused without being fetched, when its URL names an IP address
+    Given a local server, where the app is not told to fetch the metadata documents
+    And the local server is not asked anything
+    And an OAuth2 client identified by the HTTPS URL of a metadata document on that local server, named "127.0.0.1"
+    And my PKCE verifier is "verifier-cimd"
+    When I ask to authorize that client
+    Then the app answers 400
+    And the response has no "location" header
+    And the error message is "Invalid input data: CIMD URL host must be a domain name, got IP literal 127.0.0.1"
+    And the local server was asked exactly what it expected
+
+  Scenario: A metadata document on this machine is refused without being fetched, when its URL names a host that resolves to this machine
+    Given a local server, where the app is not told to fetch the metadata documents
+    And the local server is not asked anything
+    And an OAuth2 client identified by the HTTPS URL of a metadata document on that local server, named "localhost"
+    And my PKCE verifier is "verifier-cimd"
+    When I ask to authorize that client
+    Then the app answers 400
+    And the response has no "location" header
+    And the error message mentions "CIMD host localhost resolves to a special-use address ("
+    And the local server was asked exactly what it expected

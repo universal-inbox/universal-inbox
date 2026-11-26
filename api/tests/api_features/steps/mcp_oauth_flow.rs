@@ -15,10 +15,10 @@ use crate::{
     world::{ApiWorld, Response},
 };
 
-const CALLBACK: &str = "http://localhost:12345/callback";
+pub(super) const CALLBACK: &str = "http://localhost:12345/callback";
 const STATE: &str = "test_state";
 
-enum Resource {
+pub(super) enum Resource {
     Unspecified,
     Mcp,
     Other(String),
@@ -29,7 +29,7 @@ fn pkce_challenge(verifier: &str) -> String {
     BASE64_URL_SAFE_NO_PAD.encode(digest.as_ref())
 }
 
-fn browser(world: &mut ApiWorld) -> Client {
+pub(super) fn browser(world: &mut ApiWorld) -> Client {
     world
         .mcp_oauth
         .browser
@@ -43,7 +43,7 @@ fn browser(world: &mut ApiWorld) -> Client {
         .clone()
 }
 
-fn query_of(location: &str, name: &str) -> Option<String> {
+pub(super) fn query_of(location: &str, name: &str) -> Option<String> {
     url::Url::parse(location)
         .ok()?
         .query_pairs()
@@ -70,16 +70,18 @@ async fn mcp_resource_url(world: &mut ApiWorld) -> String {
         .to_string()
 }
 
-async fn authorize(world: &mut ApiWorld, scope: Option<&str>, resource: Resource) {
+pub(super) async fn authorization_url(
+    world: &mut ApiWorld,
+    scope: Option<&str>,
+    resource: Resource,
+) -> String {
     let challenge = pkce_challenge(world.mcp_oauth.verifier());
     let client_id = world.mcp_oauth.client_id().to_string();
-    let bearer = my_token(world);
     let resource = match resource {
         Resource::Unspecified => None,
         Resource::Mcp => Some(mcp_resource_url(world).await),
         Resource::Other(url) => Some(url),
     };
-    let browser = browser(world);
     let app = world.app.get().await;
     let mut url = format!(
         "{}oauth2/authorize?response_type=code&client_id={client_id}&redirect_uri={}&code_challenge={challenge}&code_challenge_method=S256&state={STATE}",
@@ -92,6 +94,13 @@ async fn authorize(world: &mut ApiWorld, scope: Option<&str>, resource: Resource
     if let Some(resource) = resource {
         url.push_str(&format!("&resource={}", urlencoding::encode(&resource)));
     }
+    url
+}
+
+async fn authorize(world: &mut ApiWorld, scope: Option<&str>, resource: Resource) {
+    let url = authorization_url(world, scope, resource).await;
+    let bearer = my_token(world);
+    let browser = browser(world);
     let response = browser
         .get(url)
         .bearer_auth(bearer)
