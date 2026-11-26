@@ -6,3 +6,4 @@ mod common;
 mod helpers;
 mod test_cache;
 mod test_cron;
+mod test_fixtures;
