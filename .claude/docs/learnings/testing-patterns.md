@@ -5,8 +5,8 @@ Universal Inbox testing conventions. Fast-path learnings doc; see also `.claude/
 ## Scenarios (cucumber-rs)
 
 API integration tests and browser tests are Gherkin scenarios run by cucumber-rs. A scenario is a
-nextest test (one process per scenario), named `<feature file>::<Rule>::<Scenario>`; a Scenario
-Outline gives one test per Examples row.
+nextest test (one process per scenario), named `<feature file>::<Rule>::<Scenario>` (without the
+Rule part for a scenario outside a Rule); a Scenario Outline gives one test per Examples row.
 
 - Features: `api/tests/features/<domain>/*.feature` (API and browser).
 - API binary `api_features` (`api/tests/api_features/`): `steps/*.rs` (register in `steps/mod.rs`),
@@ -22,6 +22,10 @@ Outline gives one test per Examples row.
   with the real Stripe client and a Stripe mock (`billing with Stripe is enabled`).
 
 ```gherkin
+Background:
+  Given I am signed in
+  And I am connected to Google Mail
+
 Scenario: Another user cannot delete my notification
   Given I have the notification "mine" of the Google Mail thread 123
   And another user is signed in
@@ -35,14 +39,20 @@ Scenario: Another user cannot delete my notification
 
 ## Rules enforced in review
 
-- **A second user for every user-scoped route or job.** The other user has their own connection,
-  their own token and their own object of the same external id (same thread, same item, same
-  customer). Assert the exact refusal, then read both users' objects back unchanged.
+These apply to new scenarios and steps. Older step files predate some of them; what is left to
+align is tracked in `universal-inbox-y9bs`.
+
+- **A second user for every new user-scoped route or job, unless a shared scenario already covers
+  that route.** The other user has their own connection, their own token and their own object of
+  the same external id (same thread, same item, same customer). Assert the exact refusal, then
+  read both users' objects back unchanged.
 - **A deterministic twin for every zero.** "Nothing happened" needs a scenario on the same fixture
   where the thing does happen, else the zero proves nothing.
-- **Pin the calls to third parties.** Mocks match the bearer token and the body and `expect(1)`;
-  where nothing must be asked, mount a catch-all `any()` with `expect(0)` after the specific mocks
-  (wiremock answers with the first mounted match).
+- **Pin the call the scenario is about.** Its mock matches the bearer token and the body and
+  `expect(1)`; where nothing must be asked, mount a catch-all `any()` with `expect(0)` after the
+  specific mocks (wiremock answers with the first mounted match). Older helpers
+  (`mock_todoist_item_add_service`, `mock_todoist_get_item_service`, several `GET` mocks) are
+  unpinned on purpose: use the `_expecting_one_call` variant, or pin in the step, when the call matters.
 - **Assert what is stored.** The answer of a `PATCH`/`POST` is not its effect: read the object again
   and compare it whole (`assert_the_patched_notification_is_stored`, `assert_the_task_is_stored`).
   Compare whole structs or tuples, not one field at a time.
@@ -53,8 +63,10 @@ Scenario: Another user cannot delete my notification
 - **Mutate before reporting.** Break the code the scenario covers, see the scenario go red on the
   assertion meant for it, restore, and check `git diff -- src` is empty. SQL in `sqlx::query!`
   cannot be mutated offline: say so instead of claiming a kill.
-- **Step code:** no boolean flags (enums or two functions), no raw SQL in steps (a helper under
-  `api/tests/common/helpers/`), no comments except a forced value or a known quirk.
+- **New step code:** no boolean flags (enums or two functions); new steps never hold raw SQL (use
+  a helper under `api/tests/common/helpers/`, and helpers prefer the repository); no comments
+  except a forced value or a known quirk. Older steps still hold raw SQL and two boolean flags,
+  listed in `universal-inbox-y9bs`.
 
 ## Plain Rust tests
 

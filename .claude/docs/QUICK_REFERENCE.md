@@ -42,8 +42,8 @@ self.repository.get_one_task(executor, id).await
 pub async fn update_task(/* ... */) -> Result<UpdateStatus<Task>, UniversalInboxError> { /* ... */ }
 
 // Scenario step skeleton (api/tests/api_features/steps/)
-#[when(expr = "I snooze {string} until {string}")]
-async fn i_snooze(world: &mut ApiWorld, name: String, time: String) {
+#[when(expr = "I paint the widget {string} in {string}")]
+async fn i_paint_the_widget(world: &mut ApiWorld, name: String, colour: String) {
     let app = world.app.get().await;
     // ...
 }
