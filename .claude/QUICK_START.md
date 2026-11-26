@@ -74,8 +74,8 @@ just api test-browser test_user_can_register   # ...filter to one test (substrin
 
 `just api test-browser` rebuilds the frontend (`just web build-ci`) before running — required
 because the test reads `web/public/` (gitignored), not your `.rs` source. Don't call
-`cargo nextest` directly: from the workspace root the root `.config/nextest.toml` filters out
-`binary(browser_features)` (0 tests), and you'd skip the frontend rebuild.
+`cargo nextest` directly: from the workspace root it only runs the domain crate (0 browser
+tests), and you'd skip the frontend rebuild.
 
 ## Committing — pre-commit hook needs Postgres + Redis
 
