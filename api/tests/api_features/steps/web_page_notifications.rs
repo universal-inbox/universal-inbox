@@ -38,6 +38,15 @@ async fn send(world: &mut ApiWorld, client: reqwest::Client, url: &str, title: &
     page
 }
 
+fn the_other_client(world: &ApiWorld) -> reqwest::Client {
+    world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .client
+        .clone()
+}
+
 fn the_answered_notification(world: &ApiWorld, page: &WebPage) -> Notification {
     assert_eq!(world.http.last().status, 200);
     let creation: ThirdPartyItemCreationResult = world.http.last().json();
@@ -72,12 +81,7 @@ async fn the_other_user_sends_a_web_page(
     title: String,
     name: String,
 ) {
-    let client = world
-        .other_session
-        .as_ref()
-        .expect("There is no other user")
-        .client
-        .clone();
+    let client = the_other_client(world);
     let page = send(world, client, &url, &title).await;
     let notification = the_answered_notification(world, &page);
     world.notifications.by_name.insert(name, notification);
@@ -110,7 +114,11 @@ fn the_notification_is(world: &mut ApiWorld, name: String, title: String, url: S
 #[then(expr = "{string}, read again, is the notification that was answered")]
 async fn the_notification_is_stored(world: &mut ApiWorld, name: String) {
     let answered = world.notifications.named(&name).clone();
-    let client = world.client();
+    let client = if answered.user_id == world.user().id {
+        world.client()
+    } else {
+        the_other_client(world)
+    };
     let app = world.app.get().await;
     let stored: Box<NotificationWithTask> = get_resource(
         &client,
@@ -132,14 +140,19 @@ fn they_are_two_notifications(world: &mut ApiWorld, first: String, second: Strin
 
 #[then(expr = "{string} belongs to that other user")]
 fn it_belongs_to_the_other_user(world: &mut ApiWorld, name: String) {
-    let other_user_id = world.other_session.as_ref().unwrap().user.id;
+    let other_user_id = world
+        .other_session
+        .as_ref()
+        .expect("There is no other user")
+        .user
+        .id;
     assert_eq!(world.notifications.named(&name).user_id, other_user_id);
 }
 
 #[when(expr = "that other user tries to read {string}")]
 async fn the_other_user_tries_to_read(world: &mut ApiWorld, name: String) {
     let id = world.notifications.named(&name).id;
-    let client = world.other_session.as_ref().unwrap().client.clone();
+    let client = the_other_client(world);
     let app = world.app.get().await;
     let response = get_resource_response(&client, &app.api_address, "notifications", id.0).await;
     world.http.record(Response::read(response).await);

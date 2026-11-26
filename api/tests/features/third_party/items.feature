@@ -73,5 +73,6 @@ Feature: Third-party items
       Then "theirs" belongs to that other user
       And "mine" and "theirs" are two notifications, of two items
       And "mine", read again, is the notification that was answered
+      And "theirs", read again, is the notification that was answered
       When that other user tries to read "mine"
       Then the app answers 403

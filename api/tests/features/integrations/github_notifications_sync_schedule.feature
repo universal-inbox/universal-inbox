@@ -22,7 +22,7 @@ Feature: Scheduling GitHub notification syncs
       And within two seconds, one of my notifications becomes read, listing them asking for a sync each time
       Given "mine" is unread in Universal Inbox
       When I ask for an asynchronous sync of my GitHub notifications
-      And one second passes
+      And the background jobs are all done
       Then I have no read notification
 
     @legacy:test_sync_github_notifications::test_sync_all_notifications_asynchronously::case_2_trigger_sync_with_sync_endpoint
@@ -38,7 +38,7 @@ Feature: Scheduling GitHub notification syncs
       And within two seconds, one of my notifications becomes read, listing them without asking for a sync
       Given "mine" is unread in Universal Inbox
       When I ask for an asynchronous sync of my GitHub notifications
-      And one second passes
+      And the background jobs are all done
       Then I have no read notification
 
   Rule: Connections that cannot sync
@@ -68,6 +68,7 @@ Feature: Scheduling GitHub notification syncs
       And GitHub answers 400 to anything
       When I ask for an asynchronous sync of my GitHub notifications
       Then the app answers 201
-      When one second passes
+      When the background jobs have all ended
+      Then of the 1 job queued, 0 are done, 0 are dead and 1 waits for a retry
       Then I have no read notification
       And my GitHub connection recorded a failed sync, the sixth, and is failing for too many sync failures

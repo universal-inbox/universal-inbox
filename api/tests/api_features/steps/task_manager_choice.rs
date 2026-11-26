@@ -247,3 +247,22 @@ fn the_explicit_task_belongs_to_ticktick(world: &mut ApiWorld) {
         ticktick_connection_id
     );
 }
+
+#[given(
+    "I have preferences of my own, opening links in the background, without a default task manager"
+)]
+async fn i_have_preferences_without_a_default(world: &mut ApiWorld) {
+    let client = world.client();
+    let app = world.app.get().await;
+    let response = client
+        .patch(format!("{}users/me/preferences", app.api_address))
+        .json(&UserPreferencesPatch {
+            open_links_in_background: Some(true),
+            ..Default::default()
+        })
+        .send()
+        .await
+        .expect("Failed to patch the preferences");
+    world.http.record(Response::read(response).await);
+    assert_eq!(the_answered_preferences(world), (world.user().id, None));
+}

@@ -517,11 +517,6 @@ async fn i_ask_for_a_synchronous_sync(world: &mut ApiWorld) {
     world.http.record(Response::read(response).await);
 }
 
-#[when("one second passes")]
-async fn one_second_passes(_world: &mut ApiWorld) {
-    sleep(Duration::from_secs(1)).await;
-}
-
 async fn wait_for_a_read_notification(world: &mut ApiWorld, request: SyncRequest) {
     for _ in 0..=20 {
         if list_read_notifications(world, request).await == 1 {

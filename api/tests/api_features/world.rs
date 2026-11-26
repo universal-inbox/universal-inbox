@@ -55,6 +55,7 @@ pub struct ApiWorld {
     pub github_sync: GithubSync,
     pub google_mail_sync: GoogleMailSync,
     pub google_drive_sync: GoogleDriveSync,
+    pub job_drain: Option<crate::helpers::jobs::JobCounts>,
     pub linear_tasks: LinearTasks,
     pub linear_tasks_from_todoist: LinearTasksFromTodoist,
     pub todoist_tasks: TodoistTasks,

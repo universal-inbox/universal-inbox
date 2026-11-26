@@ -102,7 +102,7 @@ Feature: Syncing Todoist tasks
       And Todoist answers every request with a success and no data
       And I ask for a background sync of my Todoist tasks
       Then the sync is accepted to run in the background
-      Given a second passes
+      Given the background jobs are all done
       When I list the active tasks I have
       Then I have 2 active tasks
       And Todoist received no other request
@@ -116,7 +116,7 @@ Feature: Syncing Todoist tasks
       And Todoist answers every request with a success and no data
       And I ask for a background sync of my Todoist tasks
       Then the sync is accepted to run in the background
-      Given a second passes
+      Given the background jobs are all done
       When I list the active tasks I have
       Then I have 2 active tasks
       And Todoist received no other request
@@ -131,7 +131,8 @@ Feature: Syncing Todoist tasks
       And Todoist answers every request with an error
       When I ask for a background sync of my Todoist tasks
       Then the sync is accepted to run in the background
-      Given a second passes
+      When the background jobs have all ended
+      Then of the 1 job queued, 0 are done, 0 are dead and 1 waits for a retry
       When I list the active tasks I have
       Then I have 1 active task
       And my Todoist connection recorded the failure "Failed to fetch tasks from Todoist"

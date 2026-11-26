@@ -72,3 +72,22 @@ Feature: Choosing the task manager of a new task
       When I create a task from that notification, without any detail
       Then the task that I created is the Todoist item in the project Project2, and its notification is deleted and was read just now
       And the notification stays linked to the task that I created
+
+    Scenario: Without a named task manager and without a default one, the task goes to Todoist
+      Given I am connected to Todoist, with the default project Project2, the due date today and the priority of the Todoist item
+      And Todoist can list my projects
+      And Todoist adds the item with the defaults of my connection, as the title of that notification, and then serves it
+      And TickTick is not asked anything
+      When I create a task from that notification, without any detail
+      Then the task that I created is the Todoist item in the project Project2, and its notification is deleted and was read just now
+      And the notification stays linked to the task that I created
+
+    Scenario: With preferences that name no default task manager, the task goes to Todoist too
+      Given I am connected to Todoist, with the default project Project2, the due date today and the priority of the Todoist item
+      And Todoist can list my projects
+      And I have preferences of my own, opening links in the background, without a default task manager
+      And Todoist adds the item with the defaults of my connection, as the title of that notification, and then serves it
+      And TickTick is not asked anything
+      When I create a task from that notification, without any detail
+      Then the task that I created is the Todoist item in the project Project2, and its notification is deleted and was read just now
+      And the notification stays linked to the task that I created
