@@ -16,9 +16,9 @@ Feature: Static files of the web app
 
       Examples:
         | accepted encodings | encoding | file                                                  |
-        | br, gzip           | br       | tests/api/statics/app-0123456789abcdef_bg.wasm.br     |
-        | gzip               | gzip     | tests/api/statics/app-0123456789abcdef_bg.wasm.gz     |
-        | identity           | identity | tests/api/statics/app-0123456789abcdef_bg.wasm        |
+        | br, gzip           | br       | tests/common/statics/app-0123456789abcdef_bg.wasm.br     |
+        | gzip               | gzip     | tests/common/statics/app-0123456789abcdef_bg.wasm.gz     |
+        | identity           | identity | tests/common/statics/app-0123456789abcdef_bg.wasm        |
 
   Rule: Anything else is revalidated on every use
 

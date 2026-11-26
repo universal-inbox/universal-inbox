@@ -12,7 +12,7 @@ response_timeout_in_milliseconds = 10000
 [application]
 environment = "test"
 static_path = ""
-static_dir = "tests/api/statics"
+static_dir = "tests/common/statics"
 sync_failure_window_in_hours = 1
 # Each test starts its own API server, and its first request waits for every Actix worker to
 # build the application: the default (one worker per CPU) costs ~100ms per test.

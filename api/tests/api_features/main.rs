@@ -1,7 +1,7 @@
 #![recursion_limit = "256"]
 #[path = "../common/mod.rs"]
 mod common;
-#[path = "../api/helpers/mod.rs"]
+#[path = "../common/helpers/mod.rs"]
 #[allow(dead_code, unused_imports)]
 mod helpers;
 mod state;
