@@ -7,7 +7,7 @@ For full navigation, see [docs/INDEX.md](docs/INDEX.md).
 
 | Doc | Covers | ~Tokens |
 |-----|--------|---------|
-| [testing-patterns](docs/learnings/testing-patterns.md) | rstest fixtures, `TestedApp`, mock servers, `RUST_MIN_STACK` | ~600 |
+| [testing-patterns](docs/learnings/testing-patterns.md) | Gherkin scenarios, review rules, `TestedApp`, mock servers, `RUST_MIN_STACK` | ~600 |
 | [database-patterns](docs/learnings/database-patterns.md) | SQLx migrations, repository traits, transactions, `Update`/`UpsertStatus` | ~700 |
 | [api-design](docs/learnings/api-design.md) | Actix routes, `UniversalInboxError` → HTTP, service/`Arc`/`Weak` patterns | ~700 |
 | [frontend-dioxus](docs/learnings/frontend-dioxus.md) | Dioxus 0.6 WASM, components/ui, Tailwind v4 + FlyonUI, theme tokens | ~800 |

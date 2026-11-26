@@ -57,7 +57,7 @@ Methods are async and take `&mut Transaction<'_, Postgres>`. Mapping into the do
    (held as `Arc<Service>`; `Weak<RwLock<...>>` for circular refs).
 6. **Migration** — add `api/migrations/YYYYMMDDHHMMSS_description.{up,down}.sql`
    (run `just api migrate-db`).
-7. **Tests** — add integration tests in `api/tests/api/` with a mock server (below).
+7. **Tests** — add scenarios in `api/tests/features/` with a mock server (below).
 
 ## OAuth2 flow (`*_oauth.rs` / `oauth.rs`)
 
@@ -86,9 +86,9 @@ cd api && just clear-cache   # flush Redis (cache + queue) if jobs get stuck
 
 ## Mocking in tests
 
-- `TestedApp` (`api/tests/api/helpers/mod.rs`) holds one wiremock `MockServer` per integration
+- `TestedApp` (`api/tests/common/helpers/mod.rs`) holds one wiremock `MockServer` per integration
   (`github_mock_server`, `notion_mock_server`, ...), so no real API is hit.
-- Mock helpers live in `api/tests/api/helpers/` (`notion.rs`, `slack.rs`, `notification/github.rs`, ...);
+- Mock helpers live in `api/tests/common/helpers/` (`notion.rs`, `slack.rs`, `notification/github.rs`, ...);
   JSON fixtures in `api/tests/api/fixtures/`. Running tests: [testing patterns](testing-patterns.md).
 
 ## Gotchas

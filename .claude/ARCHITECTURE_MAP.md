@@ -20,7 +20,7 @@ universal-inbox/
 │   │   ├── mcp/ middlewares/ mailer/ commands/
 │   │   ├── configuration.rs observability.rs main.rs   # ← API entry point
 │   ├── migrations/           # SQLx: YYYYMMDDHHMMSS_*.{up,down}.sql
-│   ├── tests/                # Integration tests; fixtures/ = JSON
+│   ├── tests/                # Gherkin scenarios (features/), steps, common/ helpers; api/fixtures/ = JSON
 │   └── config/               # dev.toml prod.toml local.toml (gitignored)
 └── web/                      # Frontend — Dioxus 0.6 → wasm32
     └── src/
@@ -45,7 +45,7 @@ universal-inbox/
 | Frontend API clients | `web/src/services/` |
 | Design-system components | `web/src/components/ui/` |
 | DB migrations | `api/migrations/` |
-| Integration tests + fixtures | `api/tests/` |
+| Scenarios, steps, test helpers, fixtures | `api/tests/features/`, `api/tests/api_features/`, `api/tests/common/`, `api/tests/api/fixtures/` |
 | Config | `api/config/*.toml` |
 
 ## Key entry points

@@ -41,11 +41,10 @@ self.repository.get_one_task(executor, id).await
 #[tracing::instrument(level = "debug", skip_all, fields(user_id = %user_id))]
 pub async fn update_task(/* ... */) -> Result<UpdateStatus<Task>, UniversalInboxError> { /* ... */ }
 
-// rstest test skeleton
-#[rstest]
-#[tokio::test]
-async fn test_x(#[future] tested_app: TestedApp) {
-    let app = tested_app.await;
+// Scenario step skeleton (api/tests/api_features/steps/)
+#[when(expr = "I snooze {string} until {string}")]
+async fn i_snooze(world: &mut ApiWorld, name: String, time: String) {
+    let app = world.app.get().await;
     // ...
 }
 ```

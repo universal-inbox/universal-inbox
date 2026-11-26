@@ -61,7 +61,7 @@ Always run service/test commands through `mise exec --` (or inside a shell with 
 the worktree's ports load — see **Worktree** below. `just run-detached` is the headless
 equivalent of `just run`; agents must never call bare `just run` (TUI needs a TTY).
 
-## Browser tests (`api/tests/browser/`)
+## Browser tests (`api/tests/browser_features/`, features in `api/tests/features/browser/`)
 
 Need **only postgresql + redis** up (`just run-detached`) — the `browser_tested_app` fixture
 spawns its own API in-process and serves the prebuilt WASM frontend from `web/public/`.
