@@ -265,4 +265,7 @@ async fn i_have_preferences_without_a_default(world: &mut ApiWorld) {
         .expect("Failed to patch the preferences");
     world.http.record(Response::read(response).await);
     assert_eq!(the_answered_preferences(world), (world.user().id, None));
+    let client = world.client();
+    read_preferences(world, client).await;
+    assert_eq!(the_answered_preferences(world), (world.user().id, None));
 }

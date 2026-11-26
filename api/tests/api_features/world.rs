@@ -14,7 +14,7 @@ use crate::{
         scenarios::{AppConfig, AppUnderTest, ScenarioApp, ScenarioWorld},
         settings,
     },
-    helpers::{TestedApp, build_tested_app, local_auth_settings},
+    helpers::{Billing as BillingSwitch, TestedApp, build_tested_app, local_auth_settings},
     state::{
         Account, Audit, Authorizations, Billing, Browser, Connections, EmailVerification,
         Encryption, GithubSync, GoogleDriveSync, GoogleMailSync, Integrations, Jobs, LinearTasks,
@@ -115,7 +115,6 @@ impl ScenarioApp for TestedApp {
             local_auth_policy,
             blocked_domains,
         } = config;
-        assert!(!billing, "Billing is not available to API scenarios yet");
         assert!(
             local_auth_policy.is_none() || local_auth.is_some(),
             "The password policy and the account limits need an app where users sign in with a password"
@@ -134,6 +133,11 @@ impl ScenarioApp for TestedApp {
                 identity_provider,
                 local_auth,
                 &blocked_domains,
+                if billing {
+                    BillingSwitch::WithStripe
+                } else {
+                    BillingSwitch::Disabled
+                },
                 db,
                 redis,
             )

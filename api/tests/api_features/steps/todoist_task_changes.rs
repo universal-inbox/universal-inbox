@@ -39,9 +39,9 @@ use crate::{
         rest::{get_resource, patch_resource, patch_resource_response},
         task::todoist::{
             TodoistSyncPartialCommand, mock_todoist_get_item_service,
-            mock_todoist_item_add_service, mock_todoist_no_sync_call,
-            mock_todoist_sync_project_add, mock_todoist_sync_service_expecting_one_call,
-            todoist_item,
+            mock_todoist_item_add_service, mock_todoist_item_add_service_expecting_one_call,
+            mock_todoist_no_sync_call, mock_todoist_sync_project_add,
+            mock_todoist_sync_service_expecting_one_call, todoist_item,
         },
         third_party::create_task_third_party_item,
     },
@@ -391,7 +391,7 @@ async fn todoist_adds_the_item_with_defaults(world: &mut ApiWorld) {
         ..*todoist_item()
     };
     let app = world.app.get().await;
-    mock_todoist_item_add_service(
+    mock_todoist_item_add_service_expecting_one_call(
         &app.todoist_mock_server,
         &item.id,
         title,

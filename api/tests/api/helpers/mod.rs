@@ -6,11 +6,17 @@ use sqlx::{PgPool, Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::info;
 
+use secrecy::SecretBox;
 use url::Url;
 
 use universal_inbox_api::{
+    billing::{
+        service::{BillingService, RepositoryIntegrationCounter},
+        stripe::client::StripeApiClient,
+    },
     configuration::{
-        AuthenticationSettings, LocalAuthenticationSettings, OIDCFlowSettings, Settings,
+        AuthenticationSettings, FreePlanSettings, LocalAuthenticationSettings, OIDCFlowSettings,
+        Settings, StripeApiKey, StripeWebhookSecret,
     },
     integrations::slack::SlackService,
     jobs::JobStorage,
@@ -26,11 +32,14 @@ use universal_inbox_api::{
 };
 
 use universal_inbox::{
-    audit::AuditActor, integration_connection::provider::IntegrationProviderKind,
+    audit::AuditActor, billing::StripePriceId,
+    integration_connection::provider::IntegrationProviderKind,
 };
 
 use crate::common::mailer::MailerStub;
-use crate::common::{LazyMockServer, build_and_spawn, setup_test_env};
+use crate::common::{
+    LazyMockServer, build_and_spawn, build_and_spawn_with_billing, setup_test_env,
+};
 
 // Re-export shared fixtures so rstest can resolve them by name in this module's fixtures
 pub use crate::common::test_db::TestDb;
@@ -78,6 +87,7 @@ pub struct TestedApp {
     #[allow(dead_code)] // Will be used in Phase 5 TickTick integration tests
     pub ticktick_mock_server: LazyMockServer,
     pub oidc_issuer_mock_server: Option<LazyMockServer>,
+    pub stripe_mock_server: Option<LazyMockServer>,
     pub mailer_stub: Arc<RwLock<MailerStub>>,
     pub redis_storage: JobStorage,
     pub cache: Cache,
@@ -197,6 +207,7 @@ pub async fn tested_app(
         todoist_mock_server: mock_servers.todoist,
         ticktick_mock_server: mock_servers.ticktick,
         oidc_issuer_mock_server: Some(oidc_issuer_mock_server),
+        stripe_mock_server: None,
         mailer_stub,
         redis_storage,
         cache,
@@ -394,11 +405,21 @@ pub async fn setup_tested_app_with_local_auth(
         todoist_mock_server: mock_servers.todoist,
         ticktick_mock_server: mock_servers.ticktick,
         oidc_issuer_mock_server: None,
+        stripe_mock_server: None,
         mailer_stub,
         redis_storage,
         cache,
         _test_db: test_db,
     }
+}
+
+pub const TEST_STRIPE_WEBHOOK_SECRET: &str = "whsec_test_webhook_secret";
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Billing {
+    #[default]
+    Disabled,
+    WithStripe,
 }
 
 /// Starts an app from independent settings: single sign-on with a test identity provider, local
@@ -408,6 +429,7 @@ pub async fn build_tested_app(
     identity_provider: bool,
     local_auth: Option<(LocalAuthenticationSettings, bool)>,
     blocked_domains: &[String],
+    billing: Billing,
     test_db: TestDb,
     redis_storage: JobStorage,
 ) -> TestedApp {
@@ -465,13 +487,35 @@ pub async fn build_tested_app(
 
     let pool: Arc<PgPool> = test_db.pool.clone();
 
-    let (services, mailer_stub, redis_storage) = build_and_spawn(
+    let stripe_mock_server = match billing {
+        Billing::Disabled => None,
+        Billing::WithStripe => Some(LazyMockServer::new()),
+    };
+    let billing_service = stripe_mock_server.as_ref().map(|stripe_mock_server| {
+        let repository = Arc::new(Repository::new(pool.clone()));
+        Arc::new(BillingService::new(
+            repository.clone(),
+            Arc::new(StripeApiClient::new_with_base_url(
+                &SecretBox::new(Box::new(StripeApiKey("test-stripe-api-key".to_string()))),
+                SecretBox::new(Box::new(StripeWebhookSecret(
+                    TEST_STRIPE_WEBHOOK_SECRET.to_string(),
+                ))),
+                &stripe_mock_server.uri(),
+            )),
+            &FreePlanSettings::default(),
+            StripePriceId("price_test".to_string()),
+            Arc::new(RepositoryIntegrationCounter { repository }),
+        ))
+    });
+
+    let (services, mailer_stub, redis_storage) = build_and_spawn_with_billing(
         listener,
         pool.clone(),
         settings.clone(),
         cache.clone(),
         &mock_servers,
         redis_storage,
+        billing_service,
     )
     .await;
 
@@ -503,6 +547,7 @@ pub async fn build_tested_app(
         todoist_mock_server: mock_servers.todoist,
         ticktick_mock_server: mock_servers.ticktick,
         oidc_issuer_mock_server,
+        stripe_mock_server,
         mailer_stub,
         redis_storage,
         cache,
@@ -596,6 +641,7 @@ pub async fn tested_app_with_domain_blacklist(
         todoist_mock_server: mock_servers.todoist,
         ticktick_mock_server: mock_servers.ticktick,
         oidc_issuer_mock_server: Some(oidc_issuer_mock_server),
+        stripe_mock_server: None,
         mailer_stub,
         redis_storage,
         cache,

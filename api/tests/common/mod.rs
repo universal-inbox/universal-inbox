@@ -97,7 +97,11 @@ pub async fn redis_storage(settings: Settings) -> JobStorage {
         apalis_redis::connect(settings.redis.connection_string())
             .await
             .expect("Redis storage connection failed"),
-        apalis_redis::Config::default().set_namespace(&namespace),
+        // A failed job waits for its retry: the default 30 seconds tick that runs the waiting
+        // jobs again could fire between two steps and run a failed sync a second time.
+        apalis_redis::Config::default()
+            .set_namespace(&namespace)
+            .set_enqueue_scheduled(std::time::Duration::from_secs(3600)),
     )
 }
 

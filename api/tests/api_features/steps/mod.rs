@@ -7,6 +7,7 @@ mod billing_deletion;
 mod billing_events;
 mod billing_limits;
 mod billing_support;
+mod billing_webhook;
 mod connection_config;
 mod cron;
 mod data_encryption;
